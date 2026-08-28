@@ -1,0 +1,84 @@
+# git-cliff config for WireGuide release notes.
+#
+# Why this exists: the project does not use Conventional Commits, and most
+# work lands as direct pushes to main rather than through PRs. GitHub's
+# built-in release notes generator (softprops `generate_release_notes`) only
+# enumerates merged PRs, so the v0.3.0 release was generated as one bullet
+# ("Bundle wintun.dll into Windows builds and installer") despite ~30 commits
+# of real work. git-cliff reads the actual git log and groups by subject-line
+# prefix instead.
+#
+# The commit_parsers list below is ordered: first match wins. The patterns
+# cover the project's existing "Topic: description" / "Verb description"
+# style (Windows:, macOS:, CI:, Add , Fix , Polish , etc.) and also fall
+# back to standard Conventional Commits (feat:, fix:, etc.) so a future
+# commit can use either style and still land in the right group.
+
+[changelog]
+header = ""
+# Group names below are prefixed with `N|` (digit + pipe) so Tera's default
+# alphabetical group_by sort produces a deliberate reading order: platform-
+# specific fixes first (where users feel the most regression risk), then
+# features and reliability, then UI and build/CI, then Other. The template
+# strips the prefix before rendering. `|` is used as the separator because
+# it never appears in our group names — splitting on `|` and taking `last`
+# is unambiguous for names like "Build / CI".
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+## {{ group | split(pat="|") | last }}
+
+{% for commit in commits %}\
+- {{ commit.message | split(pat="\\n") | first | trim }}
+{% endfor %}
+{% endfor %}\
+
+**Full Changelog**: https://github.com/imonior/wireguide-plus/compare/{{ previous.version }}...{{ version }}
+"""
+footer = ""
+trim = true
+
+[git]
+# We don't strictly follow Conventional Commits — but the commit_parsers
+# below include the cc patterns as a forward-compat fallback. Setting
+# conventional_commits=false lets us drive grouping purely off our regex
+# list and avoids cc-style parsing failing on a regular subject line.
+conventional_commits = false
+filter_unconventional = false
+split_commits = false
+filter_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "newest"
+
+# No commit_preprocessors: previously we stripped the "Merge pull request"
+# subject line, but the .* in that pattern stops at the first newline so
+# the squash body survived and rendered as an empty bullet. We now skip
+# the entire merge commit via the `^Merge ` parser rule below — the PR's
+# actual content lands in main as its own commit anyway.
+
+commit_parsers = [
+    # Skip noise.
+    { message = '^Merge ', skip = true },
+    { message = '^v\d', skip = true },  # version-bump commits restate the release
+
+    # Project's existing prefix convention.
+    { message = '^Windows[\s:]', group = "1|Windows" },
+    { message = '^macOS[\s:]', group = "2|macOS" },
+    { message = '^Linux[\s:]', group = "3|Linux" },
+    { message = '^(Add|Bundle|Make)\s', group = "4|Features" },
+    { message = '^(Fix|Resolve)\s', group = "5|Bug fixes" },
+    { message = '^(Audit|Wire|Surface|Bound|Cross-platform|Periodic|Update)\s', group = "6|Reliability" },
+    { message = '^(Settings|UI|Design|Sidebar|Rebrand|Polish)[\s:/]', group = "7|UI" },
+    { message = '^(CI|Build)[\s:]', group = "8|Build / CI" },
+
+    # Conventional Commits fallback (forward-compat).
+    { message = '^feat[(:]', group = "4|Features" },
+    { message = '^fix[(:]', group = "5|Bug fixes" },
+    { message = '^(refactor|perf)[(:]', group = "6|Reliability" },
+    { message = '^docs[(:]', group = "7|UI" },
+    { message = '^(ci|build)[(:]', group = "8|Build / CI" },
+    { message = '^test[(:]', group = "9|Other" },
+    { message = '^chore[(:]', group = "9|Other" },
+
+    # Anything else.
+    { message = '.*', group = "9|Other" },
+]

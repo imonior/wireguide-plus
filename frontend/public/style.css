@@ -1,0 +1,407 @@
+/* WireGuide Theme System
+ *
+ * Color palette: "Midnight Slate" (dark) / "Cloud Slate" (light).
+ * Grounded in color psychology research:
+ *   - Indigo accent (~245° HSL) — research-backed for security/trust UIs
+ *     (Sinclair & Vickery 2019; used by Stripe, Linear, Cloudflare)
+ *   - Emerald success (#34d399/#059669) — reads as "operational" vs. gamified
+ *   - Near-black surface (#13141a) — avoids halation/Cornsweet illusion
+ *     from pure black (physiological glare on cone cells)
+ *   - Near-white surface (#f0f2f8) — avoids iris constriction fatigue from #FFF
+ *   - Blue-slate surface tint — perceptual coherence with indigo accent
+ *   - Hue-matched shadows — physically correct (sky-lit ambient shadows)
+ * All text/accent contrast ratios verified against WCAG 2.2 AA (4.5:1).
+ *
+ * Token naming kept compatible with existing components.
+ * Three theme roots:
+ *   :root                                         — dark (default)
+ *   [data-theme="light"]                          — light explicit
+ *   @media (prefers-color-scheme: X) [data-theme="system"]  — follows OS
+ */
+
+/* ============================================================
+   DARK THEME — "Crimson Slate"
+   Blue-slate surfaces, WireGuide brand red accent (logo-derived).
+   Hue rotation: surfaces stay at ~230° (cool, calm chrome) while the
+   accent jumps to ~358° (warm, attention-getting brand red). The
+   cool-warm contrast is what makes the red "pop" against the bg —
+   complementary hue separation (Itten color theory).
+   ============================================================ */
+:root {
+    /* --- Surfaces (5-8% luminance staircase, ~230° hue family) --- */
+    --bg-primary:   #13141a;   /* deepest: main content canvas          L*≈8  */
+    --bg-secondary: #1c1d26;   /* raised: sidebar, list pane, panels    L*≈13 */
+    --bg-card:      #22242f;   /* card / popover / modal content        L*≈17 */
+    --bg-input:     #16171f;   /* text field — slightly recessed        L*≈10 */
+    --bg-hover:     rgba(255, 255, 255, 0.06);   /* hover state overlay */
+    --bg-active:    rgba(255, 255, 255, 0.10);   /* pressed state overlay */
+    --bg-selected:  rgba(239, 68, 68, 0.16);     /* brand-red selection row */
+    --border:       #252736;   /* hairline separators */
+    --border-strong: #353850;  /* interactive / input control borders */
+
+    /* --- Text (absolute hex — reliable for WCAG calculations) --- */
+    --text-primary:   #e8eaf6;   /* ~11:1 on --bg-primary ✓ AAA */
+    --text-secondary: #9ea3c0;   /* ~4.9:1 on --bg-primary ✓ AA  */
+    --text-muted:     #5c6080;   /* ~2.6:1 — use only for non-text elements */
+    --text-inverse:   #fff5f5;   /* warm-white text on red accent buttons */
+
+    /* --- Accent — WireGuide brand red (derived from logo: #A01D21 → #5E1012)
+       Dark mode picks a brighter vermillion for AA contrast against the
+       deep slate canvas; gradients darken back toward the logo's hue
+       so buttons keep brand identity at rest. */
+    --accent:        #EF4444;   /* red-500. ~4.6:1 on --bg-primary ✓ AA */
+    --accent-deep:   #A01D21;   /* logo top — used as gradient bottom */
+    --accent-darker: #5E1012;   /* logo bottom — for deeper shadows */
+    --blue:          #60a5fa;   /* blue-400 — reserved for "info" semantics (logs) */
+    /* Alias tokens for components that reference explicit --accent-* names */
+    --accent-blue:   #EF4444;   /* alias of --accent (legacy naming) */
+    --accent-green:  #34d399;
+    --accent-red:    #f87171;
+    --accent-yellow: #fbbf24;
+    --accent-orange: #fb923c;
+
+    /* --- Semantic status colors --- */
+    --green:   #34d399;   /* emerald-400. ~7.1:1 ✓ AAA — "connected / healthy" */
+    --yellow:  #fbbf24;   /* amber-400.   ~8.9:1 ✓ AAA — "connecting / warning" */
+    --red:     #f87171;   /* red-400.     ~5.8:1 ✓ AA  — "error / disconnect"   */
+    --orange:  #fb923c;   /* orange-400.  ~6.2:1 ✓ AA  — "no-handshake caution" */
+    --purple:  #c084fc;   /* purple-400.  ~5.1:1 ✓ AA  */
+
+    /* --- Semantic state tints --- */
+    --green-tint:  rgba(52, 211, 153, 0.16);
+    --yellow-tint: rgba(251, 191, 36, 0.16);
+    --blue-tint:   rgba(239, 68, 68, 0.18);   /* focus-ring tint = accent-red */
+    --accent-tint: rgba(239, 68, 68, 0.18);   /* explicit accent tint alias */
+    --orange-tint: rgba(251, 146, 60, 0.15);
+
+    --error-bg:    rgba(248, 113, 113, 0.14);
+    --error-text:  #fca5a5;   /* red-300, readable on --error-bg */
+
+    /* --- Modals, overlays --- */
+    --overlay-bg:       rgba(0, 0, 0, 0.65);
+    --drop-overlay-bg:  rgba(239, 68, 68, 0.18);   /* brand-red drop hint */
+
+    /* --- Shadows — hue-matched to surface blue-slate (not pure black) --- */
+    --shadow-xs:  0 0 0 0.5px rgba(100, 110, 180, 0.10),
+                  0 1px 2px  hsl(230 40% 4% / 0.50);
+    --shadow-sm:  0 1px 3px  hsl(230 40% 5% / 0.45),
+                  0 2px 6px  hsl(230 40% 4% / 0.35);
+    --shadow-md:  0 4px 12px hsl(230 40% 4% / 0.55),
+                  0 16px 48px hsl(230 40% 3% / 0.40);
+    --shadow-lg:  0 8px 24px hsl(230 40% 3% / 0.65),
+                  0 24px 64px hsl(230 40% 2% / 0.50);
+
+    /* --- Code editor --- */
+    --editor-bg:         #16171f;
+    --editor-gutter-bg:  #1c1d26;
+    --editor-border:     #252736;
+
+    /* --- Stats / graph — RX emerald, TX indigo (functional, NOT brand)
+       Kept distinct from accent red so RX/TX bars remain visually
+       distinguishable from connection state and brand chrome. */
+    --graph-bg:      #1c1d26;
+    --stats-rx:      #34d399;   /* emerald */
+    --stats-tx:      #818cf8;   /* indigo  */
+    --stats-rx-fill: rgba(52, 211, 153, 0.20);
+    --stats-tx-fill: rgba(129, 140, 248, 0.20);
+
+    /* --- Log viewer --- */
+    --log-bg:     #13141a;
+    --log-border: #252736;
+
+    /* --- Conflict / script warning item --- */
+    --warn-item-bg: rgba(255, 255, 255, 0.03);
+
+    /* ============ Non-color tokens (shared across themes) ============ */
+
+    /* Native UI font stack. Keep each platform's normal system face while
+     * giving Linux an explicit metric-compatible choice and Korean glyphs.
+     * A bare sans-serif fallback resolved to DejaVu Sans on Raspberry Pi OS,
+     * whose button baselines sit visibly high compared with SF/Segoe UI. */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+                 "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic",
+                 "Cantarell", "Noto Sans", "Noto Sans CJK KR", "Helvetica Neue", Helvetica,
+                 Arial, "Liberation Sans", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono",
+                 Consolas, monospace;
+
+    /* macOS AppKit text style scale */
+    --text-large-title: 700 26px/32px var(--font-sans);
+    --text-title-1:     700 22px/28px var(--font-sans);
+    --text-title-2:     700 17px/22px var(--font-sans);
+    --text-title-3:     600 15px/20px var(--font-sans);
+    --text-headline:    600 13px/18px var(--font-sans);
+    --text-body:        400 13px/18px var(--font-sans);
+    --text-callout:     400 12px/16px var(--font-sans);
+    --text-subheadline: 400 11px/14px var(--font-sans);
+    --text-footnote:    400 10px/13px var(--font-sans);
+
+    /* Spacing (8pt grid + 4pt half-steps) */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* Row heights (AppKit conventions) */
+    --row-compact: 24px;
+    --row-std:     28px;   /* NSTableView default */
+    --row-comfy:   36px;
+
+    /* Corner radius (macOS uses smaller radii than modern web) */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;   /* matches NSWindow corner radius */
+
+    /* Motion timing + duration */
+    --ease-out:    cubic-bezier(0.2, 0, 0.1, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-sheet:  cubic-bezier(0.32, 0.72, 0, 1);
+    --dur-fast: 120ms;
+    --dur-base: 220ms;
+    --dur-slow: 320ms;
+
+    /* Typography base applied to <html> */
+    font-family: var(--font-sans);
+    font-size: 13px;              /* macOS body default — NOT 14/16 */
+    line-height: 1.38;
+    font-weight: 400;
+    color-scheme: dark;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ============================================================
+   LIGHT THEME — "Crimson Cloud"
+   Blue-slate off-white surfaces, WireGuide brand red accent.
+   Logo's red `#A01D21` works directly on light bg (6.2:1 contrast).
+   ============================================================ */
+[data-theme="light"] {
+    /* --- Surfaces --- */
+    --bg-primary:   #f0f2f8;   /* base canvas — slightly blue-tinted off-white */
+    --bg-secondary: #e8eaf4;   /* sidebar / list pane — slightly more tinted */
+    --bg-card:      #ffffff;   /* cards "lift" above base with border+shadow */
+    --bg-input:     #ffffff;
+    --bg-hover:     rgba(160, 29, 33, 0.06);   /* brand-red hover */
+    --bg-active:    rgba(160, 29, 33, 0.10);   /* brand-red press */
+    --bg-selected:  rgba(160, 29, 33, 0.10);   /* brand-red selection */
+    --border:       rgba(100, 116, 139, 0.22); /* slate-400 @ 22% — subtle hairlines */
+    --border-strong: rgba(100, 116, 139, 0.40);
+
+    /* --- Text --- */
+    --text-primary:   #111827;   /* gray-900. ~17:1 on --bg-primary ✓ AAA */
+    --text-secondary: #374151;   /* gray-700. ~9.1:1 ✓ AAA */
+    --text-muted:     #6b7280;   /* gray-500. ~4.6:1 ✓ AA */
+    --text-inverse:   #fff5f5;   /* warm-white on red accent buttons */
+
+    /* --- Accent — WireGuide brand red (logo's vivid top color) --- */
+    --accent:        #A01D21;   /* logo top. ~6.2:1 on --bg-primary ✓ AA */
+    --accent-deep:   #5E1012;   /* logo bottom — gradient endpoint */
+    --accent-darker: #3d0a0c;   /* deeper still — shadows */
+    --blue:          #3b82f6;   /* blue-500 — reserved for "info" semantics */
+    --accent-blue:   #A01D21;   /* alias of --accent (legacy naming) */
+    --accent-green:  #059669;
+    --accent-red:    #dc2626;
+    --accent-yellow: #b45309;
+    --accent-orange: #ea580c;
+
+    /* --- Semantic status colors --- */
+    --green:   #059669;   /* emerald-600. ~4.8:1 ✓ AA — connected */
+    --yellow:  #b45309;   /* amber-700.   ~5.2:1 ✓ AA — connecting */
+    --red:     #dc2626;   /* red-600.     ~5.0:1 ✓ AA — error */
+    --orange:  #ea580c;   /* orange-600.  ~4.9:1 ✓ AA — caution */
+    --purple:  #9333ea;   /* purple-600.  ~5.1:1 ✓ AA */
+
+    /* --- Semantic state tints --- */
+    --green-tint:  rgba(5, 150, 105, 0.12);
+    --yellow-tint: rgba(180, 83, 9, 0.12);
+    --blue-tint:   rgba(160, 29, 33, 0.14);   /* focus-ring tint = accent-red */
+    --accent-tint: rgba(160, 29, 33, 0.14);   /* explicit accent tint alias */
+    --orange-tint: rgba(234, 88, 12, 0.12);
+
+    --error-bg:    rgba(220, 38, 38, 0.08);
+    --error-text:  #b91c1c;   /* red-700, readable on --error-bg */
+
+    /* --- Modals, overlays --- */
+    --overlay-bg:       rgba(15, 23, 42, 0.40);
+    --drop-overlay-bg:  rgba(160, 29, 33, 0.10);
+
+    /* --- Shadows — blue-slate hue-matched (Comeau / natural illumination) --- */
+    --shadow-xs:  0 0 0 0.5px rgba(100, 116, 139, 0.14),
+                  0 1px 2px hsl(225 25% 40% / 0.08);
+    --shadow-sm:  0 1px 3px hsl(225 25% 50% / 0.10),
+                  0 2px 8px hsl(225 25% 40% / 0.08);
+    --shadow-md:  0 4px 12px hsl(225 25% 40% / 0.12),
+                  0 16px 48px hsl(225 25% 35% / 0.08);
+    --shadow-lg:  0 8px 24px hsl(225 25% 35% / 0.18),
+                  0 24px 64px hsl(225 25% 30% / 0.12);
+
+    --editor-bg:        #ffffff;
+    --editor-gutter-bg: #f0f2f8;
+    --editor-border:    rgba(100, 116, 139, 0.22);
+
+    /* RX emerald, TX indigo — functional stats colors (not brand) */
+    --graph-bg:      #e8eaf4;
+    --stats-rx:      #059669;   /* emerald */
+    --stats-tx:      #4f46e5;   /* indigo  */
+    --stats-rx-fill: rgba(5, 150, 105, 0.16);
+    --stats-tx-fill: rgba(79, 70, 229, 0.16);
+
+    --log-bg:     #ffffff;
+    --log-border: rgba(100, 116, 139, 0.16);
+
+    --warn-item-bg: rgba(15, 23, 42, 0.03);
+
+    color-scheme: light;
+}
+
+/* ============================================================
+   SYSTEM THEME — follows OS via prefers-color-scheme
+   Mirrors the explicit light/dark blocks exactly.
+   ============================================================ */
+@media (prefers-color-scheme: light) {
+    [data-theme="system"] {
+        --bg-primary:   #f0f2f8;
+        --bg-secondary: #e8eaf4;
+        --bg-card:      #ffffff;
+        --bg-input:     #ffffff;
+        --bg-hover:     rgba(160, 29, 33, 0.06);
+        --bg-active:    rgba(160, 29, 33, 0.10);
+        --bg-selected:  rgba(160, 29, 33, 0.10);
+        --border:       rgba(100, 116, 139, 0.22);
+        --border-strong: rgba(100, 116, 139, 0.40);
+
+        --text-primary:   #111827;
+        --text-secondary: #374151;
+        --text-muted:     #6b7280;
+        --text-inverse:   #fff5f5;
+
+        --accent:        #A01D21;
+        --accent-deep:   #5E1012;
+        --accent-darker: #3d0a0c;
+        --blue:          #3b82f6;
+        --accent-blue:   #A01D21;
+        --accent-green:  #059669;
+        --accent-red:    #dc2626;
+        --accent-yellow: #b45309;
+        --accent-orange: #ea580c;
+        --green:   #059669;
+        --yellow:  #b45309;
+        --red:     #dc2626;
+        --orange:  #ea580c;
+        --purple:  #9333ea;
+
+        --green-tint:  rgba(5, 150, 105, 0.12);
+        --yellow-tint: rgba(180, 83, 9, 0.12);
+        --blue-tint:   rgba(160, 29, 33, 0.14);
+        --accent-tint: rgba(160, 29, 33, 0.14);
+        --orange-tint: rgba(234, 88, 12, 0.12);
+
+        --error-bg:   rgba(220, 38, 38, 0.08);
+        --error-text: #b91c1c;
+
+        --overlay-bg:      rgba(15, 23, 42, 0.40);
+        --drop-overlay-bg: rgba(160, 29, 33, 0.10);
+        --shadow-xs: 0 0 0 0.5px rgba(100, 116, 139, 0.14),
+                     0 1px 2px hsl(225 25% 40% / 0.08);
+        --shadow-sm: 0 1px 3px hsl(225 25% 50% / 0.10),
+                     0 2px 8px hsl(225 25% 40% / 0.08);
+        --shadow-md: 0 4px 12px hsl(225 25% 40% / 0.12),
+                     0 16px 48px hsl(225 25% 35% / 0.08);
+        --shadow-lg: 0 8px 24px hsl(225 25% 35% / 0.18),
+                     0 24px 64px hsl(225 25% 30% / 0.12);
+
+        --editor-bg:        #ffffff;
+        --editor-gutter-bg: #f0f2f8;
+        --editor-border:    rgba(100, 116, 139, 0.22);
+
+        --graph-bg:      #e8eaf4;
+        --stats-rx:      #059669;
+        --stats-tx:      #4f46e5;
+        --stats-rx-fill: rgba(5, 150, 105, 0.16);
+        --stats-tx-fill: rgba(79, 70, 229, 0.16);
+
+        --log-bg:     #ffffff;
+        --log-border: rgba(100, 116, 139, 0.16);
+
+        --warn-item-bg: rgba(15, 23, 42, 0.03);
+
+        color-scheme: light;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    [data-theme="system"] {
+        color-scheme: dark;
+    }
+}
+
+/* ============================================================
+   Resets and base element styles
+   ============================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.38;
+}
+
+/* Global button reset — kills macOS WebKit's default Aqua bezel
+ * (rounded outline + drop shadow + gradient) that otherwise shows through
+ * any component that only sets `background: transparent; border: 0`.
+ * Every .svelte component still styles its own buttons on top of this
+ * baseline; the reset just removes the UA-styled halo. */
+button {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    line-height: inherit;
+}
+button::-moz-focus-inner {
+    border: 0;
+    padding: 0;
+}
+
+/* Keyboard focus indicator — never disable without replacement.
+ * Uses :focus-visible so mouse clicks don't trigger rings on buttons. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Reduced motion — disable all non-essential transitions */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

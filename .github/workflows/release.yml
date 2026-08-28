@@ -1,0 +1,492 @@
+name: Release
+
+# Fires on annotated/lightweight tags shaped like vX.Y.Z (or vX.Y.Z-foo).
+# The build jobs (macOS arm64, Windows amd64/arm64, Linux amd64/arm64)
+# run in parallel; the final `release` job collects every artifact,
+# generates SHA256SUMS, and attaches them all to the GitHub Release the
+# tag triggers.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # needed by softprops/action-gh-release to upload assets
+
+env:
+  # Hex Ed25519 PUBLIC key baked into every release binary (via
+  # Taskfile SIGN_PUBKEY → -ldflags -X internal/update.expectedPublicKey).
+  # The matching private seed lives in the UPDATE_SIGNING_KEY secret and
+  # signs SHA256SUMS in the release job; the sign step verifies the pair
+  # actually match before publishing. Rotation: docs/release.md.
+  UPDATE_SIGNING_PUBKEY: ea2dda6d25dbcbbb9a4b16077c7138fa343a0775a3e718a333c0fbae31bded36
+
+jobs:
+  build-macos:
+    name: macOS arm64
+    # arm64 only. Intel macs are a vanishing share of the target
+    # audience and shipping a CGO/.m cross-compile from arm64 (or
+    # standing up a parallel macos-13 runner) costs more in CI
+    # complexity than it returns in coverage. Intel users can still
+    # build from source.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.2'
+
+      - name: Install wails3 + task
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          go install github.com/go-task/task/v3/cmd/task@v3.45.4
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Build .app bundle (ad-hoc signed)
+        # darwin:package does: build:native → create:app:bundle →
+        # codesign:adhoc.
+        run: wails3 task darwin:package ARCH=arm64 SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+
+      - name: Archive .app
+        # ditto preserves macOS metadata (extended attributes, symlinks,
+        # the codesign signature) better than plain `zip -ry`. The
+        # resulting .zip stays Gatekeeper-quarantine-friendly.
+        run: |
+          cd bin
+          ditto -c -k --sequesterRsrc --keepParent wireguide.app "WireGuide-darwin-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: bin/WireGuide-darwin-arm64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    name: Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: windows-latest  # x86_64 host; cross-compiles arm64 fine (no cgo)
+    permissions:
+      # signpath/github-action-submit-signing-request reads the unsigned
+      # artifact from the GitHub Actions artifact store via the standard
+      # GITHUB_TOKEN (actions: read covers it). It uses api-token auth,
+      # not OIDC — id-token: write would be dead weight that just widens
+      # the job's token scope. If SignPath ever ships an OIDC path, add
+      # the permission scoped to that step only.
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.2'
+
+      - name: Install wails3 + task
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          go install github.com/go-task/task/v3/cmd/task@v3.45.4
+          # Append, don't overwrite — PATH already has system entries.
+          "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install NSIS + add to PATH
+        # NSIS used to ship preinstalled on windows-latest runners but is
+        # no longer on the default PATH (and may not be in the image at
+        # all on newer windows-2025 builds), so wails3's NSIS packager
+        # exits 127 with "makensis: executable file not found".
+        # `choco install -y nsis` is idempotent — a no-op if already
+        # present — and we explicitly add the bin dir to GITHUB_PATH so
+        # the subsequent step's child processes (go-task → makensis)
+        # find it without depending on choco's PATH refresh behavior.
+        shell: pwsh
+        run: |
+          choco install -y nsis --no-progress
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
+
+      - name: Build .exe + NSIS installer
+        # Our Windows binary is pure-syscall (no cgo) so CGO_ENABLED=0
+        # is correct. vendor:wintun pulls the pinned wintun.dll into bin/.
+        run: wails3 task windows:package ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+
+      - name: Rename installer to canonical asset name
+        shell: bash
+        # project.nsi's OutFile writes to bin/wireguide-${ARCH}-installer.exe
+        # (ARCH set by wails_tools.nsh to "amd64" or "arm64"). v0.3.0 used
+        # `find ... | head -1` here and picked up build/windows/nsis/
+        # MicrosoftEdgeWebview2Setup.exe — the embedded WebView2 bootstrapper —
+        # instead of the real installer, shipping a 1.7MB "installer" that
+        # just installed WebView2 and exited. Path is deterministic; address
+        # it directly.
+        run: |
+          set -e
+          src="bin/wireguide-${{ matrix.arch }}-installer.exe"
+          if [ ! -f "$src" ]; then
+            echo "ERROR: NSIS installer not found at $src"
+            find build/windows bin -type f
+            exit 1
+          fi
+          mv "$src" "bin/WireGuide-windows-${{ matrix.arch }}.exe"
+
+      # --- SignPath Foundation code signing ---------------------------
+      # Gated by SIGNPATH_API_TOKEN presence. While SignPath onboarding
+      # is pending the entire signing chain skips and the unsigned .exe
+      # ships (legacy behaviour). Once the maintainer's SignPath project
+      # is approved and SIGNPATH_API_TOKEN is set as a repo secret +
+      # SIGNPATH_ORGANIZATION_ID as a repo variable, this block runs
+      # automatically on tagged releases. See SIGNING-POLICY.md for the
+      # full policy.
+      - name: Detect SignPath config
+        id: signpath-cfg
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if [ -n "$SIGNPATH_API_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "SignPath signing ENABLED for this build."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SIGNPATH_API_TOKEN not set — skipping code signing. Onboarding pending; see SIGNING-POLICY.md."
+          fi
+
+      - name: Upload unsigned installer for SignPath
+        if: steps.signpath-cfg.outputs.enabled == 'true'
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          # transient name — the final published artifact stays
+          # 'windows-${{ matrix.arch }}' and contains the signed exe;
+          # the release job's download-artifact step excludes this one
+          # via pattern '!unsigned-*'.
+          name: unsigned-windows-${{ matrix.arch }}
+          path: bin/WireGuide-windows-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Submit signing request to SignPath
+        if: steps.signpath-cfg.outputs.enabled == 'true'
+        # Pinned to commit SHA rather than @v2 floating tag — this action
+        # carries the signing api-token via `with:` and is the most
+        # privileged step in the workflow, so a compromised tag retag
+        # would be a direct supply-chain path to a signed-binary forgery.
+        # Update by bumping the SHA + the trailing `# v2.x.y` comment.
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd  # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: wireguide
+          # Tagged releases only — the policy's origin verification
+          # also enforces this, but conditioning here makes the
+          # workflow's intent obvious.
+          signing-policy-slug: ${{ startsWith(github.ref, 'refs/tags/v') && 'release-signing' || 'test-signing' }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: bin/signed
+          wait-for-completion-timeout-in-seconds: 1800
+
+      - name: Replace unsigned installer with signed
+        if: steps.signpath-cfg.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -e
+          signed=$(find bin/signed -type f -name "*.exe" | head -1)
+          test -n "$signed" || { echo "no signed .exe found"; ls -laR bin/signed; exit 1; }
+          mv "$signed" "bin/WireGuide-windows-${{ matrix.arch }}.exe"
+          # Sanity check: Get-AuthenticodeSignature reports Valid on
+          # a properly signed binary. Status NotSigned / HashMismatch
+          # would mean the replacement didn't happen.
+          powershell -Command "(Get-AuthenticodeSignature 'bin/WireGuide-windows-${{ matrix.arch }}.exe').Status" | tee /tmp/sigstatus
+          grep -q '^Valid' /tmp/sigstatus
+      # --- end signing -------------------------------------------------
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: bin/WireGuide-windows-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  build-linux:
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Wails Linux builds need cgo (GTK/WebKitGTK), so each arch
+          # builds natively on a matching runner instead of cross-compiling.
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.2'
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+
+      - name: Install wails3 + task
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          go install github.com/go-task/task/v3/cmd/task@v3.45.4
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Build native Linux binary
+        run: task linux:build ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+
+      - name: Check runtime linking
+        run: |
+          file bin/wireguide
+          if ldd bin/wireguide | grep -q 'not found'; then
+            ldd bin/wireguide
+            exit 1
+          fi
+
+      - name: Package DEB
+        env:
+          GOARCH: ${{ matrix.arch }}
+          GIT_COMMITTER_NAME: WireGuide CI
+          GIT_COMMITTER_EMAIL: noreply@example.com
+        run: |
+          wails3 tool package -name wireguide -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
+          dpkg-deb --info bin/wireguide.deb
+          mv bin/wireguide.deb "bin/WireGuide-linux-${{ matrix.arch }}.deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: bin/WireGuide-linux-${{ matrix.arch }}.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git-cliff needs the full history + all tags to compute the
+          # commit range since the previous release. Shallow clone (the
+          # default) only fetches the tag's commit and CHANGELOG comes
+          # out empty.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true  # flattens platform sub-dirs into one folder
+          # Exclude the transient unsigned-windows-* artifacts that the
+          # build-windows job uploads only to feed SignPath. Without
+          # this exclusion, the unsigned and signed .exes share the
+          # same filename (WireGuide-windows-<arch>.exe) and one
+          # silently overwrites the other under merge-multiple.
+          pattern: '!unsigned-*'
+
+      - name: Generate SHA256SUMS
+        # Matches the format internal/update/checker.go expects (GNU
+        # coreutils two-space layout). Signed below — the checker
+        # downloads SHA256SUMS.sig from next to this file.
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.12'
+
+      - name: Sign SHA256SUMS (Ed25519)
+        # HARD failure when the key is missing or mismatched — every
+        # binary built above has UPDATE_SIGNING_PUBKEY baked in with
+        # `-tags production`, so publishing without a valid .sig would
+        # strand those clients: their updater REFUSES releases it can't
+        # verify. Better no release than an unverifiable one.
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::error::UPDATE_SIGNING_KEY secret is not set. The binaries just built embed UPDATE_SIGNING_PUBKEY and will refuse unsigned updates — set the secret (docs/release.md) before releasing."
+            exit 1
+          fi
+          derived=$(go run ./tools/updatesign pub)
+          if [ "$derived" != "$UPDATE_SIGNING_PUBKEY" ]; then
+            echo "::error::UPDATE_SIGNING_KEY does not match UPDATE_SIGNING_PUBKEY in this workflow (secret derives $derived). A mismatched pair would ship binaries that reject our own releases. Fix the secret or the env value."
+            exit 1
+          fi
+          go run ./tools/updatesign sign -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
+          go run ./tools/updatesign verify -pub "$UPDATE_SIGNING_PUBKEY" -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
+
+      - name: Generate release notes with git-cliff
+        # GitHub's built-in generate_release_notes only enumerates merged
+        # PRs — most of our work lands as direct pushes to main, so the
+        # auto-generated body was nearly empty (v0.3.0 shipped showing
+        # one bullet despite ~30 commits). git-cliff reads the actual
+        # git log, grouped by subject-line prefix per cliff.toml.
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: CHANGELOG.md
+          fail_on_unmatched_files: true
+
+  update-cask:
+    name: Update homebrew-tap cask (arm64)
+    needs: release
+    # Skip on pre-release tags (vX.Y.Z-rc1, etc.) — those shouldn't bump
+    # the stable cask. Skip if TAP_PUSH_TOKEN isn't configured so a fork
+    # without a homebrew-tap secret doesn't fail the whole pipeline.
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token is present
+        id: check_token
+        env:
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          if [ -z "$TAP_PUSH_TOKEN" ]; then
+            echo "TAP_PUSH_TOKEN secret not set; skipping cask update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout homebrew-tap
+        if: steps.check_token.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: imonior/homebrew-tap
+          token: ${{ secrets.TAP_PUSH_TOKEN }}
+          path: tap
+
+      - name: Download arm64 artifact
+        if: steps.check_token.outputs.skip == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64
+          path: dl
+
+      - name: Compute sha256 + rewrite cask
+        if: steps.check_token.outputs.skip == 'false'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          # Strip the leading 'v' from vX.Y.Z so the cask `version` line
+          # matches Homebrew convention.
+          version="${TAG#v}"
+          sha256=$(sha256sum dl/WireGuide-darwin-arm64.zip | awk '{print $1}')
+          cask="tap/Casks/wireguide.rb"
+
+          # Heredoc-rewrite the whole cask in one shot. Doing it via sed
+          # against the old file would chain three fragile regex edits
+          # (version line, sha256 line, url filename — the old file says
+          # "macOS-arm64", we want "darwin-arm64"). Easier and safer to
+          # just regenerate the bits that change. Everything *outside*
+          # the version/sha256/url block stays byte-identical.
+          cat > "$cask" <<EOF
+          cask "wireguide" do
+            version "$version"
+            sha256 "$sha256"
+
+            url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuide-darwin-arm64.zip"
+            name "WireGuide Plus"
+            desc "Cross-platform WireGuard VPN desktop client"
+            homepage "https://github.com/imonior/wireguide-plus"
+
+            depends_on macos: :catalina
+
+            app "WireGuide.app"
+
+            # Symlink the CLI onto PATH (Homebrew's bin), so users get a
+            # global \`wireguide ctl ...\` after \`brew install\` instead of
+            # the in-bundle \`/Applications/WireGuide.app/Contents/MacOS/wireguide\`.
+            binary "#{appdir}/WireGuide.app/Contents/MacOS/wireguide"
+
+            # auto_updates true tells \`brew upgrade\` to defer to the
+            # app's own update mechanism, which prevents brew + the
+            # in-app scheduler from racing to upgrade the same install
+            # (the wireguide RunUpdate path also shells out to brew, so
+            # without this flag a user clicking "Update Now" while brew
+            # is auto-upgrading hits a lock contention).
+            auto_updates true
+
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/WireGuide.app"]
+              system_command "/usr/bin/killall",
+                             args: ["wireguide"],
+                             must_succeed: false
+              system_command "/bin/sleep",
+                             args: ["1"],
+                             must_succeed: false
+              system_command "/usr/bin/open",
+                             args: ["#{appdir}/WireGuide.app"],
+                             must_succeed: false
+            end
+
+            uninstall quit: "com.imonior.wireguide-plus"
+
+            zap launchctl: "com.wireguide.helper",
+                delete: [
+                  "/Library/PrivilegedHelperTools/com.wireguide.helper",
+                  "/Library/LaunchDaemons/com.wireguide.helper.plist",
+                ],
+                trash: [
+                  "~/Library/Application Support/WireGuide",
+                  "~/Library/Preferences/com.imonior.wireguide-plus.plist",
+                  "/var/run/wireguide",
+                  "/var/log/wireguide-helper.log",
+                ]
+          end
+          EOF
+
+      - name: Commit + push
+        if: steps.check_token.outputs.skip == 'false'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd tap
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Detect a no-op (rerun of the same tag) so the workflow
+          # doesn't fail trying to push an empty diff.
+          if git diff --quiet Casks/wireguide.rb; then
+            echo "cask already up to date for ${TAG}; nothing to commit."
+            exit 0
+          fi
+          git add Casks/wireguide.rb
+          git commit -m "wireguide ${TAG}: arm64 cask bump"
+          git push

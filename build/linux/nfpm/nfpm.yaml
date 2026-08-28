@@ -1,0 +1,82 @@
+# Feel free to remove those if you don't want/need to use them.
+# Make sure to check the documentation at https://nfpm.goreleaser.com
+#
+# The lines below are called `modelines`. See `:help modeline`
+
+name: "wireguide"
+arch: ${GOARCH}
+platform: "linux"
+version: "1.0.0"
+section: "default"
+priority: "extra"
+maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+description: "Cross-platform WireGuard VPN desktop client"
+vendor: "imonior"
+homepage: "https://github.com/imonior/wireguide-plus"
+license: "MIT"
+release: "1"
+
+contents:
+  - src: "./bin/wireguide"
+    dst: "/usr/local/bin/wireguide"
+  - src: "./build/appicon.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/wireguide.png"
+  - src: "./build/linux/wireguide.desktop"
+    dst: "/usr/share/applications/wireguide.desktop"
+
+# Wails v3 alpha.74 uses GTK3 and the WebKitGTK 4.1 API on Linux.
+depends:
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
+  - libayatana-appindicator3-1
+  - iproute2
+  - nftables
+  - pkexec | policykit-1
+
+# NetworkManager supplies SSID detection and immediate Wi-Fi change events,
+# while resolvconf avoids the guarded /etc/resolv.conf fallback on systems
+# that do not run systemd-resolved. Noto supplies Korean UI glyphs and stable
+# cross-platform text metrics. The core client can still operate without these,
+# so keep them as recommendations rather than hard dependencies.
+recommends:
+  - network-manager
+  - resolvconf
+  - fonts-noto-core
+  - fonts-noto-cjk
+
+# Distribution-specific overrides for different package formats and WebKit versions
+overrides:
+  # RPM package names used by current Fedora/RHEL-family distributions.
+  rpm:
+    depends:
+      - gtk3
+      - webkit2gtk4.1
+  
+  # Arch Linux package names.
+  archlinux:
+    depends:
+      - gtk3
+      - webkit2gtk-4.1
+
+# scripts section to ensure desktop database is updated after install
+scripts:
+  postinstall: "./build/linux/nfpm/scripts/postinstall.sh"
+  # You can also add preremove, postremove if needed
+  # preremove: "./build/linux/nfpm/scripts/preremove.sh"
+  # postremove: "./build/linux/nfpm/scripts/postremove.sh"
+
+# replaces:
+#   - foobar
+# provides:
+#   - bar
+# depends:
+#   - gtk3
+#   - libwebkit2gtk
+# recommends:
+#   - whatever
+# suggests:
+#   - something-else
+# conflicts:
+#   - not-foo
+#   - not-bar
+# changelog: "changelog.yaml"

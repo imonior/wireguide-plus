@@ -1,0 +1,342 @@
+package helper
+
+import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/imonior/wireguide-plus/internal/diag"
+	"github.com/imonior/wireguide-plus/internal/domain"
+	"github.com/imonior/wireguide-plus/internal/ipc"
+)
+
+// pingTargetForTunnel picks the best ICMP target to measure latency
+// of a connected tunnel. The public WG endpoint often blocks ICMP
+// (typical of corporate VPNs), so probing the endpoint IP directly
+// returns "Host unreachable" everywhere.
+//
+// Selection order:
+//
+//  1. A user-provided latency probe target from the tunnel metadata.
+//
+//  2. A specific peer host (/32 entry in AllowedIPs) — split-tunnel
+//     setups list the reachable hosts explicitly; ping one of them
+//     directly to measure tunnel RTT.
+//
+//  3. For full-tunnel configs (AllowedIPs contains 0.0.0.0/0 or ::/0)
+//     ping a known well-pingable public IP (8.8.8.8 — Google's anycast
+//     public DNS responds to ICMP from anywhere). Traffic routes
+//     through the tunnel by virtue of the default route, so the RTT
+//     reflects tunnel + underlay + remote peer NAT + peer→target hop.
+//
+//  4. Public endpoint as last resort. Often fails with
+//     "Host unreachable" but it's not wrong to try.
+func pingTargetForTunnel(cfg *domain.WireGuardConfig, fallbackEndpoint, customTarget string) string {
+	if customTarget = strings.TrimSpace(customTarget); customTarget != "" {
+		return customTarget
+	}
+	if cfg == nil {
+		return fallbackEndpoint
+	}
+
+	hasFullTunnel := false
+	for _, peer := range cfg.Peers {
+		for _, allowed := range peer.AllowedIPs {
+			// (2) specific peer host wins — most accurate
+			if strings.HasSuffix(allowed, "/32") {
+				return strings.TrimSuffix(allowed, "/32")
+			}
+			if strings.HasSuffix(allowed, "/128") {
+				return strings.TrimSuffix(allowed, "/128")
+			}
+			if allowed == "0.0.0.0/0" || allowed == "::/0" {
+				hasFullTunnel = true
+			}
+		}
+	}
+
+	// (3) full-tunnel public probe
+	if hasFullTunnel {
+		return "8.8.8.8"
+	}
+
+	// (4) fallback
+	return fallbackEndpoint
+}
+
+// statusDTO returns the current connection status for broadcast.
+// Pulled from manager.AllStatuses() in a single call — the previous
+// version queried the primary tunnel via Status() AND again via
+// AllStatuses(), doubling UAPI round-trips on every 1Hz tick for the
+// common single-tunnel case.
+func (h *Helper) statusDTO() ipc.ConnectionStatus {
+	allStats := h.manager.AllStatuses()
+	if len(allStats) == 0 {
+		// Mirror the previous Status()==nil behavior with an empty
+		// disconnected struct so subscribers don't spuriously see
+		// "tunnel disappeared" events on idle helpers.
+		return ipc.ConnectionStatus{State: domain.StateDisconnected}
+	}
+
+	// Pick the primary the same way manager.Status() did: prefer
+	// the first connected tunnel; otherwise the first non-nil entry.
+	var primary *domain.ConnectionStatus
+	for _, ts := range allStats {
+		if ts == nil {
+			continue
+		}
+		if ts.State == domain.StateConnected {
+			primary = ts
+			break
+		}
+		if primary == nil {
+			primary = ts
+		}
+	}
+	if primary == nil {
+		return ipc.ConnectionStatus{State: domain.StateDisconnected}
+	}
+	result := *primary
+	result.ActiveTunnels = h.manager.ActiveTunnels()
+
+	// Snapshot the latency cache once per call so we don't take the
+	// lock per-tunnel inside the loop.
+	h.latencyMu.Lock()
+	latencies := make(map[string]float64, len(h.latencyByTunnel))
+	for k, v := range h.latencyByTunnel {
+		latencies[k] = v
+	}
+	h.latencyMu.Unlock()
+
+	if lat, ok := latencies[result.TunnelName]; ok {
+		result.LatencyMs = lat
+	}
+
+	// Include complete per-tunnel status. The same DTO backs both the
+	// frontend's selected-tunnel statistics and `ctl status --json`; copying
+	// only name/state/handshake silently zeroed interface, duration, traffic,
+	// and endpoint whenever more than one tunnel was active.
+	// Pre-allocate to avoid the latent-bug of `append` aliasing a
+	// slice on the manager-returned struct.
+	if len(allStats) > 1 {
+		result.Tunnels = make([]domain.ConnectionStatus, 0, len(allStats))
+		for _, ts := range allStats {
+			if ts == nil {
+				continue
+			}
+			sub := *ts
+			sub.ActiveTunnels = nil
+			sub.Tunnels = nil
+			if lat, ok := latencies[ts.TunnelName]; ok {
+				sub.LatencyMs = lat
+			}
+			result.Tunnels = append(result.Tunnels, sub)
+		}
+	}
+	return result
+}
+
+// latencyLoop probes each connected tunnel's endpoint with an ICMP
+// ping every 30 seconds and stores the result in latencyByTunnel.
+// Runs in a goroutine supervised by goSafe — panics are logged and
+// restarted up to maxRestarts times.
+//
+// Each measurement uses diag.PingEndpoint which has its own 15s ctx
+// timeout. Tunnel pings dispatch in parallel (one goroutine per
+// connected tunnel) so total wall time is max(per-tunnel) instead of
+// sum — a row of N hung tunnels no longer multiplies the loop by N
+// and risks chewing through the 30s tick.
+func (h *Helper) latencyLoop() {
+	const tickInterval = 30 * time.Second
+	// With no GUI subscribed, nobody consumes 30s-fresh values — only an
+	// occasional `ctl status` reads the cache. The helper deliberately
+	// outlives the GUI while a tunnel is up (wg-quick semantics), so
+	// without this the headless state would spawn ping subprocesses every
+	// 30s forever. Probes continue at a slow cadence rather than stopping
+	// so ctl status latency stays approximately fresh.
+	const idleTickInterval = 5 * time.Minute
+	// Sleep briefly on startup so we don't ping immediately during
+	// helper boot, when the tunnel state is still settling.
+	select {
+	case <-h.done:
+		return
+	case <-time.After(5 * time.Second):
+	}
+
+	for {
+		h.measureLatencies()
+
+		interval := tickInterval
+		if !h.server.HasSubscribers() {
+			interval = idleTickInterval
+		}
+		select {
+		case <-h.done:
+			return
+		case <-time.After(interval):
+		}
+	}
+}
+
+// latencyPoolSize bounds parallel ICMP probes per tick. With N connected
+// tunnels we used to spawn N goroutines every 30s; on a flaky network with
+// 15s per-probe timeouts this could keep dozens of goroutines alive at peak
+// for very little wall-clock benefit. A fixed pool of 3 covers the typical
+// "two tunnels, both responsive" case and degrades gracefully when many
+// tunnels hang on ICMP.
+const latencyPoolSize = 3
+
+type latencyTask struct {
+	tunnelName         string
+	endpoint           string
+	cfg                *domain.WireGuardConfig
+	latencyProbeTarget string
+}
+
+// measureLatencies pings each connected tunnel's preferred latency target
+// and updates the cache. Failures store 0, which the frontend renders as "—".
+func (h *Helper) measureLatencies() {
+	statuses := h.manager.AllStatuses()
+
+	// Collect tasks first so we know how many workers are needed.
+	var tasks []latencyTask
+	for _, s := range statuses {
+		if s == nil || s.State != domain.StateConnected || s.Endpoint == "" {
+			continue
+		}
+		h.mu.Lock()
+		cfg := h.activeCfgs[s.TunnelName]
+		h.mu.Unlock()
+		latencyProbeTarget := ""
+		if h.userTunnelStore != nil {
+			if meta, err := h.userTunnelStore.LoadMeta(s.TunnelName); err == nil && meta != nil {
+				latencyProbeTarget = meta.LatencyProbeTarget
+			}
+		}
+		tasks = append(tasks, latencyTask{
+			tunnelName:         s.TunnelName,
+			endpoint:           s.Endpoint,
+			cfg:                cfg,
+			latencyProbeTarget: latencyProbeTarget,
+		})
+	}
+	if len(tasks) == 0 {
+		return
+	}
+
+	taskCh := make(chan latencyTask, len(tasks))
+	for _, t := range tasks {
+		taskCh <- t
+	}
+	close(taskCh)
+
+	workers := latencyPoolSize
+	if len(tasks) < workers {
+		workers = len(tasks)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			// defer wg.Done() FIRST so a panic in runOneLatencyProbe
+			// doesn't leak the WaitGroup counter and deadlock the
+			// 30-second latency loop. The inner func() + recover()
+			// catches per-task panics without killing the worker —
+			// next probe in the same worker still runs.
+			defer wg.Done()
+			for t := range taskCh {
+				func(t latencyTask) {
+					defer func() {
+						if r := recover(); r != nil {
+							slog.Warn("latency probe panic recovered",
+								"tunnel", t.tunnelName, "panic", r)
+						}
+					}()
+					h.runOneLatencyProbe(t)
+				}(t)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func (h *Helper) runOneLatencyProbe(t latencyTask) {
+	target := pingTargetForTunnel(t.cfg, t.endpoint, t.latencyProbeTarget)
+	viaTunnel := target != t.endpoint
+	result := diag.PingEndpoint(target)
+	measuredTarget := target
+
+	// If through-tunnel target failed (gateway doesn't exist /
+	// blocks ICMP on this network), fall back to the public
+	// endpoint. Many VPN endpoints DO drop ICMP — the through-
+	// tunnel path is just usually more permissive.
+	if !result.Reachable && viaTunnel {
+		result = diag.PingEndpoint(t.endpoint)
+		viaTunnel = false
+		measuredTarget = t.endpoint
+	}
+
+	latency := 0.0
+	if result.Reachable {
+		latency = result.LatencyMs
+	}
+	h.latencyMu.Lock()
+	h.latencyByTunnel[t.tunnelName] = latency
+	h.latencyMu.Unlock()
+	// Debug, not Info: this fires per connected tunnel every 30s, and
+	// launchd appends StandardOutPath forever with no rotation — at Info
+	// it was 95.7% of a 7.7 MB helper log (33,720 of 35,240 lines over
+	// four months). Nothing is lost by demoting it: the same value is
+	// already broadcast in the status event, rendered in the UI and
+	// readable via `ctl status`. The log level is runtime-mutable, so
+	// anyone debugging a latency problem can turn it back on live with
+	// `wireguide ctl set loglevel debug` (or the Settings UI).
+	slog.Debug("endpoint latency measured",
+		"tunnel", t.tunnelName, "target", measuredTarget,
+		"configured_target", t.latencyProbeTarget,
+		"via_tunnel", viaTunnel,
+		"reachable", result.Reachable, "latency_ms", latency)
+}
+
+// eventLoop broadcasts status updates to subscribed GUIs on change. Change
+// detection is done by JSON round-trip compare (robust against field swaps).
+//
+// The loop short-circuits when no GUI is subscribed — building the status
+// DTO involves a per-tunnel UAPI round trip to wireguard-go, so doing it
+// once per second with no listener is pure waste. The next Subscribe call
+// triggers a fresh refreshStatus on the GUI side, so the missed ticks
+// don't leave the UI stale.
+func (h *Helper) eventLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	var lastJSON []byte
+	for {
+		select {
+		case <-h.done:
+			return
+		case <-ticker.C:
+			// Skip if nobody's listening — saves the wgctrl syscalls + JSON marshal.
+			if !h.server.HasSubscribers() {
+				lastJSON = nil // force next broadcast (post-resubscribe) to fire
+				continue
+			}
+			status := h.statusDTO()
+			currentJSON, err := json.Marshal(status)
+			if err != nil {
+				continue
+			}
+			if !bytes.Equal(lastJSON, currentJSON) {
+				lastJSON = currentJSON
+				// Pass the bytes the diff already produced — RawMessage
+				// embeds as-is, avoiding a second marshal of the same
+				// struct inside Broadcast at 1 Hz.
+				h.server.Broadcast(ipc.EventStatus, json.RawMessage(currentJSON))
+			}
+		}
+	}
+}

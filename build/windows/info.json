@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "1.0.0.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "1.0.0",
+			"CompanyName": "imonior",
+			"FileDescription": "WireGuide Plus - cross-platform WireGuard VPN desktop client",
+			"LegalCopyright": "© 2026 imonior",
+			"ProductName": "WireGuide Plus",
+			"Comments": "https://github.com/imonior/wireguide-plus"
+		}
+	}
+}

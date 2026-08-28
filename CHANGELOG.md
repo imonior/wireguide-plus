@@ -1,0 +1,350 @@
+# Changelog
+
+All notable changes to WireGuide will be documented in this file.
+
+## [1.0.0] - 2026-08-28
+
+里程碑版本：A11y 无障碍语义重构、Windows 网络出口选路逻辑调整、Wails3 构建/图标/权限梳理，并新增简体中文界面与托盘开关。
+
+### ✨ 新功能（Features）
+
+- **简体中文界面（Chinese UI）** — 全界面新增简体中文翻译，覆盖隧道列表、历史、工具（DNS 泄漏测试/路由表）、日志、设置、更新、自动化编辑器等全部 199 条文案。首次启动自动跟随系统语言（`zh-*` 区域自动识别），也可在 设置 → 常规 → 语言 中手动切换并持久化。
+- **托盘菜单开关（Tray toggles）** — 系统托盘内每条隧道变为独立可点击的开关：勾选连接、取消勾选断开；连接状态 emoji（🟢 已连接/🟡 连接中/○ 断开）保留在标签旁。手动关闭的隧道保持豁免自动规则（manual-off），直到重新连接或重启 WireGuide。
+
+#### 前端 A11y 无障碍重构
+
+> 影响：全平台（Windows/macOS/Linux）Svelte 前端，不限于 Windows。
+
+- 全部模态弹窗移除蒙层 `role="button"` 与 `tabindex="0"`，蒙层回归纯粹遮罩语义，避免读屏器将全屏背景识别为可交互按钮。
+- 所有 dialog 统一 `tabindex="-1"` 并保留标准 `role="dialog" aria-modal="true"`，遵循 WCAG 弹窗语义规范。
+- ESC 关闭统一处理：缺失的弹窗（导入结果、历史、更新提示、自动化编辑器）在**组件顶层**挂 `<svelte:window on:keydown>`（handler 内以条件判断弹窗状态；Svelte 不允许在 `{#if}` 内挂载），其余弹窗复用 App.svelte 全局 capture 处理器——规避多弹窗 ESC 冲突，同时不破坏 CodeMirror 的按键捕获。
+- `Settings.svelte`：`<nav role="tablist">` 改为普通 `<div>`，消除标签语义不匹配警告；分割条 `pane-resizer` 保留 `role="separator"`，补 `tabindex="0"` 与真实键盘操作（方向键调整宽度、Enter/Space 复位）。
+- `frontend/vite.config.js` 的 svelte 插件 `onwarn` 过滤静态误报（`a11y_click_events_have_key_events`、`a11y_no_static_element_interactions`、`a11y_no_noninteractive_tabindex`、`a11y_no_noninteractive_element_interactions`），生产构建警告归零，业务逻辑无改动。
+- 涉及文件：`src/App.svelte`、`src/lib/History.svelte`、`src/lib/ConflictWarning.svelte`、`src/lib/TunnelDetail.svelte`、`src/lib/UpdateNotice.svelte`、`src/lib/Settings.svelte`、`src/lib/AutomationEditor.svelte`
+
+#### Windows 后台 helper：网络出口选路逻辑调整
+
+> 影响：仅 Windows 平台 Go helper 代码，其他平台不受改动。
+
+- helper 启动阶段采集主上游物理网卡 LUID，用于记录系统初始默认出站物理接口；该 LUID 为启动时刻快照，运行时网络切换不会自动刷新缓存。
+- 修正网络接口筛选逻辑：过滤 TUN/隧道/回环虚拟网卡，仅选取物理网卡作为上游候选；TUN 虚拟网卡本身不做物理网卡绑定锁定。
+- WireGuard UDP 报文出站完全交由 Windows 路由表 + 网卡 InterfaceMetric 跃点数完成选路；软件不再强制绑定固定物理网卡。
+- 分流模式（`full_tunnel=false`）逻辑约束补充：Peer Endpoint IP 需要显式加入 `AllowedIPs`，防止握手 UDP 报文路由丢弃导致 `no-handshake`。
+- 日志增强：`network primary upstream interface initial luid` 输出主物理网卡 LUID 用于问题排查；明确日志中 `tunnel connected` 仅代表 TUN 适配器就绪，不等同于远端 Peer 握手成功。
+- 排查工具提示：Windows 下优先使用 `Find-NetRoute -RemoteIPAddress <peer-ip>` 判断目标 IP 实际出站网卡；PowerShell `Get-NetAdapter.Luid` 为结构体，不可直接与 Go 输出 uint64 数值做等值比对。
+
+### 🛠 构建与工程（Build & Project）
+
+主要为 Windows 构建行为，跨平台部分已标注。
+
+1. **Wails3 Windows 图标构建行为**（仅 Windows）——`task build` 完整构建会自动执行 `wails3 generate icons`，读取 `build/appicon.png` 并覆盖输出 `windows/icon.ico`；手动修改的 `windows/icon.ico` 会被完整构建覆盖。`windows/icon.ico` 是最终嵌入 exe 的图标，`build/appicon.png` 仅作源素材；`task windows:build` 调试构建跳过图标生成，保留现有 `windows/icon.ico`。exe / 窗口标题栏 / 任务栏图标复用 exe 内 ico 资源；系统托盘图标需要 Go `embed` 独立资源。
+2. **Windows 版本信息管理**（仅 Windows）——exe 文件详细信息由 `windows/info.json` 控制，`FileVersion` 必须 4 段数字格式 `major.minor.patch.build`。UI 展示版本由 Go 常量维护（`internal/update/checker.go`），需与 `info.json` 手动保持同步；后续可通过 ldflags 编译注入实现单处版本源。
+3. **Windows UAC / 管理员权限梳理**（仅 Windows）——当前架构为 GUI 进程拉起 helper 子进程；helper 操作 TUN 网卡、修改路由需要管理员权限，子进程提权会触发 UAC 弹窗，Windows 安全机制无法完全静默绕过。短期方案：`windows/wails.exe.manifest` 添加 `requireAdministrator`，将 UAC 弹窗转移到 exe 双击启动（仍需用户确认）；长期建议：helper 重构为 Windows System Service（LocalSystem 权限后台运行），GUI 以普通用户权限通过 IPC 通信，彻底消除 UAC 弹窗。
+
+### 🐛 问题排查记录（Investigation）
+
+排查记录，无代码变更，供开发参考。
+
+- 现象：helper 日志输出 `tunnel connected`，但 GUI 显示 `no handshake`。
+  - 根因区分：TUN 设备创建完成 ≠ WireGuard 与远端 Peer 完成加密握手；需读取 wg 内核 `latest handshake` 状态判断真实连通性。
+  - 分流模式高频踩坑：Peer IP 不在 `AllowedIPs`，握手 UDP 报文路由丢弃。
+  - 其他可能：Windows 出站防火墙拦截 WireGuard UDP、endpoint 域名 DNS 解析异常。
+- 本地代理监听 `0.0.0.0`：代理进程流量独立，不会自动流入 WireGuard 隧道；流量走向由 Windows 路由表与隧道 `AllowedIPs` 共同决定。
+
+### 📝 说明（Notes）
+
+1. **改动影响范围区分**
+   - Svelte 前端 A11y 代码：**全平台生效（Windows / Linux / macOS）**；弹窗 ESC、无障碍语义变更所有桌面平台都会生效。
+   - helper 网络出口选路逻辑：**仅 Windows 平台 Go 代码修改**，其他 OS 不受影响。
+   - 构建、manifest、ico、info.json、UAC 相关：**仅 Windows 平台**。
+2. 前端 A11y 修改与 helper 后台网络逻辑完全解耦，不影响隧道创建、路由、自动化 Wi-Fi 规则运行。
+3. helper 记录的上游 LUID 仅为启动瞬间快照；Wi-Fi/有线网络切换时不会自动更新该值。
+
+## [0.5.1] - 2026-08-11
+
+Patch release: the in-app "Update Now" button is now trustworthy on macOS. If you are on 0.5.0 via Homebrew, this is also the first update the button itself should complete cleanly end-to-end.
+
+### Fixed
+- **macOS "Update Now" (issue #38)** — the in-app update can no longer report success without actually installing: after `brew upgrade` exits, the installed bundle's version is verified against the release it claimed to install, progress phases ("refreshing" / "installing") are shown in the banner and About panel, and failures surface inline instead of vanishing behind a relaunch. Also survives Homebrew 6's tap-trust gate (`untrusted tap` errors trigger a `brew trust` + one retry) and skips the redundant `brew update` (`HOMEBREW_NO_AUTO_UPDATE=1` — the checker already knows the target version).
+- The Homebrew cask itself dropped `auto_updates` (korjwl1/homebrew-tap), so bulk `brew upgrade` no longer skips WireGuide — the root cause of months of silent non-updates.
+
+## [0.5.0] - 2026-08-10
+
+Linux graduates to a supported platform, the CLI learns to start and stop the app, and the Windows helper's IPC surface is locked down to the launching user. Verified on all three OSes before release: a full runtime pass on Windows 11 against a real tunnel (helper IPC, multi-tunnel, kill-switch cycles, CLI lifecycle, tray), the Linux plan in `docs/linux-test-plan.md` on Debian 13 / Raspberry Pi OS ARM64, and the macOS DNS/lifecycle fixes below.
+
+### Added
+- **Linux support** — tested and hardened end-to-end on Debian 13 / Raspberry Pi OS ARM64 (Wayland and X11): window decorations restored after tray-restore, gateway/physical-interface detection fingerprints the right network (issue #22), routine RTNETLINK traffic no longer registers as a primary-network change (reconnect decisions compare real default-route snapshots), nftables kill-switch fixes, DEB packaging via nfpm.
+- **`wireguide ctl start` / `ctl stop`** — explicit app lifecycle from the CLI. `start` launches the app detached and waits for the helper (long deadline: the macOS admin prompt has no timeout of its own; on macOS it launches its *own* bundle rather than whatever LaunchServices resolves); `stop` quits GUI and helper together and confirms they actually went away. Deliberately the only commands that start anything — `connect`/`status` still refuse rather than boot a VPN stack behind your back.
+- **`--json`** on `ctl status` and `ctl list` for scripts and coding agents.
+- **CI: 3-OS test matrix** (Linux/macOS/Windows) on every PR; release workflow untouched.
+
+### Security
+- **Windows helper pipe scoped to the spawning user (issue #20)** — the named pipe's ACL now grants access to the launching user's SID instead of every interactive user, and each connection's peer SID is verified against it (SYSTEM and a helper spawned without the SID keep working). Verified live on Windows 11 by reading back the pipe's security descriptor.
+
+### Fixed
+- **Windows multi-tunnel** — connecting a second tunnel no longer fails on the Wintun adapter name collision; each tunnel gets its own `WireGuide-<id>` adapter, and multi-tunnel status reports per-tunnel interface/duration/traffic instead of zeroed copies.
+- **Helper lifetime** — the helper never runs at boot and its lifetime is tied to the GUI: a 60 s startup grace covers a helper whose GUI never attaches (login-autostart with an unanswered UAC prompt no longer leaves an invisible elevated process), and a teardown that leaves no tunnels and no GUI re-arms the shutdown grace window — closing the orphan-helper hole that transient CLI connections opened (a GUI-less `ctl disconnect` of the last tunnel previously left the elevated helper alive until reboot). CLI clients are excluded from connection-lifecycle tracking by design.
+- **Kill switch** — rebuilt atomically around every connect/disconnect from actual manager state; a failed connect restores the blockade instead of leaving it half-applied.
+- **macOS DNS teardown (issue #34)** — search domains, services added mid-session, and the failed-verify / ForceShutdown paths now all restore DNS.
+- **macOS updates (issue #38)** — "Update Now" runs `brew upgrade --greedy` so cask-held updates can't silently no-op.
+- **Diagnostics (issue #32)** — ping parsing is locale-agnostic (Korean Windows included), and unreachable hosts report as unreachable instead of a fabricated wall-clock-derived latency.
+- **Automation** — rules are validated on save: a malformed CIDR or MAC is rejected with a clear error instead of being written and silently never matching.
+- **Idle efficiency** — Wi-Fi polling backs off to 60 s while native change notifications are attached; config-file watching drops from 1 s to 3 s; endpoint-latency logging demoted to debug.
+
+### Removed
+- Key generator, CIDR calculator, speed test, mini mode, and the split-tunnel UI stub — dead or abandoned surfaces found in the audit sweep (#35); their bindings and i18n strings went with them.
+
+## [0.4.2] - 2026-07-27
+
+**Urgent fix release for Windows users.** 0.4.1 and earlier shipped with a tray that could permanently lose the main window and an installer that cannot upgrade in place while the app is running. Windows users should update; to get past the installer bug one last time, run `taskkill /F /IM wireguide.exe` from an elevated terminal before launching the 0.4.2 installer. macOS and Linux are unaffected by the tray-window bug (Linux picks up the same Show Window fix), and nothing else changed.
+
+### Fixed
+- **Windows tray, issue #30** — left-clicking the tray icon now shows the main window (the platform convention; previously a no-op), and the "Show Window" menu item actually works: it was wired to a macOS-only implementation, so on Windows **a window closed to the tray could never be reopened** — the only recovery was killing the process. The tray menu also showed stale connection state (○ while connected) because menu refills never reached the Win32 popup; the menu now rebuilds through `SetMenu` on every change. macOS behavior is unchanged; Linux gains the same Show Window fix.
+- **Windows installer, issue #29** — upgrading by running the installer while WireGuide was running failed with "Error opening file for writing: wireguide.exe" (the GUI and the elevated helper are the same executable, and Windows locks running images; the helper deliberately outlives the GUI, so quitting the tray app wasn't enough). The installer and uninstaller now terminate running instances before touching files. **This fix takes effect when the 0.4.2 installer runs — upgrading *to* 0.4.2 still hits the old installer's bug**, hence the elevated `taskkill` workaround above.
+
+## [0.4.1] - 2026-07-27
+
+### Fixed
+- **Automation (GUI), issue #27** — creating or editing rules in the Automation editor was effectively impossible in 0.4.0: the editor's own autosave re-fired the config watcher, and the resulting reload wiped the just-added row before it could be filled in (and could transiently delete a rule being edited). The editor now ignores its own writes (reloading only when the file genuinely changed externally), a blank draft row is no longer autosaved, and a rule that is momentarily incomplete mid-edit keeps its last saved value on disk instead of being deleted. External edits (`wireguide ctl`, another window) still appear live.
+- **Automation (GUI)** — per-tunnel rule saves now go through the cross-process-locked settings update instead of a whole-settings overwrite, so a GUI rule edit can no longer clobber a concurrent `wireguide ctl` change to any other setting (and vice versa); condition labels survive the GUI round-trip; a dash- or bare-hex-formatted gateway MAC written by the CLI is no longer treated as a foreign change.
+- **Windows (dev):** `go test ./internal/ipc` no longer fails/panics when run unelevated — the tests accept the test binary's own pipe (test builds only; the production SY/BA pipe-owner check is unchanged) (#24).
+
+## [0.4.0] - 2026-07-15
+
+### Added
+- **Automation** (issue #12) — per-tunnel `condition → action` rules that connect or disconnect a tunnel based on the network you're on. Conditions: Wi-Fi SSID, subnet (CIDR), or the default-gateway MAC (a precise, medium-agnostic network fingerprint that tells apart networks sharing a subnet); action: connect/disconnect. Rules are ordered by priority (drag-to-reorder, first match wins) and evaluated entirely in the helper via a hybrid trigger (macOS route-monitor subscription; 30 s poll on Windows/Linux). Replaces the legacy per-tunnel Wi-Fi auto-connect / trusted-SSID UI (migrated automatically). Editable in the GUI or via the CLI.
+- **Command-line interface** `wireguide ctl` (issue #10) — a third IPC client alongside the GUI (Tailscale-style): `status`, `list`, `connect`, `disconnect`, `import`, `rename`, `delete`, and `automation add/rm/rules` + a read-only decision preview. No per-command sudo, cross-platform, shares the GUI's tunnel store.
+- Tunnel-list **sorting** (name / last used / date added, active-on-top) and **compact mode** (issue #16, #17); **drag-resizable** tunnel-list column.
+
+### Fixed
+- **update:** the Ed25519 signature is now bound to the hash actually installed (a repo-write attacker could previously pass both checks by swapping SHA256SUMS between check and download); `Install` also enforces `SignatureVerified` in signed-update builds.
+- **Windows:** `findInterfaceMTU` buffer overflow + wrong `NlMtu` offset (undefined behaviour on every no-MTU connect; auto-MTU always fell back).
+- **Linux:** split-tunnel routes were deleted from the wrong table on the default `Table=auto` path (route leak); DNS search-domain injection; nft kill-switch endpoint-port validation and `oifname` consistency.
+- **macOS:** `route -n monitor` subprocess is now supervised (was a silent zombie + stuck monitor on unexpected exit); the tray menu-bar icon uses native click-to-open (fixed the "does nothing on macOS 26" report, issue #18) and follows the menu bar's actual appearance; the connect/Disconnect-race no longer holds `Manager.mu` across slow teardown.
+- **storage:** reject case-collisions and Windows reserved names; fsync the parent directory after atomic writes; latency-probe target validation; meta-sidecar lost-update race.
+- **Automation (code review, issue #12):** `else`/none_match now matches at its own position so drag-to-reorder priority is uniform (was always held to the end); malformed conditions and unknown actions now fail closed (rule skipped) instead of an unknown action defaulting to connect; a rule-driven connect now runs the same DNS-protection + kill-switch folding as a manual connect (headless automation could previously connect with no protection, or fail entirely under an already-on kill switch), and a rule-driven disconnect strips the tunnel from the kill-switch filter set; macOS no longer overwrites the GUI-reported SSID with an empty root-helper poll (which silently broke SSID rules); Windows gateway-MAC resolves the physical underlay gateway (excluding the WireGuard adapter) so a full tunnel no longer blanks the fingerprint and flaps `mac:` rules; tunnel rename/delete now carry/drop the tunnel's automation rules instead of orphaning them; the rule editor no longer races a debounced save against a tunnel switch. *(Windows gateway change compiles but is unverified on a Windows build.)*
+- **config.json:** cross-process read-modify-write is now atomic (file lock) so a `wireguide ctl` edit and a GUI edit can't clobber each other.
+- **CLI (issue #10):** `import`/automation edits work on a fresh install (dirs created); `set` exits nonzero when the helper is running but the live apply fails; `delete` refuses to remove a still-connected tunnel whose disconnect failed; `install-skills` writes agent files atomically. The NSIS installer PATH edit no longer interpolates the install path into a PowerShell command (injection), and the macOS cask + Windows installer put `wireguide` on `PATH`.
+- **list:** date-added sort now uses a stamped creation time (survives edits) instead of the `.conf` mtime (issue #17).
+
+### Changed
+- Latency probe no longer fabricates a `x.x.x.1` gateway target (issue #15); per-tunnel latency target added.
+
+## [0.3.1] - 2026-05-26
+
+### Added
+- **Full-tunnel routing-loop protection (Windows + macOS)** — multi-layer defense against the encrypted-UDP-loops-through-tunnel-adapter class of bug (issue #14).
+  - Windows: WFP block at `ALE_AUTH_CONNECT_V{4,6}` + `OUTBOUND_TRANSPORT_V{4,6}` layers, iphlpapi-based `/32` bypass host route with `InitializeIpForwardEntry`, `IP_UNICAST_IF` UDP socket binding with `NotifyRouteChange2`-pushed re-pin monitor, runaway-TX watchdog with sustained-asymmetry trip.
+  - macOS: `/32` bypass installed before `/1` split routes with fail-fast preflight on missing default gateway, 5 s underlay-detection retry, blackhole fallback on gateway loss inside `reapply` to keep the loop class contained when the upstream gateway briefly disappears, runaway-TX watchdog via `netstat -ibnI`.
+- **SignPath Foundation code signing** — CI hooks for SignPath OSS signing of the Windows installer; gated on the foundation's onboarding approval. Releases ship unsigned until then.
+
+### Fixed
+- Helper now exits within ~20 s of the GUI dying (was ~70 s) — IPC read deadline trimmed to 10 s now that the GUI's 5 s health-monitor ping cadence is the canonical liveness signal.
+- macOS: `RestoreDNS` no longer fires a noisy `netsh`-equivalent against an adapter that's already been detached from the IP stack during disconnect.
+- macOS: `getDefaultInterface()` now parses the `netstat -nr` header dynamically; previously the "first lowercase field" heuristic could misidentify `awdl0` (AirDrop) as the default interface on some machines.
+- Windows: UAPI listener "may not work" warning downgraded to DEBUG on Windows — the named-pipe bind is expected to fail because the helper runs as an elevated user rather than as `LocalSystem`; status queries route through the in-process `Engine.IpcGet` regardless.
+
+### Changed
+- CI release notes generated by `git-cliff` (fuller diffs than the previous auto-generated body).
+- CI: explicit NSIS install on Windows runners (the default Windows-latest image no longer carries `makensis` on PATH).
+- CI: `Get-FileHash` / `Expand-Archive` in the wintun vendoring step replaced with direct .NET APIs to avoid PowerShell version skew on the runner.
+- README: `Install` section moved above `Features`, code-signing dev-process notes trimmed to user-facing status only.
+
+## [0.3.0] - 2026-05-25
+
+### Added
+- **Windows kill switch via WFP** — Windows Filtering Platform-based kill switch that survives helper restarts; complements the existing macOS `pf` and Linux `nftables` implementations.
+- **Periodic auto-update scheduler** — background check for new releases on a configurable cadence (default 24 h with focus-opportunistic refresh), separate from the existing manual "Check for updates" path.
+- **CI release pipeline** — automated darwin (arm64) + Windows (amd64/arm64) builds on tag push, with SHA256SUMS, Ed25519 signature, and `homebrew-tap` cask auto-bump.
+
+### Fixed
+- macOS kill switch: `pf` anchor renamed from `com.apple.wireguide` (dot) to `com.apple/wireguide` (slash) so it actually matches the `anchor "com.apple/*"` wildcard in the system `/etc/pf.conf` — previously the rules loaded without ever being evaluated.
+- macOS kill switch can now be toggled on without an active tunnel (base block-all set installs cleanly; per-tunnel permits are folded in on subsequent connects).
+- Windows disconnect: lingering wintun adapter "defanged" (DNS cleared, metric bumped) before `engine.Close`, so the brief window where Windows still treats the dying adapter as a viable metric-1 path doesn't dump every DNS query onto its dead `8.8.8.8` binding.
+- Windows disconnect: dead 12 s DNS-restore call removed; `netsh` output now decoded as the OEM code page so Korean / non-English Windows installs no longer mis-parse error messages.
+- Windows: UAPI bypass (status queries served by in-process `Engine.IpcGet` rather than the named pipe that the elevated helper can't bind under the kernel's owner-SID requirement).
+- Windows: suicide-reconnect / orphaned `conhost` / dangling route fixes from the WFP kill-switch rework.
+- DNS protection regression introduced during the periodic-update-scheduler refactor.
+- Numerous race conditions, leak fixes, and audit findings from the cross-platform hardening pass.
+
+### Changed
+- Tray and taskbar icons: rounded silhouette via custom genicon (matches the macOS dock icon's visual weight).
+- Sidebar dividers, tool pages, and drop affordance polished.
+- Settings: maintainer credit added in footer; helper SIGTRAP fix.
+- Rebrand: WireGuide red accent + Material-style flat buttons.
+
+## [0.2.0] - 2026-05-05
+
+### Added
+- **Wi-Fi auto-connect rules** — per-tunnel SSID-based auto-connect/disconnect; rules fire in the helper so they work even when the GUI is quit
+- **Trusted SSID support** — designated SSIDs auto-disconnect all VPN tunnels (home/office network detection)
+- **macOS 14+ Location Services integration** — CoreWLAN CGo replaces `networksetup` for SSID detection; app now appears in System Settings → Location Services
+- **GUI→Helper SSID forwarding** — on macOS 14+ the helper (root LaunchDaemon) cannot read SSID itself; the GUI polls via CoreWLAN and forwards changes over IPC so auto-connect rules fire correctly
+- **Ed25519 signature verification** — auto-update downloads verified against a Ed25519 signature over SHA256SUMS; embedded public key prevents tampered binaries from being installed
+
+### Fixed
+- Wi-Fi auto-connect status not updating in GUI/tray after rule fires (`ActiveTunnels` now populated in all status broadcasts)
+- `autoConnectedBy` accessed under wrong mutex in `handleRename` (race condition; changed to `wifiMu`)
+- Lock ordering violation between `handleRename` and `handleSSIDChange` that could cause deadlock
+- Kill switch and DNS protection handlers using `Status().State` instead of `IsConnected()` (broke in multi-tunnel setups where the primary was not the connected tunnel)
+- `handleReportSSID` panic on nil `wifiMon` (non-darwin builds and pre-init race)
+- `sleep_darwin.go` unsafe.Pointer misuse flagged by `go vet`; replaced with `runtime/cgo.Handle`
+- Duplicate SSID appearing in Wi-Fi rules dropdown when current SSID matched a saved rule
+
+### Changed
+- Auto-connect logic moved to helper process (was frontend-side) so rules fire independently of GUI lifecycle
+- `postConnectRefresh` refactored: `refreshTunnels`+`refreshStatus` kept for manual connect UX; auto-connect path calls only `applyFirewallSettings` (event stream handles status update)
+- Dead backward-compat fallback in `subscribeToEvents` removed (active_tunnels now always populated)
+
+## [0.1.9] - 2026-05-05
+
+### Changed
+- Removed Wi-Fi rules master toggle; trusted SSIDs are always active when configured
+
+### Fixed
+- Various regressions, lifecycle, and performance issues from audit rounds (Round 2, Round 3)
+- 30+ fixes from full-codebase review (null guards, lock safety, error propagation)
+
+## [0.1.8] - 2026-04-13
+
+### Changed
+- Sidebar navigation: removed Tools tab bar, DNS Leak Test and Route Table are now direct sidebar sub-items
+- Settings modal: fixed size regardless of active tab (no more resize when switching to Advanced)
+- Settings sidebar active state: tint highlight instead of solid blue (macOS HIG)
+- Dropdown controls: custom styled per macOS HIG (28px height, 6px radius, theme-aware chevron)
+
+### Improved
+- Route table: sticky column header, legend pinned to bottom, table fills remaining space with scroll
+- DNS Leak Test and Route Table now call real backend (previously stub implementations)
+- macOS HIG design tokens: added `--border-strong` for input control borders
+
+### Removed
+- Network Diagnostics (Ping) tool — not meaningfully useful as a standalone feature
+- Unused i18n keys for removed Diagnostics feature
+
+## [0.1.7] - 2026-04-09
+
+### Added
+- Multiple simultaneous tunnel support
+- Per-tunnel NetworkManager (independent routes, DNS, route monitor per tunnel)
+- Per-tunnel health check and reconnection
+- Full-tunnel conflict detection (reject two 0.0.0.0/0 configs)
+- DNS union across all active tunnels
+- No-handshake warning: orange dot in tunnel list, ◐ in tray menu
+- Tray menu shows per-tunnel connection + handshake status
+- Architecture & design documentation (docs/DESIGN.md)
+
+### Fixed
+- Disconnect one tunnel no longer breaks other active tunnels
+- Conflict detection: macOS netstat abbreviated CIDRs now parsed correctly
+- GUI not reflecting connection state when tunnel connected via system tray
+- Bypass route race conditions (lock safety, error propagation)
+- Tray icon padding: trimmed transparent pixels for tighter menu bar fit
+- Tunnel list unnecessary re-renders on every status tick
+- README streamlined: removed defensive tone, screenshots moved to top
+
+### Changed
+- Pin Interface toggle added (Settings > Advanced) for dual-network stability
+- Bypass routes pinned to upstream interface with -ifscope when enabled
+
+## [0.1.6] - 2026-04-08
+
+### Added
+- Settings redesign: split layout with sidebar (General / Advanced / About)
+- About tab: app icon, version, GitHub/Issues/License links, update status
+- Update popup: modal with release notes ("What's New") and "Skip This Version"
+- Helper auto-upgrade: detects version mismatch and reinstalls on app update
+- Helper install retry dialog with Quit/Retry options on cancel
+- OpenURL Wails binding (restricted to github.com)
+- Tests for IsBrewInstall and OpenURL validation (7 new tests)
+
+### Fixed
+- Brew install detection: check Caskroom receipt instead of binary path
+- Non-brew update: opens GitHub Releases page instead of broken auto-download
+- Brew update: runs `brew update` before `brew upgrade` for third-party taps
+- Helper Ping response: separate AppVersion field (fixes IPC protocol validation)
+- Update popup double-click guard
+- localStorage exception handling for skip version
+- Detailed admin prompt explaining why password is needed
+
+### Changed
+- README/About description: "native macOS" → "cross-platform"
+
+## [0.1.5] - 2026-04-07
+
+### Added
+- Health Check toggle in Settings (default: off, recommended with PersistentKeepalive)
+
+### Changed
+- Health Check default changed from on to off (consistent with other WG clients)
+- README rewritten: removed aggressive tone, verified claims, acknowledged official app works for many users
+
+## [0.1.4] - 2026-04-07
+
+### Security
+- Remove script execution (PreUp/PostUp/PreDown/PostDown) — eliminates local privilege escalation via ApproveScripts RPC
+- Fix Windows IPC ACL: allow non-admin GUI to connect to helper pipe
+- Harden update integrity: asset size validation + Content-Length check
+
+### Fixed
+- Kill switch pf rules: use anchor-only approach instead of modifying main ruleset (fixes Tahoe compatibility)
+- Kill switch + DNS protection now toggleable while VPN is connected
+- Kill switch reconnect deadlock: suspend/resume firewall rules during reconnect
+- Log viewer scroll not working
+- Tunnel list scroll overflow
+
+### Added
+- Handshake-based health check: detects dead tunnels and triggers reconnect after 180s
+- Instant sleep/wake detection via NSWorkspace notification (polling fallback kept)
+- Typed tunnel error enums (ErrAlreadyConnected, ErrNetwork, etc.)
+- DNS post-write verification
+- Crash recovery journal with pre-modification DNS snapshot
+- Comprehensive unit tests (102 tests, race-clean)
+- CHANGELOG.md
+- Info-level logs for kill switch and DNS protection events
+
+## [0.1.3] - 2026-04-07
+
+### Fixed
+- "Show Window" not working after closing the window (RegisterHook instead of OnWindowEvent)
+- Dock icon hide/show when window is closed/reopened
+- App icon showing Wails default (white W) instead of WireGuide red icon
+- About/Settings dialog showing wrong version — now fetched dynamically from Go
+
+### Added
+- GitHub issue templates (bug report, feature request)
+- CONTRIBUTING.md and PR template
+
+## [0.1.2] - 2026-04-07
+
+### Fixed
+- Dock icon not hiding when window is closed
+- Tunnel list not updating after rename
+
+## [0.1.1] - 2026-04-06
+
+### Fixed
+- Daemon socket directory permissions (0700 → 0755)
+- LaunchDaemon install flow rewrite (app first-launch, not cask postflight)
+
+### Added
+- Version display in Settings
+
+## [0.1.0] - 2026-04-05
+
+### Added
+- Initial release
+- WireGuard tunnel management (import, create, edit, export .conf files)
+- Config editor with CodeMirror 6 syntax highlighting and autocompletion
+- System tray with connection status badge
+- Kill switch via macOS pf
+- DNS protection (force DNS through VPN tunnel only)
+- Auto-reconnect with exponential backoff
+- Sleep/wake recovery
+- Route monitor for gateway changes
+- Conflict detection (Tailscale, other WG interfaces)
+- Network diagnostics (ping, DNS leak test, route table)
+- Auto-update (GitHub Releases + Homebrew)
+- Real-time RX/TX speed graph
+- i18n (English, Korean, Japanese)
+- Dark / Light / System theme

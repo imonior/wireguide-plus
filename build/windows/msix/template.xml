@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="wireguide"
+        Arguments=""
+        InstallLocation="C:\Program Files\WireGuide Plus">
+    </Installer>
+    <PackageInformation
+        PackageName="WireGuidePlus"
+        PackageDisplayName="WireGuide Plus"
+        PublisherName="CN=imonior"
+        PublisherDisplayName="imonior"
+        Version="1.0.0.0"
+        PackageDescription="WireGuide Plus - cross-platform WireGuard VPN desktop client">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="com.imonior.wireguide-plus"
+                Description="WireGuide Plus - cross-platform WireGuard VPN desktop client"
+                DisplayName="WireGuide Plus"
+                ExecutableName="wireguide"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>WireGuide Plus</DisplayName>
+            <PublisherDisplayName>imonior</PublisherDisplayName>
+            <Description>WireGuide Plus - cross-platform WireGuard VPN desktop client</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="wireguide.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>

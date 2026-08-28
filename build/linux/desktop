@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=WireGuide
+Comment=Cross-platform WireGuard VPN desktop client
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/wireguide %u
+Terminal=false
+Type=Application
+Icon=wireguide
+Categories=Utility;
+StartupWMClass=wireguide
+
+ 

@@ -1,0 +1,300 @@
+package ipc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// ErrClientClosed is the sentinel returned (possibly wrapped) when a
+// caller's RPC was aborted because the client was Close()d — either
+// explicitly, or because the helper went away (ForceShutdown, crash,
+// helper-recovery swap).
+//
+// Use errors.Is(err, ErrClientClosed) to detect this case. Wrap with
+// fmt.Errorf("…: %w", ErrClientClosed) when adding context so the
+// sentinel still surfaces through errors.Is.
+var ErrClientClosed = errors.New("client closed")
+
+// EventHandler is called when an event notification is received.
+type EventHandler func(method string, params json.RawMessage)
+
+// DefaultCallTimeout is the default timeout for RPC calls when no context is provided.
+const DefaultCallTimeout = 10 * time.Second
+
+// Client is an IPC client with a control connection and optional event stream.
+type Client struct {
+	addr        string
+	controlMu   sync.Mutex
+	controlConn net.Conn
+
+	nextID uint64
+
+	// eventMu guards both eventConn and onEvent so that Subscribe (writer),
+	// eventLoop (reader), and Close don't race on the event connection.
+	eventMu   sync.Mutex
+	eventConn net.Conn
+	onEvent   EventHandler
+
+	// Pending requests waiting for responses
+	pendingMu sync.Mutex
+	pending   map[uint64]chan *Response
+
+	// transient marks every request this client sends with
+	// Request.Transient, keeping the helper from treating it as a control
+	// connection. Set by NewTransientClient; see Request.Transient.
+	transient bool
+
+	// Lifecycle
+	closeOnce sync.Once
+	closed    chan struct{}
+}
+
+// NewClient creates a client connected to addr. It performs an initial Ping
+// to verify the helper is responsive and that the protocol version matches.
+//
+// The resulting client counts as a control connection: while it is attached
+// the helper's shutdown grace window stays cancelled. Use it for the GUI —
+// the process whose presence means "the user wants WireGuide running".
+func NewClient(addr string) (*Client, error) {
+	return newClient(addr, false)
+}
+
+// NewTransientClient is NewClient for short-lived callers — the `wireguide
+// ctl` CLI. Its requests carry Request.Transient, so the helper does not
+// treat the connection as a control connection and the client's exit does
+// not re-arm the shutdown grace window. See Request.Transient.
+func NewTransientClient(addr string) (*Client, error) {
+	return newClient(addr, true)
+}
+
+func newClient(addr string, transient bool) (*Client, error) {
+	conn, err := Dial(addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial: %w", err)
+	}
+
+	c := &Client{
+		addr:        addr,
+		controlConn: conn,
+		pending:     make(map[uint64]chan *Response),
+		closed:      make(chan struct{}),
+		// Must be set before the initial Ping below: that Ping is the very
+		// request the server inspects to decide whether this connection is
+		// a control connection.
+		transient: transient,
+	}
+
+	go c.readLoop()
+
+	// Verify the helper is alive and speaks the same protocol version.
+	var ping PingResponse
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.CallWithContext(ctx, MethodPing, nil, &ping); err != nil {
+		c.Close()
+		return nil, fmt.Errorf("initial ping failed: %w", err)
+	}
+	// Major-version mismatch is fatal; minor-version difference is OK
+	// (newer side ignores fields it doesn't recognize). Parse the dotted
+	// version cheaply rather than pulling in a semver dependency.
+	if !MajorVersionMatches(ping.Version, ProtocolVersion) {
+		c.Close()
+		return nil, fmt.Errorf("protocol major-version mismatch: helper=%q client=%q", ping.Version, ProtocolVersion)
+	}
+
+	return c, nil
+}
+
+// Close terminates all connections. Safe to call multiple times.
+func (c *Client) Close() error {
+	c.closeOnce.Do(func() {
+		// Log caller so we can tell WHY a client was closed — shutdown,
+		// health-monitor swap, or something unexpected.
+		slog.Info("ipc client: Close() called", "addr", c.addr)
+		close(c.closed)
+		if c.controlConn != nil {
+			c.controlConn.Close()
+		}
+		c.eventMu.Lock()
+		ec := c.eventConn
+		c.eventConn = nil
+		c.eventMu.Unlock()
+		if ec != nil {
+			ec.Close()
+		}
+	})
+	return nil
+}
+
+// IsClosed reports whether the client has been closed.
+func (c *Client) IsClosed() bool {
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Call makes an RPC call with the default timeout.
+func (c *Client) Call(method string, params interface{}, result interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultCallTimeout)
+	defer cancel()
+	return c.CallWithContext(ctx, method, params, result)
+}
+
+// CallWithContext makes an RPC call with explicit context for cancellation/timeout.
+func (c *Client) CallWithContext(ctx context.Context, method string, params interface{}, result interface{}) error {
+	if c.IsClosed() {
+		return ErrClientClosed
+	}
+
+	id := atomic.AddUint64(&c.nextID, 1)
+	req, err := NewRequest(id, method, params)
+	if err != nil {
+		return err
+	}
+	req.Transient = c.transient
+
+	respCh := make(chan *Response, 1)
+	c.pendingMu.Lock()
+	c.pending[id] = respCh
+	c.pendingMu.Unlock()
+
+	defer func() {
+		c.pendingMu.Lock()
+		delete(c.pending, id)
+		c.pendingMu.Unlock()
+	}()
+
+	c.controlMu.Lock()
+	err = WriteFrame(c.controlConn, req)
+	c.controlMu.Unlock()
+	if err != nil {
+		return fmt.Errorf("write request: %w", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.closed:
+		return ErrClientClosed
+	case resp, ok := <-respCh:
+		if !ok {
+			return ErrClientClosed
+		}
+		if resp.Error != nil {
+			return resp.Error
+		}
+		if result != nil && len(resp.Result) > 0 {
+			return json.Unmarshal(resp.Result, result)
+		}
+		return nil
+	}
+}
+
+// Subscribe opens a second connection and subscribes to events.
+// The handler is called for each event notification received.
+func (c *Client) Subscribe(handler EventHandler) error {
+	conn, err := Dial(c.addr)
+	if err != nil {
+		return fmt.Errorf("dial event conn: %w", err)
+	}
+
+	// Send subscribe request (use ID=1 on event conn)
+	req, _ := NewRequest(1, MethodSubscribe, nil)
+	if err := WriteFrame(conn, req); err != nil {
+		conn.Close()
+		return err
+	}
+
+	// Read ack
+	var resp Response
+	if err := ReadFrame(conn, &resp); err != nil {
+		conn.Close()
+		return err
+	}
+	if resp.Error != nil {
+		conn.Close()
+		return resp.Error
+	}
+
+	c.eventMu.Lock()
+	c.eventConn = conn
+	c.onEvent = handler
+	c.eventMu.Unlock()
+
+	go c.eventLoop()
+	return nil
+}
+
+func (c *Client) readLoop() {
+	var exitErr error
+	defer func() {
+		slog.Debug("ipc client: readLoop exiting", "addr", c.addr, "error", exitErr)
+		c.pendingMu.Lock()
+		for _, ch := range c.pending {
+			close(ch)
+		}
+		c.pending = make(map[uint64]chan *Response) // reset, don't set to nil
+		c.pendingMu.Unlock()
+
+		// M19: Signal client closure when readLoop exits due to an error.
+		// Without this, callers waiting on c.closed would hang indefinitely
+		// if the connection drops unexpectedly.
+		c.Close()
+	}()
+
+	for {
+		var resp Response
+		if err := ReadFrame(c.controlConn, &resp); err != nil {
+			exitErr = err
+			return
+		}
+
+		c.pendingMu.Lock()
+		ch, ok := c.pending[resp.ID]
+		c.pendingMu.Unlock()
+		if ok {
+			respCopy := resp
+			select {
+			case ch <- &respCopy:
+			default:
+				// Receiver gave up (timeout); drop
+			}
+		}
+	}
+}
+
+func (c *Client) eventLoop() {
+	c.eventMu.Lock()
+	conn := c.eventConn
+	c.eventMu.Unlock()
+	if conn == nil {
+		return
+	}
+
+	for {
+		data, err := ReadFrameRaw(conn)
+		if err != nil {
+			return
+		}
+		var notif Request
+		if err := json.Unmarshal(data, &notif); err != nil {
+			continue
+		}
+		c.eventMu.Lock()
+		handler := c.onEvent
+		c.eventMu.Unlock()
+		if handler != nil {
+			handler(notif.Method, notif.Params)
+		}
+	}
+}

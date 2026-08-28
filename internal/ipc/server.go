@@ -1,0 +1,450 @@
+package ipc
+
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net"
+	"runtime/debug"
+	"sync"
+	"time"
+)
+
+// Handler processes an RPC request and returns a result or error.
+type Handler func(params json.RawMessage) (interface{}, error)
+
+// maxConcurrentConns caps simultaneous IPC connections so a misbehaving
+// or compromised same-UID process can't open thousands of conns and
+// exhaust the helper's goroutine + memory budget — which would in
+// practice take down the kill switch with the helper.
+//
+// We intentionally do NOT add per-method rate limiting. The threat model
+// is "same-UID local process" — that attacker already has access to far
+// more dangerous things (the user's WG configs on disk, the ability to
+// kill the helper directly, etc.). A per-method limiter would only
+// complicate the dispatch path without raising the security ceiling.
+// The 32-connection cap is the practical denial-of-service defense.
+const maxConcurrentConns = 32
+
+// Server is an IPC server that dispatches RPC requests to handlers
+// and broadcasts events to subscribed clients.
+type Server struct {
+	listener net.Listener
+	handlers map[string]Handler
+	ownerUID int // expected peer UID on Unix (-1 to skip check)
+	// ownerSID is the expected peer user SID on Windows ("" to fall back
+	// to SDDL-only gating). Set via WithOwnerSID from helper.Run.
+	ownerSID string
+
+	mu           sync.Mutex
+	eventSubs    map[*subscriber]struct{} // active event subscribers
+	shutdownCh   chan struct{}
+	onConnect    func() // called when a control conn attaches (any)
+	onDisconnect func() // called when the last control conn closes
+	controlConns map[net.Conn]struct{}
+
+	// connWg tracks in-flight safeHandleConn goroutines. Shutdown waits on it
+	// (with a timeout) so callers can be sure no RPC handler is still
+	// touching Helper state by the time Shutdown returns. Without this,
+	// helper cleanup could race a handler mid-call.
+	connWg sync.WaitGroup
+	// connSlots gates total concurrent connections (capacity = maxConcurrentConns).
+	// Acquired before spawning safeHandleConn; the goroutine releases on exit.
+	connSlots chan struct{}
+}
+
+type subscriber struct {
+	conn net.Conn
+	ch   chan []byte
+}
+
+// NewServer creates a server. ownerUID is the expected UID of connecting
+// peers on Unix (pass -1 to skip peer credential checks, e.g. in tests).
+func NewServer(listener net.Listener, ownerUID ...int) *Server {
+	uid := -1
+	if len(ownerUID) > 0 {
+		uid = ownerUID[0]
+	}
+	return &Server{
+		listener:     listener,
+		handlers:     make(map[string]Handler),
+		ownerUID:     uid,
+		eventSubs:    make(map[*subscriber]struct{}),
+		shutdownCh:   make(chan struct{}),
+		controlConns: make(map[net.Conn]struct{}),
+		connSlots:    make(chan struct{}, maxConcurrentConns),
+	}
+}
+
+// WithOwnerSID sets the expected peer user SID (Windows). Chainable so
+// helper.Run can construct the server in one expression. Call before
+// Serve — the field is read per-connection without a lock.
+func (s *Server) WithOwnerSID(sid string) *Server {
+	s.ownerSID = sid
+	return s
+}
+
+// Handle registers an RPC handler for the given method.
+func (s *Server) Handle(method string, h Handler) {
+	s.mu.Lock()
+	s.handlers[method] = h
+	s.mu.Unlock()
+}
+
+// OnConnect sets a callback fired whenever a control connection attaches.
+// Used by the helper to cancel a pending grace-window shutdown when the GUI
+// reconnects within the window.
+func (s *Server) OnConnect(fn func()) {
+	s.mu.Lock()
+	s.onConnect = fn
+	s.mu.Unlock()
+}
+
+// OnDisconnect sets a callback fired when the last control connection closes.
+func (s *Server) OnDisconnect(fn func()) {
+	s.mu.Lock()
+	s.onDisconnect = fn
+	s.mu.Unlock()
+}
+
+// Serve accepts connections until the listener is closed. Transient Accept
+// errors (EMFILE, ENFILE, etc.) are retried with backoff rather than killing
+// the helper — matching the principle that the helper must stay alive as long
+// as a tunnel is active, just like wg-quick's monitor_daemon.
+func (s *Server) Serve() error {
+	consecutiveErrors := 0
+	for {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			select {
+			case <-s.shutdownCh:
+				return nil
+			default:
+			}
+			consecutiveErrors++
+			if consecutiveErrors > 100 {
+				// Persistent failure — give up to avoid spinning.
+				return fmt.Errorf("too many consecutive Accept errors (last: %w)", err)
+			}
+			slog.Warn("ipc: Accept error, retrying", "error", err,
+				"consecutive", consecutiveErrors)
+			time.Sleep(time.Duration(consecutiveErrors) * 100 * time.Millisecond)
+			continue
+		}
+		consecutiveErrors = 0
+		// Non-blocking acquire — drop the connection if the slot pool is full.
+		// A burst of bogus same-UID conns can't pile up unbounded goroutines.
+		select {
+		case s.connSlots <- struct{}{}:
+		default:
+			slog.Warn("ipc: connection slot pool full, dropping conn",
+				"max", maxConcurrentConns)
+			_ = conn.Close()
+			continue
+		}
+		s.connWg.Add(1)
+		go func(c net.Conn) {
+			defer func() { <-s.connSlots }()
+			s.safeHandleConn(c)
+		}(conn)
+	}
+}
+
+// safeHandleConn wraps handleConn with panic recovery so that a panic in any
+// RPC handler does not kill the entire helper process. Without this, a nil
+// dereference or unexpected state in a handler would crash the helper silently.
+func (s *Server) safeHandleConn(conn net.Conn) {
+	defer s.connWg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			// Use %p (pointer address) instead of RemoteAddr().String() to
+			// avoid a potential nil dereference INSIDE the recovery handler,
+			// which would be unrecoverable and crash the helper.
+			slog.Error("ipc: panic in connection handler (recovered)",
+				"panic", fmt.Sprintf("%v", r),
+				"conn", fmt.Sprintf("%p", conn),
+				"stack", string(debug.Stack()))
+		}
+	}()
+	s.handleConn(conn)
+}
+
+// Shutdown stops the server. Blocks until all in-flight RPC handler
+// goroutines have returned (bounded by a 3s safety timeout) so callers can
+// proceed with state teardown without racing a handler that's still reading
+// Helper fields. The bound prevents a stuck handler from holding the whole
+// helper exit hostage — at that point we log and return anyway, letting
+// the process exit and launchd respawn handle the wedged state.
+func (s *Server) Shutdown() {
+	select {
+	case <-s.shutdownCh:
+	default:
+		close(s.shutdownCh)
+	}
+	s.listener.Close()
+
+	s.mu.Lock()
+	for sub := range s.eventSubs {
+		sub.conn.Close()
+	}
+	for c := range s.controlConns {
+		c.Close()
+	}
+	s.mu.Unlock()
+
+	// Wait for in-flight handlers with a hard ceiling so a wedged handler
+	// can't deadlock helper shutdown indefinitely.
+	done := make(chan struct{})
+	go func() {
+		s.connWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		slog.Warn("ipc: Shutdown timed out waiting for in-flight handlers")
+	}
+}
+
+// HasSubscribers reports whether any client is listening for events.
+// Callers can use this to skip expensive payload assembly when nobody
+// will receive the result — important for steady-state efficiency in
+// the helper's 1 Hz status loop while the GUI is not attached.
+func (s *Server) HasSubscribers() bool {
+	s.mu.Lock()
+	n := len(s.eventSubs)
+	s.mu.Unlock()
+	return n > 0
+}
+
+// HasControlConn reports whether at least one control connection (i.e. a
+// GUI) is attached. Transient CLI clients are excluded by construction —
+// they never enter controlConns. Used by the RequestQuit handler to choose
+// between "ask the GUI to quit" and "just shut myself down".
+func (s *Server) HasControlConn() bool {
+	s.mu.Lock()
+	n := len(s.controlConns)
+	s.mu.Unlock()
+	return n > 0
+}
+
+// Broadcast sends an event notification to all subscribers.
+func (s *Server) Broadcast(method string, params interface{}) {
+	// Cheap pre-check: if nobody is subscribed, skip the JSON marshal
+	// of the (often non-trivial) status payload entirely.
+	s.mu.Lock()
+	if len(s.eventSubs) == 0 {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+
+	notif, err := NewNotification(method, params)
+	if err != nil {
+		slog.Warn("failed to build notification", "error", err)
+		return
+	}
+	data, err := json.Marshal(notif)
+	if err != nil {
+		return
+	}
+
+	s.mu.Lock()
+	subs := make([]*subscriber, 0, len(s.eventSubs))
+	for sub := range s.eventSubs {
+		subs = append(subs, sub)
+	}
+	s.mu.Unlock()
+
+	for _, sub := range subs {
+		select {
+		case sub.ch <- data:
+		default:
+			// Drop event if subscriber is slow (prevents helper from blocking)
+		}
+	}
+}
+
+// handleConn processes one connection. The first request determines if this
+// is a control connection (regular RPC) or an event stream (after Subscribe).
+func (s *Server) handleConn(conn net.Conn) {
+	defer conn.Close()
+
+	// Verify the connecting process belongs to the expected owner.
+	if err := verifyPeer(conn, s.ownerUID, s.ownerSID); err != nil {
+		slog.Warn("ipc: rejecting connection: peer credential check failed", "error", err)
+		return
+	}
+
+	remoteDesc := fmt.Sprintf("%p", conn)
+	isControl := false
+	defer func() {
+		if isControl {
+			s.mu.Lock()
+			delete(s.controlConns, conn)
+			remaining := len(s.controlConns)
+			fn := s.onDisconnect
+			s.mu.Unlock()
+			slog.Info("ipc: control conn closed",
+				"conn", remoteDesc,
+				"remaining", remaining)
+			if remaining == 0 && fn != nil {
+				fn()
+			}
+		} else {
+			slog.Debug("ipc: non-control conn closed", "conn", remoteDesc)
+		}
+	}()
+
+	// readDeadline bounds how long the helper waits for the next RPC on a
+	// control connection. The GUI's helper_lifecycle.go health monitor
+	// sends a Helper.Ping every 5 s, so a 10 s deadline tolerates one
+	// missed cycle (brief GUI stall, GC pause) while still detecting a
+	// dead GUI within ~10 s — short enough that the shutdown grace timer
+	// runs and the helper exits within ~20 s of the GUI dying. The
+	// previous 60 s deadline was overkill given the ping cadence and
+	// made "GUI close → helper still running" linger for over a minute.
+	const readDeadline = 10 * time.Second
+	for {
+		if tc, ok := conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+			_ = tc.SetReadDeadline(time.Now().Add(readDeadline))
+		}
+		var req Request
+		if err := ReadFrame(conn, &req); err != nil {
+			slog.Debug("ipc: ReadFrame error, closing conn",
+				"conn", remoteDesc,
+				"is_control", isControl,
+				"error", err)
+			return // connection closed or read deadline exceeded
+		}
+
+		if req.Method == MethodSubscribe {
+			// Upgrade this connection to an event stream
+			slog.Debug("ipc: upgrading to event stream", "conn", remoteDesc)
+			s.handleSubscribe(conn, req.ID)
+			return // handleSubscribe takes over the connection
+		}
+
+		// Transient clients (the `ctl` CLI) never become control
+		// connections: they connect, issue one command and exit, which
+		// would otherwise look like a GUI attaching and immediately
+		// detaching and would re-arm the shutdown grace window.
+		if !isControl && !req.Transient {
+			isControl = true
+			s.mu.Lock()
+			s.controlConns[conn] = struct{}{}
+			count := len(s.controlConns)
+			fn := s.onConnect
+			s.mu.Unlock()
+			slog.Info("ipc: new control conn",
+				"conn", remoteDesc,
+				"count", count,
+				"first_method", req.Method)
+			if fn != nil {
+				fn()
+			}
+		}
+
+		// Reject notifications (id=0) for every method. Allowing a
+		// client to invoke side-effecting handlers without a request
+		// ID skipped both the response and the audit trail — e.g.
+		// `{"id":0,"method":"Helper.Shutdown"}` would silently kill
+		// the daemon. We don't currently have any method that's
+		// legitimately notification-only; if one is added later, opt
+		// it in to a dedicated allowlist rather than reverting this.
+		if req.IsNotification() {
+			slog.Warn("ipc: rejected notification (id=0)",
+				"conn", remoteDesc, "method", req.Method)
+			continue
+		}
+
+		// Dispatch RPC
+		resp := s.dispatch(&req)
+		if resp != nil {
+			if err := WriteFrame(conn, resp); err != nil {
+				slog.Debug("ipc: WriteFrame error, closing conn",
+					"conn", remoteDesc,
+					"error", err)
+				return
+			}
+		}
+	}
+}
+
+func (s *Server) dispatch(req *Request) *Response {
+	s.mu.Lock()
+	handler, ok := s.handlers[req.Method]
+	s.mu.Unlock()
+	if !ok {
+		return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "method not found: "+req.Method)
+	}
+
+	result, err := handler(req.Params)
+	if err != nil {
+		code := ErrCodeAppError
+		if ce, ok := err.(*CodedError); ok {
+			code = ce.Code
+		}
+		return NewErrorResponse(req.ID, code, err.Error())
+	}
+
+	resp, marshalErr := NewResponse(req.ID, result)
+	if marshalErr != nil {
+		return NewErrorResponse(req.ID, ErrCodeInternalError, marshalErr.Error())
+	}
+	return resp
+}
+
+// handleSubscribe takes over a connection as an event stream.
+func (s *Server) handleSubscribe(conn net.Conn, reqID uint64) {
+	sub := &subscriber{
+		conn: conn,
+		ch:   make(chan []byte, 32),
+	}
+
+	s.mu.Lock()
+	s.eventSubs[sub] = struct{}{}
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.eventSubs, sub)
+		s.mu.Unlock()
+		// Do NOT close sub.ch — a concurrent Broadcast may still be trying to
+		// send to it (it copies the subs list outside the lock). Sending to a
+		// closed channel panics. The channel will be GC'd once both the
+		// subscriber and the last Broadcast referencing it are done.
+	}()
+
+	// Acknowledge subscription
+	ack, _ := NewResponse(reqID, Empty{})
+	if err := WriteFrame(conn, ack); err != nil {
+		return
+	}
+
+	// Pump events to this subscriber
+	for {
+		select {
+		case <-s.shutdownCh:
+			return
+		case data, ok := <-sub.ch:
+			if !ok {
+				return
+			}
+			if _, err := conn.Write(frameBytes(data)); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// frameBytes prepends the 4-byte length prefix.
+func frameBytes(data []byte) []byte {
+	buf := make([]byte, 4+len(data))
+	buf[0] = byte(len(data) >> 24)
+	buf[1] = byte(len(data) >> 16)
+	buf[2] = byte(len(data) >> 8)
+	buf[3] = byte(len(data))
+	copy(buf[4:], data)
+	return buf
+}
