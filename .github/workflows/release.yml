@@ -175,10 +175,8 @@ jobs:
         # architecture that already contains the matching DLL. vendor:wintun
         # put the arch-correct one in bin/ already; the built exe is named
         # wireguideplus-<arch>.exe, so the zip and its contents both carry
-        # the platform. A bare dll is published too for users who only miss
-        # the driver — it must keep its arch-qualified name next to the exe
-        # to be picked up. The exe inside the zip is the unsigned build
-        # output (SignPath only covers the installer).
+        # the platform. The exe inside the zip is the unsigned build output
+        # (SignPath only covers the installer).
         run: |
           Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll" -DestinationPath "bin\wireguideplus-${{ matrix.asset }}-portable.zip" -Force
           Get-ChildItem bin | Where-Object { $_.Name -like 'wireguideplus-*' -or $_.Name -like 'wintun-*' } | Select-Object Name, Length
@@ -261,7 +259,6 @@ jobs:
           path: |
             bin/wireguideplus-${{ matrix.asset }}-installer.exe
             bin/wireguideplus-${{ matrix.asset }}-portable.zip
-            bin/wintun-${{ matrix.asset }}.dll
           if-no-files-found: error
           retention-days: 7
 

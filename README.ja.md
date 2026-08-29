@@ -14,8 +14,9 @@ WireGuide Plus はオープンソースプロジェクト
 
 [English](README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | **日本語**
 
-> 現在 **Windows 10 / 11（x64、x86 32ビットおよび ARM64）を完全サポート**しています。
-> macOS / Linux の強化版は開発中です — それまではアップストリーム版を利用してください
+> **Windows 10 / 11（x64、x86 32ビットおよび ARM64）を完全サポート**しています。
+> macOS（Apple Silicon）と Linux（x64、arm64）は**実験的プレビュー**として提供 —
+> CI でビルドされますが、実機でのテストは未実施です
 > （[プラットフォームサポート](#プラットフォームサポート) を参照）。
 > **Android / iOS は非対応です。**
 
@@ -71,8 +72,8 @@ WireGuide Plus はオープンソースプロジェクト
 | プラットフォーム | 状態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32ビット、ARM64） | ✅ 完全サポート（マルチトンネル同時接続 + SSID 自動接続） |
-| macOS | 🚧 強化版は開発中 — [wireguide](https://github.com/korjwl1/wireguide) または [WireTunnels](https://github.com/FMDigitech/WireTunnels) を利用 |
-| Linux | 🚧 強化版は開発中 — [wireguide](https://github.com/korjwl1/wireguide) を利用 |
+| macOS（Apple Silicon / arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施; [wireguide](https://github.com/korjwl1/wireguide) または [WireTunnels](https://github.com/FMDigitech/WireTunnels) を推奨 |
+| Linux（x64、arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施 |
 | Android / iOS | ❌ **非対応**（トンネルを同時に実行できず、Wi-Fi SSID による自動切替も不可） |
 
 > **macOS の代替: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — マルチトンネル・
@@ -135,10 +136,9 @@ arch は `x86` / `amd64` / `arm64`）。インストールされるプログラ�
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll) を参照）。リリースでは
 `wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip` のポータブル zip も提供しています。各 zip には
-exe と対応するドライバー DLL が**同梱**されており、解凍するだけで実行できます。手動で
-組み合わせたい方向けに、`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll` も
-個別に添付されます（exe の隣にそのまま置くだけ、リネーム不要）。対応するドライバー
-DLL が exe の隣にない場合、トンネルを作成できません。
+exe と対応するドライバー DLL が**同梱**されており、解凍するだけで実行できます。
+リリースで個別 DLL の添付は廃止しました（ポータブル zip またはインストーラーを
+ご利用ください）。対応するドライバー DLL が exe の隣にない場合、トンネルを作成できません。
 
 ## コード署名
 

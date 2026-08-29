@@ -13,8 +13,9 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 
 **English** | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-> Currently **fully supported on Windows 10 / 11 (x64 and x86 32-bit)**. The macOS and
-> Linux enhanced editions are under development — use the upstream version meanwhile (see
+> **Fully supported on Windows 10 / 11 (x64, x86 32-bit and ARM64)**. macOS (Apple
+> Silicon) and Linux (x64, arm64) builds are available as **experimental previews** —
+> built by CI but not yet tested on real hardware (see
 > [Platform support](#platform-support)). **Android / iOS are not supported.**
 
 ## Features
@@ -70,9 +71,9 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 
 | Platform | Status |
 | --- | --- |
-| Windows 10 / 11 (x64, x86 32-bit) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect) |
-| macOS | 🚧 Enhanced edition under development — use [wireguide](https://github.com/korjwl1/wireguide) or [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
-| Linux | 🚧 Enhanced edition under development — use [wireguide](https://github.com/korjwl1/wireguide) |
+| Windows 10 / 11 (x64, x86 32-bit, ARM64) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect) |
+| macOS (Apple Silicon / arm64) | 🚧 Experimental — CI-built but not yet tested on real hardware; use [wireguide](https://github.com/korjwl1/wireguide) or [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
+| Linux (x64, arm64) | 🚧 Experimental — CI-built but not yet tested on real hardware |
 | Android / iOS | ❌ **Not supported** (cannot run tunnels concurrently, nor auto-connect different tunnels by Wi-Fi SSID) |
 
 > **macOS alternative: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — a
@@ -133,13 +134,12 @@ rename is ever needed:
 | `wireguideplus-arm64.exe` (ARM64) | `wintun-arm64.dll` |
 
 The driver DLLs come from `wintun-0.14.1.zip` (see
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)). Releases also provide
-ready-made portable zips (`wireguideplus-amd64-portable.zip` /
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)). Releases provide ready-made
+portable zips (`wireguideplus-amd64-portable.zip` /
 `wireguideplus-x86-portable.zip` / `wireguideplus-arm64-portable.zip`), each already
 containing the exe **and** the matching driver DLL — download one zip, extract, and run.
-A bare `wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll` is attached too for
-manual pairing (just drop it next to the exe, no renaming). Without the matching driver
-DLL, tunnels cannot be created.
+Releases no longer attach bare DLLs (use the portable zip or the installer above). Without
+the matching driver DLL, tunnels cannot be created.
 
 ## Code Signing
 

@@ -11,8 +11,9 @@ WireGuide Plus 是對開源專案 [`korjwl1/wireguide`](https://github.com/korjw
 
 [English](README.md) | [简体中文](README.zh.md) | **繁體中文** | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-> 目前 **Windows 10 / 11（x64、x86 32 位元與 ARM64）完全支援**。macOS / Linux 增強版
-> 開發中，期間請使用上游版本（見 [平台支援](#平台支援)）。**不支援 Android / iOS。**
+> **Windows 10 / 11（x64、x86 32 位元與 ARM64）完全支援**。macOS（Apple Silicon）與
+> Linux（x64、arm64）提供**實驗性預覽版** — 經 CI 建置，尚未在實機測試
+> （見 [平台支援](#平台支援)）。**不支援 Android / iOS。**
 
 ## 功能特色
 
@@ -61,8 +62,8 @@ WireGuide Plus 是對開源專案 [`korjwl1/wireguide`](https://github.com/korjw
 | 平台 | 狀態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32 位元、ARM64） | ✅ 完全支援（多隧道並發 + SSID 自動連接） |
-| macOS | 🚧 增強版開發中 — 請使用 [wireguide](https://github.com/korjwl1/wireguide) 或 [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
-| Linux | 🚧 增強版開發中 — 請使用 [wireguide](https://github.com/korjwl1/wireguide) |
+| macOS（Apple Silicon / arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試；請使用 [wireguide](https://github.com/korjwl1/wireguide) 或 [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
+| Linux（x64、arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試 |
 | Android / iOS | ❌ **不支援**（無法同時執行多條隧道，也無法依 Wi-Fi SSID 自動切換隧道） |
 
 > **macOS 替代方案：[WireTunnels](https://github.com/FMDigitech/WireTunnels)** — 原生
@@ -116,11 +117,11 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 | `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
 
 驅動 DLL 來自 `wintun-0.14.1.zip`（見
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)）。Release 亦提供打包好的
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)）。Release 提供打包好的
 免安裝 zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip`），內含 exe **與**相符架構的驅動 DLL——下載後解壓縮
-即可執行。另附獨立的 `wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll` 供手動
-搭配（直接放在 exe 旁即可，無需改名）。缺少相符的驅動 DLL 時無法建立隧道。
+即可執行。Release 不再單獨附驅動 DLL（請使用免安裝 zip 或安裝程式）。缺少相符的驅動
+DLL 時無法建立隧道。
 
 ## 程式碼簽署
 
