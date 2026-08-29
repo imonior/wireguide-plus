@@ -10,9 +10,9 @@ import (
 )
 
 // SpawnHelper launches the helper with root privileges via pkexec (PolicyKit).
-// Shows a native authentication dialog. ctx is accepted for cross-platform
-// signature parity with the macOS variant; pkexec needs no plumbing because
-// it backgrounds immediately on Start.
+// Shows a native authentication dialog. ctx is accepted for signature
+// parity with the macOS variant; pkexec needs no plumbing because it
+// backgrounds immediately on Start.
 func SpawnHelper(ctx context.Context, args Args) error {
 	_ = ctx
 	if err := ValidateArgs(args); err != nil {

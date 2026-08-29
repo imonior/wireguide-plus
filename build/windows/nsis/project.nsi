@@ -177,7 +177,7 @@ Section
         CreateShortCut "$SMPROGRAMS\卸载 ${INFO_PRODUCTNAME}.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     ${EndIf}
 
-    # Put the install dir on the system PATH so `wireguide ctl ...` is
+    # Put the install dir on the system PATH so `wireguideplus ctl ...` is
     # callable from any terminal (the same binary is the GUI and the CLI).
     # Done via PowerShell/.NET rather than raw NSIS registry edits: .NET
     # reads and writes the full PATH value (NSIS's ReadRegStr truncates at

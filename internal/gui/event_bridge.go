@@ -27,7 +27,7 @@ type eventBridge struct {
 	// without a history store.
 	onReconcileHistory func(activeNames []string, rx, tx map[string]int64, reason string)
 	// onQuitRequested terminates the app. Fired for ipc.EventQuit, which
-	// the helper broadcasts when someone runs `wireguide ctl stop`.
+	// the helper broadcasts when someone runs `wireguideplus ctl stop`.
 	onQuitRequested func()
 
 	mu           sync.Mutex
@@ -169,7 +169,7 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 			b.app.Event.Emit("auto_connected", payload)
 		}
 	case ipc.EventQuit:
-		// `wireguide ctl stop` — the user asked for the whole app to go
+		// `wireguideplus ctl stop` — the user asked for the whole app to go
 		// away. Run the same teardown the tray's Quit item does.
 		//
 		// In a goroutine: we're on the event-stream read loop, and

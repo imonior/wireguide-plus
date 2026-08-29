@@ -31,7 +31,7 @@ const (
 	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"
 
 	// minAssetSize is the minimum acceptable size for a release asset.
-	// A macOS .dmg/.zip containing WireGuide.app is always well over 1 MB;
+	// A macOS .dmg/.zip containing wireguideplus.app is always well over 1 MB;
 	// anything smaller is almost certainly corrupted or a placeholder file
 	// injected by an attacker.
 	minAssetSize = 1 << 20 // 1 MB

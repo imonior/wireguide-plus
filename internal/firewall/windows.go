@@ -358,7 +358,7 @@ func (f *WindowsFirewall) addFilter(name string, layerKey windows.GUID, action u
 // Idempotent: calling Enable again while killSwitchEnabled is true is a
 // no-op so the GUI's "auto-apply on connect" flow can fire freely.
 //
-// ifaceAddresses is accepted for cross-platform parity but unused on
+// ifaceAddresses is accepted for parity across platforms but unused on
 // Windows — the per-tunnel LUID permit covers the same role.
 func (f *WindowsFirewall) EnableKillSwitch(interfaceName string, _ []string, endpoints []string) error {
 	f.mu.Lock()

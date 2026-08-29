@@ -14,8 +14,8 @@ var tunnelIfacePrefixes = []string{"utun", "wg", "tun", "tap", "ipsec", "ppp"}
 
 // PhysicalInterfaceIPs returns the unicast IP addresses currently
 // assigned to physical (non-tunnel, up, non-loopback) interfaces. Used
-// to evaluate subnet-based Automation conditions. Cross-platform via the
-// standard net package — no per-OS code needed.
+// to evaluate subnet-based Automation conditions. Uses only the standard
+// net package — no per-OS code needed.
 func PhysicalInterfaceIPs() []net.IP {
 	ifaces, err := net.Interfaces()
 	if err != nil {

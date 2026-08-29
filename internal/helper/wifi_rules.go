@@ -39,7 +39,7 @@ func (h *Helper) loadUserSettings() (*storage.Settings, error) {
 
 // currentNetworkContext builds the NetworkContext automation rules are
 // evaluated against — the single source for both the live engine
-// (reevaluateAutomation) and the read-only preview, so `wireguide ctl
+// (reevaluateAutomation) and the read-only preview, so `wireguideplus ctl
 // automation` always shows exactly what the engine would act on.
 //
 // SSID staleness: on macOS the SSID only arrives via GUI reports (the
@@ -177,7 +177,7 @@ func (h *Helper) reevaluateAutomation(reason string) {
 // handleAutomationPreview is a read-only dry-run of the Automation
 // engine: it reports the current network context and each rule-bearing
 // tunnel's evaluated decision, without connecting or disconnecting
-// anything. Backs `wireguide ctl automation` and answers "why did this
+// anything. Backs `wireguideplus ctl automation` and answers "why did this
 // tunnel (dis)connect?".
 func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error) {
 	settings, err := h.loadUserSettings()

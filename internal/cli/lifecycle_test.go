@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestBundleFromExePath pins the lookup that decides WHICH WireGuide.app
+// TestBundleFromExePath pins the lookup that decides WHICH wireguideplus.app
 // `ctl start` launches.
 //
 // This exists because getting it wrong is not a cosmetic failure. When the
@@ -13,7 +13,7 @@ import (
 // ID through LaunchServices, and a build tree next to an installed copy in
 // /Applications both claim com.imonior.wireguide-plus. LaunchServices then starts
 // whichever it likes — observed live: `ctl start` from a dev build launched
-// /Applications/WireGuide.app instead, whose LaunchDaemon plist differs, so
+// /Applications/wireguideplus.app instead, whose LaunchDaemon plist differs, so
 // each build kept reinstalling its own plist and prompting for an admin
 // password on every launch.
 func TestBundleFromExePath(t *testing.T) {
@@ -30,22 +30,22 @@ func TestBundleFromExePath(t *testing.T) {
 	}{
 		{
 			name: "standard bundle layout",
-			exe:  "/Applications/WireGuide.app/Contents/MacOS/wireguide",
-			want: "/Applications/WireGuide.app",
+			exe:  "/Applications/wireguideplus.app/Contents/MacOS/wireguideplus",
+			want: "/Applications/wireguideplus.app",
 		},
 		{
 			name: "bundle in a build tree",
-			exe:  "/Users/me/src/wireguide/bin/WireGuide.app/Contents/MacOS/wireguide",
-			want: "/Users/me/src/wireguide/bin/WireGuide.app",
+			exe:  "/Users/me/src/wireguide/bin/wireguideplus.app/Contents/MacOS/wireguideplus",
+			want: "/Users/me/src/wireguide/bin/wireguideplus.app",
 		},
 		{
 			name: "bare binary on PATH is not in a bundle",
-			exe:  "/usr/local/bin/wireguide",
+			exe:  "/usr/local/bin/wireguideplus",
 			want: "",
 		},
 		{
 			name: "dev build next to its bundle is not in a bundle",
-			exe:  "/Users/me/src/wireguide/bin/wireguide",
+			exe:  "/Users/me/src/wireguide/bin/wireguideplus",
 			want: "",
 		},
 		{
@@ -58,8 +58,8 @@ func TestBundleFromExePath(t *testing.T) {
 		},
 		{
 			name: "relative path inside a bundle",
-			exe:  "bin/WireGuide.app/Contents/MacOS/wireguide",
-			want: "bin/WireGuide.app",
+			exe:  "bin/wireguideplus.app/Contents/MacOS/wireguideplus",
+			want: "bin/wireguideplus.app",
 		},
 	}
 

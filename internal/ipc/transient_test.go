@@ -53,7 +53,7 @@ func startTransientTestServer(t *testing.T) (addr string, connects, disconnects 
 }
 
 // TestTransientClientIsNotAControlConn is the regression guard for the bug
-// where a single `wireguide ctl status` cut a GUI-less helper's remaining
+// where a single `wireguideplus ctl status` cut a GUI-less helper's remaining
 // life from 60s to 10s.
 //
 // The CLI connects, pings and exits within milliseconds. If that counts as a

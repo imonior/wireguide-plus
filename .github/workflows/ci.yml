@@ -57,9 +57,9 @@ jobs:
 
       - name: Check runtime linking
         run: |
-          file bin/wireguide-plus
-          if ldd bin/wireguide-plus | grep -q 'not found'; then
-            ldd bin/wireguide-plus
+          file bin/wireguideplus
+          if ldd bin/wireguideplus | grep -q 'not found'; then
+            ldd bin/wireguideplus
             exit 1
           fi
 
@@ -69,16 +69,16 @@ jobs:
           GIT_COMMITTER_NAME: WireGuide CI
           GIT_COMMITTER_EMAIL: noreply@example.com
         run: |
-          wails3 tool package -name wireguide -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
-          dpkg-deb --info bin/wireguide.deb
-          dpkg-deb --contents bin/wireguide.deb
+          wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
+          dpkg-deb --info bin/wireguideplus.deb
+          dpkg-deb --contents bin/wireguideplus.deb
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-amd64-ci
           path: |
-            bin/wireguide-plus
-            bin/wireguide.deb
+            bin/wireguideplus
+            bin/wireguideplus.deb
           if-no-files-found: error
           retention-days: 7
 

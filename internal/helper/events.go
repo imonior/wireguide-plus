@@ -294,7 +294,7 @@ func (h *Helper) runOneLatencyProbe(t latencyTask) {
 	// already broadcast in the status event, rendered in the UI and
 	// readable via `ctl status`. The log level is runtime-mutable, so
 	// anyone debugging a latency problem can turn it back on live with
-	// `wireguide ctl set loglevel debug` (or the Settings UI).
+	// `wireguideplus ctl set loglevel debug` (or the Settings UI).
 	slog.Debug("endpoint latency measured",
 		"tunnel", t.tunnelName, "target", measuredTarget,
 		"configured_target", t.latencyProbeTarget,

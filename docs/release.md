@@ -31,8 +31,10 @@ Release assets produced per tag:
 | `wireguideplus-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
 | `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 不单独发布） | build-windows |
 | `wintun-x86.dll` / `wintun-amd64.dll` / `wintun-arm64.dll` (bare driver) | build-windows |
-| `WireGuide-darwin-arm64.zip` | build-darwin |
-| `WireGuide-linux-amd64.deb` / `WireGuide-linux-arm64.deb` | build-linux |
+| `WireGuide-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
+| `WireGuide-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
+| `WireGuide-linux-amd64.deb` / `WireGuide-linux-arm64.deb` (installers) | build-linux |
+| `WireGuide-linux-amd64-portable.tar.gz` / `WireGuide-linux-arm64-portable.tar.gz` (portable, bare `wireguideplus` binary) | build-linux |
 | `SHA256SUMS` + `SHA256SUMS.sig` | release |
 
 > Windows always ships 32-bit, 64-bit and ARM64 installers per the release

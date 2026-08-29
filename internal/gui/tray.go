@@ -450,7 +450,7 @@ func (t *trayManager) startAppearanceWatch() {
 // quitApp is the single, platform-independent app teardown: stop the tray
 // rebuild machinery, run doShutdown (which disconnects tunnels and stops the
 // helper), then terminate. It backs both the tray's Quit item and
-// `wireguide ctl stop`, which reaches it via the helper's EventQuit
+// `wireguideplus ctl stop`, which reaches it via the helper's EventQuit
 // broadcast — so both routes leave exactly the same state behind.
 //
 // Safe to call more than once: doShutdown is guarded by a sync.Once and the

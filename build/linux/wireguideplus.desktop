@@ -2,7 +2,7 @@
 Type=Application
 Name=WireGuide Plus
 Comment=Multi-tunnel automated WireGuard VPN client
-Exec=/usr/local/bin/wireguide
+Exec=/usr/local/bin/wireguideplus
 Icon=wireguideplus
 Terminal=false
 StartupNotify=false

@@ -201,7 +201,7 @@ tasks:
     summary: Builds Docker image for cross-compilation (~800MB download)
     desc: |
       Builds the Docker image needed for cross-compiling to any platform.
-      Run this once to enable cross-platform builds from any OS.
+      Run this once to enable builds for any OS from this machine.
     cmds:
       - docker build -t wails-cross -f build/docker/Dockerfile.cross build/docker/
     preconditions:

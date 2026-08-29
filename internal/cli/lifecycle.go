@@ -15,7 +15,7 @@ import (
 )
 
 // macBundleID must match CFBundleIdentifier in build/darwin/Info.plist.
-// `open -b` uses it to find an installed WireGuide.app wherever it lives,
+// `open -b` uses it to find an installed wireguideplus.app wherever it lives,
 // which beats guessing at /Applications.
 const macBundleID = "com.imonior.wireguide-plus"
 
@@ -81,7 +81,7 @@ func cmdStart(_ []string) int {
 	fmt.Fprintf(os.Stderr,
 		"start: gave up after %s waiting for the helper to come up.\n", startTimeout)
 	fmt.Fprintln(os.Stderr,
-		"if the administrator password prompt is still open, answering it will finish the start; re-run 'wireguide ctl status' to check.")
+		"if the administrator password prompt is still open, answering it will finish the start; re-run 'wireguideplus ctl status' to check.")
 	return 1
 }
 
@@ -146,7 +146,7 @@ func launchApp() error {
 		//
 		// Our OWN bundle comes first, deliberately. `open -b` asks
 		// LaunchServices to resolve the bundle ID, and more than one
-		// WireGuide.app can claim it — a build tree alongside an
+		// wireguideplus.app can claim it — a build tree alongside an
 		// installed copy in /Applications. LaunchServices then picks one
 		// we did not choose, and the app that starts can be a different
 		// version from the CLI that started it. That is not cosmetic:

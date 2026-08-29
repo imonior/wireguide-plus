@@ -1,9 +1,9 @@
-// Package cli implements `wireguide ctl …` — a scriptable command-line
+// Package cli implements `wireguideplus ctl …` — a scriptable command-line
 // interface to the running helper (issue #10). Like Tailscale's `tailscale`
 // vs `tailscaled`, it's a thin third IPC client alongside the GUI: it talks
 // to the already-elevated helper over the same local socket, so unlike
-// wg-quick it needs no per-command sudo, works cross-platform, and inherits
-// the app's kill switch / DNS protection / loop protection / automation.
+// wg-quick it needs no per-command sudo, works on every supported OS, and
+// inherits the app's kill switch / DNS protection / loop protection / automation.
 package cli
 
 import (
@@ -81,50 +81,50 @@ func Run(args []string) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `wireguide ctl — control the WireGuide helper from the command line
+	fmt.Fprint(w, `wireguideplus ctl — control the WireGuide helper from the command line
 
 App:
-  wireguide ctl start                     launch WireGuide (app + helper) and wait
-  wireguide ctl stop                      quit WireGuide (app + helper)
+  wireguideplus ctl start                     launch WireGuide (app + helper) and wait
+  wireguideplus ctl stop                      quit WireGuide (app + helper)
 
 Tunnels:
-  wireguide ctl status [--json]           show connection status
-  wireguide ctl list [--json]             list tunnels (● = connected)
-  wireguide ctl connect <name>            connect a tunnel
-  wireguide ctl disconnect [name]         disconnect one tunnel (or all)
-  wireguide ctl import <file> [name]      import a .conf (name defaults to filename)
-  wireguide ctl rename <old> <new>        rename a tunnel
-  wireguide ctl delete <name>             delete a tunnel (disconnects first if active)
+  wireguideplus ctl status [--json]           show connection status
+  wireguideplus ctl list [--json]             list tunnels (● = connected)
+  wireguideplus ctl connect <name>            connect a tunnel
+  wireguideplus ctl disconnect [name]         disconnect one tunnel (or all)
+  wireguideplus ctl import <file> [name]      import a .conf (name defaults to filename)
+  wireguideplus ctl rename <old> <new>        rename a tunnel
+  wireguideplus ctl delete <name>             delete a tunnel (disconnects first if active)
 
 Automation (per-tunnel connect/disconnect rules):
-  wireguide ctl automation                show the engine's current decision
-  wireguide ctl automation rules <name>   list a tunnel's rules (in priority order)
-  wireguide ctl automation add <name> <connect|disconnect> <cond>
+  wireguideplus ctl automation                show the engine's current decision
+  wireguideplus ctl automation rules <name>   list a tunnel's rules (in priority order)
+  wireguideplus ctl automation add <name> <connect|disconnect> <cond>
                                           append a rule; <cond> is one of:
                                             ssid:<wifi-name>   subnet:<CIDR>
                                             mac:<gateway-MAC>  else
-  wireguide ctl automation rm <name> <n>  remove rule number <n> (from 'rules')
+  wireguideplus ctl automation rm <name> <n>  remove rule number <n> (from 'rules')
 
 Settings & diagnostics:
-  wireguide ctl set killswitch <on|off>       block non-VPN traffic if the tunnel drops
-  wireguide ctl set dns-protection <on|off>   pin DNS to the tunnel
-  wireguide ctl set healthcheck <on|off>      handshake monitor + auto-reconnect
-  wireguide ctl set pin-interface <on|off>    bind sockets to the upstream interface
-  wireguide ctl set loglevel <debug|info|warn|error>
-  wireguide ctl dnsleak                        check whether DNS leaks outside the tunnel
-  wireguide ctl routes                         show the OS routing table
+  wireguideplus ctl set killswitch <on|off>       block non-VPN traffic if the tunnel drops
+  wireguideplus ctl set dns-protection <on|off>   pin DNS to the tunnel
+  wireguideplus ctl set healthcheck <on|off>      handshake monitor + auto-reconnect
+  wireguideplus ctl set pin-interface <on|off>    bind sockets to the upstream interface
+  wireguideplus ctl set loglevel <debug|info|warn|error>
+  wireguideplus ctl dnsleak                        check whether DNS leaks outside the tunnel
+  wireguideplus ctl routes                         show the OS routing table
 
 Coding agents:
-  wireguide ctl install-skills [--target claude,codex,opencode,hermes]
-                                          teach coding agents how to use 'wireguide ctl'
+  wireguideplus ctl install-skills [--target claude,codex,opencode,hermes]
+                                          teach coding agents how to use 'wireguideplus ctl'
                                           (installs into every detected agent by default)
 
 Examples:
-  wireguide ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
-  wireguide ctl automation add work connect else
+  wireguideplus ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
+  wireguideplus ctl automation add work connect else
 
 WireGuide must be running for connect/disconnect/status — start it with
-'wireguide ctl start' (or by opening the app). Nothing else starts it for you.
+'wireguideplus ctl start' (or by opening the app). Nothing else starts it for you.
 list, import, rename, delete and automation edits work against local files.
 `)
 }
@@ -288,7 +288,7 @@ func printJSON(v any) int {
 
 func cmdConnect(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl connect <name>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl connect <name>")
 		return 2
 	}
 	name := args[0]
@@ -358,7 +358,7 @@ func cmdDisconnect(args []string) int {
 
 func cmdImport(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl import <file> [name]")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl import <file> [name]")
 		return 2
 	}
 	path := args[0]
@@ -498,7 +498,7 @@ func formatCondition(c wifi.Condition) string {
 
 func automationRules(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl automation rules <tunnel>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl automation rules <tunnel>")
 		return 2
 	}
 	name := args[0]
@@ -555,7 +555,7 @@ func parseCondition(spec string) (wifi.Condition, error) {
 
 func automationAdd(args []string) int {
 	if len(args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl automation add <tunnel> <connect|disconnect> <cond>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl automation add <tunnel> <connect|disconnect> <cond>")
 		return 2
 	}
 	name, action, spec := args[0], args[1], args[2]
@@ -597,7 +597,7 @@ func automationAdd(args []string) int {
 
 func automationRm(args []string) int {
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl automation rm <tunnel> <rule-number>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl automation rm <tunnel> <rule-number>")
 		return 2
 	}
 	name := args[0]
@@ -643,7 +643,7 @@ func automationRm(args []string) int {
 
 func cmdRename(args []string) int {
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl rename <old> <new>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl rename <old> <new>")
 		return 2
 	}
 	old, newName := args[0], args[1]
@@ -686,7 +686,7 @@ func cmdRename(args []string) int {
 
 func cmdDelete(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl delete <name>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl delete <name>")
 		return 2
 	}
 	name := args[0]
@@ -758,7 +758,7 @@ func parseOnOff(v string) (bool, bool) {
 
 func cmdSet(args []string) int {
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: wireguide ctl set <killswitch|dns-protection|healthcheck|pin-interface|loglevel> <value>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl set <killswitch|dns-protection|healthcheck|pin-interface|loglevel> <value>")
 		return 2
 	}
 	setting, value := strings.ToLower(args[0]), args[1]

@@ -460,7 +460,7 @@ Homebrew cask `uninstall` block only quits the app (no sudo). Helper cleanup is 
 | App Store | Not possible | Required |
 | Root required | Yes (TUN device) | No (sandboxed) |
 
-WireGuide chose wireguard-go for cross-platform support and full control over networking. The tradeoff is requiring root and not being distributable via App Store.
+WireGuide chose wireguard-go for multi-platform support and full control over networking. The tradeoff is requiring root and not being distributable via App Store.
 
 ### Why Go + Wails instead of Swift/Electron?
 

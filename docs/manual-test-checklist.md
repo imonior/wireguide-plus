@@ -32,7 +32,7 @@ the tunnel was brought up.
       `automation: rule connect ... reason=ssid-change`, tunnel up within
       ~6s. Confirm with `ctl automation` (decision=connect).
 - [ ] Repeat with the GUI fully quit (Cmd+Q, verify via
-      `pgrep -f WireGuide.app`). The rule must still fire — only the
+      `pgrep -f wireguideplus.app`). The rule must still fire — only the
       helper log shows it; `ctl status` confirms.
 
 ### Disconnect on a specific network (gateway MAC)

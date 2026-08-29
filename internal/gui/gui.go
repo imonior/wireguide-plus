@@ -143,7 +143,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// 4. Wails app
 	app := application.New(application.Options{
 		Name:        "WireGuide Plus",
-		Description: "WireGuide Plus - cross-platform WireGuard desktop client",
+		Description: "WireGuide Plus - multi-tunnel automated WireGuard VPN client",
 		Services: []application.Service{
 			application.NewService(tunnelService),
 		},

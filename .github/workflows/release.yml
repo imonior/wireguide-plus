@@ -56,18 +56,28 @@ jobs:
         # codesign:adhoc.
         run: wails3 task darwin:package ARCH=arm64 SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
-      - name: Archive .app
+      - name: Archive .app (portable)
         # ditto preserves macOS metadata (extended attributes, symlinks,
         # the codesign signature) better than plain `zip -ry`. The
         # resulting .zip stays Gatekeeper-quarantine-friendly.
         run: |
           cd bin
-          ditto -c -k --sequesterRsrc --keepParent wireguide-plus.app "WireGuide-darwin-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent wireguideplus.app "WireGuide-darwin-arm64.zip"
+
+      - name: Create DMG (installer)
+        # hdiutil builds the drag-and-drop .dmg installer from the .app
+        # bundle — the "installer" counterpart to the portable zip above,
+        # mirroring Windows' installer + portable.zip split.
+        run: |
+          cd bin
+          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuide-darwin-arm64.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: bin/WireGuide-darwin-arm64.zip
+          path: |
+            bin/WireGuide-darwin-arm64.zip
+            bin/WireGuide-darwin-arm64.dmg
           if-no-files-found: error
           retention-days: 7
 
@@ -295,26 +305,35 @@ jobs:
 
       - name: Check runtime linking
         run: |
-          file bin/wireguide-plus
-          if ldd bin/wireguide-plus | grep -q 'not found'; then
-            ldd bin/wireguide-plus
+          file bin/wireguideplus
+          if ldd bin/wireguideplus | grep -q 'not found'; then
+            ldd bin/wireguideplus
             exit 1
           fi
 
-      - name: Package DEB
+      - name: Package DEB (installer)
         env:
           GOARCH: ${{ matrix.arch }}
           GIT_COMMITTER_NAME: WireGuide CI
           GIT_COMMITTER_EMAIL: noreply@example.com
         run: |
-          wails3 tool package -name wireguide -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
-          dpkg-deb --info bin/wireguide.deb
-          mv bin/wireguide.deb "bin/WireGuide-linux-${{ matrix.arch }}.deb"
+          wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
+          dpkg-deb --info bin/wireguideplus.deb
+          mv bin/wireguideplus.deb "bin/WireGuide-linux-${{ matrix.arch }}.deb"
+
+      - name: Package portable tarball
+        # Portable build = the bare binary in a tarball (no package manager
+        # needed); pairs with the .deb installer, mirroring Windows'
+        # installer + portable.zip split.
+        run: |
+          tar -czf "bin/WireGuide-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
-          path: bin/WireGuide-linux-${{ matrix.arch }}.deb
+          path: |
+            bin/WireGuide-linux-${{ matrix.arch }}.deb
+            bin/WireGuide-linux-${{ matrix.arch }}-portable.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -464,12 +483,12 @@ jobs:
 
             depends_on macos: :catalina
 
-            app "wireguide-plus.app"
+            app "wireguideplus.app"
 
             # Symlink the CLI onto PATH (Homebrew's bin), so users get a
-            # global \`wireguide-plus ctl ...\` after \`brew install\` instead of
-            # the in-bundle \`/Applications/wireguide-plus.app/Contents/MacOS/wireguide-plus\`.
-            binary "#{appdir}/wireguide-plus.app/Contents/MacOS/wireguide-plus"
+            # global \`wireguideplus ctl ...\` after \`brew install\` instead of
+            # the in-bundle \`/Applications/wireguideplus.app/Contents/MacOS/wireguideplus\`.
+            binary "#{appdir}/wireguideplus.app/Contents/MacOS/wireguideplus"
 
             # auto_updates true tells \`brew upgrade\` to defer to the
             # app's own update mechanism, which prevents brew + the
@@ -481,15 +500,15 @@ jobs:
 
             postflight do
               system_command "/usr/bin/xattr",
-                             args: ["-dr", "com.apple.quarantine", "#{appdir}/wireguide-plus.app"]
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/wireguideplus.app"]
               system_command "/usr/bin/killall",
-                             args: ["wireguide-plus"],
+                             args: ["wireguideplus"],
                              must_succeed: false
               system_command "/bin/sleep",
                              args: ["1"],
                              must_succeed: false
               system_command "/usr/bin/open",
-                             args: ["#{appdir}/wireguide-plus.app"],
+                             args: ["#{appdir}/wireguideplus.app"],
                              must_succeed: false
             end
 

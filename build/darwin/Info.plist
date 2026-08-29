@@ -6,7 +6,7 @@
         <key>CFBundleName</key>
             <string>WireGuide Plus</string>
         <key>CFBundleExecutable</key>
-            <string>wireguide-plus</string>
+            <string>wireguideplus</string>
         <key>CFBundleIdentifier</key>
             <string>com.imonior.wireguide-plus</string>
         <key>CFBundleVersion</key>

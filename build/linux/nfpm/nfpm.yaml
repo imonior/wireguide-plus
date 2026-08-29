@@ -3,7 +3,7 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "wireguide"
+name: "wireguideplus"
 arch: ${GOARCH}
 platform: "linux"
 version: "1.1.0"
@@ -17,8 +17,8 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/wireguide-plus"
-    dst: "/usr/local/bin/wireguide"
+  - src: "./bin/wireguideplus"
+    dst: "/usr/local/bin/wireguideplus"
   - src: "./build/appicon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/wireguideplus.png"
   - src: "./build/linux/wireguideplus.desktop"
@@ -36,7 +36,7 @@ depends:
 # NetworkManager supplies SSID detection and immediate Wi-Fi change events,
 # while resolvconf avoids the guarded /etc/resolv.conf fallback on systems
 # that do not run systemd-resolved. Noto supplies Korean UI glyphs and stable
-# cross-platform text metrics. The core client can still operate without these,
+# platform-neutral text metrics. The core client can still operate without these,
 # so keep them as recommendations rather than hard dependencies.
 recommends:
   - network-manager

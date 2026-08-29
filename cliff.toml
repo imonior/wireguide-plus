@@ -94,7 +94,7 @@ commit_parsers = [
     { message = '^Linux[\s:]', group = "3|Linux" },
     { message = '^(Add|Bundle|Make)\s', group = "4|Features" },
     { message = '^(Fix|Resolve)\s', group = "5|Bug fixes" },
-    { message = '^(Audit|Wire|Surface|Bound|Cross-platform|Periodic|Update)\s', group = "6|Reliability" },
+    { message = '^(Audit|Wire|Surface|Bound|Periodic|Update)\s', group = "6|Reliability" },
     { message = '^(Settings|UI|Design|Sidebar|Rebrand|Polish)[\s:/]', group = "7|UI" },
     { message = '^(CI|Build)[\s:]', group = "8|Build / CI" },
 

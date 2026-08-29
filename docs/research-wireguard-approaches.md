@@ -117,7 +117,7 @@ In this mode:
   - Linux: netlink for routes/addresses (Go libraries exist: `vishvananda/netlink`)
   - macOS: `ifconfig`/`route` commands or raw ioctl (less well-supported in Go)
   - Windows: Wintun DLL dependency, `netsh` or Win32 API calls
-- DNS configuration is the hardest part -- every OS handles it differently and there is no good cross-platform abstraction
+- DNS configuration is the hardest part -- every OS handles it differently and there is no good cross-OS abstraction
 - Significant development effort for routing table management
 - Must track upstream wireguard-go changes
 - Wintun driver DLL must be bundled on Windows
@@ -164,7 +164,7 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 
 | Factor | Go-Native | Subprocess (wg-quick) | Rust (defguard_wireguard_rs) |
 |--------|-----------|----------------------|------------------------------|
-| Cross-platform uniformity | Medium | Low (different tools per OS) | **High** |
+| Platform uniformity | Medium | Low (different tools per OS) | **High** |
 | Dependency management | Good (single binary) | Poor (external tools) | Good (single binary + DLL on Windows) |
 | Error handling | **Excellent** | Poor (string parsing) | **Excellent** |
 | Packaging complexity | **Low** | Medium-High | Low-Medium |
@@ -185,7 +185,7 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/DefGuard/client
 - **Language/Framework**: Rust (backend) + TypeScript/React (frontend) via **Tauri**
 - **WireGuard approach**: Uses `defguard_wireguard_rs` library directly -- no subprocess to wg-quick
-- **Cross-platform**: macOS, Windows, Linux
+- **Platforms**: macOS, Windows, Linux
 - **Status**: **Actively maintained** (v1.6.7, March 2026). 359 stars, 41 releases
 - **Notable features**: Multi-factor authentication (TOTP/Email + WireGuard PSK), connection statistics, multi-location support
 - **Relevance**: This is the most architecturally similar project to what you are building. Worth studying closely.
@@ -194,7 +194,7 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/aequitas/macos-menubar-wireguard
 - **Language/Framework**: Swift (macOS native)
 - **WireGuard approach**: **Subprocess** -- wraps `wg-quick` via XPC privileged helper
-- **Cross-platform**: macOS only
+- **Platforms**: macOS only
 - **Status**: **Superseded** by official WireGuard app, minimal maintenance
 - **Architecture**: Menubar app + Privileged Helper (LaunchDaemon) communicating via XPC -- exactly the pattern in your project plan
 
@@ -202,7 +202,7 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/UnnoTed/wireguird
 - **Language/Framework**: Go + GTK
 - **WireGuard approach**: Likely subprocess (wg-quick)
-- **Cross-platform**: Linux only
+- **Platforms**: Linux only
 - **Status**: Low activity, niche project
 - **Notable**: Mimics the official Windows WireGuard GUI but for Linux/GTK
 
@@ -210,28 +210,28 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/Devsfy/wiregui
 - **Language/Framework**: Electron-based
 - **WireGuard approach**: Subprocess
-- **Cross-platform**: Linux and Windows
+- **Platforms**: Linux and Windows
 - **Status**: **Abandoned** -- developer no longer uses WireGuard
 
 #### wireguard-gui (0xle0ne)
 - **URL**: https://github.com/0xle0ne/wireguard-gui
 - **Language/Framework**: Tauri + Next.js
 - **WireGuard approach**: Likely subprocess
-- **Cross-platform**: Linux only
+- **Platforms**: Linux only
 - **Status**: Small/early project
 
 #### GUI-WireGuard (universish)
 - **URL**: https://github.com/universish/GUI-wireguard
 - **Language/Framework**: Rust + Qt
 - **WireGuard approach**: Integrated with wireguard-tools
-- **Cross-platform**: RPM-based Linux only (Fedora, AlmaLinux)
+- **Platforms**: RPM-based Linux only (Fedora, AlmaLinux)
 - **Status**: Small/niche project
 
 #### WireGuardclient2FA-tauri
 - **URL**: https://github.com/TimKieu/WireGuardclient2FA-tauri
 - **Language/Framework**: Tauri + React + Rust
 - **WireGuard approach**: Unknown
-- **Cross-platform**: Unknown
+- **Platforms**: Unknown
 - **Status**: Small project, appears to be a DefGuard fork/variant
 
 ### Larger WireGuard-Based Projects (Not Pure Clients, but Relevant Architecture)
@@ -240,7 +240,7 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/tailscale/tailscale
 - **Language**: Go
 - **WireGuard approach**: **Fully Go-native** -- embeds a forked wireguard-go, manages TUN devices, routing, DNS all in-process
-- **Cross-platform**: macOS, Windows, Linux, iOS, Android
+- **Platforms**: macOS, Windows, Linux, iOS, Android
 - **Status**: **Very active**, commercial product. The gold standard for Go-native WireGuard integration
 - **Relevance**: Proves the Go-native approach works at scale, but required enormous engineering investment
 
@@ -248,23 +248,23 @@ This is the closest thing to a "do everything" WireGuard library. It is what the
 - **URL**: https://github.com/netbirdio/netbird
 - **Language**: Go
 - **WireGuard approach**: **Go-native** -- uses wireguard-go embedded, manages interfaces programmatically
-- **Cross-platform**: macOS, Windows, Linux
+- **Platforms**: macOS, Windows, Linux
 - **Status**: **Very active**, 12k+ stars
-- **Relevance**: Another proof that Go-native wireguard management works cross-platform
+- **Relevance**: Another proof that Go-native wireguard management works across platforms
 
 #### Firezone
 - **URL**: https://github.com/firezone/firezone
 - **Language**: Rust (clients), Elixir (server)
 - **WireGuard approach**: Uses Rust-based WireGuard implementation in clients
-- **Cross-platform**: macOS, Windows, Linux, iOS, Android
+- **Platforms**: macOS, Windows, Linux, iOS, Android
 - **Status**: **Very active**, 8.5k stars, Apache 2.0 + Elastic 2.0 license
-- **Relevance**: Proves the Rust-native approach works for cross-platform VPN clients
+- **Relevance**: Proves the Rust-native approach works for multi-platform VPN clients
 
 #### Wireproxy
 - **URL**: https://github.com/octeep/wireproxy
 - **Language**: Go
 - **WireGuard approach**: **Fully Go-native** using wireguard-go + **netstack** (no TUN device, no root)
-- **Cross-platform**: macOS, Windows, Linux
+- **Platforms**: macOS, Windows, Linux
 - **Status**: Active
 - **Relevance**: Demonstrates the netstack approach for rootless WireGuard, but cannot route all system traffic
 
@@ -296,12 +296,12 @@ Given that your project is a **Rust + egui** desktop client targeting macOS, Win
 **Phase 2 (Maturity)**: Evaluate migrating to `defguard_wireguard_rs` for a library-based approach. This would:
 - Eliminate the wireguard-tools dependency
 - Give you programmatic error handling
-- Provide a more unified cross-platform experience
+- Provide a more unified experience across platforms
 - Still require wireguard-go on macOS and WireGuard-NT DLL on Windows
 
 ### Key Project to Study
 
-The **DefGuard client** (https://github.com/DefGuard/client) is the closest architectural match to your project: Rust + Tauri (similar to Rust + egui), cross-platform, uses defguard_wireguard_rs for native WireGuard management. Their codebase would be the most valuable reference for solving platform-specific issues (privilege escalation, DNS, routing).
+The **DefGuard client** (https://github.com/DefGuard/client) is the closest architectural match to your project: Rust + Tauri (similar to Rust + egui), multi-platform, uses defguard_wireguard_rs for native WireGuard management. Their codebase would be the most valuable reference for solving platform-specific issues (privilege escalation, DNS, routing).
 
 ### Windows Strategy Note
 

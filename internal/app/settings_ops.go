@@ -250,7 +250,7 @@ func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
 // SaveAutomationRules atomically replaces one tunnel's Automation rules.
 // It goes through SettingsStore.Update — the cross-process locked
 // read-modify-write — instead of a whole-object SaveSettings, so a
-// concurrent `wireguide ctl` edit to any other tunnel or field can never
+// concurrent `wireguideplus ctl` edit to any other tunnel or field can never
 // be clobbered by a stale GUI snapshot (issue #27 review follow-up).
 // An empty rules slice removes the tunnel's entry entirely. The helper
 // re-reads settings from disk on every evaluation, so no push is needed.
@@ -512,7 +512,7 @@ func (s *TunnelService) RunUpdate(info *update.UpdateInfo) error {
 		// version and fail loudly when it didn't.
 		if installed := installedBundleVersion(); installed != "" && installed != info.Version {
 			return fmt.Errorf(
-				"brew exited 0 but /Applications/WireGuide.app is still %s (expected %s) — brew output: %s",
+				"brew exited 0 but /Applications/wireguideplus.app is still %s (expected %s) — brew output: %s",
 				installed, info.Version, strings.TrimSpace(string(out)))
 		}
 		return nil
@@ -539,7 +539,7 @@ func (s *TunnelService) emitUpdateProgress(phase string) {
 // callers must treat "" as "cannot verify", not as a mismatch.
 func installedBundleVersion() string {
 	out, err := exec.Command("defaults", "read",
-		"/Applications/WireGuide.app/Contents/Info", "CFBundleShortVersionString").Output()
+		"/Applications/wireguideplus.app/Contents/Info", "CFBundleShortVersionString").Output()
 	if err != nil {
 		return ""
 	}

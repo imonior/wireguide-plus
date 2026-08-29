@@ -56,7 +56,7 @@ type Request struct {
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 
-	// Transient marks a short-lived client (the `wireguide ctl` CLI) that
+	// Transient marks a short-lived client (the `wireguideplus ctl` CLI) that
 	// must NOT be counted as a control connection. Control connections
 	// drive the helper's shutdown grace window: attaching cancels it and
 	// detaching re-arms it. A CLI command connects and exits within
@@ -134,7 +134,7 @@ const (
 	// returns each tunnel's decision WITHOUT connecting/disconnecting.
 	MethodAutomationPreview = "Automation.Preview"
 	// MethodRequestQuit asks the helper to bring the WHOLE app down —
-	// this is `wireguide ctl stop`. It is deliberately NOT the same as
+	// this is `wireguideplus ctl stop`. It is deliberately NOT the same as
 	// MethodShutdown: shutting the helper down while the GUI is still
 	// running just makes the GUI's health monitor respawn it (and prompt
 	// for an admin password on macOS). Instead the helper broadcasts
@@ -151,8 +151,8 @@ const (
 	EventLog         = "event.log"
 	EventWifiSSID    = "event.wifi_ssid"
 	EventAutoConnect = "event.auto_connect"
-	// EventQuit tells a connected GUI to terminate — the cross-platform
-	// half of `wireguide ctl stop`. The GUI runs its normal quit path
+	// EventQuit tells a connected GUI to terminate — the platform-agnostic
+	// half of `wireguideplus ctl stop`. The GUI runs its normal quit path
 	// (which disconnects tunnels and stops the helper), so no per-OS
 	// "quit that application" mechanism is needed.
 	EventQuit = "event.quit"

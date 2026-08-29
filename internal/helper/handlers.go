@@ -65,7 +65,7 @@ func (h *Helper) handleShutdown(params json.RawMessage) (interface{}, error) {
 	return ipc.Empty{}, nil
 }
 
-// handleRequestQuit implements `wireguide ctl stop` — bring the whole app
+// handleRequestQuit implements `wireguideplus ctl stop` — bring the whole app
 // down, GUI included.
 //
 // Two cases, because "stop" has to mean the same thing either way:

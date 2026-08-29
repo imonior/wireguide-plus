@@ -41,7 +41,7 @@ import (
 //     through the well-tested goroutine boundary instead of the
 //     direct in-process variant.
 //
-// Cross-platform safe: Linux/Darwin keep using wgctrl via the
+// Safe across platforms: Linux/Darwin keep using wgctrl via the
 // status_dispatch_other.go file. Only Windows pays the extra
 // pipe-pair allocation per status tick, which is negligible.
 func GetStatusFromEngine(engine *Engine, tunnelName string, connectedAt time.Time) (*ConnectionStatus, error) {

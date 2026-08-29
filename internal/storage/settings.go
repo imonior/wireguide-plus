@@ -269,7 +269,7 @@ func (s *SettingsStore) loadLocked() (*Settings, error) {
 
 // Update runs a read-modify-write of the settings file that is atomic
 // ACROSS PROCESSES: it holds an exclusive file lock across the whole
-// load → mutate → save, so a `wireguide ctl` edit and a GUI edit can't
+// load → mutate → save, so a `wireguideplus ctl` edit and a GUI edit can't
 // clobber each other (e.g. a CLI automation edit reverting a GUI
 // kill-switch change). Field-level mutators (the CLI, tunnel rename/
 // delete) should use this rather than Load-then-Save. mutate sees the

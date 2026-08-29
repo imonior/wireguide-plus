@@ -1,7 +1,7 @@
 //go:build windows
 
 // Package sysexec adjusts exec.Cmd values for platform-specific spawn
-// behaviour. Cross-platform callers Hide() unconditionally; non-Windows
+// behaviour. Platform-agnostic callers Hide() unconditionally; non-Windows
 // builds get a no-op.
 package sysexec
 

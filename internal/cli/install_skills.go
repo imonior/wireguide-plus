@@ -9,35 +9,35 @@ import (
 )
 
 // skillFrontmatter + skillBody make up the agent-facing reference for
-// `wireguide ctl`. Claude Code gets it as a SKILL.md (frontmatter + body);
+// `wireguideplus ctl`. Claude Code gets it as a SKILL.md (frontmatter + body);
 // AGENTS.md-based agents (Codex, OpenCode) get the body inside a managed
 // block so re-running install-skills updates in place without touching the
 // user's other instructions.
 const skillFrontmatter = `---
-name: wireguide-ctl
-description: Control the WireGuide VPN client from the command line (the ` + "`wireguide ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle kill switch / DNS protection, and run diagnostics. Use when the user wants to script WireGuide, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
+name: wireguideplus-ctl
+description: Control the WireGuide VPN client from the command line (the ` + "`wireguideplus ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle kill switch / DNS protection, and run diagnostics. Use when the user wants to script WireGuide, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
 ---
 `
 
-const skillBody = "# Using `wireguide ctl`\n" + `
-` + "`wireguide ctl`" + ` is the command-line interface to the WireGuide VPN client. It
+const skillBody = "# Using `wireguideplus ctl`\n" + `
+` + "`wireguideplus ctl`" + ` is the command-line interface to the WireGuide VPN client. It
 talks to the already-running, already-elevated helper over a local socket
 (like ` + "`tailscale`/`tailscaled`" + `), so it needs no per-command sudo and works the
 same on macOS/Windows/Linux.
 
-If ` + "`wireguide`" + ` is not on PATH, invoke the binary directly (on macOS a
+If ` + "`wireguideplus`" + ` is not on PATH, invoke the binary directly (on macOS a
 Homebrew/manual install lives at
-` + "`/Applications/WireGuide.app/Contents/MacOS/wireguide`" + `).
+` + "`/Applications/wireguideplus.app/Contents/MacOS/wireguideplus`" + `).
 
 ## Tunnels
 ` + "```" + `
-wireguide ctl status                 # connection status
-wireguide ctl list                   # list tunnels (● = connected)
-wireguide ctl connect <name>         # connect a tunnel (warns on route conflicts)
-wireguide ctl disconnect [name]      # disconnect one (or all)
-wireguide ctl import <file> [name]   # import a .conf
-wireguide ctl rename <old> <new>
-wireguide ctl delete <name>          # disconnects first if active
+wireguideplus ctl status                 # connection status
+wireguideplus ctl list                   # list tunnels (● = connected)
+wireguideplus ctl connect <name>         # connect a tunnel (warns on route conflicts)
+wireguideplus ctl disconnect [name]      # disconnect one (or all)
+wireguideplus ctl import <file> [name]   # import a .conf
+wireguideplus ctl rename <old> <new>
+wireguideplus ctl delete <name>          # disconnects first if active
 ` + "```" + `
 
 ## Automation — per-tunnel connect/disconnect rules
@@ -45,30 +45,30 @@ Rules are evaluated top to bottom; the FIRST matching rule wins (order is
 priority). A rule can connect OR disconnect its tunnel based on the network
 you're on. A tunnel with no rules is never auto-managed.
 ` + "```" + `
-wireguide ctl automation                 # what the engine decides right now
-wireguide ctl automation rules <name>    # list a tunnel's rules, in priority order
-wireguide ctl automation add <name> <connect|disconnect> <cond>
+wireguideplus ctl automation                 # what the engine decides right now
+wireguideplus ctl automation rules <name>    # list a tunnel's rules, in priority order
+wireguideplus ctl automation add <name> <connect|disconnect> <cond>
     #   cond = ssid:<wifi-name>   subnet:<CIDR>   mac:<gateway-MAC>   else
-wireguide ctl automation rm <name> <n>   # remove rule number <n> (from 'rules')
+wireguideplus ctl automation rm <name> <n>   # remove rule number <n> (from 'rules')
 ` + "```" + `
 ` + "`mac:`" + ` fingerprints a specific router (precise, works on Wi-Fi and Ethernet,
 and tells apart two networks sharing a subnet like 192.168.0.0/24); separator
 and case don't matter. Example — office VPN off on the office network, on
 everywhere else:
 ` + "```" + `
-wireguide ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
-wireguide ctl automation add work connect else
+wireguideplus ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
+wireguideplus ctl automation add work connect else
 ` + "```" + `
 
 ## Settings & diagnostics
 ` + "```" + `
-wireguide ctl set killswitch <on|off>       # block non-VPN traffic if the tunnel drops
-wireguide ctl set dns-protection <on|off>   # pin DNS to the tunnel
-wireguide ctl set healthcheck <on|off>
-wireguide ctl set pin-interface <on|off>
-wireguide ctl set loglevel <debug|info|warn|error>
-wireguide ctl dnsleak                        # check whether DNS leaks outside the tunnel
-wireguide ctl routes                         # OS routing table
+wireguideplus ctl set killswitch <on|off>       # block non-VPN traffic if the tunnel drops
+wireguideplus ctl set dns-protection <on|off>   # pin DNS to the tunnel
+wireguideplus ctl set healthcheck <on|off>
+wireguideplus ctl set pin-interface <on|off>
+wireguideplus ctl set loglevel <debug|info|warn|error>
+wireguideplus ctl dnsleak                        # check whether DNS leaks outside the tunnel
+wireguideplus ctl routes                         # OS routing table
 ` + "```" + `
 Every command exits non-zero on failure and prints a one-line error to stderr,
 so it composes in scripts. ` + "`connect`/`disconnect`/`status`/`set`" + ` need the app
@@ -77,8 +77,8 @@ work directly against the local files.
 `
 
 const (
-	skillBeginMarker = "<!-- BEGIN wireguide ctl (managed by `wireguide ctl install-skills`) -->"
-	skillEndMarker   = "<!-- END wireguide ctl -->"
+	skillBeginMarker = "<!-- BEGIN wireguideplus ctl (managed by `wireguideplus ctl install-skills`) -->"
+	skillEndMarker   = "<!-- END wireguideplus ctl -->"
 )
 
 type skillTarget struct {
@@ -152,9 +152,9 @@ func binOrDir(bin string, dirs ...string) func() bool {
 }
 
 // writeClaudeSkill writes the proper Claude Code skill layout:
-// ~/.claude/skills/wireguide-ctl/SKILL.md (frontmatter + body).
+// ~/.claude/skills/wireguideplus-ctl/SKILL.md (frontmatter + body).
 func writeClaudeSkill() (string, error) {
-	dir := filepath.Join(home(), ".claude", "skills", "wireguide-ctl")
+	dir := filepath.Join(home(), ".claude", "skills", "wireguideplus-ctl")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -222,7 +222,7 @@ func skillTargets() []skillTarget {
 	}
 }
 
-// cmdInstallSkills installs the `wireguide ctl` usage skill into coding
+// cmdInstallSkills installs the `wireguideplus ctl` usage skill into coding
 // agents. By default it installs into every detected agent; `--target
 // a,b` restricts to (and forces) the named ones.
 func cmdInstallSkills(args []string) int {
@@ -248,7 +248,7 @@ func cmdInstallSkills(args []string) int {
 			}
 		default:
 			fmt.Fprintf(os.Stderr, "install-skills: unexpected argument %q\n", args[i])
-			fmt.Fprintln(os.Stderr, "usage: wireguide ctl install-skills [--target claude,codex,opencode,hermes]")
+			fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl install-skills [--target claude,codex,opencode,hermes]")
 			return 2
 		}
 	}
@@ -291,10 +291,10 @@ func cmdInstallSkills(args []string) int {
 
 	if installed == 0 && skipped == 0 {
 		fmt.Println("no coding agents detected (claude, codex, opencode, hermes).")
-		fmt.Println("install one, or force with: wireguide ctl install-skills --target <name>")
+		fmt.Println("install one, or force with: wireguideplus ctl install-skills --target <name>")
 		return 0
 	}
-	fmt.Printf("installed the `wireguide ctl` skill for %d agent(s).\n", installed)
+	fmt.Printf("installed the `wireguideplus ctl` skill for %d agent(s).\n", installed)
 	if skipped > 0 {
 		return 1
 	}
