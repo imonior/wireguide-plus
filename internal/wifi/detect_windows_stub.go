@@ -8,3 +8,9 @@ package wifi
 func startWindowsWlanWatcher(onChange func()) (stop func(), attached bool) {
 	return func() {}, false
 }
+
+// currentSSIDFromWlanapi is a no-op on non-Windows platforms. detect.go's
+// detectWindows() switches on runtime.GOOS, so every case compiles on every
+// platform and needs this symbol defined. The Windows build implements it
+// via wlanapi in detect_windows.go.
+func currentSSIDFromWlanapi() string { return "" }

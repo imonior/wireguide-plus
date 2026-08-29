@@ -168,28 +168,28 @@ func currentSSIDFromWlanapi() string {
 	if err := wlanLazyOpenHandle(); err != nil {
 		return ""
 	}
-	var listPtr uintptr
+	var listPtr unsafe.Pointer
 	ret, _, _ := procWlanEnumInterfaces.Call(uintptr(wlanHandle), 0, uintptr(unsafe.Pointer(&listPtr)))
-	if ret != 0 || listPtr == 0 {
+	if ret != 0 || listPtr == nil {
 		return ""
 	}
-	defer procWlanFreeMemory.Call(listPtr)
+	defer procWlanFreeMemory.Call(uintptr(listPtr))
 
-	list := (*wlanInterfaceInfoList)(unsafe.Pointer(listPtr))
+	list := (*wlanInterfaceInfoList)(listPtr)
 	// The trailing interfaceInfo field is declared as [1]wlanInterfaceInfo
 	// but is actually a C-style variable-length array. Indexing it with a
 	// Go index (list.interfaceInfo[i]) panics the runtime once the count
 	// exceeds 1 (multiple adapters), so walk it with pointer arithmetic
 	// instead. Same pattern in knownSSIDsFromWlanapi below.
-	itemsBase := listPtr + unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo)
+	itemsBase := unsafe.Add(listPtr, unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo))
 	itemSize := unsafe.Sizeof(wlanInterfaceInfo{})
 	for i := uint32(0); i < list.numberOfItems; i++ {
-		info := (*wlanInterfaceInfo)(unsafe.Pointer(itemsBase + uintptr(i)*itemSize))
+		info := (*wlanInterfaceInfo)(unsafe.Add(itemsBase, uintptr(i)*itemSize))
 		if info.state != wlanInterfaceStateConnected {
 			continue
 		}
 		var dataSize uint32
-		var dataPtr uintptr
+		var dataPtr unsafe.Pointer
 		ret, _, _ := procWlanQueryInterface.Call(
 			uintptr(wlanHandle),
 			uintptr(unsafe.Pointer(&info.interfaceGuid)),
@@ -199,10 +199,10 @@ func currentSSIDFromWlanapi() string {
 			uintptr(unsafe.Pointer(&dataPtr)),
 			0, // pWlanOpcodeValueType
 		)
-		if ret != 0 || dataPtr == 0 {
+		if ret != 0 || dataPtr == nil {
 			continue
 		}
-		attrs := (*wlanConnectionAttributes)(unsafe.Pointer(dataPtr))
+		attrs := (*wlanConnectionAttributes)(dataPtr)
 		n := attrs.ssid.ssidLen
 		if n > 32 {
 			n = 32
@@ -213,7 +213,7 @@ func currentSSIDFromWlanapi() string {
 		if !utf8.ValidString(ssid) {
 			ssid = decodeOEM(attrs.ssid.ssid[:n])
 		}
-		procWlanFreeMemory.Call(dataPtr)
+		procWlanFreeMemory.Call(uintptr(dataPtr))
 		if ssid != "" {
 			return ssid
 		}
@@ -228,37 +228,37 @@ func knownSSIDsFromWlanapi() []string {
 	if err := wlanLazyOpenHandle(); err != nil {
 		return nil
 	}
-	var listPtr uintptr
+	var listPtr unsafe.Pointer
 	ret, _, _ := procWlanEnumInterfaces.Call(uintptr(wlanHandle), 0, uintptr(unsafe.Pointer(&listPtr)))
-	if ret != 0 || listPtr == 0 {
+	if ret != 0 || listPtr == nil {
 		return nil
 	}
-	defer procWlanFreeMemory.Call(listPtr)
+	defer procWlanFreeMemory.Call(uintptr(listPtr))
 
 	seen := make(map[string]bool)
 	var result []string
-	list := (*wlanInterfaceInfoList)(unsafe.Pointer(listPtr))
-	itemsBase := listPtr + unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo)
+	list := (*wlanInterfaceInfoList)(listPtr)
+	itemsBase := unsafe.Add(listPtr, unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo))
 	itemSize := unsafe.Sizeof(wlanInterfaceInfo{})
 	for i := uint32(0); i < list.numberOfItems; i++ {
-		info := (*wlanInterfaceInfo)(unsafe.Pointer(itemsBase + uintptr(i)*itemSize))
-		var profileListPtr uintptr
+		info := (*wlanInterfaceInfo)(unsafe.Add(itemsBase, uintptr(i)*itemSize))
+		var profileListPtr unsafe.Pointer
 		ret, _, _ := procWlanGetProfileList.Call(
 			uintptr(wlanHandle),
 			uintptr(unsafe.Pointer(&info.interfaceGuid)),
 			0, // pReserved
 			uintptr(unsafe.Pointer(&profileListPtr)),
 		)
-		if ret != 0 || profileListPtr == 0 {
+		if ret != 0 || profileListPtr == nil {
 			continue
 		}
-		plist := (*wlanProfileInfoList)(unsafe.Pointer(profileListPtr))
+		plist := (*wlanProfileInfoList)(profileListPtr)
 		// Same variable-length-array caveat: walk profiles with pointer
 		// arithmetic rather than Go indexing.
-		profilesBase := profileListPtr + unsafe.Offsetof(wlanProfileInfoList{}.profileInfo)
+		profilesBase := unsafe.Add(profileListPtr, unsafe.Offsetof(wlanProfileInfoList{}.profileInfo))
 		profileSize := unsafe.Sizeof(wlanProfileInfo{})
 		for j := uint32(0); j < plist.numberOfItems; j++ {
-			p := (*wlanProfileInfo)(unsafe.Pointer(profilesBase + uintptr(j)*profileSize))
+			p := (*wlanProfileInfo)(unsafe.Add(profilesBase, uintptr(j)*profileSize))
 			name := windows.UTF16ToString(p.profileName[:])
 			if name == "" || seen[name] {
 				continue
@@ -266,7 +266,7 @@ func knownSSIDsFromWlanapi() []string {
 			seen[name] = true
 			result = append(result, name)
 		}
-		procWlanFreeMemory.Call(profileListPtr)
+		procWlanFreeMemory.Call(uintptr(profileListPtr))
 	}
 	return result
 }

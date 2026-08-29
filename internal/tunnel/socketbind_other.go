@@ -22,6 +22,9 @@ func pinSocketToPhysical(_ conn.Bind, _ string) (uint32, uint32) {
 	return 0, 0
 }
 
-// startSocketBindMonitor is a no-op on non-Windows platforms.
-func startSocketBindMonitor(_ context.Context, _ conn.Bind, _ string, _, _ uint32) {
+// startSocketBindMonitor is a no-op on non-Windows platforms. The signature
+// must match socketbind_windows.go (manager.go calls it unconditionally via
+// a runtime.GOOS-free code path); on Linux/macOS there is no IP_UNICAST_IF
+// pinning and the kernel handles loop protection differently.
+func startSocketBindMonitor(_ context.Context, _ conn.Bind, _ string, _ uint64) {
 }
