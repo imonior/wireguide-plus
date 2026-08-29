@@ -62,7 +62,7 @@ WireGuide Plus 是對開源專案 [`korjwl1/wireguide`](https://github.com/korjw
 | 平台 | 狀態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32 位元、ARM64） | ✅ 完全支援（多隧道並發 + SSID 自動連接） |
-| macOS（Apple Silicon / arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試；請使用 [wireguide](https://github.com/korjwl1/wireguide) 或 [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
+| macOS（Apple Silicon / arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試；你同樣可以嘗試另一款名為 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
 | Linux（x64、arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試 |
 | Android / iOS | ❌ **不支援**（無法同時執行多條隧道，也無法依 Wi-Fi SSID 自動切換隧道） |
 

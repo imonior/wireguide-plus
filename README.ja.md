@@ -72,7 +72,7 @@ WireGuide Plus はオープンソースプロジェクト
 | プラットフォーム | 状態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32ビット、ARM64） | ✅ 完全サポート（マルチトンネル同時接続 + SSID 自動接続） |
-| macOS（Apple Silicon / arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施; [wireguide](https://github.com/korjwl1/wireguide) または [WireTunnels](https://github.com/FMDigitech/WireTunnels) を推奨 |
+| macOS（Apple Silicon / arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施; 別の WireGuard アプリ [WireTunnels](https://github.com/FMDigitech/WireTunnels) も試せます |
 | Linux（x64、arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施 |
 | Android / iOS | ❌ **非対応**（トンネルを同時に実行できず、Wi-Fi SSID による自動切替も不可） |
 

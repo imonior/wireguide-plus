@@ -67,7 +67,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 | 플랫폼 | 상태 |
 | --- | --- |
 | Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결) |
-| macOS(Apple Silicon / arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음; [wireguide](https://github.com/korjwl1/wireguide) 또는 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 사용 |
+| macOS(Apple Silicon / arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음; 다른 WireGuard 앱 [WireTunnels](https://github.com/FMDigitech/WireTunnels)도 사용해 볼 수 있습니다 |
 | Linux(x64, arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음 |
 | Android / iOS | ❌ **지원 안 함** (터널 동시 실행 불가, Wi-Fi SSID 자동 전환 불가) |
 
