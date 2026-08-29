@@ -57,9 +57,9 @@ jobs:
 
       - name: Check runtime linking
         run: |
-          file bin/wireguide
-          if ldd bin/wireguide | grep -q 'not found'; then
-            ldd bin/wireguide
+          file bin/wireguide-plus
+          if ldd bin/wireguide-plus | grep -q 'not found'; then
+            ldd bin/wireguide-plus
             exit 1
           fi
 
@@ -77,7 +77,7 @@ jobs:
         with:
           name: linux-amd64-ci
           path: |
-            bin/wireguide
+            bin/wireguide-plus
             bin/wireguide.deb
           if-no-files-found: error
           retention-days: 7

@@ -17,7 +17,7 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/wireguide"
+  - src: "./bin/wireguide-plus"
     dst: "/usr/local/bin/wireguide"
   - src: "./build/appicon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/wireguideplus.png"

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WireGuide Plus
+Comment=Multi-tunnel automated WireGuard VPN client
+Exec=/usr/local/bin/wireguide
+Icon=wireguideplus
+Terminal=false
+StartupNotify=false
+Categories=Network;Utility;

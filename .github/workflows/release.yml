@@ -62,7 +62,7 @@ jobs:
         # resulting .zip stays Gatekeeper-quarantine-friendly.
         run: |
           cd bin
-          ditto -c -k --sequesterRsrc --keepParent wireguide.app "WireGuide-darwin-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent wireguide-plus.app "WireGuide-darwin-arm64.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -295,9 +295,9 @@ jobs:
 
       - name: Check runtime linking
         run: |
-          file bin/wireguide
-          if ldd bin/wireguide | grep -q 'not found'; then
-            ldd bin/wireguide
+          file bin/wireguide-plus
+          if ldd bin/wireguide-plus | grep -q 'not found'; then
+            ldd bin/wireguide-plus
             exit 1
           fi
 
@@ -464,12 +464,12 @@ jobs:
 
             depends_on macos: :catalina
 
-            app "WireGuide.app"
+            app "wireguide-plus.app"
 
             # Symlink the CLI onto PATH (Homebrew's bin), so users get a
-            # global \`wireguide ctl ...\` after \`brew install\` instead of
-            # the in-bundle \`/Applications/WireGuide.app/Contents/MacOS/wireguide\`.
-            binary "#{appdir}/WireGuide.app/Contents/MacOS/wireguide"
+            # global \`wireguide-plus ctl ...\` after \`brew install\` instead of
+            # the in-bundle \`/Applications/wireguide-plus.app/Contents/MacOS/wireguide-plus\`.
+            binary "#{appdir}/wireguide-plus.app/Contents/MacOS/wireguide-plus"
 
             # auto_updates true tells \`brew upgrade\` to defer to the
             # app's own update mechanism, which prevents brew + the
@@ -481,15 +481,15 @@ jobs:
 
             postflight do
               system_command "/usr/bin/xattr",
-                             args: ["-dr", "com.apple.quarantine", "#{appdir}/WireGuide.app"]
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/wireguide-plus.app"]
               system_command "/usr/bin/killall",
-                             args: ["wireguide"],
+                             args: ["wireguide-plus"],
                              must_succeed: false
               system_command "/bin/sleep",
                              args: ["1"],
                              must_succeed: false
               system_command "/usr/bin/open",
-                             args: ["#{appdir}/WireGuide.app"],
+                             args: ["#{appdir}/wireguide-plus.app"],
                              must_succeed: false
             end
 
