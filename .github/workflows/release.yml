@@ -23,7 +23,7 @@ env:
   # The matching private seed lives in the UPDATE_SIGNING_KEY secret and
   # signs SHA256SUMS in the release job; the sign step verifies the pair
   # actually match before publishing. Rotation: docs/release.md.
-  UPDATE_SIGNING_PUBKEY: ea2dda6d25dbcbbb9a4b16077c7138fa343a0775a3e718a333c0fbae31bded36
+  UPDATE_SIGNING_PUBKEY: 13eebaa615d8f7a4e177cdf284cc38c31eb678e65136a12557b7950aa0489bc7
 
 jobs:
   build-macos:
