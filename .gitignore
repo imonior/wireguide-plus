@@ -66,4 +66,5 @@ debug-logs/
 # never run the -x variant casually.
 releases/*
 !releases/README.md
+!releases/README.zh.md
 

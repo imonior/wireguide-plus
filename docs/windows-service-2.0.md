@@ -1,249 +1,366 @@
-# WireGuide Plus 2.0 — Windows 系统服务化开发指导
+# WireGuide Plus 2.0 — Windows System Service Development Guide
 
-> 目标版本：2.0
-> 范围：把 1.x 的「GUI 驱动 + 提权 helper」架构改造为「Windows 系统服务常驻」架构
-> 关联代码：`main.go`、`internal/helper`、`internal/ipc`、`internal/gui`、`internal/elevate`、`internal/cli`、`internal/autostart`、`build/windows/nsis`
+> Target version: 2.0
+> Scope: **Windows only**. Turn the 1.x "GUI-driven + elevated helper"
+> architecture into a "Windows system service" architecture.
+> Related code: `main.go`, `internal/helper`, `internal/ipc`, `internal/gui`,
+> `internal/elevate`, `internal/cli`, `internal/autostart`,
+> `build/windows/nsis`
+>
+> 简体中文版：见 [windows-service-2.0.zh.md](windows-service-2.0.zh.md)
 
 ---
 
-## 1. 目标与收益
+## 0. Scope: Why Windows Only
 
-2.0 的核心目标：**核心引擎（隧道管理、防火墙、自动化）作为 Windows 系统服务常驻运行**，开机自启、无人值守，不依赖 GUI 是否存在。
+The 2.0 service-ization effort is **specific to Windows**:
 
-| 收益 | 说明 |
-|---|---|
-| 开机即就绪 | 服务由 SCM 在登录前启动，无需用户登录/UAC 弹窗 |
-| 无人值守 | WiFi 规则自动连接、断线重连、崩溃恢复在无 GUI 时照常工作 |
-| 稳定性 | SCM 恢复策略（服务崩溃自动重启）比现 UAC 拉起更可靠 |
-| 多会话 | 服务位于 session 0，锁屏/注销后隧道不中断 |
-| 解耦 | GUI 只是客户端，可单独更新/降级/关闭 |
-
-## 2. 现状盘点
-
-### 2.1 1.x 架构
-
-```
-┌─ 用户会话 ──────────────────────────────┐
-│  GUI (Wails3 + React)                   │
-│    │  ensureHelper(): UAC 拉起 / 直连    │
-│    ▼                                    │
-│  elevated helper 进程 (管理员)           │
-│    隧道管理 / WFP 防火墙 / 重连 / WiFi 自动化│
-└─────────────────────────────────────────┘
-   IPC: 命名管道 `\\.\pipe\wireguide…`
-   安全: SDDL = SY+BA 全权, 拉起用户 GRGW; 客户端校验管道所有者 ∈ {SY, BA}
-```
-
-- **入口**：`main.go` flag 分发（`--helper` / GUI / `ctl`）
-- **helper 内核**：`internal/helper/helper.go` 的 `Run(addr, ownerUID, ownerSID, dataDir)`，已实现：
-  - `tunnel.Manager`：wireguard-go + wintun，连接/断开/状态
-  - `firewall`：WFP kill switch / DNS 保护 / 端点保护（`internal/firewall/wfp_windows.go`）
-  - `reconnect.Monitor`：断线重连 + 防火墙挂起/恢复
-  - `wifi.Monitor` + 规则评估：SSID/子网触发自动连接（`internal/helper/wifi_rules.go`）
-  - 崩溃恢复：`tunnel.RecoverFromCrash` + `fw.RecoverFromCrash`
-  - 事件广播：`ipc.Server.Broadcast`（状态 diff、WiFi 变化、重连状态）
-  - 启动时恢复持久化设置（健康检查、PinInterface、日志级别）
-- **生命周期（1.x 是 GUI 驱动的关键点）**：
-  - `shutdownGrace = 10s`：GUI 断开且无活动隧道 → 自退（`armShutdownTimer`）
-  - `startupGrace = 60s`：启动后无 GUI 连接 → 自退
-  - 活动隧道存在时永不退出（wg-quick 语义）
-- **IPC 安全模型**（`internal/ipc/transport_windows.go`）：
-  - 管道 SDDL：`D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;<ownerSID>)` —— 服务化后**直接复用**
-  - 客户端 `verifyPipeOwner`：要求管道所有者 ∈ {SY, BA}，防冒名
-  - 服务端 `verifyPeer`：要求连接进程属主用户 = ownerSID
-  - 连接数上限 32（防同 UID 进程耗尽资源）
-- **数据目录**：`systemDataDir()` = `%PROGRAMDATA%\wireguideplus`（helper 状态）
-- **用户配置**：`storage.TunnelStore` 在用户 home。⚠️ Windows 上 `deriveUserAppSupport`（`internal/helper/wifi_rules_windows.go`）靠 UAC 透传的 `APPDATA` 环境变量定位用户目录——**SCM 启动的服务不带用户环境**，此路径在服务模式下会失效，是阶段 2 必须处理的点
-- **CLI**：`wireguideplus ctl …` 已是独立 IPC 客户端（Tailscale 模式）
-- **安装**：NSIS（`build/windows/nsis/project.nsi`）+ `internal/autostart`（Windows 用 HKCU Run key）
-
-### 2.2 与 2.0 的差距
-
-| # | 差距 | 影响 |
+| Platform | Current privileged mechanism | 2.0 work needed |
 |---|---|---|
-| 1 | 生命周期由 GUI 驱动（断连即退） | 服务必须常驻，退出逻辑需模式化 |
-| 2 | 由 GUI 以 UAC 拉起（`elevate.SpawnHelper`） | 需改为 SCM 注册 + 开机自启 |
-| 3 | 单用户绑定（ownerSID） | 服务运行于 session 0，需处理多用户 |
-| 4 | 用户配置在用户 home | 服务以系统身份读取有权限/路径问题 |
-| 5 | 无服务控制协议 | 需 Start/Stop/Pause 状态映射 + 安装/卸载子命令 |
-| 6 | 日志仅文件/广播 | 服务建议补充 Windows Event Log |
-| 7 | 更新流程假定 helper 由 GUI 管理 | 服务更新需 SCM 停机/重启 |
+| Windows | UAC-spawned elevated helper tied to the GUI (no service at all) | **Full system-service re-architecture — this guide** |
+| macOS | Helper already runs as a LaunchDaemon (`/Library/LaunchDaemons/com.wireguide.helper.plist`, `RunAtLoad=false` — see `internal/elevate/spawn_darwin.go`) | None for 2.0. Making it persist at boot is a one-line plist change, deferred |
+| Linux | Helper spawned via `pkexec` on demand (`internal/elevate/spawn_linux.go`) | None for 2.0. A small systemd unit would cover "run at boot"; low value, deferred |
 
-## 3. 目标架构
+In short: macOS and Linux already have (or trivially can get) system-level
+daemon mechanisms. Windows is the only platform with **no service layer
+today** — the elevated helper lives and dies with the GUI. This guide
+therefore targets Windows exclusively.
+
+**The management GUI remains the primary management surface in 2.0.** It
+just becomes a *client* of the service instead of the service's owner: no
+more UAC prompt per session, same tray + settings + automation UX.
+
+## 1. Goals & Benefits
+
+2.0's core goal: the core engine (tunnel management, firewall, automation)
+runs as a **Windows system service**, starts at boot, and works unattended —
+with or without the GUI.
+
+| Benefit | Description |
+|---|---|
+| Ready at boot | Service starts before logon via SCM; no login/UAC prompt needed |
+| Unattended | WiFi-rule auto-connect, reconnect, crash recovery all work headless |
+| Reliability | SCM recovery policy (auto-restart on crash) beats the current UAC flow |
+| Session 0 | Tunnel survives lock screen / logoff |
+| Decoupling | GUI is a replaceable client; can be updated/closed independently |
+
+## 2. Current State
+
+### 2.1 1.x architecture
+
+```
+┌─ User session ───────────────────────────┐
+│  GUI (Wails3 + React)                    │
+│    │  ensureHelper(): UAC spawn / dial   │
+│    ▼                                     │
+│  elevated helper process (admin)         │
+│    tunnel mgmt / WFP firewall / reconnect│
+│    / WiFi automation                     │
+└──────────────────────────────────────────┘
+   IPC: named pipe `\\.\pipe\wireguide…`
+   Security: SDDL = SY+BA full access, spawning user GRGW;
+             client verifies pipe owner ∈ {SY, BA}
+```
+
+- **Entry point**: `main.go` flag dispatch (`--helper` / GUI / `ctl`)
+- **Helper core**: `Run(addr, ownerUID, ownerSID, dataDir)` in
+  `internal/helper/helper.go`, already provides:
+  - `tunnel.Manager`: wireguard-go + wintun, connect/disconnect/status
+  - `firewall`: WFP kill switch / DNS protection / endpoint protection
+    (`internal/firewall/wfp_windows.go`)
+  - `reconnect.Monitor`: reconnect with firewall suspend/resume
+  - `wifi.Monitor` + rule evaluation: SSID/subnet-triggered auto-connect
+    (`internal/helper/wifi_rules.go`)
+  - Crash recovery: `tunnel.RecoverFromCrash` + `fw.RecoverFromCrash`
+  - Event broadcast: `ipc.Server.Broadcast` (status diff, WiFi change, reconnect state)
+  - Restores persisted settings on start (health check, pin-interface, log level)
+- **Lifecycle (the key GUI-driven design in 1.x)**:
+  - `shutdownGrace = 10s`: GUI disconnected + no active tunnel → self-exit
+    (`armShutdownTimer`)
+  - `startupGrace = 60s`: no GUI connection after start → self-exit
+  - Never exits while a tunnel is active (wg-quick semantics)
+- **IPC security model** (`internal/ipc/transport_windows.go`):
+  - Pipe SDDL: `D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;<ownerSID>)` —
+    **directly reusable for the service**
+  - Client `verifyPipeOwner`: pipe owner must be ∈ {SY, BA} (anti-spoofing)
+  - Server `verifyPeer`: connecting process must belong to `ownerSID`
+  - Connection cap 32 (protects against same-UID resource exhaustion)
+- **Data dir**: `systemDataDir()` = `%PROGRAMDATA%\wireguideplus` (helper state)
+- **User config**: `storage.TunnelStore` in the user's home. ⚠️ On Windows,
+  `deriveUserAppSupport` (`internal/helper/wifi_rules_windows.go`) locates the
+  user dir via the `APPDATA` env var passed through UAC — **an SCM-started
+  service has no user environment**, so this path breaks under the service;
+  Phase 2 must address it
+- **CLI**: `wireguideplus ctl …` is already a standalone IPC client
+  (Tailscale-style)
+- **Install**: NSIS (`build/windows/nsis/project.nsi`) + `internal/autostart`
+  (Windows uses HKCU Run key)
+
+### 2.2 Gaps vs 2.0
+
+| # | Gap | Impact |
+|---|---|---|
+| 1 | Lifecycle is GUI-driven (exits on disconnect) | Service must persist; exit logic needs a mode switch |
+| 2 | Spawned by the GUI via UAC (`elevate.SpawnHelper`) | Replace with SCM registration + auto-start |
+| 3 | Single-user binding (`ownerSID`) | Service runs in session 0; multi-user handling needed |
+| 4 | User config lives in the user home | Service (system identity) can't resolve user paths |
+| 5 | No service-control protocol | Need Start/Stop/Pause mapping + install/uninstall subcommands |
+| 6 | Logging: file/broadcast only | Add Windows Event Log for unattended observability |
+| 7 | Update flow assumes the GUI manages the helper | Service update needs SCM stop/start orchestration |
+
+## 3. Target Architecture
 
 ```
 ┌─ SCM ────────────────────────────────────────────┐
-│  wireguidesvc  (Windows 服务, LocalSystem)        │
-│   ── 就是现有 helper 内核, 常驻, 无 GUI 依赖       │
-│   隧道管理 / WFP 防火墙 / 重连 / WiFi 自动化        │
+│  wireguidesvc  (Windows service, LocalSystem)     │
+│   ── the existing helper core, persistent,        │
+│      no GUI dependency                            │
+│   tunnel mgmt / WFP firewall / reconnect /        │
+│   WiFi automation                                 │
 └──────┬────────────────────────────────────────────┘
-       │ 命名管道 (SDDL 不变, SY/BA/用户)
+       │ named pipe (SDDL unchanged: SY/BA/user)
        ├──────────────┬───────────────────┐
        ▼              ▼                   ▼
-   GUI 客户端     ctl CLI (已有)       (可选) 远程/监控
-   (Wails,        `wireguideplus ctl`   HTTP 管理面 (复用
-    不再 UAC 拉起)                        -tags server 思路)
+   GUI client     ctl CLI (existing)   (optional) HTTP admin
+   (Wails,         `wireguideplus ctl`   surface (reuse the
+    no UAC spawn)                         -tags server idea)
 ```
 
-**组件拆分原则**：不新建大模块。服务 = 现有 `helper.Run` + 一层 `svc.Handler` 外壳；GUI = 现有 Wails 前端 + `ensureHelper` 改为「连接服务，未安装则引导安装」；CLI 原样复用。
+**Component principle**: no new engine. The service = the existing
+`helper.Run` wrapped in an `svc.Handler` shell; the GUI = the existing Wails
+front end with `ensureHelper` changed to "dial the service, guide install if
+missing"; the CLI is reused as-is.
 
-## 4. 技术选型
+## 4. Technology Choices
 
-| 方案 | 说明 | 结论 |
+| Option | Description | Verdict |
 |---|---|---|
-| **A. `golang.org/x/sys/windows/svc`** | Go 官方对 SCM 的支持，零额外依赖；`svc.Run` + `Handler.Execute` 控制 Start/Stop/Pause | ✅ 推荐。Windows 专用、控制精确，与现有 `x/sys/windows` 依赖一致 |
-| B. `kardianos/service` | 跨平台封装（win/mac/linux 同一 API） | 备选。若未来要统一 launchd/systemd 管理代码再用 |
-| C. 外部工具（NSSM/winsw） | 把任意 exe 包装成服务 | ❌ 增加外部依赖，且拿不到 SCM 生命周期事件 |
+| **A. `golang.org/x/sys/windows/svc`** | Official SCM support, zero extra deps; `svc.Run` + `Handler.Execute` for Start/Stop/Pause | ✅ Recommended. Windows-specific, precise control, consistent with the existing `x/sys/windows` dependency |
+| B. `kardianos/service` | Cross-platform wrapper (win/mac/linux, one API) | Fallback. Consider only if unifying launchd/systemd management later |
+| C. External wrappers (NSSM/winsw) | Wrap any exe as a service | ❌ External dependency; no SCM lifecycle events |
 
-- **服务账户**：`LocalSystem`（需要写 `%PROGRAMDATA%`、加载 wintun 驱动、操作 WFP、访问网络）。不要用 `NetworkService`（无驱动加载与 WFP 权限）。
-- **管道名**：服务实例使用全局管道，建议 `\\.\pipe\wireguide`（与 `ipc.DefaultSocketPath()` 区分），多用户阶段按需扩展（见 5.3）。
+- **Service account**: `LocalSystem` (needs to write `%PROGRAMDATA%`, load
+  the wintun driver, drive WFP, access the network). Do NOT use
+  `NetworkService` (no driver loading / WFP rights).
+- **Pipe name**: the service uses a global pipe, e.g.
+  `\\.\pipe\wireguide` (distinct from `ipc.DefaultSocketPath()`); extend per
+  user if multi-user lands (see 5.3).
 
-## 5. 实施路线
+## 5. Implementation Roadmap
 
-### 阶段 0 — 服务外壳（不动 helper 内核）
+### Phase 0 — Service shell (helper core untouched)
 
-**改动**
-1. 新增 `internal/service/service_windows.go`：
-   - 实现 `svc.Handler`：`Execute(args, requests, changes)` 循环处理
-     `SVC_CONTROL_STOP` → 调用 `h.server.Shutdown()`（复用现有干净退出路径）；
-     `SVC_CONTROL_INTERROGATE` → 报告 Running。
-   - `Run()` 内构造与 `helper.Run` 相同的依赖（`tunnel.NewManager`、`firewall.NewPlatformFirewall`、`reconnect.NewMonitor`、`wifi.NewMonitor`），通过 **`svc.Run(serviceName, handler)`** 进入 SCM 控制循环。
-2. `main.go` 增加 `--service` 分支：先 `svc.Run`，非服务上下文（无 SCM）则提示并退出。
-3. 新增 `ctl svc install|uninstall|status|start|stop` 子命令（`internal/cli/cli.go` 的 switch 增加分支）：
-   - `install`：`OpenSCManager` + `CreateService`（`SERVICE_AUTO_START`、`SERVICE_WIN32_OWN_PROCESS`、启动参数 `--service --data-dir <ProgramData>`）
-   - `uninstall`：停服务 → `DeleteService`
-4. **NSIS 集成**（`build/windows/nsis/project.nsi`）：安装时静默注册服务；卸载时先停+删服务。与现有 `internal/autostart` 的 HKCU Run key 二选一（服务安装后移除 Run key）。
+**Changes**
+1. New package `internal/service/service_windows.go`:
+   - Implement `svc.Handler`: `Execute(args, requests, changes)` loop handling
+     `SVC_CONTROL_STOP` → `h.server.Shutdown()` (reuse the existing clean-exit
+     path); `SVC_CONTROL_INTERROGATE` → report Running.
+   - `Run()` builds the same dependencies as `helper.Run`
+     (`tunnel.NewManager`, `firewall.NewPlatformFirewall`,
+     `reconnect.NewMonitor`, `wifi.NewMonitor`) and enters the SCM control
+     loop via **`svc.Run(serviceName, handler)`**.
+2. `main.go`: add a `--service` branch — `svc.Run` first; if there is no SCM
+   context, print a hint and exit.
+3. New `ctl svc install|uninstall|status|start|stop` subcommands
+   (`internal/cli/cli.go` switch):
+   - `install`: `OpenSCManager` + `CreateService`
+     (`SERVICE_AUTO_START`, `SERVICE_WIN32_OWN_PROCESS`, args
+     `--service --data-dir <ProgramData>`)
+   - `uninstall`: stop service → `DeleteService`
+4. **NSIS integration** (`build/windows/nsis/project.nsi`): register the
+   service silently on install; stop + delete on uninstall. Pick ONE of
+   service-vs-`internal/autostart` HKCU Run key (remove the Run key once the
+   service is installed).
 
-**验收**
-- `wireguideplus ctl svc install && ctl svc start` 后，服务在 services.msc 可见、可启停。
-- 停止服务时隧道断开、防火墙规则清理（走现有 `cleanup()` 路径）。
-- GUI 模式行为完全不变（回归）。
+**Acceptance**
+- `wireguideplus ctl svc install && ctl svc start` → service visible in
+  services.msc, startable/ stoppable.
+- Stopping the service tears down tunnels + firewall rules (existing
+  `cleanup()` path).
+- GUI mode behavior unchanged (regression).
 
-### 阶段 1 — 生命周期解耦（关键改造）
+### Phase 1 — Lifecycle decoupling (the key change)
 
-**问题**：`internal/helper/helper.go` 的 `startupGrace`/`shutdownGrace` 逻辑会让服务「无 GUI 连接就自退」，与服务常驻目标冲突。
+**Problem**: `internal/helper/helper.go`'s `startupGrace`/`shutdownGrace`
+logic would make the service self-exit when no GUI is connected — exactly
+what a service must not do.
 
-**改动**
-1. 给 `Helper` 增加运行模式字段（如 `mode`：`modeGUI` / `modeService`），由 `--service` 传入。
-2. `armShutdownTimer` 中：`modeService` 下**跳过所有自退定时**（`OnConnect`/`OnDisconnect` 仍保留，用于控制事件推送与 `HasControlConn` 判断，但不再触发 `shutdown()`）。
-3. `main.go` 的 `--service` 路径直接调用 `helper.Run(..., helper.WithMode(service))` 或新增 `helper.RunService(...)`。
-4. 保留「活动隧道保护」逻辑，作为服务停止时的最后防线（SCM Stop 请求仍走 `Shutdown`）。
+**Changes**
+1. Add a run-mode field to `Helper` (e.g. `mode`: `modeGUI` / `modeService`),
+   passed in from `--service`.
+2. In `armShutdownTimer`: under `modeService`, **skip all self-exit timers**
+   (`OnConnect`/`OnDisconnect` still fire — they drive event push and
+   `HasControlConn`, but never `shutdown()`).
+3. `main.go` `--service` path calls `helper.Run(..., helper.WithMode(service))`
+   or a new `helper.RunService(...)`.
+4. Keep the "active tunnel keeps the helper alive" guard as a last line of
+   defense when SCM Stop arrives (Stop still goes through `Shutdown`).
 
-**验收**
-- 服务启动后 GUI 全程不开，隧道/WiFi 自动化照常工作。
-- GUI 打开 → 连接 → 关闭，服务保持运行。
-- `sc stop wireguidesvc` 能干净停止。
+**Acceptance**
+- Service runs with the GUI never opened; tunnels/WiFi automation work.
+- GUI open → connect → close: the service stays up.
+- `sc stop wireguidesvc` stops cleanly.
 
-### 阶段 2 — 多用户与会话 0
+### Phase 2 — Multi-user & Session 0
 
-**问题**：服务运行在 session 0 的 LocalSystem 下，用户配置（`storage.TunnelStore`）位于各自 home。当前 Windows 实现（`deriveUserAppSupport`）靠 UAC 拉起时透传的 `APPDATA` 环境变量定位用户目录——**SCM 启动的服务不带任何用户环境变量**，必须改为显式路径。
+**Problem**: the service runs as LocalSystem in session 0; user config
+(`storage.TunnelStore`) lives in each user's home. The current Windows
+implementation (`deriveUserAppSupport`) relies on the `APPDATA` env var
+passed through UAC — **an SCM-started service has no user environment**, so
+paths must be explicit.
 
-**决策点（建议 v2.0 取舍）**
-- **方案 A（推荐，范围小）**：配置根统一到系统级 `%PROGRAMDATA%\wireguideplus\`（含 `tunnels/`、`config.json`），服务直接读写；`storage.TunnelStore` 增加可配置根目录构造（现为 `App Support/tunnels`，加一个参数即可）。单用户即可，后续再演进。
-- **方案 B（多用户完整）**：每用户一套配置目录，管道名带用户 SID（`\\.\pipe\wireguide-<SID>`），服务按活动会话切换上下文。复杂度高，建议 2.1。
-- **GUI 行为**：GUI 检测配置位置并兼容迁移（1.x 已有配置 → 复制到新位置）。
+**Decision (recommended for v2.0 scope)**
+- **Option A (recommended, small scope)**: move the config root to the
+  system level `%PROGRAMDATA%\wireguideplus\` (incl. `tunnels/`,
+  `config.json`); let the service read/write it directly. `storage.TunnelStore`
+  gains a configurable root parameter (today it is `App Support/tunnels`).
+  Single-config is fine for v2.0; evolve later.
+- **Option B (full multi-user)**: per-user config dirs + per-user pipe names
+  (`\\.\pipe\wireguide-<SID>`) + active-session context switching. High
+  complexity — defer to 2.1.
+- **GUI behavior**: detect the config location and migrate 1.x configs
+  (copy to the new location).
 
-**改动**
-1. `systemDataDir()`（`main.go`）在 `--service` 模式下固定为 `%PROGRAMDATA%\wireguideplus`。
-2. `storage.TunnelStore` 构造增加 root 参数；迁移现有 `tunnels/`。
-3. 管道 SDDL：服务模式下 `ownerSID` 校验的语义调整——服务由 LocalSystem 拥有，`verifyPeer` 应校验「连接者是本机任一已登录用户」（枚举活动会话）而非单一 SID；或先保持宽松（BA 组成员）并记录安全评审。
+**Changes**
+1. `systemDataDir()` (`main.go`) under `--service` is fixed to
+   `%PROGRAMDATA%\wireguideplus`.
+2. `storage.TunnelStore` constructor gains a root argument; migrate existing
+   `tunnels/`.
+3. Pipe SDDL: under service mode, `ownerSID` semantics change — the service
+   is owned by LocalSystem, so `verifyPeer` should accept "any locally
+   logged-on user" (enumerate active sessions) instead of a single SID; or
+   start permissive (BA members) and record a security review.
 
-**验收**
-- 安装服务后，任一管理员用户登录都能通过 GUI/ctl 控制隧道。
-- 锁屏/注销期间隧道持续；重新登录后 GUI 显示真实状态（事件重放或状态拉取）。
+**Acceptance**
+- After install, any administrator login can control tunnels via GUI/ctl.
+- Tunnels survive lock/logoff; on re-login the GUI shows real state
+  (event replay or status pull).
 
-### 阶段 3 — GUI 对接改造
+### Phase 3 — GUI client adaptation
 
-**改动**
-1. `internal/gui/helper_lifecycle.go` 的 `ensureHelper`：
-   - 优先尝试连接服务管道（新增 `ipc.Dial` 指向服务地址）。
-   - 连接失败 → 提示「服务未运行」，提供一键安装/启动（调 `ctl svc install`，或新 RPC `Svc.Install`）。
-   - **删除** UAC 拉起路径（`elevate.SpawnHelper`）及版本匹配重启逻辑（服务升级由 SCM 管理，见阶段 5）。
-2. 版本校验：服务响应增加 `AppVersion`（已有 `PingResponse`），GUI 检测服务过旧时提示用户运行更新（不再自己强杀）。
-3. `internal/autostart`：Windows 路径改为「确保服务存在」，删除 HKCU Run key 逻辑（macOS/Linux 保留原样）。
+**Changes**
+1. `internal/gui/helper_lifecycle.go` `ensureHelper`:
+   - Dial the service pipe first (new `ipc.Dial` to the service address).
+   - On failure → prompt "service not running", offer one-click install/start
+     (call `ctl svc install`, or a new `Svc.Install` RPC).
+   - **Remove** the UAC spawn path (`elevate.SpawnHelper`) and the
+     version-mismatch force-restart logic (service upgrades are managed by
+     SCM — see Phase 5).
+2. Version check: the service already reports `AppVersion` (`PingResponse`);
+   when the service is older, prompt the user to run the updater instead of
+   killing it.
+3. `internal/autostart`: the Windows path becomes "ensure the service
+   exists"; remove the HKCU Run key logic (macOS/Linux unchanged).
 
-**验收**
-- 全新机器：装完 → 首次打开 GUI → 引导安装服务 → 正常使用，全程无 UAC。
-- GUI 崩溃/被杀：服务与隧道不受影响；重开 GUI 秒连。
+**Acceptance**
+- Fresh machine: install → first GUI launch → guided service install → use;
+  no UAC anywhere.
+- GUI crash/kill: service and tunnels unaffected; reopening the GUI
+  reconnects instantly.
 
-### 阶段 4 — 服务控制面与日志
+### Phase 4 — Control surface & logging
 
-**改动**
-1. RPC 增加：`Svc.Status`（SCM 状态 + 隧道状态合并）、`Svc.SetAutostart`。
-2. 日志：
-   - 保留现有 `broadcastHandler`（GUI 订阅）+ `helper-stderr.log`。
-   - 新增 Windows Event Log 输出（`golang.org/x/sys/windows/svc/eventlog`）：服务启停、隧道连接/断开、防火墙告警、崩溃恢复。
-3. 崩溃恢复的 SCM 侧配合：`CreateService` 时设置 `SERVICE_CONFIG_FAILURE_ACTIONS`（失败 → 延迟 5s 重启，最多 3 次），配合现有 `RecoverFromCrash`。
+**Changes**
+1. New RPCs: `Svc.Status` (SCM state + tunnel state), `Svc.SetAutostart`.
+2. Logging:
+   - Keep `broadcastHandler` (GUI subscription) + `helper-stderr.log`.
+   - Add Windows Event Log output
+     (`golang.org/x/sys/windows/svc/eventlog`): service start/stop, tunnel
+     connect/disconnect, firewall alerts, crash recovery.
+3. SCM-side crash recovery: set `SERVICE_CONFIG_FAILURE_ACTIONS` on
+   `CreateService` (failure → restart after 5s, max 3), complementing the
+   existing `RecoverFromCrash`.
 
-**验收**
-- `eventvwr` 中能看到服务/隧道关键事件。
-- 人为杀掉服务进程 → SCM 自动重启 → 隧道恢复（日志可见）。
+**Acceptance**
+- `eventvwr` shows key service/tunnel events.
+- Killing the service process → SCM auto-restart → tunnels recover (visible
+  in logs).
 
-### 阶段 5 — 更新与回滚
+### Phase 5 — Update & rollback
 
-**改动**
-1. `internal/update` 的服务适配：GUI 执行更新时，新增「经 SCM 停服务 → 替换 exe → 启动」的原子流程（`ctl svc stop` + 文件替换 + `ctl svc start`），避免「GUI 强杀服务」。
-2. 服务侧自更新可滞后实现（2.1）：先保持「GUI 触发、SCM 托管重启」模式。
-3. 签名校验逻辑不变（Ed25519 + SHA256SUMS）。
+**Changes**
+1. `internal/update` service adaptation: the GUI performs updates through
+   "stop service via SCM → replace exe → start service"
+   (`ctl svc stop` + file replace + `ctl svc start`) instead of killing the
+   service directly.
+2. Service self-update can lag (2.1): v2.0 keeps "GUI-triggered, SCM-managed
+   restart".
+3. Signature verification unchanged (Ed25519 + SHA256SUMS).
 
-**验收**
-- 升级/降级后服务与 GUI 版本一致（`PingResponse.AppVersion` 校验），隧道在升级窗口内完成重连。
+**Acceptance**
+- Upgrade/downgrade keeps service and GUI versions consistent
+  (`PingResponse.AppVersion`); tunnels reconnect across the update window.
 
-### 阶段 6 — 安全强化
+### Phase 6 — Security hardening
 
-1. 服务账户最小化：确认 LocalSystem 权限面；必要时拆「服务（LocalSystem）+ 工作进程（低权限）」（如 Tailscale 的 tailscaled 模型）。
-2. 管道 SDDL 复查：`SY/BA` 全权、普通用户仅 `GRGW`（现有定义已满足）；会话 0 下确认无交互式桌面注入面。
-3. 输入校验：服务不信任任何客户端（`maxConcurrentConns`、`verifyPeer`、`ReadDeadline` 现有防护保留并测试）。
-4. 卸载安全：停服务可能导致 kill switch 失效——卸载流程须先断网保护告警，再停服务，最后删防火墙规则。
+1. Service account minimization: confirm the LocalSystem surface; if needed,
+   split "service (LocalSystem) + worker (least privilege)" (the tailscaled
+   model).
+2. Re-audit pipe SDDL: `SY/BA` full access, regular users `GRGW` only
+   (current definition already does this); verify no interactive-desktop
+   injection surface from session 0.
+3. Input validation: the service trusts no client (`maxConcurrentConns`,
+   `verifyPeer`, `ReadDeadline` — keep and test all existing protections).
+4. Uninstall safety: stopping the service can drop the kill switch — warn the
+   user about network protection before stopping, then clean firewall rules.
 
-## 6. 关键设计决策摘要
+## 6. Key Design Decisions
 
-| 决策 | 结论 | 理由 |
+| Decision | Verdict | Rationale |
 |---|---|---|
-| 服务账户 | LocalSystem | 需要 wintun 驱动 + WFP + 写 ProgramData |
-| 服务技术栈 | `x/sys/windows/svc` | 零额外依赖、生命周期事件完整 |
-| 服务 = 现有 helper | 是（外壳化） | 内核能力已齐备，避免重写 |
-| 多用户 | 方案 A（系统级配置根） | 控制 v2.0 范围 |
-| GUI 拉起方式 | 删除 UAC，改引导安装服务 | 消除每次登录弹 UAC |
-| 日志 | 文件 + Event Log 双写 | 无人值守场景可观测性 |
-| 更新 | GUI 触发 + SCM 托管重启 | 2.1 再考虑服务自更新 |
+| Service account | LocalSystem | Needs wintun driver + WFP + ProgramData writes |
+| Service stack | `x/sys/windows/svc` | Zero extra deps, full lifecycle events |
+| Service = existing helper | Yes (shell it) | Engine is complete; avoid a rewrite |
+| Multi-user | Option A (system-level config root) | Keep v2.0 scope bounded |
+| GUI spawn | Remove UAC; guide service install | Eliminate per-session UAC |
+| Logging | File + Event Log | Observability for unattended mode |
+| Update | GUI-triggered, SCM-managed restart | Service self-update lands in 2.1 |
 
-## 7. 测试计划
+## 7. Test Plan
 
-### 单元
-- `armShutdownTimer` 在两种模式下的行为（GUI 模式回归 / 服务模式常驻）
-- `storage.TunnelStore` 新 root 参数
-- `ctl svc` 子命令参数解析与错误处理
+### Unit
+- `armShutdownTimer` behavior in both modes (GUI regression / service persist)
+- `storage.TunnelStore` new root parameter
+- `ctl svc` subcommand parsing & error handling
 
-### 集成（Windows 真机）
-1. 全新安装 → `ctl svc install` → 服务注册成功、`AUTO_START`
-2. 开机（不登录）→ 服务已运行 → 登录后 GUI 直连
-3. 无 GUI 期间：WiFi 规则自动连接、断线自动重连（断网 30s 重连）
-4. 杀掉服务进程 → SCM 自动重启 → 崩溃恢复拉起隧道
-5. `sc stop` / 卸载：隧道断开、防火墙清理、kill switch 不残留
-6. 升级：GUI 触发 → 停服务 → 替换 → 启动 → 版本一致
-7. 多用户登录切换：隧道不中断，第二个用户 GUI 状态正确
-8. 回归：macOS/Linux 的 LaunchAgent/LaunchDaemon/systemd 路径不受影响
+### Integration (Windows real machine)
+1. Fresh install → `ctl svc install` → service registered, `AUTO_START`
+2. Boot without login → service running → GUI dials directly after login
+3. Headless: WiFi-rule auto-connect, auto-reconnect after network drop (~30s)
+4. Kill the service process → SCM auto-restart → crash recovery brings the tunnel back
+5. `sc stop` / uninstall: tunnels down, firewall cleaned, no kill-switch residue
+6. Upgrade: GUI triggers → stop → replace → start → versions match
+7. Multi-user login switch: tunnels uninterrupted; second user's GUI state correct
+8. Regression: macOS/Linux LaunchAgent/LaunchDaemon/systemd paths unaffected
 
-### 手动清单
-- 用 `docs/manual-test-checklist.md` 覆盖 GUI 模式全功能回归。
+### Manual
+- Cover full GUI-mode regression with `docs/manual-test-checklist.md`.
 
-## 8. 里程碑与交付
+## 8. Milestones & Deliverables
 
-| 里程碑 | 内容 | 预计改动面 |
+| Milestone | Content | Touch surface |
 |---|---|---|
-| M1 | 阶段 0：服务外壳 + 安装/卸载 + NSIS 集成 | `internal/service`(新)、`main.go`、`cli.go`、`project.nsi` |
-| M2 | 阶段 1：生命周期解耦 | `helper.go`（模式字段 + 定时器分支） |
-| M3 | 阶段 2：系统级配置根 + 会话 0 适配 | `storage`、`systemDataDir`、`transport_windows.go` |
-| M4 | 阶段 3：GUI 对接 | `helper_lifecycle.go`、`autostart` |
-| M5 | 阶段 4-6：控制面/日志/更新/安全 | `ipc`、`update`、NSIS |
-| M6 | 全量测试 + 发布 | 测试计划 + release 流程 |
+| M1 | Phase 0: service shell + install/uninstall + NSIS | `internal/service`(new), `main.go`, `cli.go`, `project.nsi` |
+| M2 | Phase 1: lifecycle decoupling | `helper.go` (mode field + timer branch) |
+| M3 | Phase 2: system-level config root + session 0 | `storage`, `systemDataDir`, `transport_windows.go` |
+| M4 | Phase 3: GUI client adaptation | `helper_lifecycle.go`, `autostart` |
+| M5 | Phases 4-6: control/logging/update/security | `ipc`, `update`, NSIS |
+| M6 | Full test + release | Test plan + release flow |
 
-**发布提示**：2.0 是破坏性升级，release notes 需说明「服务化带来的行为变化」（如：卸载流程、配置目录迁移、UAC 消失）。
+**Release note**: 2.0 is a breaking upgrade — call out behavior changes
+(service-based lifecycle, config-dir migration, UAC removal).
 
-## 9. 风险与注意事项
+## 9. Risks & Notes
 
-1. **kill switch 与服务生命周期**：服务被强制停止（用户/异常）会瞬时失去 kill switch 保护——SCM 恢复策略 + 现有崩溃恢复是主要防线，务必测试。
-2. **配置迁移**：1.x 用户已有配置在 `%APPDATA%`，迁移失败会导致「看不见隧道」。迁移脚本要幂等、可回滚。
-3. **多用户首版简化**：若采用方案 A，多个 Windows 账户共享一套配置——需在 UI 明示「单配置」或做账户隔离提示。
-4. **勿删 `--helper` 模式**：macOS/Linux 及 Windows 开发调试仍依赖现有 UAC helper 路径，服务化是新增路径而非替换（发布后再评估下线）。
+1. **Kill switch vs service lifecycle**: force-stopping the service
+   (user/abnormal) briefly drops kill-switch protection — SCM recovery +
+   existing crash recovery are the main lines of defense; test thoroughly.
+2. **Config migration**: 1.x users have configs in `%APPDATA%`; a failed
+   migration hides their tunnels. The migration must be idempotent and
+   rollback-able.
+3. **Multi-user simplification**: with Option A, multiple Windows accounts
+   share one config — make it explicit in the UI ("single shared config") or
+   add an account-isolation hint.
+4. **Keep `--helper` mode**: macOS/Linux and Windows dev/debug still rely on
+   the existing UAC helper path. Service-ization adds a new path rather than
+   replacing it (evaluate removal after release).

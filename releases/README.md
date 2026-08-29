@@ -1,36 +1,43 @@
-# 本地历史版本归档
+# Local Historical Release Archive
 
-本目录存放各版本发布资产的**本地备份**（installer、portable zip、dmg、
-deb、tar.gz、SHA256SUMS、签名等），供回滚、对比、离线分发使用。
+This directory stores **local backups** of released artifacts (installers,
+portable zips, dmg, deb, tar.gz, SHA256SUMS, signatures, …) for rollback,
+comparison, and offline distribution. It is NOT part of the build output.
 
-## 规则
+## Rules
 
-- 二进制文件**不进 git 仓库**（体积大），由 `.gitignore` 中的
-  `releases/*` 忽略。
-- 本 `README.md` 被 git 跟踪，用于固定目录存在并说明用途。
-- 常规清理命令不会动本目录：
-  - `git clean -fd`：**不会**删除（被忽略的文件默认保留）
-  - `task build` / `wails3` 构建：只写 `bin/`，不碰本目录
-  - CI（GitHub Actions）：跑在独立 runner 上，不接触本地文件
-- ⚠️ 唯一会删除本目录的命令是 `git clean -fdx`（`-x` 连忽略文件一起删），
-  **切勿随意运行**。确需删除时先 `git clean -ndx releases/` 预览。
+- Binary files are **never committed** to git (repo bloat). They are ignored
+  by the `releases/*` rule in `.gitignore`.
+- The `README.md` / `README.zh.md` files ARE tracked, so the directory's
+  purpose survives clones and the directory is never treated as throwaway.
+- Routine cleanup commands will NOT touch this directory:
+  - `git clean -fd`: safe (ignored files are kept)
+  - `task build` / `wails3` builds: only write to `bin/`
+  - CI (GitHub Actions): runs on isolated runners, never touches local files
+- ⚠️ The ONLY command that removes these files is `git clean -fdx`
+  (`-x` deletes ignored files too) — **never run it casually**. If you truly
+  need to wipe the archive, preview first with `git clean -ndx releases/`.
 
-## 备份文件清单
+## Manifest
 
-> 每次发布后，将 release 资产复制到本目录并登记。示例：
+> After every release, copy the artifacts here and register them below.
 
-| 版本 | 平台 | 文件 | SHA256 |
-|------|------|------|--------|
-| v1.1.0 | Windows amd64 | wireguideplus-1.1.0-amd64-installer.exe | 在此登记 |
-| v1.1.0 | Windows amd64 | wireguideplus-1.1.0-amd64-portable.zip | 在此登记 |
+| Version | Platform | File | SHA256 |
+|---------|----------|------|--------|
+| v1.1.0 | Windows amd64 | wireguideplus-1.1.0-amd64-installer.exe | register here |
+| v1.1.0 | Windows amd64 | wireguideplus-1.1.0-amd64-portable.zip | register here |
 | ... | ... | ... | ... |
 
-## 操作命令
+## Commands
 
 ```powershell
-# 复制历史版本资产到归档（示例）
+# Copy historical artifacts into the archive (example)
 Copy-Item "D:\releases-backup\*" .\releases\
 
-# 登记哈希（追加到清单）
+# Compute hashes to register in the manifest
 Get-FileHash .\releases\*.exe -Algorithm SHA256 | Format-Table
 ```
+
+---
+
+简体中文版：见 [README.zh.md](README.zh.md)
