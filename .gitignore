@@ -58,3 +58,12 @@ debug-logs/
 # Log files
 *.log
 
+# Local historical release archive — installers / packages kept on disk
+# for rollback & offline distribution. Binaries are intentionally NOT
+# tracked (repo bloat); the README is tracked so the directory's purpose
+# survives clones. `git clean -fd` never touches this directory (ignored
+# files are kept); only an explicit `git clean -fdx` would remove it —
+# never run the -x variant casually.
+releases/*
+!releases/README.md
+
