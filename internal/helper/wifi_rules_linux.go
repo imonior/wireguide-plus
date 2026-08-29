@@ -26,7 +26,7 @@ func deriveUserAppSupport(uid int) (string, error) {
 	// Respect XDG_CONFIG_HOME if it was passed through the environment
 	// when the GUI launched pkexec (pkexec preserves a subset of env).
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "wireguide"), nil
+		return filepath.Join(xdg, "wireguideplus"), nil
 	}
-	return filepath.Join(u.HomeDir, ".config", "wireguide"), nil
+	return filepath.Join(u.HomeDir, ".config", "wireguideplus"), nil
 }

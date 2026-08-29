@@ -14,6 +14,7 @@ export {
     DNSServer,
     KnownSSIDs,
     RouteEntry,
+    TestProxyResult,
     TunnelInfo,
     UpdateState,
     ZipImportResult

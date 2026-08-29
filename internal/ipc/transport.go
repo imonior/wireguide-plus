@@ -16,7 +16,7 @@ func DefaultSocketPath() string {
 		// USERNAME environment variable (which can be spoofed). Access control
 		// is handled by the SDDL on the pipe itself, so the name does not
 		// need to encode identity.
-		return `\\.\pipe\wireguide`
+		return `\\.\pipe\wireguideplus`
 	default:
 		uid := os.Getuid()
 		uidStr := strconv.Itoa(uid)
@@ -24,24 +24,24 @@ func DefaultSocketPath() string {
 		// M18: Prefer $XDG_RUNTIME_DIR (typically /run/user/<uid>/) which is
 		// a per-user tmpfs with restricted permissions.
 		if runtimeDir := os.Getenv("XDG_RUNTIME_DIR"); runtimeDir != "" {
-			return filepath.Join(runtimeDir, "wireguide-"+uidStr+".sock")
+			return filepath.Join(runtimeDir, "wireguideplus-"+uidStr+".sock")
 		}
 
 		if runtime.GOOS == "darwin" {
-			// macOS: use /var/run/wireguide/ — the helper runs as root (via
+			// macOS: use /var/run/wireguideplus/ — the helper runs as root (via
 			// LaunchDaemon or osascript) and creates this directory. The GUI
 			// connects as an unprivileged user; the helper chowns the socket
 			// so the GUI can read/write it. This path is stable across app
 			// restarts and doesn't pollute the user's home directory.
-			return "/var/run/wireguide/wireguide.sock"
+			return "/var/run/wireguideplus/wireguideplus.sock"
 		}
 
 		// Linux fallback: create a private subdirectory under /tmp with mode 0700
 		// so other users cannot place symlinks or interfere with the socket.
-		dir := filepath.Join("/tmp", "wireguide-"+uidStr)
+		dir := filepath.Join("/tmp", "wireguideplus-"+uidStr)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			slog.Error("failed to create IPC socket directory", "dir", dir, "error", err)
-			return filepath.Join(dir, "wireguide.sock") // return best-effort path
+			return filepath.Join(dir, "wireguideplus.sock") // return best-effort path
 		}
 		// Ensure the directory has the correct permissions even if it already existed.
 		if err := os.Chmod(dir, 0700); err != nil {
@@ -58,6 +58,6 @@ func DefaultSocketPath() string {
 			slog.Error("IPC socket directory ownership check failed; subsequent Listen will fail with a clear error",
 				"dir", dir, "error", err)
 		}
-		return filepath.Join(dir, "wireguide.sock")
+		return filepath.Join(dir, "wireguideplus.sock")
 	}
 }

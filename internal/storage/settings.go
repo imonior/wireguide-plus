@@ -16,7 +16,11 @@ type Settings struct {
 	Theme         string `json:"theme"`           // "dark", "light", "system"
 	TrayIconStyle string `json:"tray_icon_style"` // "color" (MVP: color only)
 	AutoStart     bool   `json:"auto_start"`      // launch GUI on OS login
-	KillSwitch    bool   `json:"kill_switch"`
+	StartMinimized bool  `json:"start_minimized"` // start hidden in the tray
+	// NotifyDurationMs is how long the connection-status notification
+	// bubble stays on screen (ms). 0 means the default (10s).
+	NotifyDurationMs int `json:"notify_duration_ms,omitempty"`
+	KillSwitch       bool `json:"kill_switch"`
 	DNSProtection bool   `json:"dns_protection"`
 	HealthCheck   bool   `json:"health_check"`  // periodic handshake age monitoring
 	PinInterface  bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
@@ -58,6 +62,19 @@ type Settings struct {
 	// manual off wins until they manually reconnect that tunnel once or
 	// the app restarts (the GUI clears the list on startup).
 	ManualOffTunnels []string `json:"manual_off_tunnels,omitempty"`
+
+	// ProxyMode controls outbound proxying for update checks: "direct"
+	// (default, no proxy), "mirror" (rewrite the API URL through a GitHub
+	// accelerator prefix stored in ProxyURL) or "manual" (use ProxyURL as
+	// an HTTP/SOCKS proxy). Intended for users who can't reach GitHub
+	// directly (e.g. mainland China) — they can route update checks through
+	// an accelerator mirror or a local HTTP/SOCKS proxy.
+	ProxyMode string `json:"proxy_mode,omitempty"`
+	// ProxyURL is the proxy address used when ProxyMode is "manual" (e.g.
+	// "http://127.0.0.1:7890" or "socks5://127.0.0.1:1080"), or the
+	// accelerator prefix used when ProxyMode is "mirror" (e.g.
+	// "https://ghfast.top").
+	ProxyURL string `json:"proxy_url,omitempty"`
 }
 
 // IsManualOff reports whether the user has manually switched the tunnel
@@ -163,6 +180,7 @@ func DefaultSettings() *Settings {
 		Language:        "auto",
 		Theme:           "system", // follows OS dark/light mode
 		TrayIconStyle:   "color",
+		NotifyDurationMs: 10000, // 10s default notification duration
 		KillSwitch:      false,
 		DNSProtection:   false,
 		HealthCheck:     false,

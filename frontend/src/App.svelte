@@ -712,9 +712,9 @@
   <div class="layout">
     <nav class="sidebar">
       <div class="brand-area">
-        <img class="brand-mark" src="/wireguide.svg" alt="WireGuide" width="38" height="38" />
+        <img class="brand-mark" src="/appicon.png" alt="WireGuide Plus" width="38" height="38" />
         <div class="brand-text">
-          <span class="brand-name">WireGuide</span>
+          <span class="brand-name">WireGuide Plus</span>
           <span class="brand-tagline">WireGuard VPN</span>
         </div>
       </div>

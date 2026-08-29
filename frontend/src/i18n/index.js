@@ -3,8 +3,9 @@ import en from './en.json';
 import ko from './ko.json';
 import ja from './ja.json';
 import zh from './zh.json';
+import zhTW from './zh-TW.json';
 
-const translations = { en, ko, ja, zh };
+const translations = { en, ko, ja, zh, 'zh-TW': zhTW };
 
 // `locale` is the current UI language. Components don't usually touch it
 // directly — they subscribe to the `t` derived store below via `$t(...)`.
@@ -12,6 +13,10 @@ export const locale = writable('en');
 
 export function detectLanguage() {
   const nav = navigator.language || 'en';
+  // Traditional-Chinese locales (zh-TW, zh-HK, zh-MO, zh-Hant*) map to the
+  // dedicated zh-TW bundle; everything else zh-* uses the simplified zh.
+  const full = nav.toLowerCase().replace(/_/g, '-');
+  if (/^zh-?(tw|hk|mo|hant)/.test(full)) return 'zh-TW';
   const short = nav.split('-')[0];
   if (translations[short]) return short;
   return 'en';

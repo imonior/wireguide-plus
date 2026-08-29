@@ -48,6 +48,7 @@ if (-not (Test-Path $src)) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-Copy-Item $src (Join-Path $OutDir 'wintun.dll') -Force
+$outName = "wintun-$dllArch.dll"
+Copy-Item $src (Join-Path $OutDir $outName) -Force
 Remove-Item -Recurse -Force $tmpDir
-Write-Host "Bundled $dllArch wintun.dll to $OutDir"
+Write-Host "Bundled $dllArch driver as $outName to $OutDir"

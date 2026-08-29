@@ -133,6 +133,8 @@
     language: getLanguage(),
     theme: 'system',
     auto_start: false,
+    start_minimized: false,
+    notify_duration_ms: 10000,
     kill_switch: false,
     dns_protection: false,
     health_check: false,
@@ -141,6 +143,8 @@
     tray_icon_style: 'color',
     auto_update_check: true,
     compact_list: false,
+    proxy_mode: 'direct',
+    proxy_url: '',
   };
   let loaded = false;
   let appVersion = '';
@@ -152,6 +156,8 @@
         settings.language = s.language || 'auto';
         settings.theme = s.theme || 'system';
         settings.auto_start = s.auto_start ?? false;
+        settings.start_minimized = s.start_minimized ?? false;
+        settings.notify_duration_ms = s.notify_duration_ms || 10000;
         settings.kill_switch = s.kill_switch ?? false;
         settings.dns_protection = s.dns_protection ?? false;
         settings.health_check = s.health_check ?? false;
@@ -163,6 +169,8 @@
         // the Go side becomes undefined here; default to true to match
         // Settings.AutoUpdateCheckEnabled() semantics.
         settings.auto_update_check = (s.auto_update_check === false) ? false : true;
+        settings.proxy_mode = s.proxy_mode || 'direct';
+        settings.proxy_url = s.proxy_url || '';
       }
     } catch (e) {
       console.error('load settings:', e);
@@ -194,6 +202,8 @@
         theme: settings.theme,
         tray_icon_style: settings.tray_icon_style,
         auto_start: settings.auto_start,
+        start_minimized: settings.start_minimized,
+        notify_duration_ms: settings.notify_duration_ms,
         kill_switch: settings.kill_switch,
         dns_protection: settings.dns_protection,
         health_check: settings.health_check,
@@ -201,6 +211,8 @@
         log_level: settings.log_level,
         auto_update_check: settings.auto_update_check,
         compact_list: settings.compact_list,
+        proxy_mode: settings.proxy_mode,
+        proxy_url: settings.proxy_url,
         // List-ordering prefs are owned by the tunnel-list header, not
         // this screen — carry them from the fresh fetch so saving any
         // Settings toggle doesn't wipe them back to defaults.
@@ -261,6 +273,16 @@
     scheduleSave();
   }
 
+  function onStartMinimizedChange(e) {
+    settings.start_minimized = e.target.checked;
+    scheduleSave();
+  }
+
+  function onNotifyDurationChange(e) {
+    settings.notify_duration_ms = Number(e.target.value);
+    scheduleSave();
+  }
+
   function onLogLevelChange(e) {
     settings.log_level = e.target.value;
     TunnelService.SetLogLevel(settings.log_level).catch((err) => {
@@ -312,6 +334,74 @@
       settings.health_check = !settings.health_check;
     });
     scheduleSave();
+  }
+
+  // --- Proxy (for update checks) ---
+  // Two distinct outbound paths, both for networks that cannot reach
+  // api.github.com directly (e.g. mainland China):
+  //   - mirror: the API URL is rewritten through a public accelerator
+  //     prefix (https://ghfast.top/https://api.github.com/...) and fetched
+  //     directly. No local proxy software needed.
+  //   - manual: requests still go to api.github.com but tunnel through a
+  //     locally running HTTP/SOCKS5 proxy (Clash etc.).
+  const MIRROR_PRESETS = [
+    { value: 'https://ghfast.top', label: 'ghfast.top' },
+    { value: 'https://gh-proxy.com', label: 'gh-proxy.com' },
+  ];
+
+  // Current <select> value: 'direct', one of the mirror presets,
+  // 'mirror' (custom mirror prefix), or 'manual'.
+  function proxySelectValue() {
+    if (settings.proxy_mode === 'mirror') {
+      for (const p of MIRROR_PRESETS) {
+        if (settings.proxy_url === p.value) return p.value;
+      }
+      return 'mirror';
+    }
+    if (settings.proxy_mode !== 'manual') return 'direct';
+    return 'manual';
+  }
+
+  function onProxyChange(e) {
+    const v = e.target.value;
+    if (v === 'direct') {
+      settings.proxy_mode = 'direct';
+      settings.proxy_url = '';
+    } else if (v === 'manual') {
+      settings.proxy_mode = 'manual';
+      settings.proxy_url = settings.proxy_url || '';
+    } else if (v === 'mirror') {
+      // "Custom mirror" — keep whatever prefix is already typed.
+      settings.proxy_mode = 'mirror';
+      settings.proxy_url = settings.proxy_url || 'https://';
+    } else {
+      // One of the mirror presets.
+      settings.proxy_mode = 'mirror';
+      settings.proxy_url = v;
+    }
+    proxyTestState = null;
+    scheduleSave();
+  }
+
+  function onProxyUrlInput(e) {
+    settings.proxy_url = e.target.value;
+    proxyTestState = null;
+    scheduleSave();
+  }
+
+  // { testing, ok, latency, error }
+  let proxyTestState = null;
+  async function onTestProxy() {
+    // Test whatever is currently selected: direct, the active mirror
+    // prefix, or the manual proxy URL.
+    const target = settings.proxy_mode === 'direct' ? '' : settings.proxy_url;
+    proxyTestState = { testing: true, ok: false, latency: 0, error: '' };
+    try {
+      const res = await TunnelService.TestProxy(settings.proxy_mode, target);
+      proxyTestState = { testing: false, ok: !!res.ok, latency: res.latency_ms || 0, error: res.error || '' };
+    } catch (err) {
+      proxyTestState = { testing: false, ok: false, latency: 0, error: String(err) };
+    }
   }
 
   // Reflect settings applied by another client (the CLI) live, so the
@@ -417,7 +507,8 @@
                   <option value="en">English</option>
                   <option value="ko">한국어</option>
                   <option value="ja">日本語</option>
-                  <option value="zh">中文</option>
+                  <option value="zh">简体中文</option>
+                  <option value="zh-TW">繁體中文</option>
                 </select>
               </div>
               <div class="setting-row setting-row--toggle">
@@ -446,6 +537,29 @@
                   <span class="toggle-track"></span>
                 </label>
               </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="start-minimized">{$t('settings.start_minimized')}</label>
+                  <p class="setting-desc">{$t('settings.start_minimized_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="start-minimized" type="checkbox" checked={settings.start_minimized} on:change={onStartMinimizedChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="notify-duration">{$t('settings.notify_duration')}</label>
+                  <p class="setting-desc">{$t('settings.notify_duration_hint')}</p>
+                </div>
+                <select id="notify-duration" value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
+                  <option value="5000">5s</option>
+                  <option value="10000">10s</option>
+                  <option value="15000">15s</option>
+                  <option value="30000">30s</option>
+                  <option value="60000">60s</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -461,6 +575,59 @@
                   <input id="auto-update" type="checkbox" bind:checked={settings.auto_update_check} on:change={scheduleSave} />
                   <span class="toggle-track"></span>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.proxy')}</h4>
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="proxy-select">{$t('settings.proxy')}</label>
+                  <p class="setting-desc">{$t('settings.proxy_hint')}</p>
+                </div>
+                <select id="proxy-select" value={proxySelectValue()} on:change={onProxyChange}>
+                  <option value="direct">{$t('settings.proxy_direct')}</option>
+                  {#each MIRROR_PRESETS as p}
+                    <option value={p.value}>{p.label}</option>
+                  {/each}
+                  <option value="mirror">{$t('settings.proxy_mirror_custom')}</option>
+                  <option value="manual">{$t('settings.proxy_manual')}</option>
+                </select>
+              </div>
+              {#if settings.proxy_mode === 'mirror' || settings.proxy_mode === 'manual'}
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <label class="setting-label" for="proxy-url">
+                      {settings.proxy_mode === 'mirror' ? $t('settings.proxy_mirror_label') : $t('settings.proxy_url')}
+                    </label>
+                    <p class="setting-desc">
+                      {settings.proxy_mode === 'mirror' ? $t('settings.proxy_mirror_hint') : $t('settings.proxy_manual_hint')}
+                    </p>
+                  </div>
+                  <input id="proxy-url" type="text"
+                    value={settings.proxy_url}
+                    placeholder={settings.proxy_mode === 'mirror'
+                      ? $t('settings.proxy_mirror_placeholder')
+                      : $t('settings.proxy_url_placeholder')}
+                    on:input={onProxyUrlInput} />
+                </div>
+              {/if}
+              <div class="setting-row setting-row--test">
+                <div class="setting-info"></div>
+                <div class="proxy-test-wrap">
+                  <button class="btn-secondary" on:click={onTestProxy} disabled={proxyTestState?.testing}>
+                    {proxyTestState?.testing ? $t('settings.proxy_testing') : $t('settings.proxy_test')}
+                  </button>
+                  {#if proxyTestState && !proxyTestState.testing}
+                    {#if proxyTestState.ok}
+                      <span class="proxy-test-ok">{$t('settings.proxy_test_ok', { n: proxyTestState.latency })}</span>
+                    {:else}
+                      <span class="proxy-test-fail">{$t('settings.proxy_test_fail', { err: proxyTestState.error })}</span>
+                    {/if}
+                  {/if}
+                </div>
               </div>
             </div>
           </div>
@@ -544,7 +711,7 @@
         {:else if activeTab === 'about'}
           <div class="about-tab">
             <div class="about-hero">
-              <img src="/wireguide.svg" alt="WireGuide" class="about-logo" />
+              <img src="/appicon.png" alt="WireGuide Plus" class="about-logo" />
               <div class="about-hero-text">
                 <h2 class="about-name">WireGuide Plus</h2>
                 <p class="about-tagline-text">{$t('settings.about_tagline')}</p>
@@ -877,6 +1044,50 @@
   :global([data-theme="dark"]) select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23FFFFFF' stroke-opacity='.55' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     border-color: rgba(84, 84, 88, 0.72);
+  }
+  /* The native listbox popup renders in a separate tree, so scoped selectors
+     cannot reach it. Color options explicitly to match the theme; otherwise
+     they inherit the select's light text on the popup's default (light)
+     background and appear blank in dark mode. */
+  :global(select option) {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+  }
+  input[type="text"] {
+    height: 28px;
+    padding: 0 12px;
+    background-color: var(--bg-input);
+    border: 1px solid rgba(60, 60, 67, 0.5);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+    box-sizing: border-box;
+    min-width: 200px;
+  }
+  :global([data-theme="dark"]) input[type="text"] {
+    border-color: rgba(84, 84, 88, 0.72);
+  }
+  .setting-row--test {
+    justify-content: flex-end;
+  }
+  .proxy-test-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .proxy-test-ok {
+    color: var(--green);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .proxy-test-fail {
+    color: var(--red, #FF453A);
+    font-size: 12px;
+    word-break: break-all;
+    max-width: 320px;
   }
   select:hover {
     background-color: var(--bg-hover);

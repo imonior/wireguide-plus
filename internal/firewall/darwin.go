@@ -53,7 +53,7 @@ const dnsSubAnchorRel = "dns"
 
 // savedPfStateFile persists whether pf was enabled before WireGuide modified
 // it, so crash recovery can restore the original enabled/disabled state.
-const savedPfStateFile = "/Library/Application Support/wireguide/pf-was-enabled"
+const savedPfStateFile = "/Library/Application Support/wireguideplus/pf-was-enabled"
 
 // DarwinFirewall implements FirewallManager using macOS pf (packet filter).
 //

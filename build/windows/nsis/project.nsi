@@ -29,9 +29,15 @@
 # Features" display. Default is "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}" =
 # "imoniorWireGuide Plus", which is awkward — override to the clean product name.
 !define UNINST_KEY_NAME     "WireGuide Plus"
+# Override the wails default ("wireguide") so every artifact name starts with
+# the branded "wireguideplus" prefix — OutFile below becomes
+# wireguideplus-<arch>-installer.exe. The built program itself is installed as
+# PRODUCT_EXECUTABLE, which makensis receives via -DPRODUCT_EXECUTABLE=...
+# (arch-suffixed), see build/windows/Taskfile.yml create:nsis:installer.
+!define INFO_PROJECTNAME    "wireguideplus"
 ####
 ## !define INFO_PROJECTNAME    "my-project" # Default "wireguide"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
+## !define INFO_PRODUCTVERSION "1.1.0"     # Default "0.1.0"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ####
@@ -56,6 +62,8 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 ManifestDPIAware true
 
 !include "MUI.nsh"
+!include "nsDialogs.nsh"
+!include "LogicLib.nsh"
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -66,6 +74,7 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
 # !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
 !insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
+Page custom StartMenuPage StartMenuPageLeave # 快捷方式选项页（默认创建开始菜单，可取消）
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
@@ -81,11 +90,50 @@ Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 # Single folder under Program Files — the wails default "<company>\<product>" nests
 # "imonior\WireGuide Plus" which is ugly when company is just a github handle.
+# The 32-bit build installs under $PROGRAMFILES (Program Files / Program Files (x86));
+# 64-bit builds go to $PROGRAMFILES64.
+!ifdef SUPPORTS_X86
+InstallDir "$PROGRAMFILES\${INFO_PRODUCTNAME}"
+!else
 InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}"
+!endif
 ShowInstDetails show # This will always show the installation details.
 
+Var CreateStartMenu # "1" = create Start Menu shortcuts (default), "0" = skip
+Var StartMenuCheck  # nsDialogs checkbox handle on the shortcut options page
+
+# Shortcut options page shown after the directory selection page. The Start
+# Menu shortcut (with uninstall entry) is created by default but can be
+# deselected; the desktop shortcut is always created and offers no choice.
+Function StartMenuPage
+    !insertmacro MUI_HEADER_TEXT "快捷方式选项" "选择要创建的快捷方式"
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+        Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 36u "将在开始菜单创建 WireGuide Plus 快捷方式（含“卸载 WireGuide Plus”入口）。桌面快捷方式始终创建，无需选择。"
+    Pop $0
+    ${NSD_CreateCheckBox} 0 44u 100% 24u "创建开始菜单快捷方式（含卸载入口）"
+    Pop $StartMenuCheck
+    ${NSD_SetState} $StartMenuCheck ${BST_CHECKED}
+
+    nsDialogs::Show
+FunctionEnd
+
+Function StartMenuPageLeave
+    ${NSD_GetState} $StartMenuCheck $0
+    ${If} $0 == ${BST_CHECKED}
+        StrCpy $CreateStartMenu "1"
+    ${Else}
+        StrCpy $CreateStartMenu "0"
+    ${EndIf}
+FunctionEnd
+
 Function .onInit
-   !insertmacro wails.checkArchitecture
+    StrCpy $CreateStartMenu "1" # silent installs skip the page — keep the default
+    !insertmacro wails.checkArchitecture
 FunctionEnd
 
 Section
@@ -93,9 +141,9 @@ Section
 
     # The GUI tray app and the elevated helper are the same exe, and Windows
     # locks running images — without this, an in-place upgrade dies with
-    # "Error opening file for writing: wireguide.exe". The installer runs
-    # elevated, so taskkill reaches the SYSTEM-level helper too. Exit code is
-    # ignored: 128 just means nothing was running.
+    # "Error opening file for writing: ${PRODUCT_EXECUTABLE}". The installer
+    # runs elevated, so taskkill reaches the SYSTEM-level helper too. Exit code
+    # is ignored: 128 just means nothing was running.
     nsExec::ExecToLog `taskkill /F /IM "${PRODUCT_EXECUTABLE}"`
     Pop $0
     Sleep 500
@@ -106,12 +154,28 @@ Section
 
     !insertmacro wails.files
 
-    # wireguard-go loads wintun.dll dynamically from the EXE directory at first
-    # TUN creation. Bundled here by `task vendor:wintun` during build.
-    File "..\..\..\bin\wintun.dll"
+    # wireguard-go loads the architecture-specific wintun DLL (wintun-amd64.dll /
+    # wintun-x86.dll / wintun-arm64.dll) from the EXE directory at first TUN
+    # creation. Bundled here by `task vendor:wintun` during build; the filename
+    # is picked from the arch flag makensis received for this installer.
+    !ifdef ARG_WAILS_AMD64_BINARY
+        File "..\..\..\bin\wintun-amd64.dll"
+    !else ifdef ARG_WAILS_ARM64_BINARY
+        File "..\..\..\bin\wintun-arm64.dll"
+    !else
+        File "..\..\..\bin\wintun-x86.dll"
+    !endif
 
-    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    # Desktop shortcut: always created — the user cannot opt out.
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+
+    # Start Menu shortcuts (app + uninstall entry): created by default, can be
+    # deselected on the shortcut options page. The uninstall entry reuses the
+    # app icon (4th CreateShortCut arg) so its tray/icon matches the app.
+    ${If} $CreateStartMenu == "1"
+        CreateShortCut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+        CreateShortCut "$SMPROGRAMS\卸载 ${INFO_PRODUCTNAME}.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${EndIf}
 
     # Put the install dir on the system PATH so `wireguide ctl ...` is
     # callable from any terminal (the same binary is the GUI and the CLI).
@@ -144,7 +208,7 @@ Section "uninstall"
     !insertmacro wails.setShellContext
 
     # Same as install: both the tray app and the helper hold the exe image
-    # open, so RMDir /r would silently leave wireguide.exe behind.
+    # open, so RMDir /r would silently leave ${PRODUCT_EXECUTABLE} behind.
     nsExec::ExecToLog `taskkill /F /IM "${PRODUCT_EXECUTABLE}"`
     Pop $0
     Sleep 500
@@ -159,6 +223,7 @@ Section "uninstall"
     RMDir /r $INSTDIR
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\卸载 ${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
 
     !insertmacro wails.unassociateFiles

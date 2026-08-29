@@ -10,9 +10,9 @@ func TestValidateArgsSocketSID(t *testing.T) {
 	// pass validateSpawnPath's absolute-path check on every OS — Unix
 	// fixtures are not absolute under Windows filepath rules. The Windows
 	// SocketPath is the production pipe address, which IsAbs accepts.
-	base := Args{SocketPath: "/var/run/wireguide/wireguide.sock", DataDir: "/var/lib/wireguide"}
+	base := Args{SocketPath: "/var/run/wireguideplus/wireguideplus.sock", DataDir: "/var/lib/wireguideplus"}
 	if runtime.GOOS == "windows" {
-		base = Args{SocketPath: `\\.\pipe\wireguide`, DataDir: `C:\ProgramData\wireguide`}
+		base = Args{SocketPath: `\\.\pipe\wireguideplus`, DataDir: `C:\ProgramData\wireguideplus`}
 	}
 
 	valid := base

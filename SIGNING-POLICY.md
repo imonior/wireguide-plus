@@ -5,12 +5,37 @@ This document describes how Windows binaries published by the
 and what the integrity guarantees are. Required by SignPath Foundation
 for projects using their free OSS code-signing service.
 
+## Why code signing matters
+
+Code signing provides three guarantees that a plain SHA-256 checksum
+cannot:
+
+1. **Integrity.** The Authenticode signature covers every byte of the
+   installer. Any corruption or malicious modification — in transit, on
+   a mirror, or on the user's disk — invalidates the signature and the
+   binary is rejected by Windows.
+2. **Authenticity / origin.** The certificate chain ties each binary to
+   the SignPath Foundation certificate, which only signs artifacts
+   produced by this project's own CI pipeline. Users can verify *who*
+   published a file, not just that its hash matches a number on a web
+   page.
+3. **User trust and SmartScreen.** Binaries signed by a widely trusted
+   certificate avoid the most alarming SmartScreen and UAC warnings, so
+   users are less likely to be intimidated into discarding a legitimate
+   installer — and less likely to accept an unsigned lookalike.
+
+SHA-256 sums still ship with every release (`SHA256SUMS`, see
+`docs/release.md`) as a defense-in-depth layer, but the signature is
+the primary, user-verifiable trust anchor for the Windows installers.
+
 ## Scope
 
-The signing policy applies to the Windows NSIS installer artifacts:
+The signing policy applies to the Windows NSIS installer artifacts (every release
+ships all three architectures):
 
-- `WireGuide-windows-amd64.exe`
-- `WireGuide-windows-arm64.exe`
+- `wireguideplus-x86-installer.exe` (32-bit installer)
+- `wireguideplus-amd64-installer.exe` (64-bit installer)
+- `wireguideplus-arm64-installer.exe` (ARM64 installer)
 
 macOS and Linux artifacts are not in scope (macOS uses ad-hoc signing
 via `codesign`; Linux ships unsigned).
@@ -113,7 +138,7 @@ branch. To reproduce locally:
 
 ```sh
 git checkout v<version>
-wails3 task windows:package ARCH=amd64   # or arm64
+wails3 task windows:package ARCH=amd64   # or ARCH=386 for the 32-bit build
 ```
 
 The resulting `.exe` SHA-256 will differ from the published binary

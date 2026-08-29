@@ -170,7 +170,16 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 
 			c := clients.Get()
 			if c == nil {
-				continue // client may be temporarily nil during swap; keep ticking
+				// No live client — the helper never came up (elevation was
+				// cancelled) or it was lost. Probe the socket in case a helper
+				// is already listening (e.g. the user approved the UAC prompt
+				// late, or started one manually). Never auto-spawn from here:
+				// that would pop an unprompted elevation dialog.
+				if probeHelper(clients, bridge, dataDir) {
+					slog.Info("helper connected via background probe")
+					app.Event.Emit("helper", HelperEvent{Alive: true})
+				}
+				continue
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -230,6 +239,31 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 			}
 		}
 	}()
+}
+
+// probeHelper checks whether a helper is already listening on the expected
+// socket and, if so, swaps it into the holder and resubscribes the event
+// bridge. It never spawns a new helper (no elevation prompt). Returns true
+// when a usable client is now in place.
+func probeHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := ipc.NewClient(ipc.DefaultSocketPath())
+	if err != nil {
+		return false
+	}
+	var resp ipc.PingResponse
+	if err := client.CallWithContext(ctx, ipc.MethodPing, nil, &resp); err != nil {
+		client.Close()
+		return false
+	}
+	clients.Set(client)
+	bridge.Resubscribe()
+	// Push the current SSID so macOS Wi-Fi automation resumes immediately
+	// after a late helper arrival.
+	ResendSSIDToHelper(clients)
+	return true
 }
 
 // recoverHelper attempts to re-establish a working helper connection. Returns

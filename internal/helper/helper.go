@@ -192,6 +192,13 @@ type Helper struct {
 	userTunnelStore *storage.TunnelStore
 	userAppSupport  string
 
+	// startedAt is when the helper process started. It bounds the
+	// post-connect rule re-check to the startup window (see
+	// scheduleRuleCheck in wifi_rules.go): a tunnel that a GUI restore or
+	// crash-recovery path brings up shortly after launch is corrected by
+	// the rules within seconds, instead of staying up until the 30s poll.
+	startedAt time.Time
+
 	done        chan struct{}
 	cleanupOnce sync.Once
 }
@@ -237,6 +244,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir string) error {
 		autoConnectedBy: make(map[string]string),
 		logLevel:        new(slog.LevelVar), // defaults to Info
 		done:            make(chan struct{}),
+		startedAt:       time.Now(),
 	}
 
 	// Derive the user's Application Support dir from the uid the

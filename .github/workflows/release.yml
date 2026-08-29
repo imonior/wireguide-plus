@@ -1,10 +1,14 @@
 name: Release
 
 # Fires on annotated/lightweight tags shaped like vX.Y.Z (or vX.Y.Z-foo).
-# The build jobs (macOS arm64, Windows amd64/arm64, Linux amd64/arm64)
+# The build jobs (macOS arm64, Windows x86+amd64, Linux amd64+arm64)
 # run in parallel; the final `release` job collects every artifact,
 # generates SHA256SUMS, and attaches them all to the GitHub Release the
 # tag triggers.
+#
+# Publish flow: just push a version tag locally — the pipeline below does
+# the rest (build → sign/verify → release notes → GitHub Release → cask).
+#   git tag v1.1.0 && git push origin v1.1.0
 on:
   push:
     tags:
@@ -68,12 +72,19 @@ jobs:
           retention-days: 7
 
   build-windows:
-    name: Windows ${{ matrix.arch }}
+    name: Windows ${{ matrix.asset }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
-    runs-on: windows-latest  # x86_64 host; cross-compiles arm64 fine (no cgo)
+        # Every Windows release ships a 32-bit (x86), a 64-bit (amd64)
+        # and an ARM64 installer. `arch` is the GOARCH handed to
+        # `task windows:package`; `asset` is the suffix project.nsi uses
+        # for the installer filename (wireguideplus-<asset>-installer.exe).
+        include:
+          - { arch: "386", asset: x86 }
+          - { arch: amd64, asset: amd64 }
+          - { arch: arm64, asset: arm64 }
+    runs-on: windows-latest  # x86_64 host; cross-compiles 386 fine (no cgo)
     permissions:
       # signpath/github-action-submit-signing-request reads the unsigned
       # artifact from the GitHub Actions artifact store via the standard
@@ -94,11 +105,15 @@ jobs:
         with:
           node-version: '20.19.2'
 
-      - name: Install wails3 + task
+      - name: Install wails3 + task + goversioninfo
         shell: pwsh
         run: |
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
           go install github.com/go-task/task/v3/cmd/task@v3.45.4
+          # generate:syso invokes `goversioninfo` directly; without it the
+          # build fails with "executable file not found". Pinned version,
+          # not @latest, for reproducible CI builds.
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
           # Append, don't overwrite — PATH already has system entries.
           "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
@@ -118,27 +133,45 @@ jobs:
 
       - name: Build .exe + NSIS installer
         # Our Windows binary is pure-syscall (no cgo) so CGO_ENABLED=0
-        # is correct. vendor:wintun pulls the pinned wintun.dll into bin/.
+        # is correct. vendor:wintun pulls the pinned arch-specific wintun
+        # DLL (wintun-x86.dll / wintun-amd64.dll) into bin/.
         run: wails3 task windows:package ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
-      - name: Rename installer to canonical asset name
+      - name: Verify NSIS installer exists
         shell: bash
-        # project.nsi's OutFile writes to bin/wireguide-${ARCH}-installer.exe
-        # (ARCH set by wails_tools.nsh to "amd64" or "arm64"). v0.3.0 used
-        # `find ... | head -1` here and picked up build/windows/nsis/
-        # MicrosoftEdgeWebview2Setup.exe — the embedded WebView2 bootstrapper —
-        # instead of the real installer, shipping a 1.7MB "installer" that
-        # just installed WebView2 and exited. Path is deterministic; address
-        # it directly.
+        # project.nsi's OutFile writes directly to
+        # bin/wireguideplus-${ARCH}-installer.exe (ARCH set by wails_tools.nsh
+        # to "x86" / "amd64" / "arm64"). The filename already is the canonical
+        # asset name — no rename needed. v0.3.0 used `find ... | head -1`
+        # here and picked up build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+        # — the embedded WebView2 bootstrapper — instead of the real
+        # installer, shipping a 1.7MB "installer" that just installed WebView2
+        # and exited. Path is deterministic; assert it directly.
         run: |
           set -e
-          src="bin/wireguide-${{ matrix.arch }}-installer.exe"
+          src="bin/wireguideplus-${{ matrix.asset }}-installer.exe"
           if [ ! -f "$src" ]; then
             echo "ERROR: NSIS installer not found at $src"
             find build/windows bin -type f
             exit 1
           fi
-          mv "$src" "bin/WireGuide-windows-${{ matrix.arch }}.exe"
+
+      - name: Package portable build (exe + wintun-<arch>.dll)
+        shell: pwsh
+        # Portable builds are NOT standalone: the exe loads the
+        # architecture-specific driver DLL from its own folder
+        # (wintun-amd64.dll / wintun-x86.dll / wintun-arm64.dll — see
+        # third_party/wintun/wintunDLLName), so we ship a ready-made zip per
+        # architecture that already contains the matching DLL. vendor:wintun
+        # put the arch-correct one in bin/ already; the built exe is named
+        # wireguideplus-<arch>.exe, so the zip and its contents both carry
+        # the platform. A bare dll is published too for users who only miss
+        # the driver — it must keep its arch-qualified name next to the exe
+        # to be picked up. The exe inside the zip is the unsigned build
+        # output (SignPath only covers the installer).
+        run: |
+          Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll" -DestinationPath "bin\wireguideplus-${{ matrix.asset }}-portable.zip" -Force
+          Get-ChildItem bin | Where-Object { $_.Name -like 'wireguideplus-*' -or $_.Name -like 'wintun-*' } | Select-Object Name, Length
 
       # --- SignPath Foundation code signing ---------------------------
       # Gated by SIGNPATH_API_TOKEN presence. While SignPath onboarding
@@ -168,11 +201,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # transient name — the final published artifact stays
-          # 'windows-${{ matrix.arch }}' and contains the signed exe;
+          # 'windows-${{ matrix.asset }}' and contains the signed exe;
           # the release job's download-artifact step excludes this one
           # via pattern '!unsigned-*'.
-          name: unsigned-windows-${{ matrix.arch }}
-          path: bin/WireGuide-windows-${{ matrix.arch }}.exe
+          name: unsigned-windows-${{ matrix.asset }}
+          path: bin/wireguideplus-${{ matrix.asset }}-installer.exe
           if-no-files-found: error
           retention-days: 1
 
@@ -204,18 +237,21 @@ jobs:
           set -e
           signed=$(find bin/signed -type f -name "*.exe" | head -1)
           test -n "$signed" || { echo "no signed .exe found"; ls -laR bin/signed; exit 1; }
-          mv "$signed" "bin/WireGuide-windows-${{ matrix.arch }}.exe"
+          mv "$signed" "bin/wireguideplus-${{ matrix.asset }}-installer.exe"
           # Sanity check: Get-AuthenticodeSignature reports Valid on
           # a properly signed binary. Status NotSigned / HashMismatch
           # would mean the replacement didn't happen.
-          powershell -Command "(Get-AuthenticodeSignature 'bin/WireGuide-windows-${{ matrix.arch }}.exe').Status" | tee /tmp/sigstatus
+          powershell -Command "(Get-AuthenticodeSignature 'bin/wireguideplus-${{ matrix.asset }}-installer.exe').Status" | tee /tmp/sigstatus
           grep -q '^Valid' /tmp/sigstatus
       # --- end signing -------------------------------------------------
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ matrix.arch }}
-          path: bin/WireGuide-windows-${{ matrix.arch }}.exe
+          name: windows-${{ matrix.asset }}
+          path: |
+            bin/wireguideplus-${{ matrix.asset }}-installer.exe
+            bin/wireguideplus-${{ matrix.asset }}-portable.zip
+            bin/wintun-${{ matrix.asset }}.dll
           if-no-files-found: error
           retention-days: 7
 
@@ -302,7 +338,7 @@ jobs:
           # Exclude the transient unsigned-windows-* artifacts that the
           # build-windows job uploads only to feed SignPath. Without
           # this exclusion, the unsigned and signed .exes share the
-          # same filename (WireGuide-windows-<arch>.exe) and one
+          # same filename (wireguideplus-<arch>-installer.exe) and one
           # silently overwrites the other under merge-multiple.
           pattern: '!unsigned-*'
 
@@ -423,7 +459,7 @@ jobs:
 
             url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuide-darwin-arm64.zip"
             name "WireGuide Plus"
-            desc "Cross-platform WireGuard VPN desktop client"
+            desc "Multi-tunnel automated WireGuard VPN client"
             homepage "https://github.com/imonior/wireguide-plus"
 
             depends_on macos: :catalina

@@ -3,7 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -142,6 +145,11 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		return err
 	}
 
+	// Proxy setting applies to update checks immediately — the next
+	// scheduled check (and any manual "Check now") uses the new mode/URL
+	// without a restart.
+	update.SetProxy(settings.ProxyMode, settings.ProxyURL)
+
 	if prev == nil || prev.AutoStart != settings.AutoStart {
 		if settings.AutoStart {
 			exe, err := os.Executable()
@@ -177,6 +185,66 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 	}
 
 	return nil
+}
+
+// TestProxyResult is the outcome of a proxy connectivity test.
+type TestProxyResult struct {
+	OK        bool   `json:"ok"`
+	LatencyMs int    `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// TestProxy performs a round-trip request to the GitHub Releases API using
+// the given proxy configuration and reports success plus latency. The
+// Settings → Proxy "test connection" button calls this so the user can
+// verify a proxy works before saving it.
+//
+// mode is one of "direct", "mirror" or "manual":
+//   - "direct": rawURL ignored; a plain Transport (explicitly ignoring any
+//     environment HTTP_PROXY/HTTPS_PROXY, which is what "direct" means in
+//     the UI).
+//   - "mirror": rawURL is a GitHub accelerator mirror prefix (e.g.
+//     "https://ghfast.top"); the API endpoint is fetched directly through
+//     "<mirror>/<official endpoint>".
+//   - "manual": rawURL is an http/https/socks5 proxy URL used for a
+//     CONNECT-style request to the official API endpoint.
+func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
+	start := time.Now()
+	client := &http.Client{Timeout: 8 * time.Second}
+	target := update.APIEndpoint()
+	switch mode {
+	case "mirror":
+		if !update.ValidMirrorPrefix(rawURL) {
+			return TestProxyResult{OK: false, Error: "invalid mirror prefix (need e.g. https://ghfast.top)"}
+		}
+		client.Transport = &http.Transport{}
+		target = update.MirroredEndpoint(rawURL)
+	case "manual":
+		u, err := url.Parse(rawURL)
+		if err != nil || !update.ValidProxyURL(u) {
+			return TestProxyResult{OK: false, Error: "invalid proxy URL (need e.g. http://127.0.0.1:7890)"}
+		}
+		client.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
+	default: // "direct"
+		client.Transport = &http.Transport{}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return TestProxyResult{OK: false, Error: err.Error()}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return TestProxyResult{OK: false, Error: err.Error()}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) // drain
+	if resp.StatusCode >= 400 {
+		return TestProxyResult{OK: false, Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+	return TestProxyResult{OK: true, LatencyMs: int(time.Since(start).Milliseconds())}
 }
 
 // SaveAutomationRules atomically replaces one tunnel's Automation rules.

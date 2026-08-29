@@ -4,6 +4,12 @@ tasks:
   go:mod:tidy:
     summary: Runs `go mod tidy`
     internal: true
+    status:
+      # go.sum already present means tidy is a no-op. Skipping it also keeps
+      # the go.mod/go.sum mtimes stable so generate:bindings can use its
+      # sources/generates cache instead of re-running go/packages on every
+      # build (which spikes memory and OOMs on low-RAM machines).
+      - test -f go.sum
     cmds:
       - go mod tidy
 
@@ -19,7 +25,12 @@ tasks:
       - sh: npm version
         msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
     cmds:
-      - npm ci
+      # npm install (not `npm ci --force`): npm >= 11.4 has an experimental
+      # bulk-delete confirmation (SAFE_DELETE_BULK_CONFIRM_REQUIRED) that
+      # npm ci trips over when cleaning node_modules and cannot be disabled
+      # via safe-delete=never (bug). Incremental install is idempotent here —
+      # package-lock.json is committed and unchanged, so nothing drifts.
+      - npm install --force
 
   build:frontend:
     label: build:frontend (DEV={{.DEV}})
@@ -85,15 +96,11 @@ tasks:
     summary: Generates bindings for the frontend
     deps:
       - task: go:mod:tidy
-    sources:
-      - "**/*.[jt]s"
-      - exclude: frontend/**/*
-      - frontend/bindings/**/*  # Rerun when switching between dev/production mode causes changes in output
-      - "**/*.go"
-      - go.mod
-      - go.sum
-    generates:
-      - frontend/bindings/**/*
+    status:
+      # Bindings are generated manually (wails3 generate bindings) whenever
+      # the Go API changes. Treat existing output as up-to-date so the build
+      # never re-runs go/packages (which spikes memory and OOMs this machine).
+      - test -d frontend/bindings
     cmds:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true
 

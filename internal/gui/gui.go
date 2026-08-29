@@ -78,6 +78,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	if err := paths.EnsureDirs(); err != nil {
 		return fmt.Errorf("create dirs: %w", err)
 	}
+	setGUILogFile(paths.LogsDir)
 	tunnelStore := storage.NewTunnelStore(paths.TunnelsDir)
 	settingsStore := storage.NewSettingsStore(paths.ConfigDir)
 	historyStore := storage.NewHistoryStore(paths.ConfigDir)
@@ -87,14 +88,26 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	historyStore.CloseOpenSessions("app_quit")
 
 	// Apply persisted log level to the GUI side immediately (helper-side
-	// gets it after ensureHelper + the SaveSettings path).
-	if s, err := settingsStore.Load(); err == nil && s != nil && s.LogLevel != "" {
-		setGUILogLevel(s.LogLevel)
+	// gets it after ensureHelper + the SaveSettings path), and seed the
+	// update checker's proxy setting so the first scheduled check already
+	// honors the user's saved proxy without waiting for a settings save.
+	if s, err := settingsStore.Load(); err == nil && s != nil {
+		if s.LogLevel != "" {
+			setGUILogLevel(s.LogLevel)
+		}
+		update.SetProxy(s.ProxyMode, s.ProxyURL)
 	}
 
 	// 2. Helper process (spawn if needed).
 	// If the user cancels the admin prompt, retry up to 3 times with a
-	// user-visible dialog explaining why the helper is required.
+	// user-visible dialog explaining why the helper is required. If the
+	// user still cancels (or elevation never succeeds), keep running with
+	// a nil client instead of exiting: the window and tray stay up, the
+	// health monitor probes for a helper on every tick, and tunnel
+	// operations surface an error until the helper comes back. Previously
+	// this returned an error and the whole GUI process exited — which
+	// read to the user as "the main window auto-closes and the tray icon
+	// disappears ~30s after launch" (one 30s helper probe + two retries).
 	var initialClient *ipc.Client
 	for attempt := 0; attempt < 3; attempt++ {
 		helperCtx, helperCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -112,11 +125,12 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 			// helper, so a UAC prompt the user answered while this dialog
 			// was up connects instantly instead of re-prompting.
 			if !askHelperRetry() {
-				return fmt.Errorf("helper setup cancelled by user")
+				slog.Warn("user cancelled helper setup; continuing without helper")
+				break
 			}
 			continue
 		}
-		return fmt.Errorf("helper connection failed after 3 attempts: %w", err)
+		slog.Error("helper connection failed after 3 attempts; continuing with limited functionality")
 	}
 	clients := ipc.NewClientHolder(initialClient)
 
@@ -171,7 +185,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// Min size pins the smallest pretty-looking shape (≈1.44 ratio) while
 	// still leaving the detail pane wide enough that nothing wraps weirdly.
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "WireGuide",
+		Title:          "WireGuide Plus",
 		Width:          1200,
 		Height:         740,
 		MinWidth:       920,
@@ -206,12 +220,29 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	}
 	win.RegisterHook(closingEvent, func(event *application.WindowEvent) {
 		event.Cancel()
+		// Close = go to background on every platform: hide the window,
+		// keep the tray icon alive, and let the tray's left-click (or the
+		// popup's Open Window) bring the main window back. Minimising
+		// instead (the old Windows-only branch) made Close behave exactly
+		// like the minimise button — the window stayed on the taskbar —
+		// which users reported as surprising for a tray-first app.
 		win.Hide()
-		hideDock()
+		hideDock() // no-op outside macOS
 	})
 
 	// Wire the window reference so showDock() can retry showing it.
 	dockWindow = win
+
+	// "Start minimized": launch straight into the tray when the setting is
+	// on. The tray menu's Show Window restores the main window, so the app
+	// stays fully reachable even when the user never sees the window.
+	if s, err := settingsStore.Load(); err == nil && s != nil && s.StartMinimized {
+		// "Start minimized" hides to the tray on every platform — the same
+		// model as close-to-tray. The tray's left-click / Show Window
+		// restores the main window, so it stays fully reachable.
+		win.Hide()
+		hideDock() // no-op outside macOS
+	}
 
 	// Native file drop forwarded to frontend
 	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
@@ -298,6 +329,10 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 
 	trayMgr := newTrayManager(app, win, tray, tunnelService, doShutdown)
 	trayMgr.initialBuild()
+	// Report the connection situation 10s after launch — enough time for
+	// the user to approve any permission prompts and for the automation
+	// rules to finish auto-connecting.
+	trayMgr.scheduleStatusNotification()
 
 	if runtime.GOOS == "darwin" {
 		app.Event.OnApplicationEvent(events.Mac.ApplicationWillTerminate, func(_ *application.ApplicationEvent) {

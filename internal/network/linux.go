@@ -35,7 +35,7 @@ type LinuxManager struct {
 	// re-apply) doesn't overwrite the saved original with WireGuide's own
 	// nameservers and leave RestoreDNS unable to recover the real DNS.
 	origDNSCaptured bool
-	// dataDir is the persistent state directory (e.g. /var/lib/wireguide).
+	// dataDir is the persistent state directory (e.g. /var/lib/wireguideplus).
 	// If empty, DNS state persistence is skipped (graceful degradation).
 	dataDir string
 	// fwmark and table track the values used for full-tunnel routing so

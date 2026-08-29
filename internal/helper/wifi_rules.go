@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/storage"
@@ -78,6 +79,38 @@ func (h *Helper) currentNetworkContext() wifi.NetworkContext {
 // triggers share it.
 func (h *Helper) handleSSIDChange(oldSSID, newSSID string) {
 	h.reevaluateAutomation("ssid-change")
+}
+
+const (
+	// startupRuleCheckWindow is how long after helper start a manual
+	// connect gets an immediate rule re-check.
+	startupRuleCheckWindow = 60 * time.Second
+	// postConnectRuleCheckDelay is how long after a connect we wait before
+	// re-evaluating the rules.
+	postConnectRuleCheckDelay = 3 * time.Second
+)
+
+// scheduleRuleCheck re-runs the automation rules shortly after a manual
+// (RPC) connect made during the helper's startup window. The startup
+// evaluation already decides each tunnel's intended state from the rules;
+// a connect that arrives afterwards (e.g. a GUI restore of the last
+// session) would otherwise stay up until the 30s poll notices and tears
+// it down — looking like the app "connects first, then obeys the rules".
+// A quick post-connect eval makes the rule decision authoritative within
+// a few seconds. Outside the startup window a deliberate manual connect
+// is left alone and the regular poll remains the fallback.
+func (h *Helper) scheduleRuleCheck() {
+	if time.Since(h.startedAt) > startupRuleCheckWindow {
+		return
+	}
+	go func() {
+		select {
+		case <-h.done:
+			return
+		case <-time.After(postConnectRuleCheckDelay):
+		}
+		h.reevaluateAutomation("post-connect")
+	}()
 }
 
 // reevaluateAutomation drives every tunnel that has Automation rules

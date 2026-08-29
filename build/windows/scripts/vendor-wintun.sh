@@ -45,5 +45,6 @@ if [ ! -f "$SRC" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
-cp "$SRC" "$OUT_DIR/wintun.dll"
-echo "Bundled $DLL_ARCH wintun.dll to $OUT_DIR"
+OUT_NAME="wintun-$DLL_ARCH.dll"
+cp "$SRC" "$OUT_DIR/$OUT_NAME"
+echo "Bundled $DLL_ARCH driver as $OUT_NAME to $OUT_DIR"

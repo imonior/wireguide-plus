@@ -109,7 +109,7 @@ export class Settings {
     constructor($$source = {}) {
         if (!("language" in $$source)) {
             /**
-             * "auto", "en", "ko", "ja"
+             * "auto", "en", "ko", "ja", "zh"
              * @member
              * @type {string}
              */
@@ -246,6 +246,42 @@ export class Settings {
              */
             this["automation"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * ManualOffTunnels lists tunnels the user has manually switched off
+             * from the UI or tray menu. While a tunnel is listed, the automation
+             * engine refuses to auto-connect it even when rules match — the user's
+             * manual off wins until they manually reconnect that tunnel once or
+             * the app restarts (the GUI clears the list on startup).
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["manual_off_tunnels"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ProxyMode controls outbound proxying for update checks: "direct"
+             * (default, no proxy), "mirror" (rewrite the API URL through a GitHub
+             * accelerator prefix stored in ProxyURL) or "manual" (use ProxyURL as
+             * an HTTP/SOCKS proxy). Intended for users who can't reach GitHub
+             * directly (e.g. mainland China) — they can route update checks through
+             * an accelerator mirror or a local HTTP/SOCKS proxy.
+             * @member
+             * @type {string | undefined}
+             */
+            this["proxy_mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ProxyURL is the proxy address used when ProxyMode is "manual" (e.g.
+             * "http://127.0.0.1:7890" or "socks5://127.0.0.1:1080"), or the
+             * accelerator prefix used when ProxyMode is "mirror" (e.g.
+             * "https://ghfast.top").
+             * @member
+             * @type {string | undefined}
+             */
+            this["proxy_url"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -258,12 +294,16 @@ export class Settings {
     static createFrom($$source = {}) {
         const $$createField14_0 = $$createType0;
         const $$createField15_0 = $$createType2;
+        const $$createField16_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
             $$parsedSource["wifi_rules"] = $$createField14_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
             $$parsedSource["automation"] = $$createField15_0($$parsedSource["automation"]);
+        }
+        if ("manual_off_tunnels" in $$parsedSource) {
+            $$parsedSource["manual_off_tunnels"] = $$createField16_0($$parsedSource["manual_off_tunnels"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
@@ -273,3 +313,4 @@ export class Settings {
 const $$createType0 = wifi$0.Rules.createFrom;
 const $$createType1 = wifi$0.Automation.createFrom;
 const $$createType2 = $Create.Nullable($$createType1);
+const $$createType3 = $Create.Array($Create.Any);

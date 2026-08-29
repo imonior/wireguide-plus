@@ -17,8 +17,8 @@
         PackageDisplayName="WireGuide Plus"
         PublisherName="CN=imonior"
         PublisherDisplayName="imonior"
-        Version="1.0.0.0"
-        PackageDescription="WireGuide Plus - cross-platform WireGuard VPN desktop client">
+        Version="1.1.0.0"
+        PackageDescription="WireGuide Plus - multi-tunnel automated WireGuard VPN client">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
@@ -26,7 +26,7 @@
         <Applications>
             <Application
                 Id="com.imonior.wireguide-plus"
-                Description="WireGuide Plus - cross-platform WireGuard VPN desktop client"
+                Description="WireGuide Plus - multi-tunnel automated WireGuard VPN client"
                 DisplayName="WireGuide Plus"
                 ExecutableName="wireguide"
                 EntryPoint="Windows.FullTrustApplication">
@@ -43,7 +43,7 @@
             <Framework>false</Framework>
             <DisplayName>WireGuide Plus</DisplayName>
             <PublisherDisplayName>imonior</PublisherDisplayName>
-            <Description>WireGuide Plus - cross-platform WireGuard VPN desktop client</Description>
+            <Description>WireGuide Plus - multi-tunnel automated WireGuard VPN client</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>

@@ -265,6 +265,51 @@ export class RouteEntry {
 }
 
 /**
+ * TestProxyResult is the outcome of a proxy connectivity test.
+ */
+export class TestProxyResult {
+    /**
+     * Creates a new TestProxyResult instance.
+     * @param {Partial<TestProxyResult>} [$$source = {}] - The source object to create the TestProxyResult.
+     */
+    constructor($$source = {}) {
+        if (!("ok" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["ok"] = false;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TestProxyResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TestProxyResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TestProxyResult(/** @type {Partial<TestProxyResult>} */($$parsedSource));
+    }
+}
+
+/**
  * TunnelInfo is the summary shown in the tunnel list.
  */
 export class TunnelInfo {

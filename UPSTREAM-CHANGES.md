@@ -11,6 +11,43 @@ notes live in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 1.1.0 (2026-08-28) — WireGuide Plus
+
+迭代版本：托盘状态图标可辨识化、代理三模式语义明确并新增连通性测试、无效代理 URL 校验
+（不再拖垮更新检查）、启动自动化规则优先（避免先连后断）。
+
+### ✨ 新功能（Features）
+
+- **托盘状态图标可辨识化** — Windows 托盘菜单连接状态改用 `●` 实心 / `○` 空心字形区分
+  （Windows 托盘弹窗由 GDI 绘制，无法渲染彩色 emoji）；macOS 继续用彩色 emoji。
+- **代理三模式语义明确 + 连通性测试** — 直连（忽略系统/环境代理）/ GitHub 镜像
+  （`mirror` 加速前缀，如 `https://ghfast.top`）/ 手动代理（`manual`，http/https/socks5 URL）
+  三者清晰区分；设置页新增"测试连接"按钮，保存前验证代理可达性。
+- **代理设置即时生效** — 保存后下一次更新检查无需重启即生效；GUI 启动直接套用已保存代理。
+
+### 🐛 修复（Bug Fixes）
+
+- 无效手动代理 URL（如 `proxy_url = "https://"`）此前导致更新检查持续报
+  `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify`；现于启动和每次使用时
+  校验 URL，无效值记录 WARN 并回退直连。
+- 启动"先连接、后按规则断开"：启动规则评估提前到 helper 启动后立即执行，并新增
+  `scheduleRuleCheck`——启动 60s 窗口内任何手动连接 3 秒后按规则纠正，日志记录触发来源。
+- 无效 mirror 前缀同样校验 scheme/host，非法值回退官方 API 端点。
+
+### 🛠 内部（Internal）
+
+- 版本号 1.1.0（`internal/update/checker.go` + 全部构建配置同步）。
+- Windows 版本资源标准化：`wails3 generate syso` 生成的版本资源语言 `0x0000` 且 ProductVersion 为零导致属性页空白，
+  改用 `goversioninfo`（`build/windows/versioninfo.json`）生成标准 `0409/04B0` 资源。
+- 新增 Windows x86（32 位）构建：`task windows:build ARCH=386`，NSIS 脚本支持 x86 架构与 `Program Files` 安装目录。
+- 移除 iOS 构建任务与配置，明确不支持 Android/iOS（无法多通道并发、无法按 SSID 自动连接）。
+- 新增「最小化启动」设置与连接状况托盘通知气泡：启动后 / 连接状态变化时延迟 10 秒显示，停留时长可设置（Windows，`internal/gui/notify_windows.go`）。
+- Windows 物理网卡适配器名匹配逻辑调整。
+- 窗口标题统一为 **WireGuide Plus**。
+- 更新检查调度器内去重，同一轮只记录一次失败。
+
+---
+
 ## 1.0.0 (2026-08-28) — WireGuide Plus
 
 里程碑版本：品牌重命名、A11y 无障碍语义重构、Windows 网络出口选路逻辑调整、Wails3

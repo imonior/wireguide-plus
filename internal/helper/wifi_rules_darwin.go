@@ -22,5 +22,5 @@ func deriveUserAppSupport(uid int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("user.LookupId %d: %w", uid, err)
 	}
-	return filepath.Join(u.HomeDir, "Library", "Application Support", "wireguide"), nil
+	return filepath.Join(u.HomeDir, "Library", "Application Support", "wireguideplus"), nil
 }

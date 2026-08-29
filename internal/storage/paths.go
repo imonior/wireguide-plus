@@ -2,13 +2,14 @@ package storage
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 )
 
-const appName = "wireguide"
+const appName = "wireguideplus"
 
 // canWriteDir tests whether the current process can create files in dir by
 // writing and immediately removing a temp file. Used by EnsureDirs to
@@ -94,15 +95,110 @@ func GetPaths() (*Paths, error) {
 		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
 
+	// Move user data left behind by pre-rename builds (the app used the
+	// directory "wireguide" before it became "wireguideplus"). Runs at most
+	// once: it only acts when the legacy directory exists AND the new one
+	// does not yet contain anything.
+	migrateFromLegacyPaths(&p)
+
 	return &p, nil
+}
+
+// legacyAppName is the config-directory name used before the rename.
+const legacyAppName = "wireguide"
+
+// migrateFromLegacyPaths copies user data (config.json, history.json,
+// tunnels/*.conf) from the legacy "wireguide" directory to the current
+// location. Logs are intentionally not migrated — they are recreated fresh
+// at the new path. Failures are logged as warnings and never fail startup:
+// the user simply starts with an empty config, which the UI handles.
+func migrateFromLegacyPaths(current *Paths) {
+	old := legacyConfigDir()
+	if old == "" || !pathExists(old) || pathExists(current.ConfigDir) {
+		return
+	}
+	for _, f := range []string{"config.json", "history.json"} {
+		src := filepath.Join(old, f)
+		if !pathExists(src) {
+			continue
+		}
+		if err := copyFile(src, filepath.Join(current.ConfigDir, f)); err != nil {
+			slog.Warn("legacy data migration skipped", "file", f, "error", err)
+			return
+		}
+	}
+	srcTunnels := filepath.Join(old, "tunnels")
+	if pathExists(srcTunnels) {
+		if entries, err := os.ReadDir(srcTunnels); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				if err := copyFile(filepath.Join(srcTunnels, e.Name()),
+					filepath.Join(current.TunnelsDir, e.Name())); err != nil {
+					slog.Warn("legacy tunnel migration skipped", "file", e.Name(), "error", err)
+					return
+				}
+			}
+		}
+	}
+	slog.Info("migrated user data from legacy directory", "from", old, "to", current.ConfigDir)
+}
+
+// legacyConfigDir returns the pre-rename config directory for this OS.
+func legacyConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", legacyAppName)
+	case "linux":
+		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+			return filepath.Join(xdg, legacyAppName)
+		}
+		return filepath.Join(home, ".config", legacyAppName)
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, legacyAppName)
+		}
+		return filepath.Join(home, "AppData", "Roaming", legacyAppName)
+	}
+	return ""
+}
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 // EnsureDirs creates all necessary directories if they don't exist.
 // ConfigDir and TunnelsDir use 0700 to prevent other users from listing
 // config filenames on multi-user systems. LogsDir and DataDir use 0700 as well.
 //
-// DataDir may require root permissions (e.g. /var/lib/wireguide on Linux,
-// /Library/Application Support/wireguide on macOS). If creation fails due
+// DataDir may require root permissions (e.g. /var/lib/wireguideplus on Linux,
+// /Library/Application Support/wireguideplus on macOS). If creation fails due
 // to insufficient privileges, the error is logged as a warning instead of
 // failing the entire startup — the helper process will create it when running
 // as root.

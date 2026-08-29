@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 	"syscall"
+	"unicode/utf8"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -69,6 +70,10 @@ var (
 	modWlanapi                      = windows.NewLazySystemDLL("wlanapi.dll")
 	procWlanOpenHandle              = modWlanapi.NewProc("WlanOpenHandle")
 	procWlanRegisterNotification    = modWlanapi.NewProc("WlanRegisterNotification")
+	procWlanEnumInterfaces          = modWlanapi.NewProc("WlanEnumInterfaces")
+	procWlanQueryInterface          = modWlanapi.NewProc("WlanQueryInterface")
+	procWlanGetProfileList          = modWlanapi.NewProc("WlanGetProfileList")
+	procWlanFreeMemory              = modWlanapi.NewProc("WlanFreeMemory")
 
 	wlanHandle uintptr
 	wlanOpenOnce sync.Once
@@ -99,4 +104,169 @@ func wlanLazyOpenHandle() error {
 		wlanHandle = handle
 	})
 	return wlanOpenErr
+}
+
+// ---------------------------------------------------------------------------
+// Native SSID reads via Wlanapi. SSIDs come back as raw bytes / UTF-16
+// instead of netsh's code-page-dependent console text, so non-ASCII SSIDs
+// survive regardless of the system's OEM code page.
+// ---------------------------------------------------------------------------
+
+// dot11Ssid mirrors the DOT11_SSID struct.
+type dot11Ssid struct {
+	ssidLen uint32
+	ssid    [32]byte
+}
+
+// wlanConnectionAttributes mirrors the WLAN_CONNECTION_ATTRIBUTES struct
+// (the leading fields we need; the trailing association attributes are
+// intentionally omitted).
+type wlanConnectionAttributes struct {
+	isState            uint32 // WLAN_INTERFACE_STATE
+	wlanConnectionMode uint32
+	profileName        [256]uint16
+	ssid               dot11Ssid
+}
+
+// wlanInterfaceInfoList mirrors WLAN_INTERFACE_INFO_LIST.
+type wlanInterfaceInfoList struct {
+	numberOfItems uint32
+	index         uint32
+	interfaceInfo [1]wlanInterfaceInfo
+}
+
+// wlanInterfaceInfo mirrors WLAN_INTERFACE_INFO.
+type wlanInterfaceInfo struct {
+	interfaceGuid        windows.GUID
+	interfaceDescription [256]uint16
+	state                uint32 // WLAN_INTERFACE_STATE
+}
+
+// wlanProfileInfoList mirrors WLAN_PROFILE_INFO_LIST.
+type wlanProfileInfoList struct {
+	numberOfItems uint32
+	index         uint32
+	profileInfo   [1]wlanProfileInfo
+}
+
+// wlanProfileInfo mirrors WLAN_PROFILE_INFO.
+type wlanProfileInfo struct {
+	profileName [256]uint16
+	flags       uint32
+}
+
+const (
+	// WLAN_INTERFACE_STATE_CONNECTED = 1
+	wlanInterfaceStateConnected = 1
+	// WLAN_INTF_OPCODE_CURRENT_CONNECTION = 7
+	wlanIntfOpcodeCurrentConnection = 7
+)
+
+// currentSSIDFromWlanapi returns the SSID of the currently connected
+// interface via WlanQueryInterface, or "" when not connected / API missing.
+func currentSSIDFromWlanapi() string {
+	if err := wlanLazyOpenHandle(); err != nil {
+		return ""
+	}
+	var listPtr uintptr
+	ret, _, _ := procWlanEnumInterfaces.Call(uintptr(wlanHandle), 0, uintptr(unsafe.Pointer(&listPtr)))
+	if ret != 0 || listPtr == 0 {
+		return ""
+	}
+	defer procWlanFreeMemory.Call(listPtr)
+
+	list := (*wlanInterfaceInfoList)(unsafe.Pointer(listPtr))
+	// The trailing interfaceInfo field is declared as [1]wlanInterfaceInfo
+	// but is actually a C-style variable-length array. Indexing it with a
+	// Go index (list.interfaceInfo[i]) panics the runtime once the count
+	// exceeds 1 (multiple adapters), so walk it with pointer arithmetic
+	// instead. Same pattern in knownSSIDsFromWlanapi below.
+	itemsBase := listPtr + unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo)
+	itemSize := unsafe.Sizeof(wlanInterfaceInfo{})
+	for i := uint32(0); i < list.numberOfItems; i++ {
+		info := (*wlanInterfaceInfo)(unsafe.Pointer(itemsBase + uintptr(i)*itemSize))
+		if info.state != wlanInterfaceStateConnected {
+			continue
+		}
+		var dataSize uint32
+		var dataPtr uintptr
+		ret, _, _ := procWlanQueryInterface.Call(
+			uintptr(wlanHandle),
+			uintptr(unsafe.Pointer(&info.interfaceGuid)),
+			uintptr(wlanIntfOpcodeCurrentConnection),
+			0, // pReserved
+			uintptr(unsafe.Pointer(&dataSize)),
+			uintptr(unsafe.Pointer(&dataPtr)),
+			0, // pWlanOpcodeValueType
+		)
+		if ret != 0 || dataPtr == 0 {
+			continue
+		}
+		attrs := (*wlanConnectionAttributes)(unsafe.Pointer(dataPtr))
+		n := attrs.ssid.ssidLen
+		if n > 32 {
+			n = 32
+		}
+		ssid := string(attrs.ssid.ssid[:n])
+		// Most APs encode the SSID as UTF-8; a few legacy ones use the OEM
+		// code page. Try UTF-8 first, fall back to OEM decoding.
+		if !utf8.ValidString(ssid) {
+			ssid = decodeOEM(attrs.ssid.ssid[:n])
+		}
+		procWlanFreeMemory.Call(dataPtr)
+		if ssid != "" {
+			return ssid
+		}
+	}
+	return ""
+}
+
+// knownSSIDsFromWlanapi lists every saved Wi-Fi profile (SSID) via
+// WlanGetProfileList. Profile names are UTF-16 in wlanapi, so non-ASCII
+// names come back correctly without any code-page conversion.
+func knownSSIDsFromWlanapi() []string {
+	if err := wlanLazyOpenHandle(); err != nil {
+		return nil
+	}
+	var listPtr uintptr
+	ret, _, _ := procWlanEnumInterfaces.Call(uintptr(wlanHandle), 0, uintptr(unsafe.Pointer(&listPtr)))
+	if ret != 0 || listPtr == 0 {
+		return nil
+	}
+	defer procWlanFreeMemory.Call(listPtr)
+
+	seen := make(map[string]bool)
+	var result []string
+	list := (*wlanInterfaceInfoList)(unsafe.Pointer(listPtr))
+	itemsBase := listPtr + unsafe.Offsetof(wlanInterfaceInfoList{}.interfaceInfo)
+	itemSize := unsafe.Sizeof(wlanInterfaceInfo{})
+	for i := uint32(0); i < list.numberOfItems; i++ {
+		info := (*wlanInterfaceInfo)(unsafe.Pointer(itemsBase + uintptr(i)*itemSize))
+		var profileListPtr uintptr
+		ret, _, _ := procWlanGetProfileList.Call(
+			uintptr(wlanHandle),
+			uintptr(unsafe.Pointer(&info.interfaceGuid)),
+			0, // pReserved
+			uintptr(unsafe.Pointer(&profileListPtr)),
+		)
+		if ret != 0 || profileListPtr == 0 {
+			continue
+		}
+		plist := (*wlanProfileInfoList)(unsafe.Pointer(profileListPtr))
+		// Same variable-length-array caveat: walk profiles with pointer
+		// arithmetic rather than Go indexing.
+		profilesBase := profileListPtr + unsafe.Offsetof(wlanProfileInfoList{}.profileInfo)
+		profileSize := unsafe.Sizeof(wlanProfileInfo{})
+		for j := uint32(0); j < plist.numberOfItems; j++ {
+			p := (*wlanProfileInfo)(unsafe.Pointer(profilesBase + uintptr(j)*profileSize))
+			name := windows.UTF16ToString(p.profileName[:])
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			result = append(result, name)
+		}
+		procWlanFreeMemory.Call(profileListPtr)
+	}
+	return result
 }

@@ -119,7 +119,7 @@ StartupNotify=false
 X-GNOME-Autostart-enabled=true
 `, quotedPath)
 
-	return os.WriteFile(filepath.Join(autostartDir, "wireguide.desktop"), []byte(desktop), 0644)
+	return os.WriteFile(filepath.Join(autostartDir, "wireguideplus.desktop"), []byte(desktop), 0644)
 }
 
 func removeLinuxAutostart() error {
@@ -128,7 +128,7 @@ func removeLinuxAutostart() error {
 		home, _ := os.UserHomeDir()
 		configHome = filepath.Join(home, ".config")
 	}
-	return os.Remove(filepath.Join(configHome, "autostart", "wireguide.desktop"))
+	return os.Remove(filepath.Join(configHome, "autostart", "wireguideplus.desktop"))
 }
 
 // --- Windows: Registry Run key ---

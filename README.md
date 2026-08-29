@@ -1,307 +1,183 @@
-<p align="center">
-  <img src="docs/appicon.png" width="128" alt="WireGuide" />
-</p>
-
-<h1 align="center">WireGuide Plus</h1>
-
-<p align="center">
-  <b>A WireGuard VPN client for people who don't want to think about WireGuard.</b>
-</p>
-
-<p align="center">
-  <a href="https://github.com/imonior/wireguide-plus/releases/latest"><img src="https://img.shields.io/github/v/release/imonior/wireguide-plus?style=flat-square" alt="Release" /></a>
-  <a href="https://github.com/imonior/wireguide-plus/stargazers"><img src="https://img.shields.io/github/stars/imonior/wireguide-plus?style=flat-square" alt="Stars" /></a>
-  <a href="#install"><img src="https://img.shields.io/badge/homebrew-tap-blue?style=flat-square" alt="Homebrew" /></a>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform" />
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/imonior/wireguide-plus?style=flat-square" alt="License" /></a>
-</p>
-
-<p align="center">
-  <a href="README.ko.md">한국어</a>
-</p>
-
-<p align="center">
-  <i>Forked from <a href="https://github.com/korjwl1/wireguide">korjwl1/wireguide</a> v0.5.1 — a huge thank you to the original author for the great foundation.</i>
-</p>
-
----
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/06-connected.png" width="400" /><br><sub>VPN Connected</sub></td>
-    <td align="center"><img src="docs/screenshots/02-editor.png" width="400" /><br><sub>Config Editor</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/03-autocomplete.png" width="400" /><br><sub>Autocomplete</sub></td>
-    <td align="center"><img src="docs/screenshots/05-settings.png" width="400" /><br><sub>Settings</sub></td>
-  </tr>
-</table>
-
----
-
-## Why WireGuide
-
-Most WireGuard clients are built for the person who set up the server. WireGuide is built for the rest of the team.
-
-Hand a `.conf` file to a non-technical coworker. They should be online in three steps:
-
-1. Drag the file into WireGuide
-2. Click **On**
-3. (There is no step 3.)
-
-That's the whole product from the user's side. Everything else is plumbing that quietly keeps the tunnel up, so the IT person doesn't have to keep fielding *"the VPN is broken again"* messages.
-
----
-
-## Design
-
-**Small surface, careful insides.**
-
-The UI deliberately exposes a tiny number of things to click. Features that ship in WireGuide have to satisfy two rules:
-
-1. They must not break the system when something goes wrong.
-2. The everyday user must not need to know they exist.
-
-That means most of WireGuide runs silently in the background.
-
-### What the user sees
-
-- Drag-and-drop `.conf` import (also QR and ZIP)
-- A list of tunnels, each with one big toggle (sortable, resizable, optional compact mode)
-- A tray icon that shows whether you're connected — each tunnel is an on/off checkbox you can click right in the tray menu, and connected tunnels are shown green (yellow while connecting)
-- Per-tunnel **Automation** — connect or disconnect a tunnel automatically based on which network you're on (by Wi-Fi SSID, subnet, or the router's MAC address; rules are ordered by priority and drag-reorderable, and switching a tunnel off manually pauses its rules until you switch it back on or restart WireGuide)
-- A **command-line interface** (`wireguide ctl …`) for scripting — see below
-
-### What runs silently underneath
-
-- **Sleep/wake recovery** — the tunnel comes back after the lid closes
-- **Route monitor** — keeps working when you move between Wi-Fi and Ethernet
-- **Kill switch** — if the tunnel drops, nothing leaks while WireGuide is reconnecting. Uses the OS-native firewall (`pf` on macOS, WFP on Windows, `nftables` on Linux), not a userspace shim
-- **Health check + auto-reconnect** — fixes a stalled handshake without the user noticing
-- **DNS protection** — DNS queries are pinned to the tunnel
-- **Conflict detection** — warns when another VPN (Tailscale, another WG interface) would step on routes
-
-### For the person who set up the server
-
-- Config editor with WireGuard syntax highlighting and autocomplete (CodeMirror 6)
-- DNS leak test and route table view
-- Real-time RX/TX dashboard
-- Multi-tunnel — keep dev / staging / prod connected at once
-- Per-tunnel notes and connection history
-
-### Not included on purpose
-
-- No account, no telemetry, no "Pro" tier
-- No protocols other than WireGuard
-- No bundled extras you didn't ask for
-
----
-
-## Stability over features
-
-WireGuide ships fewer knobs than most desktop VPN clients on purpose. The trade is that the few it does ship are meant to be boring and reliable.
-
-- **Privilege separation.** A single binary runs in two modes. The GUI runs unprivileged. A small helper runs as root / Administrator. They talk over a local Unix socket (macOS/Linux) or named pipe (Windows). Nothing is exposed over HTTP or the network.
-- **OS-native firewall.** The kill switch uses `pf` (macOS), WFP (Windows), or `nftables` (Linux) — not a userspace packet filter that fails open.
-- **Up-to-date crypto.** Built on a May 2026 build of [wireguard-go](https://git.zx2c4.com/wireguard-go) — years ahead of the engine inside the official macOS app, which hasn't been updated since Feb 2023.
-- **Manual QA per release.** Every tagged release is exercised on macOS (Apple Silicon), Windows 11 (amd64), and Linux (Debian 13 / Raspberry Pi OS ARM64) before it goes out, on top of a 3-OS `go test` matrix that gates every PR.
-
-If something breaks, helper logs are plain text — not behind a paywall. Open an issue and attach them.
-
----
-
-## Install
-
-Tested on **macOS 15+ (Apple Silicon)**, **Windows 11 (amd64)**, and **Linux (Debian 13 / Raspberry Pi OS, amd64/arm64)** — see [what's actually been exercised](#tested-coverage) below.
-
-### macOS (Homebrew) — recommended
-
-```bash
-brew tap imonior/tap
-brew install --cask wireguide
-```
-
-### macOS (Manual)
-
-Download from [Releases](https://github.com/imonior/wireguide-plus/releases), unzip, move to `/Applications`.
-
-> If macOS shows "app is damaged", run: `xattr -cr /Applications/WireGuide.app`
-
-### Windows (Installer)
-
-Download the latest `WireGuide-windows-amd64.exe` (or `-arm64.exe`) installer from
-[Releases](https://github.com/imonior/wireguide-plus/releases) and run it. The NSIS
-installer registers the helper service and shortcut.
-
-> Windows SmartScreen may warn that the publisher is unknown — the binary is
-> currently unsigned. Click "More info" → "Run anyway".
-
-### Linux (DEB)
-
-Download the `WireGuide-linux-amd64.deb` (or `-arm64.deb`) package from
-[Releases](https://github.com/imonior/wireguide-plus/releases) and install it:
-
-```bash
-sudo apt install ./WireGuide-linux-amd64.deb
-```
-
-The package registers the app menu entry and tray integration; the privileged
-helper is started on demand through PolicyKit (no always-on service).
-
-### Build from Source
-
-```bash
-brew install go node
-go install github.com/go-task/task/v3/cmd/task@v3.45.4
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
-
-task build
-./bin/wireguide
-```
-
-### Tested coverage
-
-Manual QA runs on real hardware, but the hardware doesn't cover every
-combination. What has actually been exercised:
-
-| Platform | Tested on | Ethernet | Wi-Fi |
-|----------|-----------|:--------:|:-----:|
-| macOS | macOS 26.4 (Tahoe), Apple Silicon | ✅ | ✅ |
-| Windows | Windows 11 (amd64), desktop PC | ✅ | ⚠️ not properly tested |
-| Linux | Raspberry Pi OS Lite (arm64) | ⚠️ not tested | ✅ |
-
-The untested cells matter most for Wi-Fi-dependent features — SSID-based
-Automation rules and Wi-Fi↔Ethernet handover on Windows, and wired
-gateway/subnet detection on Linux. **If you hit an error in one of those
-gaps, please [open an issue](https://github.com/imonior/wireguide-plus/issues/new/choose)**
-— reports from hardware we don't have are the only way those cells get fixed.
-
----
-
-## Command line
-
-WireGuide ships a small CLI, `wireguide ctl`, for scripting and automation. Like
-`tailscale`/`tailscaled`, it talks to the already-running (already-elevated)
-helper over the local socket — so unlike `wg-quick` it needs no per-command
-`sudo`, works the same on macOS/Windows/Linux, and shares the GUI's tunnel store.
-
-```
-wireguide ctl start                     # launch WireGuide (app + helper) and wait
-wireguide ctl stop                      # quit WireGuide (app + helper)
-
-wireguide ctl status [--json]           # connection status
-wireguide ctl list [--json]             # list tunnels (● = connected)
-wireguide ctl connect <name>            # connect a tunnel
-wireguide ctl disconnect [name]         # disconnect one (or all)
-wireguide ctl import <file> [name]      # import a .conf
-wireguide ctl rename <old> <new>
-wireguide ctl delete <name>
-
-# Automation — per-tunnel connect/disconnect rules (top rule wins on conflict):
-wireguide ctl automation                # what the engine decides right now
-wireguide ctl automation rules <name>   # list a tunnel's rules
-wireguide ctl automation add <name> <connect|disconnect> <cond>
-    #   cond = ssid:<wifi>  subnet:<CIDR>  mac:<gateway-MAC>  else
-wireguide ctl automation rm <name> <n>
-
-# Settings & diagnostics:
-wireguide ctl set killswitch <on|off>       # block non-VPN traffic if the tunnel drops
-wireguide ctl set dns-protection <on|off>   # pin DNS to the tunnel
-wireguide ctl set healthcheck <on|off>
-wireguide ctl set pin-interface <on|off>
-wireguide ctl set loglevel <debug|info|warn|error>
-wireguide ctl dnsleak                        # check whether DNS leaks outside the tunnel
-wireguide ctl routes                         # OS routing table
-
-# Teach coding agents (Claude Code, Codex, ...) how to drive the CLI:
-wireguide ctl install-skills
-
-# e.g. turn the work VPN off on the office network, on everywhere else:
-wireguide ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
-wireguide ctl automation add work connect else
-```
-
-Connect/disconnect/status need the app (or its helper) running — start it with
-`wireguide ctl start` (or by opening the app); nothing else starts a VPN stack
-behind your back. list, import, rename, delete and automation edits work
-directly against the local files.
-
----
-
-## Architecture
-
-```mermaid
-graph LR
-    subgraph GUI["GUI Process (unprivileged)"]
-        A1[Wails + Svelte]
-        A2[Config editor]
-        A3[System tray]
-        A4[Diagnostics]
-    end
-
-    subgraph Helper["Helper Process (root)"]
-        B1[wireguard-go + wgctrl]
-        B2[TUN / routing / DNS]
-        B3[Kill switch / firewall]
-        B4[Reconnect monitor]
-        B5[Route monitor]
-    end
-
-    GUI <-->|"JSON-RPC over UDS"| Helper
-```
-
-- **Single binary** — `wireguide` runs as GUI or helper (`--helper` flag)
-- **Privilege separation** — GUI is unprivileged; helper runs as root
-- **IPC** — JSON-RPC over Unix socket (macOS/Linux) or named pipe (Windows)
-
----
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Language | Go 1.25+ |
-| GUI | [Wails v3](https://wails.io) |
-| Frontend | Svelte + Vite |
-| WireGuard | [wireguard-go](https://git.zx2c4.com/wireguard-go) + [wgctrl-go](https://github.com/WireGuard/wgctrl-go) |
-| Editor | [CodeMirror 6](https://codemirror.net/) |
-| Firewall | macOS `pf` / Linux `nftables` / Windows WFP (Filtering Platform) |
-| i18n | English, Korean, Japanese, Chinese |
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
-
-Found a bug? [Open an issue](https://github.com/imonior/wireguide-plus/issues/new/choose).
-
----
-
-## Code signing
-
-Once the SignPath Foundation OSS approval completes, Windows installers will be
-code-signed via SignPath. The signing policy is documented in
-[SIGNING-POLICY.md](SIGNING-POLICY.md).
-
-> Free code signing provided by [SignPath.io](https://signpath.io),
-> certificate by [SignPath Foundation](https://signpath.org).
-
-Until then, releases ship unsigned and SmartScreen shows the "unknown
-publisher" warning on first run.
-
----
-
-## Sponsor
-
-<a href="https://github.com/sponsors/imonior">
-  <img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?style=for-the-badge&logo=github" alt="Sponsor" />
-</a>
-
-If WireGuide is useful to you, consider sponsoring to support development.
-
----
-
-## License
-
-[MIT](LICENSE)
+# WireGuide Plus
+
+**A multi-tunnel, automation-first WireGuard client for Windows**
+
+WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source project
+[`korjwl1/wireguide`](https://github.com/korjwl1/wireguide). Its two core capabilities:
+
+- **Multi-tunnel concurrency** — multiple WireGuard tunnels establish at the same time
+  and run independently without interfering with each other;
+- **Conditional auto-connect** — rules based on Wi-Fi SSID, time of day, system startup,
+  etc. automatically connect the right tunnel (for example, tunnel A on the office
+  Wi-Fi, tunnel B at home).
+
+**English** | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
+
+> Currently **fully supported on Windows 10 / 11 (x64 and x86 32-bit)**. The macOS and
+> Linux enhanced editions are under development — use the upstream version meanwhile (see
+> [Platform support](#platform-support)). **Android / iOS are not supported.**
+
+## Features
+
+- **Multi-tunnel concurrency** — unlike upstream, which allows only one tunnel at a time,
+  this edition runs multiple tunnels in parallel — ideal for reaching an intranet and an
+  exit network simultaneously.
+- **Conditional auto-connect** — triggers on Wi-Fi SSID / time of day / system startup
+  connect or disconnect a tunnel automatically; rules support priority and mutual
+  exclusion.
+- **Auto-reconnect** — tunnels recover automatically after unexpected drops, with the
+  connection state visible in real time.
+- **Start on login** — a setting that launches WireGuide Plus after login and connects
+  according to your rules (combined with "Start minimized" the window starts tucked away).
+- **Start minimized** — a setting that starts the app minimized to the **taskbar** on
+  Windows (the taskbar button stays visible, so the main window can always be reopened) or
+  to the system tray on macOS/Linux.
+- **Tray connection notifications** — 10 seconds after startup (once the elevation prompt
+  is settled) the current connection state is shown; network changes (Wi-Fi switch,
+  cable unplug, network loss, ...) that alter tunnel state also show a 10-second-delayed
+  bubble with the stable, latest state. The bubble has an action menu (open main window /
+  disconnect), can be dismissed manually, or auto-closes after a configurable dwell time
+  (default 10 s, adjustable in Settings).
+- **Tunnel management** — import / export `.conf`, connection history, quick toggles.
+
+## Fixes & enhancements over upstream wireguide
+
+### Fixes
+
+1. **Wi-Fi fully supported as the network egress (the most critical fix)** — upstream
+   only sends traffic out of the **wired** interface on Windows, so the egress was
+   unusable on Wi-Fi. This edition fixes the default-egress-interface selection: on
+   Wi-Fi, traffic correctly leaves through the wireless adapter.
+2. **GUI theme bug** — fixed broken rendering when switching between dark / light themes.
+3. **Standardized Windows version resources** — fixed the blank version info in the exe
+   properties page (now generated with `goversioninfo`).
+4. **Stability fixes** — deduplicated update-check scheduling, more accurate physical
+   adapter detection, and more (see [CHANGELOG](CHANGELOG.en.md)).
+
+### Enhancements
+
+1. **SSID dropdown** — auto-connect rules can pick from **every Wi-Fi SSID the system has
+   saved** via a dropdown instead of typing, avoiding typos.
+2. **Update checks through a proxy** — configure an HTTP(S) proxy before checking for
+   updates, solving update failures caused by GitHub being unreachable / rate-limited.
+3. **Multi-language UI** — 简体中文 / English / 日本語 / 한국어 / 繁體中文.
+4. **System integration** — start on login, start minimized (taskbar on Windows / tray on
+   macOS & Linux), tray connection notifications (shown 10 s after startup / after network
+   changes alter connection state, default dwell 10 s, adjustable).
+5. **Window title & interaction polish** and more.
+
+## Platform support
+
+| Platform | Status |
+| --- | --- |
+| Windows 10 / 11 (x64, x86 32-bit) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect) |
+| macOS | 🚧 Enhanced edition under development — use [wireguide](https://github.com/korjwl1/wireguide) or [WireTunnels](https://github.com/FMDigitech/WireTunnels) |
+| Linux | 🚧 Enhanced edition under development — use [wireguide](https://github.com/korjwl1/wireguide) |
+| Android / iOS | ❌ **Not supported** (cannot run tunnels concurrently, nor auto-connect different tunnels by Wi-Fi SSID) |
+
+> **macOS alternative: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — a
+> native macOS menu-bar WireGuard client with multi-tunnel support, monitoring and
+> control, complementing upstream `wireguide`.
+
+### Why no mobile edition?
+
+The project's core capabilities are **multi-tunnel concurrency** and **rule-based
+auto-connect (e.g. by Wi-Fi SSID)**. On Android / iOS the system kernel and permissions
+prevent WireGuard implementations from **running multiple tunnels at once** or
+**switching tunnels automatically by Wi-Fi SSID** — neither core goal is achievable on
+mobile. This project therefore **explicitly does not target mobile devices**; mobile
+users should use the official WireGuard app with its On-Demand capability for
+single-tunnel needs.
+
+## Roadmap
+
+- **v2.0 (planned)**: run as a **Windows system service** — auto-connect without a user
+  login, with a more stable network stack and better privilege control.
+
+## Download & Install
+
+Each release publishes two kinds of Windows builds separately: **installers** and a
+**portable build**.
+
+**Installers (recommended)**
+
+- Windows x64 installer: `wireguideplus-amd64-installer.exe`
+- Windows x86 (32-bit) installer: `wireguideplus-x86-installer.exe`
+- Windows ARM64 installer: `wireguideplus-arm64-installer.exe`
+
+Installer names embed the architecture (`wireguideplus-<arch>-installer.exe`, arch ∈
+`x86` / `amd64` / `arm64`), and the executable installed inside carries it too
+(`wireguideplus-<arch>.exe` — also visible in the file's Properties → Details). The
+64-bit installer installs to `C:\Program Files\WireGuide Plus` by default; the 32-bit
+installer to `C:\Program Files (x86)\WireGuide Plus` (`C:\Program Files\WireGuide Plus`
+on 32-bit systems). The install directory can be changed during installation. A Start
+Menu shortcut (including an "Uninstall WireGuide Plus" entry, default on, optional) and a
+desktop shortcut (always created) are registered. Installers bundle everything needed —
+no extra files to download.
+
+**Portable build (no installation)**
+
+- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`** (or **+ `wintun-x86.dll`** for the
+  32-bit exe, **+ `wintun-arm64.dll`** for the ARM64 exe) — download **both** files for
+  the same architecture and place them in the same folder, then run the exe.
+
+The portable binary is **not standalone**: it needs the matching-architecture driver
+DLL next to it (used to create WireGuard tunnels). The exe loads the DLL by its
+arch-qualified name (`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) — no
+rename is ever needed:
+
+| exe | matching driver DLL |
+| --- | --- |
+| `wireguideplus-amd64.exe` (64-bit) | `wintun-amd64.dll` |
+| `wireguideplus-x86.exe` (32-bit) | `wintun-x86.dll` |
+| `wireguideplus-arm64.exe` (ARM64) | `wintun-arm64.dll` |
+
+The driver DLLs come from `wintun-0.14.1.zip` (see
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)). Releases also provide
+ready-made portable zips (`wireguideplus-amd64-portable.zip` /
+`wireguideplus-x86-portable.zip` / `wireguideplus-arm64-portable.zip`), each already
+containing the exe **and** the matching driver DLL — download one zip, extract, and run.
+A bare `wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll` is attached too for
+manual pairing (just drop it next to the exe, no renaming). Without the matching driver
+DLL, tunnels cannot be created.
+
+## Code Signing
+
+Every published Windows **installer** is Authenticode-signed, which lets you verify
+both **integrity** (the binary has not been tampered with in transit or on disk)
+and **origin** (it was built and released by this project). Signed binaries also
+trigger fewer Windows SmartScreen warnings on first run.
+
+Note: only the installers are signed; the portable zips contain the unsigned build
+output. For the full signing policy (scope, approval workflow, account security and
+reproducibility) see [SIGNING-POLICY.md](SIGNING-POLICY.md).
+
+> Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+> [SignPath Foundation](https://signpath.org).
+
+## Build & Development
+
+Build environment requirements, dev / release build commands (including the x86 +
+amd64 + arm64 multi-architecture build), NSIS installer notes, version resources and
+the release workflow are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Publishing is as
+simple as pushing a version tag — the GitHub Actions pipeline builds, signs and publishes
+the release automatically (see [docs/release.md](docs/release.md)).
+
+## Data & Logs
+
+| Item | Location |
+| --- | --- |
+| Settings / history | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
+| Tunnel configs | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Logs | `%APPDATA%\wireguideplus\logs\` |
+
+## Uninstall
+
+Uninstall via **Control Panel → Programs and Features → WireGuide Plus**, or run the
+uninstaller in the install directory.
+
+## Acknowledgements
+
+- [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — upstream open-source project
+- [WireGuard](https://www.wireguard.com/) / [wireguard-go](https://git.zx2c4.com/wireguard-go)
+- [Wails](https://wails.io)

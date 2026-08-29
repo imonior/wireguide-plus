@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,6 +38,26 @@ import (
 // retry goroutines in the dock_* files can observe teardown without holding
 // a trayManager reference.
 var appQuitting atomic.Bool
+
+// Menu connection glyphs. Colored emoji render natively in the macOS menu
+// bar (AppKit), but the Windows tray popup is drawn with GDI, which cannot
+// render colored emoji — a 🟢 degrades to a grey outline circle there.
+// Windows therefore uses plain text glyphs (● filled / ○ hollow) so the two
+// states stay visually distinct in both light and dark themes.
+var (
+	connectedGlyph    = "🟢"
+	disconnectedGlyph = "○"
+)
+
+func init() {
+	if runtime.GOOS == "windows" {
+		// GDI renders these as plain text glyphs (no colored emoji). A
+		// filled ✔ vs hollow ✗ reads far better than ●/○, which both look
+		// like grey circles in the small tray font.
+		connectedGlyph = "✔"
+		disconnectedGlyph = "✗"
+	}
+}
 
 var (
 	trayOnIconDark   []byte // white W + green dot (dark menu bar)
@@ -357,6 +378,7 @@ type trayManager struct {
 	activeTunnels map[string]bool // cached from status events
 	hasHandshake  map[string]bool // per-tunnel handshake status
 	rebuildTimer  *time.Timer     // debounce timer for rebuildMenu
+	notifyTimer   *time.Timer     // debounce timer for the status notification
 	// menu is the ONE Menu object backing the tray for the app's whole
 	// lifetime. rebuildMenu clears and refills it in place instead of
 	// creating a fresh Menu: Wails reuses the same NSMenu instance on
@@ -434,6 +456,8 @@ func (t *trayManager) startAppearanceWatch() {
 // Safe to call more than once: doShutdown is guarded by a sync.Once and the
 // quit flags are idempotent.
 func (t *trayManager) quitApp() {
+	// Close any visible connect popup before tearing down the app.
+	closeConnectPopup()
 	// Latch the quit flag BEFORE Destroy so any in-flight debounce
 	// timer that fires between here and the AfterFunc cancel will
 	// see it and bail. Then stop the timer explicitly to prevent
@@ -444,6 +468,10 @@ func (t *trayManager) quitApp() {
 	if t.rebuildTimer != nil {
 		t.rebuildTimer.Stop()
 		t.rebuildTimer = nil
+	}
+	if t.notifyTimer != nil {
+		t.notifyTimer.Stop()
+		t.notifyTimer = nil
 	}
 	t.mu.Unlock()
 	t.doShutdown()
@@ -487,6 +515,24 @@ func (t *trayManager) initialBuild() {
 //
 //   disconnected → W glyph (white on dark menu bars, black on light)
 //   connected    → same W with a green dot badge
+// safeSetIcon updates the tray icon without letting a Win32 API failure
+// kill the app or hang the status stream. Wails' SystemTray.SetIcon
+// dispatches to the main thread via InvokeSync; a failing ShellNotifyIcon
+// becomes a panic there that Wails' handler swallows but which leaves
+// InvokeSync's WaitGroup un-Done (deadlocking the caller). We therefore
+// run it fire-and-forget with a recover guard. The icon bytes themselves
+// are validated on startup (see ztraytest), so this is purely defensive.
+func (t *trayManager) safeSetIcon(icon []byte) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("tray SetIcon panicked", "err", r, "stack", string(debug.Stack()))
+			}
+		}()
+		t.tray.SetIcon(icon)
+	}()
+}
+
 func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string]bool) {
 	newSet := make(map[string]bool, len(activeNames))
 	for _, n := range activeNames {
@@ -525,27 +571,34 @@ func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string
 			onIcon, offIcon = trayOnIconWindows, trayOffIconWindows
 		}
 		if anyConnected {
-			t.tray.SetIcon(onIcon)
-			tooltip := "WireGuide — " + strings.Join(activeNames, ", ")
+			t.safeSetIcon(onIcon)
+			tooltip := "WireGuide Plus — " + strings.Join(activeNames, ", ")
 			t.tray.SetTooltip(tooltip)
 		} else {
 			if runtime.GOOS == "darwin" || ((runtime.GOOS == "windows" || runtime.GOOS == "linux") && len(offIcon) > 0) {
-				t.tray.SetIcon(offIcon)
+				t.safeSetIcon(offIcon)
 			}
-			t.tray.SetTooltip("WireGuide")
+			t.tray.SetTooltip("WireGuide Plus")
 		}
 		if runtime.GOOS != "darwin" {
-			if anyConnected {
-				t.tray.SetLabel("WireGuide ●")
-			} else {
-				t.tray.SetLabel("WireGuide")
-			}
+			// Windows/Linux: SetLabel has no menu-bar meaning (that's a
+			// macOS concept) and GDI renders the ● as '?', so keep it a
+			// plain text tooltip-style label.
+			t.tray.SetLabel("WireGuide Plus")
 		}
 	} else if anyConnected {
 		// Active names may have reordered without count changing.
 		// Refresh tooltip only when names differ from last broadcast.
-		newTooltip := "WireGuide — " + strings.Join(activeNames, ", ")
+		newTooltip := "WireGuide Plus — " + strings.Join(activeNames, ", ")
 		t.tray.SetTooltip(newTooltip)
+	}
+
+	if activeChanged {
+		// Any connection-state change — auto-connect, Wi-Fi switch,
+		// Ethernet unplug/replug, network loss, manual connect/disconnect —
+		// schedules the status notification. The 10s debounce means the
+		// bubble shows the settled state once churn has quieted down.
+		t.scheduleStatusNotification()
 	}
 
 	// Rebuild menu if active set changed OR if handshake state changed for
@@ -564,6 +617,72 @@ func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string
 	if changed {
 		t.scheduleRebuild()
 	}
+}
+
+// statusNotificationDelay is how long a connection-state change is left to
+// settle before the status notification appears. 10s gives the automation
+// engine time to finish auto-connecting after launch or after a network
+// change (Wi-Fi switch, Ethernet unplug/replug, network loss) before the
+// bubble reports the settled situation.
+const statusNotificationDelay = 10 * time.Second
+
+// scheduleStatusNotification debounces the connection-status notification:
+// every state change resets a 10s timer, so the bubble shows the *settled*
+// state once churn has quieted down. Also used at startup (gui.Run after
+// initialBuild) so a fresh launch reports its connection situation once the
+// auto-connect window closes.
+func (t *trayManager) scheduleStatusNotification() {
+	if t.quitting.Load() {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.notifyTimer != nil {
+		t.notifyTimer.Stop()
+	}
+	t.notifyTimer = time.AfterFunc(statusNotificationDelay, func() {
+		if t.quitting.Load() {
+			return
+		}
+		t.showStatusNotification()
+	})
+}
+
+// showStatusNotification renders the tray bubble with the current connection
+// situation (connected tunnel list, or "not connected"). Its on-screen
+// duration comes from the notify_duration_ms setting (default 10s).
+func (t *trayManager) showStatusNotification() {
+	t.mu.Lock()
+	names := make([]string, 0, len(t.activeTunnels))
+	for n := range t.activeTunnels {
+		names = append(names, n)
+	}
+	t.mu.Unlock()
+
+	lang := "en"
+	duration := 10 * time.Second
+	if s, err := t.svc.GetSettings(); err == nil && s != nil {
+		if s.Language != "" {
+			lang = s.Language
+		}
+		if s.NotifyDurationMs > 0 {
+			duration = time.Duration(s.NotifyDurationMs) * time.Millisecond
+		}
+	}
+	connected := len(names) > 0
+	showStatusPopup(names, connected, lang, duration, showDock, func() {
+		t.mu.Lock()
+		names := make([]string, 0, len(t.activeTunnels))
+		for n := range t.activeTunnels {
+			names = append(names, n)
+		}
+		t.mu.Unlock()
+		for _, n := range names {
+			if err := t.svc.DisconnectTunnel(n); err != nil {
+				slog.Warn("tray: popup disconnect failed", "tunnel", n, "err", err)
+			}
+		}
+	})
 }
 
 // scheduleRebuild debounces rebuildMenu calls — multiple triggers within 100ms
@@ -612,7 +731,6 @@ func (t *trayManager) rebuildMenu() {
 	// glyph" flickers.
 	t.mu.Lock()
 	activeSet := t.activeTunnels
-	hsMap := t.hasHandshake
 	t.mu.Unlock()
 
 	// Refill the single persistent Menu in place (see the menu field
@@ -626,7 +744,7 @@ func (t *trayManager) rebuildMenu() {
 		t.menu.Clear()
 	}
 	m := t.menu
-	m.Add("WireGuide").SetEnabled(false)
+	m.Add("WireGuide Plus").SetEnabled(false)
 	m.AddSeparator()
 
 	for _, tun := range tunnels {
@@ -634,20 +752,22 @@ func (t *trayManager) rebuildMenu() {
 		connected := activeSet[tun.Name]
 		// Each tunnel is a checkbox item: the native checkmark in front
 		// of the name is an independent ON/OFF switch — click it to
-		// toggle the tunnel. The emoji keeps the connection status
-		// visible next to the switch (🟢 green = connected + handshake,
-		// 🟡 yellow = still connecting, ○ grey = off). Colored emoji
-		// render natively in the tray popup (Segoe UI Emoji on Windows,
-		// AppKit emoji on macOS). Wails flips the checkmark itself on
-		// click and hands the NEW state to the callback via
-		// ctx.IsChecked(), so the action follows the switch; a failed
-		// connect/disconnect is corrected on the next status-driven
-		// rebuild.
-		label := "○ " + tun.Name
-		if connected && hsMap[tun.Name] {
-			label = "🟢 " + tun.Name // connected + handshake (green)
-		} else if connected {
-			label = "🟡 " + tun.Name // connected, no handshake yet (yellow)
+		// toggle the tunnel. The glyph keeps the connection status
+		// visible next to the switch (green circle = connected, hollow
+		// grey = off).
+		// WireGuard "connected" means the first handshake has completed,
+		// so any tunnel in the active set is green; a separate yellow
+		// "connecting" glyph would leave the menu stuck on yellow right
+		// after a connect if the handshake timestamp had not been
+		// refreshed yet. Colored emoji render natively in the tray popup
+		// (Segoe UI Emoji on Windows, AppKit emoji on macOS). Wails flips
+		// the checkmark itself on click and hands the NEW state to the
+		// callback via ctx.IsChecked(), so the action follows the switch;
+		// a failed connect/disconnect is corrected on the next
+		// status-driven rebuild.
+		label := disconnectedGlyph + " " + tun.Name
+		if connected {
+			label = connectedGlyph + " " + tun.Name
 		}
 		tunName := tun.Name
 		m.AddCheckbox(label, connected).OnClick(func(ctx *application.Context) {

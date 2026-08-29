@@ -25,7 +25,10 @@ import (
 const (
 	githubRepo     = "imonior/wireguide-plus"
 	apiEndpoint    = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
-	currentVersion = "1.0.0"
+	currentVersion = "1.1.0"
+
+	// GitHubReleasesURL is the human-facing releases page.
+	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"
 
 	// minAssetSize is the minimum acceptable size for a release asset.
 	// A macOS .dmg/.zip containing WireGuide.app is always well over 1 MB;
@@ -49,6 +52,17 @@ const (
 	// activePublicKey() to return "" and the install path refuses
 	// to apply the update.
 )
+
+// APIEndpoint returns the official GitHub Releases API URL the updater
+// checks (before any mirror rewrite).
+// Exported so the app service can reuse the exact endpoint for proxy
+// connectivity tests.
+func APIEndpoint() string { return apiEndpoint }
+
+// MirroredEndpoint returns the official endpoint rewritten through the
+// given accelerator prefix (see mirrorEndpoint). It is exported for the
+// GUI's connectivity test of an as-yet-unsaved mirror setting.
+func MirroredEndpoint(prefix string) string { return mirrorEndpoint(prefix) }
 
 // expectedPublicKey is a `var` (not `const`) so `-ldflags -X` can inject
 // it. The build-time constant idiom (`const expectedPublicKey = ""`) is
@@ -131,7 +145,7 @@ type CheckResult struct {
 // doesn't have a context (e.g. test code).
 func CheckForUpdateConditional(ctx context.Context, prevETag, prevLastModified string) (*CheckResult, error) {
 	client := newUpdateClient(10 * time.Second)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resolvedEndpoint(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -339,6 +353,10 @@ func newUpdateClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: updateCheckRedirect,
+		// Honor the user-configured proxy (direct by default). Without an
+		// explicit Transport, http.Client uses ProxyFromEnvironment, which
+		// would ignore our direct/manual setting.
+		Transport: proxyTransport(),
 	}
 }
 
@@ -351,7 +369,7 @@ func newUpdateClient(timeout time.Duration) *http.Client {
 // machinery.
 func CheckForUpdate() (*UpdateInfo, error) {
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resolvedEndpoint(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -908,7 +926,13 @@ func matchAsset(assets []Asset) string {
 }
 
 func assetMatchesOSArch(name string, osNames []string, arch string) bool {
-	hasArch := matchTokenAnchored(name, arch)
+	hasArch := false
+	for _, t := range archTokens(arch) {
+		if matchTokenAnchored(name, t) {
+			hasArch = true
+			break
+		}
+	}
 	if !hasArch {
 		return false
 	}
@@ -918,6 +942,22 @@ func assetMatchesOSArch(name string, osNames []string, arch string) bool {
 		}
 	}
 	return false
+}
+
+// archTokens returns the filename tokens that identify an architecture.
+// Release assets use human-readable suffixes (e.g. "x86", "amd64"), while
+// runtime.GOARCH uses Go names ("386", "arm64") — the "386" <-> "x86" pair is
+// the classic mismatch. Exact tokens are tried first so "x86" never shadows a
+// "x86_64"-style name; a "386"-named asset still wins for 32-bit users.
+func archTokens(arch string) []string {
+	switch arch {
+	case "386":
+		return []string{"386", "x86", "i386", "i686", "32bit"}
+	case "arm64":
+		return []string{"arm64", "aarch64"}
+	default:
+		return []string{arch}
+	}
 }
 
 // matchTokenAnchored returns true if `token` appears in `name`

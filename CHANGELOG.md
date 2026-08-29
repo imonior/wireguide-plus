@@ -1,6 +1,38 @@
 # Changelog
 
-All notable changes to WireGuide will be documented in this file.
+All notable changes to WireGuide Plus will be documented in this file.
+
+> English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
+
+## [1.1.0] - 2026-08-28
+
+本次版本聚焦可辨识性、代理健壮性与启动自动化规则：托盘状态改用高辨识图标、代理三模式语义明确并新增连通性测试、无效代理 URL 不再破坏更新检查、启动时先按自动化规则判断再连接。
+
+### ✨ 新功能（Features）
+
+- **托盘状态图标可辨识化（Tray state glyphs）** — Windows 托盘菜单中的连接状态改用纯文本字形区分：`●` 实心=已连接、`○` 空心=未连接（Windows 托盘弹窗由 GDI 绘制，无法渲染彩色 emoji，`🟢` 会退化成一圈灰色轮廓，新旧状态难分辨）；macOS 菜单栏（AppKit 原生渲染）继续使用彩色 emoji。启动中/过渡态另有专属标记。
+- **代理三模式语义明确 + 连通性测试（Proxy modes & test）** — 设置 → 代理 的选项统一为三种且语义不再混淆：**直连**（完全忽略系统/环境代理）、**GitHub 镜像**（`mirror`，如 `https://ghfast.top` 加速前缀）、**手动代理**（`manual`，http/https/socks5 完整 URL）。新增 **"测试连接"** 按钮：保存前先向 GitHub Releases API 发起往返请求，报告成功与延迟。
+- **代理设置即时生效（Proxy applies immediately）** — 保存代理配置后，下一次计划更新检查（及手动"立即检查"）无需重启即生效；GUI 启动时也直接套用已保存的代理，避免"启动即触发一次错误配置的检查"。
+
+### 🐛 修复（Bug Fixes）
+
+- **修复无效代理 URL 拖垮更新检查** — `config.json` 中残缺的手动代理（如 `proxy_url = "https://"`）此前会被 `http.ProxyURL` 直接采用，导致每次更新检查报 `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config`。现在启动时与每次使用时均校验 URL（`internal/update/proxy.go`），无效值记录 `WARN update: ignoring invalid manual proxy URL` 并回退直连，检查不再失败。
+- **修复"先连接、后按规则断开"的启动观感** — 启动规则评估提前到 helper 启动后立即执行（日志 `startup rule re-evaluation`），确保每个隧道的目标状态由规则先行决定；同时新增 `scheduleRuleCheck` 兜底：启动 60 秒窗口内任何 RPC 手动连接（如恢复上次会话）都会在 3 秒后按规则重新评估并纠正，不等 30 秒轮询，日志记录触发来源便于排查。
+- **无效镜像前缀不再静默破坏检查** — `mirror` 模式下的加速前缀同样做 scheme/host 校验，非法值回退官方 API 端点。
+
+### 🛠 内部（Internal）
+
+- 版本号更新至 **1.1.0**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.0.0`）、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm 全部同步。
+- **Windows 版本资源标准化** — `wails3 generate syso` 生成的版本资源语言为 `0x0000` 且 `VS_FIXEDFILEINFO.ProductVersion` 为零，Windows 资源管理器 / `FileVersionInfo` 无法读出（属性页版本字段空白）。改用 `goversioninfo`（配置：`build/windows/versioninfo.json`）生成标准 `0409/04B0` 资源，`generate:syso` 任务同步更新；exe 与安装包属性页现正确显示 `1.1.0`。
+- **新增 Windows x86（32 位）构建** — `task windows:build ARCH=386` 产出 32 位运行程序与 `wireguide-x86-installer.exe` 安装包（NSIS 脚本支持 x86 架构、安装到 `Program Files`、打包 x86 版 `wintun.dll`）。
+- **明确平台边界** — 移除 iOS 构建任务与配置注释；本项目不支持 Android / iOS（无法多通道并发、无法按 SSID 自动连接），README 已同步说明，macOS / Linux 增强版待开发。
+- **系统集成增强** — 新增「最小化启动」设置（启动时直接最小化到系统托盘，不显示主窗口，设置 → 启动）；新增「连接状况托盘通知」：启动后延迟 10 秒显示当前连接状况，网络变动（Wi-Fi 切换、网线插拔、网络断开等）导致隧道连接状态变化时也延迟 10 秒显示稳定后的最新状况；通知气泡带操作菜单（打开主界面 / 断开连接），可手动关闭或按设置自动关闭（默认停留 10 秒，可在 设置 → 启动 → 通知停留时长 调整，`internal/gui/notify_windows.go`）。
+- **双架构发布** — 每次构建同时产出 32 位（x86）与 64 位（amd64）程序及对应安装包（`task windows:build:all`，含 wintun.dll 架构自动刷新）；软件/安装包描述统一为「多隧道 + 自动化」重点，移除跨平台（cross-platform）表述。
+- **安装体验** — 安装包默认安装到 Program Files（32 位安装包自动选择 Program Files (x86)），安装过程中可自定义目录；开始菜单快捷方式（含「卸载 WireGuide Plus」入口，卸载入口图标与运行程序一致）默认创建，可在「快捷方式选项」页取消勾选；桌面快捷方式始终创建（`build/windows/nsis/project.nsi`）。
+- **开发与发布文档** — 构建/打包说明从 README 移至独立开发文档 `docs/DEVELOPMENT.md`；GitHub Release 工作流补齐 32 位 Windows 产物与 CI 工具链（goversioninfo），本地推送 `v*` 标签即可自动构建（Windows x86+amd64、macOS arm64、Linux amd64+arm64）、签名并发布（`docs/release.md`）。
+- Windows 网卡适配器名匹配逻辑调整（`internal/wifi/known_windows.go`、`detect_windows.go`），物理网卡识别更准确。
+- 窗口标题统一为 **WireGuide Plus**。
+- 更新检查在调度器内去重，避免同一轮多次触发（仅记录一次失败并给出重试间隔）。
 
 ## [1.0.0] - 2026-08-28
 

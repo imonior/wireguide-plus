@@ -18,6 +18,12 @@ import (
 // adapter. The console window is hidden so a GUI never flashes a black
 // box while enumerating.
 func knownSSIDsWindows() []string {
+	// WlanGetProfileList returns profile names as UTF-16 — no code-page
+	// issues, so non-ASCII SSIDs come back intact. Fall back to netsh (with
+	// OEM→UTF-8 conversion) only when the native API is unavailable.
+	if list := knownSSIDsFromWlanapi(); len(list) > 0 {
+		return list
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "netsh", "wlan", "show", "profiles")
@@ -30,7 +36,7 @@ func knownSSIDsWindows() []string {
 
 	seen := make(map[string]bool)
 	list := make([]string, 0, 16)
-	for _, line := range strings.Split(out.String(), "\n") {
+	for _, line := range strings.Split(decodeOEM(out.Bytes()), "\n") {
 		// Profile rows read "All User Profile     : MyWiFi" (English) or
 		// "所有用户配置文件 : MyWiFi" (localized); netsh keeps the colon
 		// between the label and the name in every language. Taking

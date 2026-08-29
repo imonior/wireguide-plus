@@ -1,0 +1,182 @@
+# WireGuide Plus
+
+**Windows 向けマルチトンネル・自動化ファーストの WireGuard クライアント**
+
+WireGuide Plus はオープンソースプロジェクト
+[`korjwl1/wireguide`](https://github.com/korjwl1/wireguide) を**深く修正・強化した**
+フォークです。2つの核となる機能:
+
+- **マルチトンネル同時接続** — 複数の WireGuard トンネルを同時に確立し、互いに
+  干渉することなく独立して動作します;
+- **条件付き自動接続** — Wi-Fi SSID・時間帯・システム起動などの条件に基づいて
+  適切なトンネルを自動接続します（例: オフィスの Wi-Fi ではトンネル A、自宅では
+  トンネル B）。
+
+[English](README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | **日本語**
+
+> 現在 **Windows 10 / 11（x64、x86 32ビットおよび ARM64）を完全サポート**しています。
+> macOS / Linux の強化版は開発中です — それまではアップストリーム版を利用してください
+> （[プラットフォームサポート](#プラットフォームサポート) を参照）。
+> **Android / iOS は非対応です。**
+
+## 機能
+
+- **マルチトンネル同時接続** — 一度に1本しか接続できないアップストリームとは異なり、
+  複数のトンネルを並行して実行できます — 社内ネットワークと出口ネットワークへ同時に
+  アクセスしたい場合に最適です。
+- **条件付き自動接続** — Wi-Fi SSID / 時間帯 / システム起動をトリガーに、トンネルを
+  自動で接続・切断します。ルールは優先度と排他（相互排除）をサポートします。
+- **自動再接続** — 予期しない切断後もトンネルが自動復旧し、接続状態がリアルタイムに
+  表示されます。
+- **ログイン時自動起動** — ログイン後に WireGuide Plus を起動し、ルールに従って接続する
+  設定（「最小化で起動」と組み合わせれば、起動直後にウィンドウをたたんだ状態にできます）。
+- **最小化で起動** — Windows では起動時にタスクバーへ最小化します（タスクバーのアイコンは
+  残るので、メインウィンドウはいつでも開き直せます）。macOS / Linux ではシステムトレイへ
+  最小化されます。
+- **トレイ接続通知** — 起動10秒後（昇格プロンプトの確定後）に現在の接続状態を表示します。
+  ネットワーク変更（Wi-Fi 切替・ケーブル抜去・ネットワーク喪失など）でトンネル状態が
+  変わった場合も、10秒遅延で安定した最新状態のバブルを表示します。バブルにはアクション
+  メニュー（メインウィンドウを開く / 切断）があり、手動で閉じるか、設定可能な表示時間
+  （既定10秒、設定で変更可）で自動的に閉じます。
+- **トンネル管理** — `.conf` のインポート / エクスポート、接続履歴、クイック切り替え。
+
+## アップストリーム wireguide からの修正・強化点
+
+### 修正
+
+1. **Wi-Fi をネットワーク出口として完全サポート（最も重要な修正）** —
+   アップストリームは Windows では**有線**インターフェースからしかトラフィックを送信
+   せず、Wi-Fi では出口が使えませんでした。本エディションはデフォルト出口インターフェース
+   の選択を修正し、Wi-Fi ではワイヤレスアダプターから正しくトラフィックが送出されます。
+2. **GUI テーマのバグ** — ダーク / ライトテーマ切替時の描画崩れを修正しました。
+3. **Windows バージョン情報の標準化** — exe のプロパティでバージョン情報が空になる問題を
+   修正しました（現在は `goversioninfo` で生成）。
+4. **安定性の修正** — 更新確認スケジューラの重複排除、物理アダプター検出の精度向上など
+   （[CHANGELOG](CHANGELOG.ja.md) を参照）。
+
+### 強化
+
+1. **SSID ドロップダウン** — 自動接続ルールで、システムが保存している**すべての
+   Wi-Fi SSID** をドロップダウンから選択でき、入力ミスを防げます。
+2. **プロキシ経由の更新確認** — 更新確認の前に HTTP(S) プロキシを設定可能。
+   GitHub に到達できない / レート制限されることによる更新失敗を解決します。
+3. **多言語 UI** — 简体中文 / English / 日本語 / 한국어 / 繁體中文。
+4. **システム統合** — ログイン時自動起動、最小化起動（Windows はタスクバー / macOS・
+   Linux はトレイ）、トレイ接続通知（起動10秒後 / ネットワーク変更で接続状態が変わった
+   ときに表示、既定10秒、変更可）。
+5. **ウィンドウタイトルと操作感の改善** など。
+
+## プラットフォームサポート
+
+| プラットフォーム | 状態 |
+| --- | --- |
+| Windows 10 / 11（x64、x86 32ビット、ARM64） | ✅ 完全サポート（マルチトンネル同時接続 + SSID 自動接続） |
+| macOS | 🚧 強化版は開発中 — [wireguide](https://github.com/korjwl1/wireguide) または [WireTunnels](https://github.com/FMDigitech/WireTunnels) を利用 |
+| Linux | 🚧 強化版は開発中 — [wireguide](https://github.com/korjwl1/wireguide) を利用 |
+| Android / iOS | ❌ **非対応**（トンネルを同時に実行できず、Wi-Fi SSID による自動切替も不可） |
+
+> **macOS の代替: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — マルチトンネル・
+> 監視・制御に対応するネイティブ macOS メニューバー WireGuard クライアントで、
+> アップストリームの `wireguide` を補完します。
+
+### モバイル版がない理由
+
+本プロジェクトの核となる機能は**マルチトンネル同時接続**と**ルールベース自動接続
+（例: Wi-Fi SSID による）**です。Android / iOS ではシステムカーネルと権限の制約により、
+WireGuard 実装が**複数トンネルの同時実行**や**Wi-Fi SSID による自動切替**を行えません —
+モバイルではどちらの核となる目標も達成できません。そのため本プロジェクトは**明示的に
+モバイルを対象外**としています。モバイルユーザーは、単一トンネルの用途には公式 WireGuard
+アプリのオンデマンド機能を利用してください。
+
+## ロードマップ
+
+- **v2.0（予定）**: **Windows システムサービス**として実行 — ユーザーログインなしでの
+  自動接続、より安定したネットワークスタック、優れた権限制御。
+
+## ダウンロードとインストール
+
+各リリースでは Windows ビルドを**インストーラー**と**ポータブル版**の2種類に分けて
+公開しています。
+
+**インストーラー（推奨）**
+
+- Windows x64 インストーラー: `wireguideplus-amd64-installer.exe`
+- Windows x86（32ビット）インストーラー: `wireguideplus-x86-installer.exe`
+- Windows ARM64 インストーラー: `wireguideplus-arm64-installer.exe`
+
+インストーラー名にはアーキテクチャが含まれます（`wireguideplus-<arch>-installer.exe`、
+arch は `x86` / `amd64` / `arm64`）。インストールされるプログラムのファイル名にも
+アーキテクチャが付きます（`wireguideplus-<arch>.exe` — ファイルのプロパティ → 詳細でも
+表示されます）。64ビット版インストーラーは既定で `C:\Program Files\WireGuide Plus` に、32ビット版は
+`C:\Program Files (x86)\WireGuide Plus`（32ビット OS では `C:\Program Files\WireGuide Plus`）
+にインストールします。インストール先はインストール中に変更できます。スタートメニューの
+ショートカット（「WireGuide Plus のアンインストール」を含む、既定オン・任意）と
+デスクトップショートカット（常に作成）が登録されます。インストーラーには必要なファイル
+がすべて含まれており、追加ダウンロードは不要です。
+
+**ポータブル版（インストール不要）**
+
+- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`**（32ビット exe は **`wintun-x86.dll`**、
+  ARM64 exe は **`wintun-arm64.dll`**）— **同じアーキテクチャ**の2ファイルをまとめて
+  ダウンロードし、同じフォルダーに置いてから exe を実行してください。
+
+ポータブル版は**単体では動作しません**。WireGuard トンネルを作成するために必要な
+ドライバー DLL を、exe と同じフォルダーに置く必要があります。プログラムはアーキテクチャに
+応じて対応ファイルを自動で読み込みます（`wintun-amd64.dll` / `wintun-x86.dll` /
+`wintun-arm64.dll`）— **リネーム不要**で、下表のとおり置くだけです:
+
+| exe | 対応するドライバー DLL |
+| --- | --- |
+| `wireguideplus-amd64.exe`（64ビット） | `wintun-amd64.dll` |
+| `wireguideplus-x86.exe`（32ビット） | `wintun-x86.dll` |
+| `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
+
+ドライバー DLL は `wintun-0.14.1.zip` に含まれます（
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll) を参照）。リリースでは
+`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
+`wireguideplus-arm64-portable.zip` のポータブル zip も提供しています。各 zip には
+exe と対応するドライバー DLL が**同梱**されており、解凍するだけで実行できます。手動で
+組み合わせたい方向けに、`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll` も
+個別に添付されます（exe の隣にそのまま置くだけ、リネーム不要）。対応するドライバー
+DLL が exe の隣にない場合、トンネルを作成できません。
+
+## コード署名
+
+公開されるすべての Windows **インストーラー**には Authenticode 署名が施されており、
+**整合性**（転送中やディスク上で改ざんされていないこと）と**出所**（このプロジェクトで
+ビルド・公開されたこと）を同時に検証できます。署名済みバイナリは、初回実行時の
+Windows SmartScreen 警告も少なくなります。
+
+注: 署名されているのは**インストーラーのみ**です。ポータブル zip 内の exe は
+未署名のビルド成果物です。完全な署名ポリシー（対象範囲、承認ワークフロー、アカウント
+セキュリティ、再現性）は [SIGNING-POLICY.md](SIGNING-POLICY.md) をご覧ください。
+
+> Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+> [SignPath Foundation](https://signpath.org).
+
+## ビルドと開発
+
+ビルド環境の要件、開発 / リリースビルドのコマンド（x86 + amd64 + arm64 のマルチ
+アーキテクチャビルドを含む）、NSIS インストーラーの注意点、バージョンリソース、リリース
+ワークフローは [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) に記載しています。公開は
+バージョンタグをプッシュするだけ — GitHub Actions パイプラインがビルド・署名・公開を
+自動で行います（[docs/release.md](docs/release.md) を参照）。
+
+## データとログ
+
+| 項目 | 場所 |
+| --- | --- |
+| 設定 / 履歴 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
+| トンネル設定 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| ログ | `%APPDATA%\wireguideplus\logs\` |
+
+## アンインストール
+
+**コントロールパネル → プログラムと機能 → WireGuide Plus** からアンインストールするか、
+インストール先のアンインストーラーを実行します。
+
+## 謝辞
+
+- [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — アップストリームのオープンソースプロジェクト
+- [WireGuard](https://www.wireguard.com/) / [wireguard-go](https://git.zx2c4.com/wireguard-go)
+- [Wails](https://wails.io)

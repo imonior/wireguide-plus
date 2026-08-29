@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// deriveUserAppSupport returns the user's %APPDATA%\wireguide directory.
+// deriveUserAppSupport returns the user's %APPDATA%\wireguideplus directory.
 // On Windows the helper runs as SYSTEM via the named-pipe service, so we
 // can't read os.UserHomeDir() — that returns the SYSTEM profile path. The
 // uid arg is ignored on Windows; the GUI passes its own %APPDATA% via
@@ -21,13 +21,13 @@ import (
 func deriveUserAppSupport(uid int) (string, error) {
 	_ = uid
 	if appdata := os.Getenv("APPDATA"); appdata != "" {
-		return filepath.Join(appdata, "wireguide"), nil
+		return filepath.Join(appdata, "wireguideplus"), nil
 	}
 	if local := os.Getenv("LOCALAPPDATA"); local != "" {
-		return filepath.Join(local, "wireguide"), nil
+		return filepath.Join(local, "wireguideplus"), nil
 	}
 	if pd := os.Getenv("PROGRAMDATA"); pd != "" {
-		return filepath.Join(pd, "wireguide"), nil
+		return filepath.Join(pd, "wireguideplus"), nil
 	}
 	return "", fmt.Errorf("no APPDATA/LOCALAPPDATA/PROGRAMDATA env available")
 }

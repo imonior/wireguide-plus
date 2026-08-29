@@ -60,3 +60,8 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
+
+// Use the local fork of wintun so the helper loads the architecture-specific
+// DLL (wintun-amd64.dll / wintun-x86.dll / wintun-arm64.dll) instead of the
+// hardcoded "wintun.dll".
+replace golang.zx2c4.com/wintun => ./third_party/wintun

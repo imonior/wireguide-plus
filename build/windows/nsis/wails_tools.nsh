@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "My Product"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.0.0"
+    !define INFO_PRODUCTVERSION "1.1.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "© 2026, My Company"
@@ -41,17 +41,37 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     !define SUPPORTS_ARM64
 !endif
 
+!ifdef ARG_WAILS_X86_BINARY
+    !define SUPPORTS_X86
+!endif
+
 !ifdef SUPPORTS_AMD64
     !ifdef SUPPORTS_ARM64
-        !define ARCH "amd64_arm64"
+        !ifdef SUPPORTS_X86
+            !define ARCH "amd64_arm64_x86"
+        !else
+            !define ARCH "amd64_arm64"
+        !endif
     !else
-        !define ARCH "amd64"
+        !ifdef SUPPORTS_X86
+            !define ARCH "amd64_x86"
+        !else
+            !define ARCH "amd64"
+        !endif
     !endif
 !else
     !ifdef SUPPORTS_ARM64
-        !define ARCH "arm64"
+        !ifdef SUPPORTS_X86
+            !define ARCH "arm64_x86"
+        !else
+            !define ARCH "arm64"
+        !endif
     !else
-        !error "Wails: Undefined ARCH, please provide at least one of ARG_WAILS_AMD64_BINARY or ARG_WAILS_ARM64_BINARY"
+        !ifdef SUPPORTS_X86
+            !define ARCH "x86"
+        !else
+            !error "Wails: Undefined ARCH, please provide at least one of ARG_WAILS_AMD64_BINARY, ARG_WAILS_ARM64_BINARY or ARG_WAILS_X86_BINARY"
+        !endif
     !endif
 !endif
 
@@ -65,6 +85,13 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     !endif
 
     ${If} ${AtLeastWin10}
+        !ifdef SUPPORTS_X86
+            # A 32-bit installer runs on both x86 and x64 Windows (WoW64).
+            ${if} ${IsNativeIA32}
+                Goto ok
+            ${EndIf}
+        !endif
+
         !ifdef SUPPORTS_AMD64
             ${if} ${IsNativeAMD64}
                 Goto ok
@@ -98,6 +125,12 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macroend
 
 !macro wails.files
+    !ifdef SUPPORTS_X86
+        ${if} ${IsNativeIA32}
+            File "/oname=${PRODUCT_EXECUTABLE}" "${ARG_WAILS_X86_BINARY}"
+        ${EndIf}
+    !endif
+
     !ifdef SUPPORTS_AMD64
         ${if} ${IsNativeAMD64}
             File "/oname=${PRODUCT_EXECUTABLE}" "${ARG_WAILS_AMD64_BINARY}"

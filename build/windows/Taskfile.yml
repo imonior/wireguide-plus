@@ -14,8 +14,9 @@ vars:
   # Docker image for cross-compilation with CGO (used when CGO_ENABLED=1 on non-Windows)
   CROSS_IMAGE: wails-cross
 
-  # wintun.dll — required at runtime by wireguard-go on Windows. Pinned to the
-  # last upstream release; SHA256 from https://www.wintun.net/.
+  # wintun-<arch>.dll — required at runtime by wireguard-go on Windows,
+  # fetched as wintun-x86.dll / wintun-amd64.dll / wintun-arm64.dll.
+  # Pinned to the last upstream release; SHA256 from https://www.wintun.net/.
   WINTUN_VERSION: "0.14.1"
   WINTUN_SHA256: "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
 
@@ -51,8 +52,11 @@ tasks:
           ARCH: '{{.ARCH | default ARCH}}'
     cmds:
       - task: generate:syso
-      - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe"
-      - cmd: powershell Remove-item *.syso
+      - go build {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.exe"
+      # Quoted so go-task doesn't glob-expand *.syso into positional args
+      # (Remove-Item rejects extra positional parameters) — PowerShell must
+      # do the globbing itself, or the cleanup step fails after every build.
+      - cmd: powershell -NoProfile -Command "Remove-Item -Force -ErrorAction SilentlyContinue *.syso"
         platforms: [windows]
       - cmd: rm -f *.syso
         platforms: [linux, darwin]
@@ -60,6 +64,7 @@ tasks:
       # SIGN_PUBKEY (optional, release CI): hex Ed25519 public key baked
       # into internal/update so production builds verify SHA256SUMS.sig.
       BUILD_FLAGS: '{{if eq .DEV "true"}}{{if .EXTRA_TAGS}}-tags {{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .SIGN_PUBKEY}} -X github.com/imonior/wireguide-plus/internal/update.expectedPublicKey={{.SIGN_PUBKEY}}{{end}}"{{end}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
     env:
       GOOS: windows
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
@@ -106,6 +111,34 @@ tasks:
             fi
           done | tr '\n' ' '
 
+  build:all:
+    summary: Builds and packages the x86, amd64 and arm64 Windows releases plus installers
+    desc: |
+      Release policy: every Windows build ships a 32-bit (x86), a 64-bit
+      (amd64) and an ARM64 program plus matching installers. Run on Windows:
+      `wails3 task windows:build:all`. The wintun driver DLL (wintun-x86.dll /
+      wintun-amd64.dll / wintun-arm64.dll) is refreshed between the
+      architectures so each installer bundles the correct one.
+    cmds:
+      - cmd: powershell -NoProfile -Command "Remove-Item -Force '{{.ROOT_DIR}}/bin/wintun-x86.dll' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -f "{{.ROOT_DIR}}/bin/wintun-x86.dll"
+        platforms: [linux, darwin]
+      - task: package
+        vars: { ARCH: 386 }
+      - cmd: powershell -NoProfile -Command "Remove-Item -Force '{{.ROOT_DIR}}/bin/wintun-x86.dll' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -f "{{.ROOT_DIR}}/bin/wintun-x86.dll"
+        platforms: [linux, darwin]
+      - task: package
+        vars: { ARCH: amd64 }
+      - cmd: powershell -NoProfile -Command "Remove-Item -Force '{{.ROOT_DIR}}/bin/wintun-arm64.dll' -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -f "{{.ROOT_DIR}}/bin/wintun-arm64.dll"
+        platforms: [linux, darwin]
+      - task: package
+        vars: { ARCH: arm64 }
+
   package:
     summary: Packages the application
     cmds:
@@ -121,25 +154,53 @@ tasks:
       FORMAT: '{{.FORMAT | default "nsis"}}'
 
   generate:syso:
-    summary: Generates Windows `.syso` file
+    summary: Generates Windows `.syso` file (goversioninfo for standard version resources)
+    desc: |
+      Uses goversioninfo (build/windows/versioninfo.json) instead of `wails3 generate syso`
+      because the wails-generated resource uses language 0x0000 and a zeroed
+      FixedFileInfo.ProductVersion, which Windows Explorer / FileVersionInfo
+      cannot display. goversioninfo emits a standard 0409/04B0 resource.
+
+      The per-architecture identity (FileDescription / InternalName /
+      OriginalFilename) is rendered from versioninfo.json.tmpl by
+      tools/genverinfo, so Properties -> Details always shows the platform.
     dir: build
     cmds:
-      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
+      - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION | default "1.1.0"}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
+      - cmd: goversioninfo -64=false -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_386.syso windows/versioninfo.gen.json
+        when:
+          - '{{.ARCH}} == "386"'
+      # arm64 MUST use `-arm` (IMAGE_FILE_MACHINE_ARM64). Using `-64`
+      # (AMD64 machine) here links fine but the resulting .rsrc is tagged
+      # as AMD64 and Explorer / FileVersionInfo then report empty version
+      # info on the ARM64 build.
+      - cmd: goversioninfo -arm -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_arm64.syso windows/versioninfo.gen.json
+        when:
+          - '{{.ARCH}} == "arm64"'
+      - cmd: goversioninfo -64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_amd64.syso windows/versioninfo.gen.json
+        when:
+          - '{{.ARCH}} == "amd64"'
+      - cmd: powershell -NoProfile -Command "Remove-Item -Force windows/versioninfo.gen.json -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -f windows/versioninfo.gen.json
+        platforms: [linux, darwin]
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
 
   vendor:wintun:
-    summary: Fetches the official wintun.dll into bin/ (required at runtime by wireguard-go)
+    summary: Fetches the official wintun driver into bin/ as wintun-<arch>.dll
     desc: |
-      wireguard-go loads wintun.dll dynamically at first TUN creation; without
-      it Connect fails with "Error loading wintun.dll DLL: Unable to load
+      wireguard-go loads the architecture-specific driver (wintun-amd64.dll /
+      wintun-x86.dll / wintun-arm64.dll) dynamically at first TUN creation;
+      without it Connect fails with "Error loading wintun DLL: Unable to load
       library". The official binary is published at https://www.wintun.net/ and
-      pinned here by SHA256.
+      pinned here by SHA256. The filename mirrors the GOARCH selection in
+      internal/tunnel/wintun_cleanup_windows.go and third_party/wintun.
     internal: true
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
     status:
-      - test -f "{{.ROOT_DIR}}/{{.BIN_DIR}}/wintun.dll"
+      - test -f "{{.ROOT_DIR}}/{{.BIN_DIR}}/wintun-{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}.dll"
     cmds:
       - cmd: powershell -NoProfile -ExecutionPolicy Bypass -File "{{.ROOT_DIR}}/build/windows/scripts/vendor-wintun.ps1" -Version "{{.WINTUN_VERSION}}" -Sha256 "{{.WINTUN_SHA256}}" -Arch "{{.ARCH}}" -OutDir "{{.ROOT_DIR}}/{{.BIN_DIR}}"
         platforms: [windows]
@@ -160,13 +221,14 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - | 
         {{if eq OS "windows"}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        makensis -DPRODUCT_EXECUTABLE="wireguideplus-{{.SUFFIX}}.exe" -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\wireguideplus-{{.SUFFIX}}.exe" project.nsi
         {{else}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        makensis -DPRODUCT_EXECUTABLE="wireguideplus-{{.SUFFIX}}.exe" -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.exe" project.nsi
         {{end}}
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
-      ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
+      ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else if eq .ARCH "arm64"}}ARM64{{else}}X86{{end}}'
 
   create:msix:package:
     summary: Creates an MSIX package
@@ -176,15 +238,16 @@ tasks:
       - |-
         wails3 tool msix \
           --config "{{.ROOT_DIR}}/wails.json" \
-          --name "{{.APP_NAME}}" \
-          --executable "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" \
+          --name "WireGuide Plus" \
+          --executable "{{.ROOT_DIR}}/{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.exe" \
           --arch "{{.ARCH}}" \
-          --out "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}.msix" \
+          --out "{{.ROOT_DIR}}/{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.msix" \
           {{if .CERT_PATH}}--cert "{{.CERT_PATH}}"{{end}} \
           {{if .PUBLISHER}}--publisher "{{.PUBLISHER}}"{{end}} \
           {{if .USE_MSIX_TOOL}}--use-msix-tool{{else}}--use-makeappx{{end}}
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
       CERT_PATH: '{{.CERT_PATH | default ""}}'
       PUBLISHER: '{{.PUBLISHER | default ""}}'
       USE_MSIX_TOOL: '{{.USE_MSIX_TOOL | default "false"}}'
@@ -196,7 +259,10 @@ tasks:
 
   run:
     cmds:
-      - '{{.BIN_DIR}}/{{.APP_NAME}}.exe'
+      - '{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.exe'
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
 
   sign:
     summary: Signs the Windows executable
@@ -207,7 +273,10 @@ tasks:
     deps:
       - task: build
     cmds:
-      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
+      - wails3 tool sign --input "{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
     preconditions:
       - sh: '[ -n "{{.SIGN_CERTIFICATE}}" ] || [ -n "{{.SIGN_THUMBPRINT}}" ]'
         msg: "Either SIGN_CERTIFICATE or SIGN_THUMBPRINT is required. Set it in the vars section at the top of build/windows/Taskfile.yml"
@@ -221,7 +290,10 @@ tasks:
     deps:
       - task: create:nsis:installer
     cmds:
-      - wails3 tool sign --input "build/windows/nsis/{{.APP_NAME}}-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
+      - wails3 tool sign --input "{{.BIN_DIR}}/wireguideplus-{{.SUFFIX}}-installer.exe" {{if .SIGN_CERTIFICATE}}--certificate {{.SIGN_CERTIFICATE}}{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint {{.SIGN_THUMBPRINT}}{{end}} {{if .TIMESTAMP_SERVER}}--timestamp {{.TIMESTAMP_SERVER}}{{end}}
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
     preconditions:
       - sh: '[ -n "{{.SIGN_CERTIFICATE}}" ] || [ -n "{{.SIGN_THUMBPRINT}}" ]'
         msg: "Either SIGN_CERTIFICATE or SIGN_THUMBPRINT is required. Set it in the vars section at the top of build/windows/Taskfile.yml"

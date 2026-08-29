@@ -6,6 +6,9 @@ frontend/node_modules
 build/linux/appimage/build
 build/linux/wireguide.desktop
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+# Per-architecture versioninfo rendered by tools/genverinfo during
+# `task generate:syso` (source of truth is versioninfo.json.tmpl).
+build/windows/versioninfo.gen.json
 
 # Go
 *.exe
@@ -15,6 +18,7 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 *.dylib
 *.test
 *.out
+*.syso
 
 # OS
 .DS_Store

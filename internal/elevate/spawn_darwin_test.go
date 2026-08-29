@@ -13,9 +13,9 @@ import (
 // testArgs returns a representative Args for plist generation.
 func testArgs() Args {
 	return Args{
-		SocketPath: "/var/run/wireguide/wireguide.sock",
+		SocketPath: "/var/run/wireguideplus/wireguideplus.sock",
 		SocketUID:  501,
-		DataDir:    "/Library/Application Support/wireguide",
+		DataDir:    "/Library/Application Support/wireguideplus",
 	}
 }
 

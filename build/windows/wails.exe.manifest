@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
-    <assemblyIdentity type="win32" name="com.imonior.wireguide-plus" version="1.0.0" processorArchitecture="*"/>
+    <!-- NOTE: the assemblyIdentity version MUST be 4-part numeric
+         (major.minor.patch.build) or the SxS activation context fails with
+         "The application has failed to start because its side-by-side
+         configuration is incorrect." Keep in sync with the FileVersion in
+         windows/versioninfo.json on every version bump. -->
+    <assemblyIdentity type="win32" name="com.imonior.wireguide-plus" version="1.1.0.0" processorArchitecture="*"/>
     <dependency>
         <dependentAssembly>
             <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>

@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 type guiLogHandler struct {
 	levelVar *slog.LevelVar
 	stderr   slog.Handler
+	file     slog.Handler // may be nil until setGUILogFile runs
 	app      *application.App // may be nil before Wails finishes bootstrap
 
 	mu    sync.Mutex
@@ -119,6 +121,9 @@ func (h *guiLogHandler) Enabled(_ context.Context, l slog.Level) bool {
 
 func (h *guiLogHandler) Handle(ctx context.Context, r slog.Record) error {
 	_ = h.stderr.Handle(ctx, r)
+	if h.file != nil {
+		_ = h.file.Handle(ctx, r)
+	}
 
 	var b strings.Builder
 	b.WriteString(r.Message)
@@ -169,6 +174,7 @@ func (h *guiLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &guiLogHandler{
 		levelVar: h.levelVar,
 		stderr:   h.stderr.WithAttrs(attrs),
+		file:     h.file,
 		app:      app,
 		attrs:    combined,
 	}
@@ -181,7 +187,47 @@ func (h *guiLogHandler) WithGroup(name string) slog.Handler {
 	return &guiLogHandler{
 		levelVar: h.levelVar,
 		stderr:   h.stderr.WithGroup(name),
+		file:     h.file,
 		app:      app,
 		attrs:    h.attrs,
 	}
+}
+
+// setGUILogFile opens an append-only file in logsDir and starts mirroring
+// every GUI log record into it. Called after storage.EnsureDirs so the
+// directory is guaranteed to exist; records emitted before this point are
+// only in stderr/pending and are not retroactively written.
+func setGUILogFile(logsDir string) {
+	path := filepath.Join(logsDir, "wireguideplus.log")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "wireguide-plus: open log file %s: %v\n", path, err)
+		return
+	}
+	// safeMultiWriter ignores individual writer errors so a full disk or a
+	// broken stderr cannot break the stderr/event pipeline.
+	fileHandler := slog.NewTextHandler(&safeMultiWriter{writers: []io.Writer{os.Stderr, f}}, &slog.HandlerOptions{
+		Level:     guiLogLevel,
+		AddSource: true,
+	})
+	guiLogRefMu.Lock()
+	if guiLogRef != nil {
+		guiLogRef.mu.Lock()
+		guiLogRef.file = fileHandler
+		guiLogRef.mu.Unlock()
+	}
+	guiLogRefMu.Unlock()
+	slog.Info("file log enabled", "path", path)
+}
+
+// safeMultiWriter fans writes out to every writer, discarding errors.
+type safeMultiWriter struct {
+	writers []io.Writer
+}
+
+func (w *safeMultiWriter) Write(p []byte) (int, error) {
+	for _, w := range w.writers {
+		_, _ = w.Write(p)
+	}
+	return len(p), nil
 }

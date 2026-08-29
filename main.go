@@ -12,9 +12,11 @@ import (
 	"embed"
 	"flag"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/imonior/wireguide-plus/internal/cli"
 	"github.com/imonior/wireguide-plus/internal/gui"
@@ -96,9 +98,20 @@ func main() {
 
 	// GUI mode
 	gui.SetTrayIconPNG(trayIconBytes)
+	// Crash diagnostics: GUI mode runs with -H windowsgui (no console), so a
+	// panic inside the Wails layer would otherwise vanish with the window.
+	// Capture the stack into the file log (installed by gui.Run) before dying.
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("PANIC (main)", "value", r, "stack", string(debug.Stack()))
+			os.Exit(1)
+		}
+	}()
 	if err := gui.Run(application.AssetFileServerFS(assets), systemDataDir()); err != nil {
-		log.Fatal(err)
+		slog.Error("GUI exited with error", "error", err)
+		os.Exit(1)
 	}
+	slog.Info("GUI exited cleanly")
 }
 
 // systemDataDir returns the system-level data directory for helper state.
@@ -106,14 +119,14 @@ func main() {
 func systemDataDir() string {
 	switch runtime.GOOS {
 	case "darwin":
-		return "/Library/Application Support/wireguide"
+		return "/Library/Application Support/wireguideplus"
 	case "linux":
-		return "/var/lib/wireguide"
+		return "/var/lib/wireguideplus"
 	case "windows":
 		if pd := os.Getenv("PROGRAMDATA"); pd != "" {
-			return pd + `\wireguide`
+			return pd + `\wireguideplus`
 		}
-		return `C:\ProgramData\wireguide`
+		return `C:\ProgramData\wireguideplus`
 	}
-	return "/tmp/wireguide"
+	return "/tmp/wireguideplus"
 }

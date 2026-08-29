@@ -1,216 +1,177 @@
-<p align="center">
-  <img src="docs/appicon.png" width="128" alt="WireGuide" />
-</p>
+# WireGuide Plus
 
-<h1 align="center">WireGuide Plus</h1>
+**Windows용 멀티 터널 · 자동화 중심 WireGuard 클라이언트**
 
-<p align="center">
-  킬 스위치와 자동 재연결을 지원하는 크로스 플랫폼 WireGuard VPN 클라이언트
-</p>
+WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github.com/korjwl1/wireguide)를
+**깊이 있게 수정·강화한** 포크입니다. 두 가지 핵심 기능:
 
-<p align="center">
-  <a href="https://github.com/imonior/wireguide-plus/releases/latest"><img src="https://img.shields.io/github/v/release/imonior/wireguide-plus?style=flat-square" alt="Release" /></a>
-  <a href="https://github.com/imonior/wireguide-plus/stargazers"><img src="https://img.shields.io/github/stars/imonior/wireguide-plus?style=flat-square" alt="Stars" /></a>
-  <a href="#설치"><img src="https://img.shields.io/badge/homebrew-tap-blue?style=flat-square" alt="Homebrew" /></a>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform" />
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/imonior/wireguide-plus?style=flat-square" alt="License" /></a>
-</p>
+- **멀티 터널 동시 연결** — 여러 WireGuard 터널을 동시에 연결해 서로 간섭 없이
+  독립적으로 실행할 수 있습니다.
+- **조건 기반 자동 연결** — Wi-Fi SSID, 시간대, 시스템 시작 등의 조건에 따라
+  알맞은 터널을 자동으로 연결합니다 (예: 사무실 Wi-Fi에서는 터널 A, 집에서는 터널 B).
 
-<p align="center">
-  <a href="README.md">English</a>
-</p>
+[English](README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | **한국어** | [日本語](README.ja.md)
 
-<p align="center">
-  <i><a href="https://github.com/korjwl1/wireguide">korjwl1/wireguide</a> v0.5.1에서 포크했습니다 — 원저자에게 감사드립니다.</i>
-</p>
+> 현재 **Windows 10 / 11(x64, x86 32비트 및 ARM64)을 완전히 지원**합니다. macOS /
+> Linux 강화판은 개발 중이며, 그동안은 업스트림 버전을 사용하세요 ([플랫폼 지원](#플랫폼-지원) 참조).
+> **Android / iOS는 지원하지 않습니다.**
 
----
+## 주요 기능
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/06-connected.png" width="400" /><br><sub>VPN 연결됨</sub></td>
-    <td align="center"><img src="docs/screenshots/02-editor.png" width="400" /><br><sub>설정 에디터</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/03-autocomplete.png" width="400" /><br><sub>자동완성</sub></td>
-    <td align="center"><img src="docs/screenshots/05-settings.png" width="400" /><br><sub>설정</sub></td>
-  </tr>
-</table>
+- **멀티 터널 동시 연결** — 업스트림의 「한 번에 한 터널만」과 달리 여러 터널을
+  병렬로 실행할 수 있어, 사내망과 외부망을 동시에 접근할 수 있습니다.
+- **조건 기반 자동 연결** — Wi-Fi SSID / 시간대 / 시스템 시작 등의 조건으로 터널을
+  자동으로 연결·해제하며, 규칙은 우선순위와 상호 배제를 지원합니다.
+- **자동 재연결** — 터널이 예기치 않게 끊기면 자동으로 복구되며, 연결 상태를
+  실시간으로 확인할 수 있습니다.
+- **로그인 시 자동 시작** — 로그인 후 WireGuide Plus를 자동으로 실행하고 규칙에 따라
+  연결합니다 (「최소화 시작」과 함께 쓰면 창이 시작 직후 접힌 상태로 실행됩니다).
+- **최소화 시작** — Windows에서는 시작 시 작업 표시줄로 최소화됩니다(작업 표시줄
+  아이콘이 유지되므로 메인 창은 언제든 다시 열 수 있습니다). macOS/Linux에서는 시스템
+  트레이로 최소화됩니다.
+- **트레이 연결 상태 알림** — 시작 후 10초(권한 상승 확인 후)에 현재 연결 상태를
+  알려주며, 네트워크 변화(Wi-Fi 전환, 랜 케이블 분리, 인터넷 끊김 등)로 터널 상태가
+  바뀌면 10초 후 안정된 최신 상태를 표시합니다. 알림에는 작업 메뉴(메인 창 열기 /
+  연결 끊기)가 있고, 수동으로 닫거나 설정한 시간(기본 10초, 설정에서 조절 가능) 후
+  자동으로 닫힙니다.
+- **터널 관리** — `.conf` 가져오기 / 내보내기, 연결 기록, 빠른 켜기/끄기.
 
----
+## 업스트림 wireguide 대비 수정·개선 사항
 
-## 설치
+### 수정
 
-**macOS 15+ (Apple Silicon)**, **Windows 11 (amd64)**, **Linux (Debian 13 / Raspberry Pi OS, amd64/arm64)** 에서 테스트 완료 — 실제 검증 범위는 아래 [테스트 커버리지](#테스트-커버리지) 참조.
+1. **Wi-Fi 네트워크 출구 지원(가장 중요한 수정)** — 업스트림은 Windows에서 **유선**
+   인터페이스로만 트래픽을 내보내 Wi-Fi 환경에서는 출구가 사용 불가했습니다. 이
+   에디션은 기본 출구 인터페이스 선택을 수정해 Wi-Fi에서도 무선 어댑터로 트래픽이
+   정상적으로 나가게 했습니다.
+2. **GUI 테마 표시 오류** — 다크/라이트 테마 전환 시 렌더링이 깨지던 문제를 수정했습니다.
+3. **Windows 버전 리소스 표준화** — exe 속성 「세부 정보」의 버전 정보가 비어 있던
+   문제를 수정했습니다 (`goversioninfo`로 생성).
+4. **안정성 수정** — 업데이트 확인 스케줄 중복 제거, 더 정확한 물리 어댑터 감지 등
+   (자세한 내용은 [CHANGELOG](CHANGELOG.en.md) 참조).
 
-### macOS (Homebrew) — 권장
+### 개선
 
-```bash
-brew tap imonior/tap
-brew install --cask wireguide
-```
+1. **SSID 드롭다운** — 자동 연결 규칙에서 시스템에 **저장된 모든 Wi-Fi SSID**를
+   드롭다운으로 선택할 수 있어 오타가 없습니다.
+2. **프록시 통한 업데이트 확인** — 업데이트 확인 전에 HTTP(S) 프록시를 설정할 수 있어,
+   GitHub 접속 불가/제한으로 인한 업데이트 실패를 해결합니다.
+3. **다국어 UI** — 简体中文 / English / 日本語 / 한국어 / 繁體中文.
+4. **시스템 통합** — 로그인 시 자동 시작, 트레이 최소화 시작, 트레이 연결 상태 알림
+   (시작 후 10초 / 네트워크 변화 후 10초 지연 표시, 기본 10초, 조절 가능).
+5. **창 제목 및 상호작용 개선** 등.
 
-### macOS (수동)
+## 플랫폼 지원
 
-[Releases](https://github.com/imonior/wireguide-plus/releases)에서 다운로드 후 `/Applications`으로 이동.
+| 플랫폼 | 상태 |
+| --- | --- |
+| Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결) |
+| macOS | 🚧 강화판 개발 중 — [wireguide](https://github.com/korjwl1/wireguide) 또는 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 사용 |
+| Linux | 🚧 강화판 개발 중 — [wireguide](https://github.com/korjwl1/wireguide) 사용 |
+| Android / iOS | ❌ **지원 안 함** (터널 동시 실행 불가, Wi-Fi SSID 자동 전환 불가) |
 
-> macOS에서 "앱이 손상되었습니다" 경고가 뜨면: `xattr -cr /Applications/WireGuide.app`
+> **macOS 대안: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — 멀티
+> 터널, 모니터링, 제어를 지원하는 네이티브 macOS 메뉴바 WireGuard 클라이언트로,
+> 업스트림 `wireguide`를 보완합니다.
 
-### Windows (설치 파일)
+### 모바일 버전이 없는 이유
 
-[Releases](https://github.com/imonior/wireguide-plus/releases)에서 `WireGuide-windows-amd64.exe`
-(또는 `-arm64.exe`) 설치 파일을 다운로드 후 실행. NSIS 인스톨러가 헬퍼 서비스와 단축 아이콘을
-등록합니다.
+이 프로젝트의 핵심은 **멀티 터널 동시 연결**과 **조건 기반 자동 연결(예: Wi-Fi SSID)** 입니다.
+Android / iOS에서는 시스템 커널과 권한 체계 때문에 WireGuard 구현이 **여러 터널을
+동시에 실행**하거나 **Wi-Fi SSID에 따라 터널을 자동으로 전환**할 수 없습니다. 두 핵심
+목표 모두 모바일에서 달성할 수 없으므로, 이 프로젝트는 **모바일을 명시적으로
+지원하지 않습니다.** 모바일 단일 터널 용도는 공식 WireGuard 앱의 On-Demand 기능을
+사용하세요.
 
-> Windows SmartScreen에서 "확인되지 않은 게시자" 경고가 뜰 수 있습니다 — 현재 코드 서명이
-> 없습니다. "추가 정보" → "실행"을 클릭하세요.
+## 로드맵
 
-### Linux (DEB)
+- **v2.0(계획)**: **Windows 시스템 서비스**로 실행 — 사용자 로그인 없이 자동 연결,
+  더 안정적인 네트워크 스택과 권한 제어.
 
-[Releases](https://github.com/imonior/wireguide-plus/releases)에서 `WireGuide-linux-amd64.deb`
-(또는 `-arm64.deb`) 패키지를 다운로드 후 설치:
+## 다운로드 & 설치
 
-```bash
-sudo apt install ./WireGuide-linux-amd64.deb
-```
+각 릴리스에서는 Windows 빌드를 **설치 프로그램**과 **포터블 버전** 두 종류로 나누어
+배포합니다.
 
-앱 메뉴 등록과 트레이 연동이 함께 설치되며, 특권 헬퍼는 상시 서비스가 아니라
-PolicyKit을 통해 필요할 때만 기동됩니다.
+**설치 프로그램(권장)**
 
-### 소스에서 빌드
+- Windows x64 설치 프로그램: `wireguideplus-amd64-installer.exe`
+- Windows x86(32비트) 설치 프로그램: `wireguideplus-x86-installer.exe`
+- Windows ARM64 설치 프로그램: `wireguideplus-arm64-installer.exe`
 
-```bash
-brew install go node
-go install github.com/go-task/task/v3/cmd/task@v3.45.4
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+설치 프로그램 파일 이름에는 아키텍처가 포함됩니다(`wireguideplus-<arch>-installer.exe`,
+arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 아키텍처가 붙습니다
+(`wireguideplus-<arch>.exe` — 파일 속성 → 자세히에서도 확인 가능). 64비트 설치
+프로그램은 기본적으로 `C:\Program Files\WireGuide Plus`에, 32비트 설치 프로그램은
+`C:\Program Files (x86)\WireGuide Plus`에 설치됩니다(32비트 시스템에서는
+`C:\Program Files\WireGuide Plus`). 설치 중에 설치 폴더를 변경할 수 있습니다. 시작
+메뉴 바로 가기(「WireGuide Plus 제거」 항목 포함, 기본 생성, 선택 해제 가능)와
+바탕화면 바로 가기(항상 생성)가 등록됩니다. 설치 프로그램에는 필요한 모든 파일이
+포함되어 있어 추가 다운로드가 필요 없습니다.
 
-task build
-./bin/wireguide
-```
+**포터블 버전(설치 불필요)**
 
-### 테스트 커버리지
+- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`** (32비트 exe는 **`wintun-x86.dll`**,
+  ARM64 exe는 **`wintun-arm64.dll`**) — **같은 아키텍처**의 두 파일을 함께 다운로드해
+  같은 폴더에 넣은 뒤 exe를 실행하세요.
 
-수동 QA는 실물 하드웨어에서 진행하지만, 모든 조합을 커버하지는 못합니다.
-실제로 검증된 범위:
+포터블 버전은 **단독으로 실행되지 않습니다**. WireGuard 터널을 만드는 데 필요한
+드라이버 DLL을 exe와 같은 폴더에 두어야 합니다. 프로그램은 아키텍처에 맞는 파일을
+자동으로 로드합니다(`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) —
+**이름을 바꿀 필요 없이** 아래 표대로 두면 됩니다:
 
-| 플랫폼 | 테스트 환경 | 유선랜 | Wi-Fi |
-|--------|------------|:------:|:-----:|
-| macOS | macOS 26.4 (Tahoe), Apple Silicon | ✅ | ✅ |
-| Windows | Windows 11 (amd64), 데스크탑 | ✅ | ⚠️ 제대로 테스트되지 못함 |
-| Linux | Raspberry Pi OS Lite (arm64) | ⚠️ 미테스트 | ✅ |
+| exe | 일치하는 드라이버 DLL |
+| --- | --- |
+| `wireguideplus-amd64.exe`(64비트) | `wintun-amd64.dll` |
+| `wireguideplus-x86.exe`(32비트) | `wintun-x86.dll` |
+| `wireguideplus-arm64.exe`(ARM64) | `wintun-arm64.dll` |
 
-미검증 칸은 Wi-Fi 의존 기능에서 특히 중요합니다 — Windows의 SSID 기반
-자동화 규칙과 Wi-Fi↔유선 전환, Linux의 유선 게이트웨이/서브넷 감지가
-해당됩니다. **이 빈 곳에서 오류를 만나면 꼭
-[이슈로 알려주세요](https://github.com/imonior/wireguide-plus/issues/new/choose)** —
-저희에게 없는 하드웨어의 문제는 제보가 있어야만 고칠 수 있습니다.
+드라이버 DLL은 `wintun-0.14.1.zip`에 들어 있습니다(
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll) 참조). 릴리스에는
+`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
+`wireguideplus-arm64-portable.zip` 포터블 zip도 제공됩니다. 각 zip에는 exe와 일치하는
+드라이버 DLL이 **함께** 들어 있어 압축을 풀기만 하면 실행할 수 있습니다. 수동으로
+맞추려는 사용자를 위해 `wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`도
+별도로 첨부됩니다(exe 옆에 그대로 두면 되며, 이름 변경 불필요). 일치하는 드라이버
+DLL이 exe 옆에 없으면 터널을 만들 수 없습니다.
 
----
+## 코드 서명
 
-## 기능
+게시되는 모든 Windows **설치 프로그램**은 Authenticode 서명이 적용되어 **무결성**(전송
+중이거나 디스크에서 변조되지 않음)과 **출처**(이 프로젝트에서 빌드·배포되었음)를 동시에
+검증할 수 있습니다. 서명된 바이너리는 최초 실행 시 Windows SmartScreen 경고도 덜
+표시됩니다.
 
-| 기능 | 설명 |
-|------|------|
-| **자동화 (Automation)** | 터널별 조건→액션 규칙. 어느 네트워크에 있는지(Wi-Fi SSID / 서브넷 / 공유기 MAC 주소)에 따라 자동 연결·해제. 규칙은 우선순위 순서(드래그로 변경)이며 위에 있는 규칙이 우선. GUI 종료 시에도 헬퍼에서 독립 동작. 트레이에서 수동으로 끈 터널은 다시 켜거나 앱을 재시작하기 전까지 자동 규칙이 적용되지 않습니다. |
-| **CLI** | `wireguide ctl` 명령줄 인터페이스 — 앱 시작/종료(`start`/`stop`), 연결/해제/목록(`--json` 지원)/가져오기/이름변경/삭제 및 자동화 규칙 설정. 실행 중인 헬퍼에 붙어 동작하므로 `wg-quick`과 달리 명령마다 sudo 불필요, 크로스플랫폼. |
-| **멀티 터널** | 여러 WireGuard 터널을 동시에 연결하고 터널별 독립 상태 관리 |
-| **터널 관리** | `.conf` 파일 가져오기, 생성, 편집, 내보내기. 드래그 앤 드롭 지원. |
-| **설정 에디터** | CodeMirror 6 기반 WireGuard 문법 강조 및 자동완성 |
-| **시스템 트레이** | 터널별 켜기/끄기 체크박스 스위치, 연결됨은 초록색으로 표시(연결 중엔 노란색) |
-| **킬 스위치** | VPN 외 모든 트래픽 차단 — macOS `pf`, Linux `nftables`, Windows WFP (선택) |
-| **루프 보호** | 풀터널 라우팅 루프(업로드 폭증 버그)에 대한 다층 방어. Windows: WFP `ALE_AUTH_CONNECT` + `OUTBOUND_TRANSPORT` 블록, `IP_UNICAST_IF` 소켓 바인딩 + 재핀 모니터, 런어웨이 TX 워치독. macOS: `/32` bypass를 `/1` split 라우트보다 먼저 설치 + 게이트웨이 누락 시 fail-fast, `reapply` 중 게이트웨이 손실 시 블랙홀 폴백, 런어웨이 TX 워치독. |
-| **DNS 보호** | DNS 쿼리를 VPN 터널로만 강제 (선택) |
-| **헬스 체크** | 핸드셰이크 상태 모니터링 및 자동 재연결 (선택) |
-| **슬립/웨이크 복구** | macOS `NSWorkspace`, Linux `systemd-logind`, Windows 전원 알림 |
-| **라우트 모니터** | 게이트웨이 변경 시 엔드포인트 바이패스 라우트 재적용 — macOS `RTM`, Linux netlink, Windows `NotifyIpInterfaceChange` |
-| **인터페이스 고정** | WiFi + 이더넷 동시 연결 시 지연 스파이크 방지 |
-| **충돌 감지** | Tailscale 등 다른 WG 인터페이스와의 라우트 충돌 경고 |
-| **진단 도구** | DNS 유출 검사, 라우트 테이블 시각화 |
-| **자동 업데이트** | GitHub Releases 확인; `brew upgrade` 및 직접 설치 지원 |
-| **속도 대시보드** | 실시간 RX/TX 그래프 |
-| **다국어** | 영어, 한국어, 일본어 |
-| **테마** | 다크 / 라이트 / 시스템 자동 |
+참고: **설치 프로그램만** 서명됩니다. 포터블 zip 안의 exe는 서명되지 않은 빌드 산출물입니다.
+전체 서명 정책(범위, 승인 워크플로, 계정 보안, 재현성)은
+[SIGNING-POLICY.md](SIGNING-POLICY.md)를 참조하세요.
 
-[wireguard-go](https://git.zx2c4.com/wireguard-go) 2026년 5월 빌드 사용 (공식 macOS 앱의 엔진은 2023년 2월에서 멈춰 있음).
+> Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+> [SignPath Foundation](https://signpath.org).
 
----
+## 빌드 & 개발
 
-## 아키텍처
+빌드 환경 요구 사항, 개발/배포 빌드 명령(x86 + amd64 + arm64 멀티 아키텍처 빌드 포함),
+NSIS 설치 프로그램 설명, 버전 리소스 및 릴리스 워크플로는 개발 문서
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)에 정리되어 있습니다. 릴리스는 버전 태그를
+로컬에서 푸시하기만 하면 GitHub Actions 파이프라인이 빌드·서명·배포까지 자동으로
+처리합니다 ([docs/release.md](docs/release.md) 참조).
 
-```mermaid
-graph LR
-    subgraph GUI["GUI 프로세스 (일반 권한)"]
-        A1[Wails + Svelte]
-        A2[설정 에디터]
-        A3[시스템 트레이]
-        A4[진단 도구]
-    end
+## 데이터 & 로그
 
-    subgraph Helper["Helper 프로세스 (root)"]
-        B1[wireguard-go + wgctrl]
-        B2[TUN / 라우팅 / DNS]
-        B3[킬 스위치 / 방화벽]
-        B4[재연결 모니터]
-        B5[라우트 모니터]
-    end
+| 항목 | 위치 |
+| --- | --- |
+| 설정 / 기록 | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
+| 터널 설정 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| 로그 | `%APPDATA%\wireguideplus\logs\` |
 
-    GUI <-->|"JSON-RPC over UDS"| Helper
-```
+## 제거
 
-- **단일 바이너리** — `wireguide`가 GUI 또는 helper로 동작 (`--helper` 플래그)
-- **권한 분리** — GUI는 일반 권한; helper는 root로 실행
-- **IPC** — Unix 소켓 (macOS/Linux) 또는 Named Pipe (Windows) 위 JSON-RPC
+**제어판 → 프로그램 및 기능 → WireGuide Plus**에서 제거하거나, 설치 폴더의 제거
+프로그램을 실행하세요.
 
----
+## 감사의 말
 
-## 기술 스택
-
-| 구성 요소 | 기술 |
-|-----------|------|
-| 언어 | Go 1.25+ |
-| GUI | [Wails v3](https://wails.io) |
-| 프론트엔드 | Svelte + Vite |
-| WireGuard | [wireguard-go](https://git.zx2c4.com/wireguard-go) + [wgctrl-go](https://github.com/WireGuard/wgctrl-go) |
-| 에디터 | [CodeMirror 6](https://codemirror.net/) |
-| 방화벽 | macOS `pf` / Linux `nftables` / Windows WFP (Filtering Platform) |
-
----
-
-## 기여
-
-개발 환경 설정 및 가이드라인은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참조하세요.
-
-버그를 발견하셨나요? [이슈를 등록](https://github.com/imonior/wireguide-plus/issues/new/choose)해 주세요.
-
----
-
-## 후원
-
-<a href="https://github.com/sponsors/imonior">
-  <img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?style=for-the-badge&logo=github" alt="Sponsor" />
-</a>
-
-WireGuide가 유용하셨다면 후원으로 개발을 지원해 주세요.
-
----
-
-## 라이선스
-
-[MIT](LICENSE)
-
----
-
-## 코드 사이닝
-
-SignPath Foundation 오픈소스 프로그램 승인이 완료되면 Windows
-인스톨러는 SignPath를 통해 코드 사이닝됩니다. 사이닝 인프라는
-[SignPath.io](https://signpath.io)에서 제공하며, 인증서는
-[SignPath Foundation](https://signpath.org)에서 발급합니다.
-사이닝 정책은 [SIGNING-POLICY.md](SIGNING-POLICY.md)에
-문서화되어 있습니다.
-
-> Free code signing provided by [SignPath.io](https://signpath.io),
-> certificate by [SignPath Foundation](https://signpath.org).
-
-SignPath 승인 전까지는 unsigned 빌드가 릴리스되며 첫 실행 시
-SmartScreen이 노란색 "확인되지 않은 게시자" 경고를 표시합니다.
+- [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — 업스트림 오픈소스 프로젝트
+- [WireGuard](https://www.wireguard.com/) / [wireguard-go](https://git.zx2c4.com/wireguard-go)
+- [Wails](https://wails.io)

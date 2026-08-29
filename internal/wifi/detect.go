@@ -174,6 +174,13 @@ func knownSSIDsDarwin() []string {
 }
 
 func detectWindows() string {
+	// Native Wlanapi is the primary source: SSIDs come back as raw bytes
+	// (typically UTF-8) instead of netsh's code-page-dependent console text,
+	// so non-ASCII SSIDs survive on any system locale. netsh remains the
+	// fallback for environments where wlanapi is unavailable.
+	if ssid := currentSSIDFromWlanapi(); ssid != "" {
+		return ssid
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "netsh", "wlan", "show", "interfaces")
@@ -182,7 +189,7 @@ func detectWindows() string {
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(decodeOEM(out), "\n") {
 		trimmed := strings.TrimSpace(line)
 		// Match "SSID" followed by optional spaces and a colon, but NOT
 		// "SSID2", "BSSID", etc. The netsh output uses "SSID  : MyNetwork"

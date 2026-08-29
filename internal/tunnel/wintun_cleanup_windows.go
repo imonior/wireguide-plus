@@ -4,6 +4,7 @@ package tunnel
 
 import (
 	"log/slog"
+	"runtime"
 	"syscall"
 	"unsafe"
 
@@ -19,8 +20,21 @@ import (
 // Best-effort. If wintun.dll isn't loadable (e.g. wintun-go embedded a
 // different path) we simply do nothing and let the regular CreateTUN
 // path either succeed or fail with its own error message.
+// wintunDLLName mirrors third_party/wintun's architecture selection so the
+// pre-cleanup path loads the same DLL variant the driver itself uses.
+func wintunDLLName() string {
+	switch runtime.GOARCH {
+	case "386":
+		return "wintun-x86.dll"
+	case "arm64":
+		return "wintun-arm64.dll"
+	default:
+		return "wintun-amd64.dll"
+	}
+}
+
 func cleanupStaleWintunAdapter(name string) {
-	dll, err := windows.LoadDLL("wintun.dll")
+	dll, err := windows.LoadDLL(wintunDLLName())
 	if err != nil {
 		// wintun-go may extract the DLL to a temp location only after
 		// the first CreateAdapter call. In that case we can't

@@ -1,5 +1,47 @@
 # Release signing & rotation
 
+## 0. Cutting a release (local push → published)
+
+No manual GitHub steps needed: pushing a `v*` tag triggers
+`.github/workflows/release.yml`, which in parallel builds every artifact,
+verifies/signs them (SignPath optional), generates release notes from
+`CHANGELOG.md` (git-cliff), creates the GitHub Release, attaches all assets
+plus the Ed25519-signed `SHA256SUMS` / `SHA256SUMS.sig`, and bumps the
+Homebrew cask.
+
+```bash
+# 1. (one-time) confirm the signing keypair is in place and matches:
+gh secret list                         # UPDATE_SIGNING_KEY must be present
+grep UPDATE_SIGNING_PUBKEY .github/workflows/release.yml
+go run ./tools/updatesign pub          # must print the same public hex
+
+# 2. cut the release — make sure CHANGELOG.md already describes the new version
+git tag v1.1.0 && git push origin v1.1.0
+
+# 3. watch the pipeline
+gh run watch
+```
+
+Release assets produced per tag:
+
+| Asset | Job |
+| --- | --- |
+| `wireguideplus-x86-installer.exe` (32-bit installer) | build-windows (x86) |
+| `wireguideplus-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
+| `wireguideplus-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
+| `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 不单独发布） | build-windows |
+| `wintun-x86.dll` / `wintun-amd64.dll` / `wintun-arm64.dll` (bare driver) | build-windows |
+| `WireGuide-darwin-arm64.zip` | build-darwin |
+| `WireGuide-linux-amd64.deb` / `WireGuide-linux-arm64.deb` | build-linux |
+| `SHA256SUMS` + `SHA256SUMS.sig` | release |
+
+> Windows always ships 32-bit, 64-bit and ARM64 installers per the release
+> policy; the CI matrix keys off the `arch` (GOARCH) / `asset` (x86/amd64/
+> arm64) pair defined in `release.yml`. Every artifact name embeds the
+> architecture (`wireguideplus-<arch>-installer.exe`, `-portable.zip`, bare
+> exe `wireguideplus-<arch>.exe`), and the installed program is also
+> installed as `wireguideplus-<arch>.exe`.
+
 The auto-update verifier in `internal/update/checker.go` defends
 against a compromised GitHub account by verifying an Ed25519
 signature over `SHA256SUMS` with a public key embedded in the binary

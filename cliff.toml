@@ -24,6 +24,32 @@ header = ""
 # it never appears in our group names — splitting on `|` and taking `last`
 # is unambiguous for names like "Build / CI".
 body = """
+## 📦 Downloads
+
+The Windows assets are split into two groups:
+
+**Installers (recommended)** — bundle everything, no extra downloads:
+- `wireguideplus-amd64-installer.exe` — 64-bit installer
+- `wireguideplus-x86-installer.exe` — 32-bit installer
+- `wireguideplus-arm64-installer.exe` — ARM64 installer
+
+**Portable builds (no installation)** — ready-made zips, each already containing the
+exe and the matching `wintun.dll` (extract into one folder and run):
+- `wireguideplus-amd64-portable.zip` — 64-bit portable
+- `wireguideplus-x86-portable.zip` — 32-bit portable
+- `wireguideplus-arm64-portable.zip` — ARM64 portable
+
+Bare drivers for manual pairing (keep the arch-qualified name next to your exe —
+the app loads `wintun-<arch>.dll` matching its own architecture, no renaming needed):
+`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`.
+
+macOS: `WireGuide-darwin-arm64.zip` · Linux: `WireGuide-linux-amd64.deb`,
+`WireGuide-linux-arm64.deb`.
+
+**Verify**: compare each file against `SHA256SUMS` (`SHA256SUMS.sig` signed with the
+Ed25519 key).
+
+---
 {% for group, commits in commits | group_by(attribute="group") %}
 ## {{ group | split(pat="|") | last }}
 
@@ -33,6 +59,8 @@ body = """
 {% endfor %}\
 
 **Full Changelog**: https://github.com/imonior/wireguide-plus/compare/{{ previous.version }}...{{ version }}
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 """
 footer = ""
 trim = true

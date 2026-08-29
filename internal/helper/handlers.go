@@ -356,11 +356,19 @@ func (h *Helper) handleConnect(params json.RawMessage) (interface{}, error) {
 		}
 	}
 
+	// Log the source so the log viewer can distinguish rule-driven,
+	// restore-driven and user-driven connects.
+	slog.Info("connect requested", "tunnel", req.Config.Name, "source", "rpc")
+
 	if err := h.doConnectHeld(req.Config); err != nil {
 		return nil, err
 	}
 
 	h.applyPostConnectFirewall(req.Config)
+	// A GUI restore / crash-recovery path can bring up a tunnel the
+	// automation rules would leave down; re-check shortly after connect
+	// (only within the startup window) so the rules stay authoritative.
+	h.scheduleRuleCheck()
 	return ipc.Empty{}, nil
 }
 
