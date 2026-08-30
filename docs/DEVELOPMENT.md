@@ -104,7 +104,7 @@ npm run build
 
 **已知问题**：如果 `node_modules` 不完整，`task` 会触发 `npm ci --force`，而 npm 较新版本对批量删除会弹出交互确认（`[safe-delete]`），在 CI/非交互环境下会卡住。解决：手动 `npm install`（非 `ci`）后重新运行构建；或直接手动执行上面四步。
 
-### 4.2 wintun 驱动（wintun-x86.dll / wintun-amd64.dll）
+### 4.2 wintun driver DLL
 
 `task windows:build*` 会尝试从 `https://www.wintun.net/builds/wintun-0.14.1.zip` 下载 wintun 驱动。该站点在部分网络环境无法访问，构建会失败。
 

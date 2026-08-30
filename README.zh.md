@@ -118,7 +118,7 @@ WireGuard 隧道）。程序按架构自动加载对应文件（`wintun-amd64.dl
 | `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
 
 驱动 DLL 来自 `wintun-0.14.1.zip`（见
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)）。Release 提供打包好的便携
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)）。Release 提供打包好的便携
 zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip`），内含 exe **和**对应架构的驱动 DLL——下载后解压
 即可运行。Release 不再单独附驱动 DLL（请使用便携 zip 或安装包）。缺少匹配的驱动 DLL

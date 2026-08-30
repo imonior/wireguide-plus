@@ -117,7 +117,7 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 | `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
 
 驅動 DLL 來自 `wintun-0.14.1.zip`（見
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)）。Release 提供打包好的
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)）。Release 提供打包好的
 免安裝 zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip`），內含 exe **與**相符架構的驅動 DLL——下載後解壓縮
 即可執行。Release 不再單獨附驅動 DLL（請使用免安裝 zip 或安裝程式）。缺少相符的驅動

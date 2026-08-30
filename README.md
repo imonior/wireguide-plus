@@ -134,7 +134,7 @@ rename is ever needed:
 | `wireguideplus-arm64.exe` (ARM64) | `wintun-arm64.dll` |
 
 The driver DLLs come from `wintun-0.14.1.zip` (see
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll)). Releases provide ready-made
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)). Releases provide ready-made
 portable zips (`wireguideplus-amd64-portable.zip` /
 `wireguideplus-x86-portable.zip` / `wireguideplus-arm64-portable.zip`), each already
 containing the exe **and** the matching driver DLL — download one zip, extract, and run.

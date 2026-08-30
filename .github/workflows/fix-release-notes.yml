@@ -28,11 +28,23 @@ jobs:
           # since the previous release.
           fetch-depth: 0
 
+      - name: Ensure input tag is the latest tag
+        # git-cliff renders ALL version sections by default; a release body
+        # must contain only the latest one, so this workflow only supports
+        # refreshing the latest tag (same --latest mode release.yml uses).
+        run: |
+          latest="$(git describe --tags --abbrev=0)"
+          echo "latest tag: $latest"
+          if [ "$latest" != "${{ inputs.tag }}" ]; then
+            echo "::error::'${{ inputs.tag }}' is not the latest tag ('$latest'). Refresh only supports the latest tag."
+            exit 1
+          fi
+
       - name: Regenerate release notes for tag
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --tag ${{ inputs.tag }} --strip header
+          args: --latest --strip header
         env:
           OUTPUT: RELEASE_NOTES.md
 

@@ -133,7 +133,7 @@ arch は `x86` / `amd64` / `arm64`）。インストールされるプログラ�
 | `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
 
 ドライバー DLL は `wintun-0.14.1.zip` に含まれます（
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll) を参照）。リリースでは
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) を参照）。リリースでは
 `wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip` のポータブル zip も提供しています。各 zip には
 exe と対応するドライバー DLL が**同梱**されており、解凍するだけで実行できます。

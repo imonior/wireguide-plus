@@ -128,7 +128,7 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
 | `wireguideplus-arm64.exe`(ARM64) | `wintun-arm64.dll` |
 
 드라이버 DLL은 `wintun-0.14.1.zip`에 들어 있습니다(
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintundll) 참조). 릴리스에는
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) 참조). 릴리스에는
 `wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 `wireguideplus-arm64-portable.zip` 포터블 zip도 제공됩니다. 각 zip에는 exe와 일치하는
 드라이버 DLL이 **함께** 들어 있어 압축을 풀기만 하면 실행할 수 있습니다. 릴리스에서

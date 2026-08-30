@@ -4,10 +4,10 @@
 
 No manual GitHub steps needed: pushing a `v*` tag triggers
 `.github/workflows/release.yml`, which in parallel builds every artifact,
-verifies/signs them (SignPath optional), generates release notes from
-`CHANGELOG.md` (git-cliff), creates the GitHub Release, attaches all assets
-plus the Ed25519-signed `SHA256SUMS` / `SHA256SUMS.sig`, and bumps the
-Homebrew cask.
+verifies/signs them (SignPath optional), generates release notes with
+git-cliff (config: `cliff.toml`), creates the GitHub Release, attaches all
+assets plus the Ed25519-signed `SHA256SUMS` / `SHA256SUMS.sig`, and bumps
+the Homebrew cask.
 
 ### Workflow triggers
 
@@ -20,6 +20,11 @@ The two workflows fire on **events**, not on any analysis of what changed:
   is pushed (`on.push.tags`). There is no `paths` filter and no content
   sniffing: any `v*` tag triggers the full cross-platform build, regardless
   of what the diff contains.
+- `.github/workflows/fix-release-notes.yml` — manual `workflow_dispatch`
+  utility: regenerates the body of the **latest** tag with git-cliff and
+  overwrites it via `gh release edit`. Used when a noise commit (e.g. GitHub's
+  "Add files via upload") slipped into a published changelog after a
+  `cliff.toml` parser change.
 
 To build without a tag, trigger `ci.yml` manually via `workflow_dispatch`.
 
@@ -57,8 +62,7 @@ Release assets produced per tag:
 | `wireguideplus-x86-installer.exe` (32-bit installer) | build-windows (x86) |
 | `wireguideplus-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
 | `wireguideplus-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
-| `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 不单独发布） | build-windows |
-| `wintun-x86.dll` / `wintun-amd64.dll` / `wintun-arm64.dll` (bare driver) | build-windows |
+| `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 与 bare `wintun-<arch>.dll` 均不单独发布） | build-windows |
 | `WireGuide-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
 | `WireGuide-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
 | `WireGuide-linux-amd64.deb` / `WireGuide-linux-arm64.deb` (installers) | build-linux |
