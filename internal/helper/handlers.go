@@ -47,6 +47,13 @@ func (h *Helper) handleSetLogLevel(params json.RawMessage) (interface{}, error) 
 		return nil, err
 	}
 	lvl := parseLevel(req.Level)
+	// No-op when nothing changed. The GUI calls SetLogLevel on startup
+	// and on every Settings save; logging + broadcasting each time
+	// produced repeated "log level changed" lines and spammed
+	// settings_changed subscribers even when the value was identical.
+	if h.logLevel.Level() == lvl {
+		return ipc.Empty{}, nil
+	}
 	h.logLevel.Set(lvl)
 	slog.Info("log level changed", "level", req.Level)
 	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{LogLevel: &req.Level})

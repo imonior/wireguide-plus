@@ -32,6 +32,8 @@ const (
 
 	firstFailRetryMin = 5 * time.Minute
 	firstFailRetryMax = 7 * time.Minute
+	midFailRetryMin   = 10 * time.Minute
+	midFailRetryMax   = 15 * time.Minute
 	failRetryMin      = 25 * time.Minute
 	failRetryMax      = 30 * time.Minute
 
@@ -84,6 +86,14 @@ type Scheduler struct {
 	// fires, so a fresh process re-notifies the user about an existing
 	// pending update.
 	lastNotifiedVersion string
+
+	// sessionErrors counts consecutive failures within this process
+	// lifetime. The persisted ConsecutiveErrors can carry a long offline
+	// history across restarts — a week of failed checks would otherwise
+	// make the first check after boot fall straight into the 25-30 min
+	// sustained-failure backoff. Ramping from the in-session counter
+	// keeps restarts responsive while still backing off steadily.
+	sessionErrors int
 }
 
 // NewScheduler wires a scheduler to its persistent state and notification
@@ -228,9 +238,21 @@ func (s *Scheduler) loop(ctx context.Context) {
 
 		if err != nil {
 			st2 := s.store.Get()
-			if st2.ConsecutiveErrors <= 1 {
+			s.mu.Lock()
+			ses := s.sessionErrors
+			s.mu.Unlock()
+			// Gradual backoff ramp: short for the first failure, medium
+			// after a couple, sustained only once the outage looks
+			// long-lived. Persisted ConsecutiveErrors (which may predate
+			// this process) is logged for context but does NOT drive the
+			// delay — a restart must not inherit a 25-30 min wait from a
+			// previous session's outage.
+			switch {
+			case ses <= 1:
 				delay = jitterRange(firstFailRetryMin, firstFailRetryMax)
-			} else {
+			case ses <= 4:
+				delay = jitterRange(midFailRetryMin, midFailRetryMax)
+			default:
 				delay = jitterRange(failRetryMin, failRetryMax)
 			}
 			slog.Warn("update scheduler: check failed; will retry",
@@ -282,6 +304,9 @@ func (s *Scheduler) recordResult(res *CheckResult, err error) {
 	now := time.Now().Unix()
 
 	if err != nil {
+		s.mu.Lock()
+		s.sessionErrors++
+		s.mu.Unlock()
 		_ = s.store.Update(func(st *State) {
 			st.LastErrorUnix = now
 			st.ConsecutiveErrors++
@@ -293,6 +318,9 @@ func (s *Scheduler) recordResult(res *CheckResult, err error) {
 		return
 	}
 
+	s.mu.Lock()
+	s.sessionErrors = 0
+	s.mu.Unlock()
 	_ = s.store.Update(func(st *State) {
 		st.LastCheckUnix = now
 		st.LastErrorUnix = 0

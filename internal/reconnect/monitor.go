@@ -3,6 +3,7 @@ package reconnect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -385,7 +386,7 @@ func (m *Monitor) triggerReconnectTunnel(tunnelName string) {
 				return
 			case <-time.After(5 * time.Second):
 				slog.Warn("timed out waiting for previous retry goroutine to exit",
-					"tunnel", tunnelName)
+					"tunnel", displayTunnel(tunnelName))
 			}
 		}
 	}
@@ -414,6 +415,16 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 	entry.delay = m.cfg.InitialDelay
 	m.mu.Unlock()
 
+	// tornDown tracks whether this retry session has already torn the
+	// tunnel down at least once. The tunnel is legitimately connected at
+	// the first attempt — that connection is what triggered the
+	// reconnect — so "is connected" alone must never abort. Only once we
+	// have actually disconnected (or observed the tunnel already down)
+	// and it has since come back up on its own (automation rules, the
+	// user, a concurrent reconnect) should the retry bow out instead of
+	// tearing down the fresh connection.
+	tornDown := false
+
 	for {
 		m.mu.Lock()
 		if !m.running {
@@ -426,7 +437,7 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 		m.mu.Unlock()
 
 		if m.cfg.MaxAttempts > 0 && attempt > m.cfg.MaxAttempts {
-			slog.Error("max reconnection attempts reached", "attempts", m.cfg.MaxAttempts, "tunnel", tunnelName)
+			slog.Error("max reconnection attempts reached", "attempts", m.cfg.MaxAttempts, "tunnel", displayTunnel(tunnelName))
 			m.notifyStatus(State{
 				Reconnecting: false,
 				Attempt:      attempt - 1,
@@ -440,7 +451,7 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 			return
 		}
 
-		slog.Info("reconnecting", "attempt", attempt, "delay", delay, "tunnel", tunnelName)
+		slog.Info("reconnecting", "attempt", attempt, "delay", delay, "tunnel", displayTunnel(tunnelName))
 		m.notifyStatus(State{
 			Reconnecting: true,
 			Attempt:      attempt,
@@ -483,6 +494,25 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 			}
 		}
 
+		// If the tunnel(s) came back up on their own while we were
+		// backing off (automation rules, a concurrent reconnect, or the
+		// user), the reconnect goal is already met — tearing down the
+		// freshly established tunnel just to rebuild it would bounce the
+		// connection for no reason. Guarded by tornDown so the first
+		// attempt (which is the very connection that triggered the
+		// reconnect) is never mistaken for an external recovery.
+		if tornDown && m.tunnelIsUp(tunnelName) {
+			slog.Info("reconnect skipped: tunnel already connected",
+				"attempt", attempt, "tunnel", displayTunnel(tunnelName))
+			m.notifyStatus(State{Reconnecting: false})
+			m.mu.Lock()
+			if cur, ok := m.retries[tunnelName]; ok && cur == entry {
+				delete(m.retries, tunnelName)
+			}
+			m.mu.Unlock()
+			return
+		}
+
 		// Disconnect the specific tunnel (or first tunnel for legacy path).
 		// If teardown fails (timeout / corrupt state) we log AND back off —
 		// otherwise the next reconnectFn hits ErrAlreadyConnected and we
@@ -494,21 +524,34 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 			disconnectErr = m.manager.Disconnect()
 		}
 		if disconnectErr != nil {
-			slog.Warn("pre-reconnect disconnect failed; will retry after backoff",
-				"tunnel", tunnelName, "attempt", attempt, "error", disconnectErr)
-			if firewallWasSuspended && m.fwResumeFn != nil {
-				if err := m.fwResumeFn(); err != nil {
-					slog.Warn("failed to resume firewall after disconnect failure",
-						"error", err)
+			var te *tunnel.TunnelError
+			if errors.As(disconnectErr, &te) && te.Kind == tunnel.ErrNotConnected {
+				// Tunnel is already down — exactly the pre-reconnect
+				// state we want (an earlier attempt in this retry loop
+				// already tore it down). Don't burn a backoff cycle on
+				// a no-op teardown; proceed straight to reconnectFn.
+				slog.Debug("pre-reconnect disconnect skipped (already disconnected)",
+					"tunnel", displayTunnel(tunnelName), "attempt", attempt)
+				tornDown = true
+			} else {
+				slog.Warn("pre-reconnect disconnect failed; will retry after backoff",
+					"tunnel", displayTunnel(tunnelName), "attempt", attempt, "error", disconnectErr)
+				if firewallWasSuspended && m.fwResumeFn != nil {
+					if err := m.fwResumeFn(); err != nil {
+						slog.Warn("failed to resume firewall after disconnect failure",
+							"error", err)
+					}
 				}
+				m.mu.Lock()
+				entry.delay = delay * 2
+				if entry.delay > m.cfg.MaxDelay {
+					entry.delay = m.cfg.MaxDelay
+				}
+				m.mu.Unlock()
+				continue
 			}
-			m.mu.Lock()
-			entry.delay = delay * 2
-			if entry.delay > m.cfg.MaxDelay {
-				entry.delay = m.cfg.MaxDelay
-			}
-			m.mu.Unlock()
-			continue
+		} else {
+			tornDown = true
 		}
 
 		// One more cancellation check before the actual reconnect — manager
@@ -528,7 +571,7 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 		// Attempt reconnection — pass tunnel name so only the specific
 		// tunnel is reconnected when doing per-tunnel health recovery.
 		if err := m.reconnectFn(ctx, tunnelName); err != nil {
-			slog.Warn("reconnection failed", "attempt", attempt, "tunnel", tunnelName, "error", err)
+			slog.Warn("reconnection failed", "attempt", attempt, "tunnel", displayTunnel(tunnelName), "error", err)
 			// Re-enable firewall after failed attempt so the system stays
 			// protected between retries.
 			if firewallWasSuspended && m.fwResumeFn != nil {
@@ -557,7 +600,7 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 			}
 		}
 
-		slog.Info("reconnected successfully", "attempt", attempt, "tunnel", tunnelName)
+		slog.Info("reconnected successfully", "attempt", attempt, "tunnel", displayTunnel(tunnelName))
 		m.notifyStatus(State{Reconnecting: false})
 		m.mu.Lock()
 		// Only clear if this entry is still the current one for the
@@ -569,6 +612,30 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 		m.mu.Unlock()
 		return
 	}
+}
+
+// displayTunnel renders the tunnel name for log output. The empty string
+// is the legacy "reconnect all tunnels" path, which reads better as "all".
+func displayTunnel(name string) string {
+	if name == "" {
+		return "all"
+	}
+	return name
+}
+
+// tunnelIsUp reports whether the reconnect goal is already satisfied: the
+// named tunnel (or any tunnel on the legacy all-tunnels path) is fully
+// connected right now.
+func (m *Monitor) tunnelIsUp(tunnelName string) bool {
+	if tunnelName == "" {
+		return m.manager.IsConnected()
+	}
+	for _, s := range m.manager.AllStatuses() {
+		if s.TunnelName == tunnelName && s.State == domain.StateConnected {
+			return true
+		}
+	}
+	return false
 }
 
 // triggerLoop fans both wake and network-change events into the same

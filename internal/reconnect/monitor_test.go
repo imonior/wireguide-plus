@@ -59,9 +59,19 @@ func (m *mockManager) AllStatuses() []*tunnel.ConnectionStatus {
 func (m *mockManager) Disconnect() error {
 	m.mu.Lock()
 	fn := m.disconnectFn
+	connected := m.connected
 	m.mu.Unlock()
 	if fn != nil {
 		return fn()
+	}
+	// Mirror the real Manager semantics: a successful teardown leaves
+	// the tunnel disconnected. Several tests rely on subsequent retry
+	// attempts seeing the tunnel as down after the first disconnect.
+	if connected {
+		m.mu.Lock()
+		m.connected = false
+		m.activeName = ""
+		m.mu.Unlock()
 	}
 	return nil
 }
@@ -69,9 +79,16 @@ func (m *mockManager) Disconnect() error {
 func (m *mockManager) DisconnectTunnel(name string) error {
 	m.mu.Lock()
 	fn := m.disconnectFn
+	connected := m.connected
 	m.mu.Unlock()
 	if fn != nil {
 		return fn()
+	}
+	if connected {
+		m.mu.Lock()
+		m.connected = false
+		m.activeName = ""
+		m.mu.Unlock()
 	}
 	return nil
 }
@@ -789,6 +806,52 @@ func TestMonitorLoop_SkipsZeroHandshake(t *testing.T) {
 
 	if reconnectCalls.Load() != 0 {
 		t.Fatalf("expected no reconnect for zero handshake time, got %d", reconnectCalls.Load())
+	}
+}
+
+func TestReconnect_SkipsWhenTunnelRestoredExternally(t *testing.T) {
+	// Regression: after a failed reconnect attempt left the tunnel down,
+	// if another path (automation rules, the user, a concurrent
+	// reconnect) brings it back up while we are backing off, the next
+	// retry must NOT tear the fresh connection down — it should detect
+	// the tunnel is already up and bow out.
+	var reconnectCalls atomic.Int32
+	reconnectFn := func(_ context.Context, name string) error {
+		reconnectCalls.Add(1)
+		return errors.New("resolve failed") // e.g. DNS unavailable mid-network-switch
+	}
+
+	cfg := testConfig()
+	cfg.InitialDelay = 10 * time.Millisecond
+	cfg.MaxDelay = 30 * time.Millisecond
+
+	mon, mgr, _ := newTestMonitor(cfg, reconnectFn)
+	mgr.setConnected(true, "test-tunnel")
+	mon.mu.Lock()
+	mon.running = true
+	mon.mu.Unlock()
+
+	mon.triggerReconnect()
+
+	// Wait for the first attempt (disconnect + failed reconnect).
+	waitFor(t, 2*time.Second, "first reconnect attempt", func() bool {
+		return reconnectCalls.Load() >= 1
+	})
+
+	// Externally restore the tunnel while the retry is backing off.
+	mgr.setConnected(true, "test-tunnel")
+
+	// The retry goroutine should notice the recovery on its next attempt
+	// and exit (clearing its retry slot) instead of disconnecting again.
+	waitFor(t, 2*time.Second, "retry goroutine exited after skip", func() bool {
+		mon.mu.Lock()
+		defer mon.mu.Unlock()
+		_, ok := mon.retries[""]
+		return !ok
+	})
+
+	if got := reconnectCalls.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 reconnect call (second attempt skipped), got %d", got)
 	}
 }
 
