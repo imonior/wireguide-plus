@@ -45,28 +45,39 @@ body = """
 
 ## 📦 Downloads
 
-The Windows assets are split into two groups:
+Click a file name to download it directly (every asset is also attached to this Release page).
+
+### Windows
 
 **Installers (recommended)** — bundle everything, no extra downloads:
-- `wireguideplus-amd64-installer.exe` — 64-bit installer
-- `wireguideplus-x86-installer.exe` — 32-bit installer
-- `wireguideplus-arm64-installer.exe` — ARM64 installer
+- [wireguideplus-amd64-installer.exe](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-amd64-installer.exe) — 64-bit installer
+- [wireguideplus-x86-installer.exe](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-x86-installer.exe) — 32-bit installer
+- [wireguideplus-arm64-installer.exe](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-arm64-installer.exe) — ARM64 installer
 
 **Portable builds (no installation)** — ready-made zips, each already containing the
 exe and the matching `wintun.dll` (extract into one folder and run):
-- `wireguideplus-amd64-portable.zip` — 64-bit portable
-- `wireguideplus-x86-portable.zip` — 32-bit portable
-- `wireguideplus-arm64-portable.zip` — ARM64 portable
+- [wireguideplus-amd64-portable.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-amd64-portable.zip) — 64-bit portable
+- [wireguideplus-x86-portable.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-x86-portable.zip) — 32-bit portable
+- [wireguideplus-arm64-portable.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/wireguideplus-arm64-portable.zip) — ARM64 portable
 
-Bare drivers for manual pairing (keep the arch-qualified name next to your exe —
-the app loads `wintun-<arch>.dll` matching its own architecture, no renaming needed):
-`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`.
+### macOS
 
-macOS: `WireGuide-darwin-arm64.zip` · Linux: `WireGuide-linux-amd64.deb`,
-`WireGuide-linux-arm64.deb`.
+- [WireGuide-darwin-arm64.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-darwin-arm64.zip) — portable app bundle
+- [WireGuide-darwin-arm64.dmg](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-darwin-arm64.dmg) — drag-and-drop installer
 
-**Verify**: compare each file against `SHA256SUMS` (`SHA256SUMS.sig` signed with the
-Ed25519 key).
+### Linux
+
+- [WireGuide-linux-amd64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-amd64.deb) — Debian/Ubuntu, amd64
+- [WireGuide-linux-arm64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-arm64.deb) — Debian/Ubuntu, arm64
+- [WireGuide-linux-amd64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-amd64-portable.tar.gz) — portable, amd64
+- [WireGuide-linux-arm64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-arm64-portable.tar.gz) — portable, arm64
+
+### Checksums
+
+- [SHA256SUMS](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/SHA256SUMS)
+- [SHA256SUMS.sig](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/SHA256SUMS.sig) — Ed25519 signature
+
+**Verify**: compare each file against `SHA256SUMS` (signed with the Ed25519 key).
 
 **Full Changelog**: https://github.com/imonior/wireguide-plus/compare/{{ previous.version }}...{{ version }}
 
