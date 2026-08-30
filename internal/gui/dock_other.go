@@ -3,7 +3,9 @@
 package gui
 
 import (
+	"log/slog"
 	"runtime"
+	"runtime/debug"
 	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -39,26 +41,47 @@ var showDockMu sync.Mutex
 // decoration hint); the Linux UI thread never enters showDock (Activate /
 // dbusmenu callbacks run on dbus goroutines), so no lock-order inversion is
 // possible there.
+//
+// InvokeAsync (never blocks the caller): the whole body runs as a callback on
+// the Wails UI thread, so showDock returns immediately from ANY caller thread
+// — the bubble's Open Window goroutine, the Windows tray left-click handler,
+// a StatusNotifier Activate on Linux. Inside the callback every Wails call
+// executes inline (dispatchOnMainThread short-circuits when already on the
+// main thread), so no cross-thread WaitGroup wait remains. This is what stops
+// the intermittent freeze: when the UI thread is momentarily starved (system
+// CPU contention — e.g. a Windows maintenance process pegging a core — or
+// WebView2 latency), a synchronous showDock would stall its caller too, and
+// with the caller being the bubble goroutine the whole GUI reads as frozen
+// while the helper keeps the VPN running. A recover guard also keeps any
+// unexpected WebView2/win32 panic from breaking the main-thread callback
+// chain.
 func showDock() {
 	if dockWindow == nil {
 		return
 	}
-	if dockWindow.IsMinimised() {
-		dockWindow.Restore()
-	}
-	if runtime.GOOS == "linux" {
-		showDockMu.Lock()
-		defer showDockMu.Unlock()
-		// labwc/XWayland may forget server-side decorations when a hidden GTK
-		// window is mapped again. Merely setting decorated=true is ineffective
-		// because GTK already caches that value and sends no new WM hint. Toggle
-		// it while the window is hidden so the next map is unambiguously
-		// decorated, without exposing an intermediate frameless frame.
-		dockWindow.SetFrameless(true)
-		dockWindow.SetFrameless(false)
-	}
-	dockWindow.Show()
-	dockWindow.Focus()
+	application.InvokeAsync(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("showDock: recovered from panic", "err", r, "stack", string(debug.Stack()))
+			}
+		}()
+		if dockWindow.IsMinimised() {
+			dockWindow.Restore()
+		}
+		if runtime.GOOS == "linux" {
+			showDockMu.Lock()
+			defer showDockMu.Unlock()
+			// labwc/XWayland may forget server-side decorations when a hidden GTK
+			// window is mapped again. Merely setting decorated=true is ineffective
+			// because GTK already caches that value and sends no new WM hint. Toggle
+			// it while the window is hidden so the next map is unambiguously
+			// decorated, without exposing an intermediate frameless frame.
+			dockWindow.SetFrameless(true)
+			dockWindow.SetFrameless(false)
+		}
+		dockWindow.Show()
+		dockWindow.Focus()
+	})
 }
 
 // hideDock only exists to hide the macOS dock icon — the window itself is
