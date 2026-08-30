@@ -667,6 +667,33 @@ func TestMatchAsset_EmptyAssets(t *testing.T) {
 	}
 }
 
+// Windows assets are published without an OS token
+// (wireguideplus-<arch>-installer.exe / -portable.zip, see docs/release.md),
+// so the arch anchor alone must be enough for them — while other OSes must
+// never accept a tokenless Windows asset name.
+func TestAssetMatchesOSArch_WindowsTokenlessNames(t *testing.T) {
+	winOS := []string{"windows", "win", "win64"}
+	for _, name := range []string{
+		"wireguideplus-amd64-installer.exe",
+		"wireguideplus-amd64-portable.zip",
+	} {
+		if !assetMatchesOSArch(name, winOS, "amd64") {
+			t.Errorf("assetMatchesOSArch(%q, %v, amd64) = false, want true", name, winOS)
+		}
+	}
+	// An explicit OS token still matches via the normal path.
+	if !assetMatchesOSArch("wireguideplus-windows-amd64-installer.exe", winOS, "amd64") {
+		t.Error("explicit OS token must match on Windows")
+	}
+	// Other OSes require their own token: a tokenless Windows asset
+	// name must not match them.
+	for _, osNames := range [][]string{{"linux"}, {"darwin", "macos", "osx"}} {
+		if assetMatchesOSArch("wireguideplus-amd64-installer.exe", osNames, "amd64") {
+			t.Errorf("assetMatchesOSArch tokenless name matched %v, want false", osNames)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Integration-like: CheckForUpdate via httptest
 // ---------------------------------------------------------------------------

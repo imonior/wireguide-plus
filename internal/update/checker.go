@@ -951,6 +951,15 @@ func assetMatchesOSArch(name string, osNames []string, arch string) bool {
 			return true
 		}
 	}
+	// Windows release assets are published without an OS token —
+	// `wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`
+	// (see docs/release.md). The arch anchor above already proved this is the
+	// running architecture, and a .exe/.msi/.zip carrying it can only be a
+	// Windows asset, so accept it. This also prevents a Linux/macOS binary
+	// from ever matching those names: they require their own OS token.
+	if osNames[0] == "windows" {
+		return strings.HasSuffix(name, ".exe") || strings.HasSuffix(name, ".msi") || strings.HasSuffix(name, ".zip")
+	}
 	return false
 }
 
