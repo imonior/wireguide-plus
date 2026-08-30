@@ -22,9 +22,11 @@ import (
 //  6. Apply DNS (best-effort)
 //  7. Persist crash-recovery state (only after everything else succeeds)
 //
-// Note: Pre/PostUp/Down script execution was removed as a security hardening
-// measure. The config parser still accepts these fields so existing configs
-// import without error, but the scripts are silently ignored.
+// Script hooks (PreUp/PostUp/PreDown/PostDown) are executed ONLY when the
+// user enables them in Settings (EnableScripts); by default they are
+// ignored — arbitrary commands running inside the root/admin helper are a
+// security risk, so this stays a deliberate opt-in. The config parser
+// always accepts these fields so existing configs import without error.
 func (m *Manager) connectPhases(ctx context.Context, cfg *domain.WireGuardConfig, netMgr network.NetworkManager) (*Engine, error) {
 	// Compute fullTunnel early — needed by the rollback closure and later
 	// by AddRoutes. It only depends on cfg which is a parameter.
@@ -113,6 +115,16 @@ func (m *Manager) connectPhases(ctx context.Context, cfg *domain.WireGuardConfig
 		return nil, err
 	}
 
+	// 5.1 PreUp hook (opt-in). Runs after the interface is up but before
+	// the WireGuard device starts / routes change — mirroring wg-quick's
+	// ordering (PreUp fires before wg setconf / PostUp).
+	if cfg.EnableScripts && cfg.Interface.PreUp != "" {
+		RunScript("PreUp", cfg.Interface.PreUp)
+	}
+	if err := checkCtx(); err != nil {
+		return nil, err
+	}
+
 	// 5.5 Endpoint loop protection (Windows full-tunnel only on the
 	// firewall side; nil-protector platforms are no-ops). Installed
 	// BEFORE engine.Start() — the WG handshake goroutine fires its
@@ -141,6 +153,18 @@ func (m *Manager) connectPhases(ctx context.Context, cfg *domain.WireGuardConfig
 	// above is the precondition.
 	if err := engine.Start(); err != nil {
 		return nil, rollback(newTunnelError(ErrEngineCreation, "starting engine", err))
+	}
+	if err := checkCtx(); err != nil {
+		return nil, err
+	}
+
+	// 5.7.1 PostUp hook (opt-in). Runs after the WireGuard device is up
+	// (first handshake kicked off) and before routes/DNS change. Unlike
+	// wg-quick we do NOT fail the connection when PostUp errors — a
+	// script bug must not strand the user without a VPN; the failure is
+	// logged (Warn) and teardown still runs.
+	if cfg.EnableScripts && cfg.Interface.PostUp != "" {
+		RunScript("PostUp", cfg.Interface.PostUp)
 	}
 	if err := checkCtx(); err != nil {
 		return nil, err
@@ -296,6 +320,12 @@ func (m *Manager) disconnectPhases(cfg *domain.WireGuardConfig, engine *Engine, 
 			"ms", time.Since(since).Milliseconds())
 	}
 
+	// PreDown hook (opt-in): runs BEFORE teardown starts, so the script
+	// still sees a fully-working tunnel. Errors are logged, never fatal.
+	if cfg.EnableScripts && cfg.Interface.PreDown != "" {
+		RunScript("PreDown", cfg.Interface.PreDown)
+	}
+
 	// Routes — remove only THIS tunnel's routes via its own netMgr.
 	var allAllowedIPs []string
 	for _, peer := range cfg.Peers {
@@ -400,6 +430,13 @@ func (m *Manager) disconnectPhases(cfg *domain.WireGuardConfig, engine *Engine, 
 	// Clear crash-recovery state for this specific tunnel
 	if err := ClearActiveState(m.dataDir, cfg.Name); err != nil {
 		slog.Warn("disconnect: ClearActiveState failed", "tunnel", cfg.Name, "error", err)
+	}
+
+	// PostDown hook (opt-in): runs AFTER full teardown — the tunnel is
+	// gone, so scripts can safely flush rules/firewall entries without
+	// racing the disconnect itself.
+	if cfg.EnableScripts && cfg.Interface.PostDown != "" {
+		RunScript("PostDown", cfg.Interface.PostDown)
 	}
 
 	slog.Info("tunnel disconnected", "name", cfg.Name,

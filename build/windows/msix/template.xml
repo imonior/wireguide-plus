@@ -17,7 +17,7 @@
         PackageDisplayName="WireGuide Plus"
         PublisherName="CN=imonior"
         PublisherDisplayName="imonior"
-        Version="1.1.3.0"
+        Version="1.1.5.0"
         PackageDescription="WireGuide Plus - multi-tunnel automated WireGuard VPN client">
         <Capabilities>
             <Capability Name="runFullTrust" />

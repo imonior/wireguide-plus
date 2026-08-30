@@ -208,7 +208,9 @@ type Helper struct {
 // ownerSID: spawning user's SID (Windows only, "" on Unix) — scopes the
 // pipe ACL and per-connection peer checks to that user (issue #20).
 // dataDir: persistent data dir for crash recovery state.
-func Run(addr string, ownerUID int, ownerSID, dataDir string) error {
+// logsDir: optional directory for daily helper log files
+// (helper-YYYY-MM-DD.log). Empty disables file logging.
+func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// wireguard-go allocates sizeable per-Device transient buffer pools. With
 	// the runtime default GOGC=100, repeated connect/disconnect on a long-lived
 	// helper retained hundreds of MiB of reclaimable heap before GC caught up
@@ -260,7 +262,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir string) error {
 	// Install the broadcast slog handler BEFORE the first log call so
 	// everything that follows (crash recovery notices, manager init,
 	// handler registration) gets piped to subscribed GUIs.
-	slog.SetDefault(slog.New(newBroadcastHandler(h.logLevel, func() func(string, interface{}) {
+	slog.SetDefault(slog.New(newBroadcastHandler(h.logLevel, logsDir, func() func(string, interface{}) {
 		if h.server == nil {
 			return nil
 		}

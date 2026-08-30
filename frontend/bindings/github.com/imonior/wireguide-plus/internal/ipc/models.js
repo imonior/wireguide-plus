@@ -41,6 +41,14 @@ export class LogEntry {
              */
             this["source"] = "";
         }
+        if (!("category" in $$source)) {
+            /**
+             * one of logging.ValidCategories ("app" when unset)
+             * @member
+             * @type {string}
+             */
+            this["category"] = "";
+        }
         if (!("message" in $$source)) {
             /**
              * human-readable text (already includes attrs)

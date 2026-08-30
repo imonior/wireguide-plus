@@ -4,6 +4,30 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.5] - 2026-08-30
+
+本版本全面強化日誌系統（更新檢查、設定稽核、分類分級、保留期限清理），修復若干設定問題，並重新加入預設關閉的 WireGuard 腳本支援。
+
+### ✨ 新功能
+
+- **更新檢查完整日誌** — 手動與自動檢查均記錄實際請求的 endpoint、本機版本、線上版本、`not_modified` 以及錯誤/重試資訊；失敗（403、逾時等）帶 `category=update`，可在 Log 介面檢視與篩選。
+- **設定變更稽核日誌** — 每次儲存都會記錄哪些設定被修改（代理模式、kill switch 等）及關鍵值；代理憑證會遮罩（`http://***@host`）。
+- **日誌分類與篩選** — `ipc.LogEntry` 新增 `category` 欄位（app / update / settings / tunnel / network / system）；Log 介面新增分類篩選列（All 在最前、預設選中），每筆日誌顯示分類，複製時也攜帶分類。
+- **日誌保留期限（預設 7 天）** — 按天輪替儲存（`wireguideplus-YYYY-MM-DD.log`），超過可設定保留期限自動清理。
+- **WireGuard 腳本支援（PreUp / PostUp / PreDown / PostDown，預設關閉）** — 與 wg-quick 行為一致（Unix 用 `sh -c`，Windows 用 `cmd.exe /C`），在 helper 內以 30 秒逾時執行，輸出截斷到 1000 字元。預設關閉（設定 → 進階），開啟時顯示明顯的安全警告，因為指令以完整系統權限執行；PostUp 失敗不會中斷連線。
+- **DNS leak test 增強** — 每台 DNS 伺服器顯示探測狀態（vpn / ok / leak / timeout）與延遲；Windows 收集 DNS 時同時包含 IPv4 與 IPv6。
+- **開啟資料夾捷徑** — 設定中新增可點擊連結，直接開啟隧道設定資料夾與日誌儲存資料夾（跨平台）。
+
+### 🐛 錯誤修正
+
+- **通知持續時間設定無法儲存** — 離開設定再進入時不再重置。
+- **設定中日誌分級缺少 All** — 下拉新增 `All`（與 Log 介面預設一致），源頭不再過濾任何記錄。
+
+### 🛠 內部
+
+- **日誌級別 All 全鏈路生效** — helper 與 GUI 日誌處理器均支援 `all`（`slog.Level(-8)`），不會丟棄任何記錄。
+- 版本提升至 **1.1.5**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+
 ## [1.1.3] - 2026-08-30
 
 本版本修復 Windows 用戶端自動更新失效的問題：自 v1.1.0 資產改名以來，Windows 發行資產（`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`）命名不含作業系統識別，而更新檢查器要求資產名稱同時攜帶「OS 識別 + 架構」，導致 Windows 平台永遠比對不到自己的發行資產，已安裝用戶只會看到「發現新版本但無相符資產」，無法自動更新。

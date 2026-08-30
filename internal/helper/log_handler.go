@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/logging"
 )
 
 // broadcastHandler is an slog.Handler that chains to a stderr handler AND
@@ -27,6 +28,7 @@ import (
 type broadcastHandler struct {
 	levelVar *slog.LevelVar
 	stderr   slog.Handler
+	file     *logging.DailyHandler // optional daily log file (helper-YYYY-MM-DD.log)
 
 	// broadcast is the helper's broadcaster — we look it up lazily via
 	// getBroadcaster because the handler is installed in slog.SetDefault
@@ -39,14 +41,19 @@ type broadcastHandler struct {
 	group string
 }
 
-func newBroadcastHandler(levelVar *slog.LevelVar, getBroadcaster func() func(string, interface{})) *broadcastHandler {
+func newBroadcastHandler(levelVar *slog.LevelVar, logsDir string, getBroadcaster func() func(string, interface{})) *broadcastHandler {
 	stderr := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level:     levelVar,
 		AddSource: true,
 	})
+	var file *logging.DailyHandler
+	if logsDir != "" {
+		file = logging.NewDailyHandler(logsDir, "helper", levelVar)
+	}
 	return &broadcastHandler{
 		levelVar:       levelVar,
 		stderr:         stderr,
+		file:           file,
 		getBroadcaster: getBroadcaster,
 	}
 }
@@ -60,16 +67,31 @@ func (h *broadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	// unified log ingestion in prod).
 	_ = h.stderr.Handle(ctx, r)
 
+	// Persist helper logs to a daily file so they survive a GUI restart
+	// (the in-memory viewer buffer does not). Optional: only when the GUI
+	// passed --logs-dir at spawn time.
+	if h.file != nil {
+		_ = h.file.Handle(ctx, r)
+	}
+
 	// Render the same record as a single flat string for the viewer.
 	var b strings.Builder
 	b.WriteString(r.Message)
 	// Append WithAttrs-captured attrs first, then record-local attrs.
+	// The "category" attr is carried separately (entry.Category) and
+	// deliberately omitted from the flattened text.
 	h.mu.Lock()
 	for _, a := range h.attrs {
+		if a.Key == "category" {
+			continue
+		}
 		fmt.Fprintf(&b, " %s=%v", a.Key, a.Value.Any())
 	}
 	h.mu.Unlock()
 	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "category" {
+			return true
+		}
 		fmt.Fprintf(&b, " %s=%v", a.Key, a.Value.Any())
 		return true
 	})
@@ -81,10 +103,11 @@ func (h *broadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	entry := ipc.LogEntry{
-		Time:    r.Time.UTC().Format(time.RFC3339Nano),
-		Level:   strings.ToLower(r.Level.String()),
-		Source:  "helper",
-		Message: b.String(),
+		Time:     r.Time.UTC().Format(time.RFC3339Nano),
+		Level:    strings.ToLower(r.Level.String()),
+		Source:   "helper",
+		Category: logging.CategoryFromRecord(r, h.attrs),
+		Message:  b.String(),
 	}
 
 	if bc := h.getBroadcaster(); bc != nil {
@@ -102,6 +125,7 @@ func (h *broadcastHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &broadcastHandler{
 		levelVar:       h.levelVar,
 		stderr:         h.stderr.WithAttrs(attrs),
+		file:           h.file,
 		getBroadcaster: h.getBroadcaster,
 		attrs:          combined,
 		group:          h.group,
@@ -112,6 +136,7 @@ func (h *broadcastHandler) WithGroup(name string) slog.Handler {
 	return &broadcastHandler{
 		levelVar:       h.levelVar,
 		stderr:         h.stderr.WithGroup(name),
+		file:           h.file,
 		getBroadcaster: h.getBroadcaster,
 		attrs:          h.attrs,
 		group:          name,
@@ -122,6 +147,10 @@ func (h *broadcastHandler) WithGroup(name string) slog.Handler {
 // Unknown strings default to Info.
 func parseLevel(s string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "all":
+		// Log everything — lower than the lowest named level so no
+		// record is ever dropped, including future trace-level entries.
+		return slog.Level(-8)
 	case "debug":
 		return slog.LevelDebug
 	case "warn", "warning":

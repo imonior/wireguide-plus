@@ -139,6 +139,23 @@ export class Settings {
              */
             this["auto_start"] = false;
         }
+        if (!("start_minimized" in $$source)) {
+            /**
+             * start hidden in the tray
+             * @member
+             * @type {boolean}
+             */
+            this["start_minimized"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * NotifyDurationMs is how long the connection-status notification
+             * bubble stays on screen (ms). 0 means the default (10s).
+             * @member
+             * @type {number | undefined}
+             */
+            this["notify_duration_ms"] = undefined;
+        }
         if (!("kill_switch" in $$source)) {
             /**
              * @member
@@ -184,6 +201,28 @@ export class Settings {
              * @type {boolean}
              */
             this["compact_list"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LogRetentionDays is how many days of daily log files to keep.
+             * 0 means the default (7). Files older than this are removed at
+             * startup and whenever settings are saved.
+             * @member
+             * @type {number | undefined}
+             */
+            this["log_retention_days"] = undefined;
+        }
+        if (!("enable_wg_scripts" in $$source)) {
+            /**
+             * EnableWgScripts controls whether PreUp/PostUp/PreDown/PostDown
+             * scripts embedded in tunnel configs are executed. OFF by default:
+             * scripts run inside the privileged helper (root/admin) and arbitrary
+             * config-driven commands are a security risk. Enabling shows a
+             * prominent warning in Settings.
+             * @member
+             * @type {boolean}
+             */
+            this["enable_wg_scripts"] = false;
         }
         if (!("list_sort" in $$source)) {
             /**
@@ -292,18 +331,18 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField14_0 = $$createType0;
-        const $$createField15_0 = $$createType2;
-        const $$createField16_0 = $$createType3;
+        const $$createField18_0 = $$createType0;
+        const $$createField19_0 = $$createType2;
+        const $$createField20_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField14_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField18_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField15_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField19_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField16_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField20_0($$parsedSource["manual_off_tunnels"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

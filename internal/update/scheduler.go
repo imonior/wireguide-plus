@@ -169,8 +169,17 @@ func (s *Scheduler) CheckNow() (*CheckResult, error) {
 	res, err := CheckForUpdateConditional(context.Background(), st.ETag, st.LastModified)
 	s.recordResult(res, err)
 	if err != nil {
+		// Manual check failed (network down, rate limit, mirror broken…).
+		// Logged at Warn so the failure is visible in the log viewer even
+		// though the UI also surfaces the error inline.
+		slog.Warn("update check failed (manual)",
+			"category", "update",
+			"endpoint", resolvedEndpoint(),
+			"current_version", CurrentVersion(),
+			"error", err)
 		return res, err
 	}
+	s.logCheckResult("update check completed (manual)", res)
 	s.maybeNotify(res)
 	return res, nil
 }
@@ -225,14 +234,41 @@ func (s *Scheduler) loop(ctx context.Context) {
 				delay = jitterRange(failRetryMin, failRetryMax)
 			}
 			slog.Warn("update scheduler: check failed; will retry",
+				"category", "update",
+				"endpoint", resolvedEndpoint(),
+				"current_version", CurrentVersion(),
 				"error", err, "retry_in", delay,
 				"consecutive_errors", st2.ConsecutiveErrors)
 			continue
 		}
 		s.maybeNotify(res)
 		delay = jitterAround(steadyInterval, steadyJitter)
+		s.logCheckResult("update scheduler: check completed", res)
 		slog.Debug("update scheduler: next check scheduled", "delay", delay)
 	}
+}
+
+// logCheckResult records a successful update check with the full context a
+// user needs to answer "what URL was checked, what did it find?" — the
+// endpoint actually hit (mirror prefix, official API), the locally
+// installed version, and what the feed reported. Logged at Info on every
+// successful check: at the steady cadence of ~1/day that's a handful of
+// lines, and it makes the log tell the update story even when nothing is
+// wrong.
+func (s *Scheduler) logCheckResult(msg string, res *CheckResult) {
+	attrs := []any{
+		"category", "update",
+		"endpoint", resolvedEndpoint(),
+		"current_version", CurrentVersion(),
+		"not_modified", res != nil && res.NotModified,
+	}
+	if res != nil && res.Info != nil {
+		attrs = append(attrs, "latest_version", res.Info.Version)
+		if res.Info.Available {
+			attrs = append(attrs, "update_available", true)
+		}
+	}
+	slog.Info(msg, attrs...)
 }
 
 // recordResult persists the outcome to the StateStore — ETag/Last-Modified

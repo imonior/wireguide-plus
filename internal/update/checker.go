@@ -220,6 +220,7 @@ func parseReleaseBody(ctx context.Context, resp *http.Response, client *http.Cli
 	assetName := matchAsset(release.Assets)
 	if assetName == "" {
 		slog.Warn("update available but no matching asset for this platform",
+			"category", "update",
 			"version", latestVer, "os", runtime.GOOS, "arch", runtime.GOARCH)
 		return &UpdateInfo{Available: false, CurrentVer: currentVersion, Version: latestVer}, nil
 	}
@@ -411,6 +412,7 @@ func CheckForUpdate() (*UpdateInfo, error) {
 	assetName := matchAsset(release.Assets)
 	if assetName == "" {
 		slog.Warn("update available but no matching asset for this platform",
+			"category", "update",
 			"version", latestVer, "os", runtime.GOOS, "arch", runtime.GOARCH)
 		return &UpdateInfo{Available: false, CurrentVer: currentVersion}, nil
 	}

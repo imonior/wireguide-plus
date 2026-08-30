@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
 
@@ -26,6 +27,16 @@ type Settings struct {
 	PinInterface  bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
 	LogLevel      string `json:"log_level"`     // "debug", "info", "warn", "error"
 	CompactList   bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
+	// LogRetentionDays is how many days of daily log files to keep.
+	// 0 means the default (7). Files older than this are removed at
+	// startup and whenever settings are saved.
+	LogRetentionDays int `json:"log_retention_days,omitempty"`
+	// EnableWgScripts controls whether PreUp/PostUp/PreDown/PostDown
+	// scripts embedded in tunnel configs are executed. OFF by default:
+	// scripts run inside the privileged helper (root/admin) and arbitrary
+	// config-driven commands are a security risk. Enabling shows a
+	// prominent warning in Settings.
+	EnableWgScripts bool `json:"enable_wg_scripts"`
 
 	// ListSort controls tunnel-list ordering: "name_asc" (default),
 	// "name_desc". ListActiveOnTop floats connected tunnels above the
@@ -186,6 +197,7 @@ func DefaultSettings() *Settings {
 		HealthCheck:     false,
 		PinInterface:    false, // off by default — enable for dual-network setups
 		LogLevel:        "info",
+		LogRetentionDays: logging.DefaultRetentionDays,
 		AutoUpdateCheck: &on,
 		ListSort:        "name_asc",
 		ListActiveOnTop: true,

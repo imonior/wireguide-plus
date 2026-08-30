@@ -3,7 +3,6 @@ package gui
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -28,7 +28,7 @@ import (
 type guiLogHandler struct {
 	levelVar *slog.LevelVar
 	stderr   slog.Handler
-	file     slog.Handler // may be nil until setGUILogFile runs
+	file     *logging.DailyHandler // may be nil until setGUILogFile runs
 	app      *application.App // may be nil before Wails finishes bootstrap
 
 	mu    sync.Mutex
@@ -104,6 +104,10 @@ func setGUILogLevel(level string) {
 
 func parseGUILevel(s string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "all":
+		// Log everything — lower than the lowest named level so no
+		// record is ever dropped, including future trace-level entries.
+		return slog.Level(-8)
 	case "debug":
 		return slog.LevelDebug
 	case "warn", "warning":
@@ -125,15 +129,24 @@ func (h *guiLogHandler) Handle(ctx context.Context, r slog.Record) error {
 		_ = h.file.Handle(ctx, r)
 	}
 
+	// The "category" attr is carried separately (entry.Category) and
+	// deliberately omitted from the flattened text shown in the viewer.
 	var b strings.Builder
 	b.WriteString(r.Message)
 	h.mu.Lock()
 	for _, a := range h.attrs {
+		if a.Key == "category" {
+			continue
+		}
 		fmt.Fprintf(&b, " %s=%v", a.Key, a.Value.Any())
 	}
 	app := h.app
+	attrs := h.attrs
 	h.mu.Unlock()
 	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "category" {
+			return true
+		}
 		fmt.Fprintf(&b, " %s=%v", a.Key, a.Value.Any())
 		return true
 	})
@@ -145,10 +158,11 @@ func (h *guiLogHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	entry := ipc.LogEntry{
-		Time:    r.Time.UTC().Format(time.RFC3339Nano),
-		Level:   strings.ToLower(r.Level.String()),
-		Source:  "gui",
-		Message: b.String(),
+		Time:     r.Time.UTC().Format(time.RFC3339Nano),
+		Level:    strings.ToLower(r.Level.String()),
+		Source:   "gui",
+		Category: logging.CategoryFromRecord(r, attrs),
+		Message:  b.String(),
 	}
 	if app != nil {
 		app.Event.Emit("log", entry)
@@ -193,23 +207,13 @@ func (h *guiLogHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
-// setGUILogFile opens an append-only file in logsDir and starts mirroring
-// every GUI log record into it. Called after storage.EnsureDirs so the
-// directory is guaranteed to exist; records emitted before this point are
-// only in stderr/pending and are not retroactively written.
+// setGUILogFile starts mirroring every GUI log record into a daily file
+// wireguideplus-YYYY-MM-DD.log in logsDir. Called after storage.EnsureDirs
+// so the directory is guaranteed to exist; records emitted before this
+// point are only in stderr/pending and are not retroactively written.
 func setGUILogFile(logsDir string) {
 	path := filepath.Join(logsDir, "wireguideplus.log")
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "wireguide-plus: open log file %s: %v\n", path, err)
-		return
-	}
-	// safeMultiWriter ignores individual writer errors so a full disk or a
-	// broken stderr cannot break the stderr/event pipeline.
-	fileHandler := slog.NewTextHandler(&safeMultiWriter{writers: []io.Writer{os.Stderr, f}}, &slog.HandlerOptions{
-		Level:     guiLogLevel,
-		AddSource: true,
-	})
+	fileHandler := logging.NewDailyHandler(logsDir, "wireguideplus", guiLogLevel)
 	guiLogRefMu.Lock()
 	if guiLogRef != nil {
 		guiLogRef.mu.Lock()
@@ -217,17 +221,5 @@ func setGUILogFile(logsDir string) {
 		guiLogRef.mu.Unlock()
 	}
 	guiLogRefMu.Unlock()
-	slog.Info("file log enabled", "path", path)
-}
-
-// safeMultiWriter fans writes out to every writer, discarding errors.
-type safeMultiWriter struct {
-	writers []io.Writer
-}
-
-func (w *safeMultiWriter) Write(p []byte) (int, error) {
-	for _, w := range w.writers {
-		_, _ = w.Write(p)
-	}
-	return len(p), nil
+	slog.Info("file log enabled (daily)", "path", path)
 }

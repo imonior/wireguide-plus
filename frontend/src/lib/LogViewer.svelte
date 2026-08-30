@@ -4,6 +4,10 @@
   import { t } from '../i18n/index.js';
 
   let filter = 'all';
+  // Category filter — mirrors logging.ValidCategories on the Go side.
+  // Keep in sync when adding a category.
+  const categories = ['app', 'update', 'settings', 'tunnel', 'network', 'system'];
+  let categoryFilter = 'all';
   let autoScroll = true;
   let logContainer;
   let prevVersion = -1;
@@ -18,8 +22,13 @@
   // allocation-free; the slice/concat happens only on this read.
   $: ordered = orderedLogs($logs);
   $: filtered = ordered.filter((entry) => {
-    if (filter === 'all') return true;
-    return (levelRank[entry.level] ?? 1) >= (levelRank[filter] ?? 1);
+    if (filter !== 'all' && (levelRank[entry.level] ?? 1) < (levelRank[filter] ?? 1)) {
+      return false;
+    }
+    if (categoryFilter !== 'all' && (entry.category || 'app') !== categoryFilter) {
+      return false;
+    }
+    return true;
   });
 
   $: {
@@ -57,7 +66,7 @@
   }
 
   function formatEntry(entry) {
-    return `${formatTime(entry.time)}\t${entry.source}\t${entry.level.toUpperCase()}\t${entry.message}`;
+    return `${formatTime(entry.time)}\t${entry.source}\t${entry.level.toUpperCase()}\t${entry.category || 'app'}\t${entry.message}`;
   }
 
   async function copyAll() {
@@ -87,8 +96,9 @@
         const time = row.querySelector('.log-time')?.textContent || '';
         const source = row.querySelector('.log-source')?.textContent || '';
         const level = row.querySelector('.log-level')?.textContent || '';
+        const category = row.querySelector('.log-category')?.textContent || '';
         const msg = row.querySelector('.log-msg')?.textContent || '';
-        lines.push(`${time}\t${source}\t${level}\t${msg}`);
+        lines.push(`${time}\t${source}\t${level}\t${category}\t${msg}`);
       }
     }
     if (lines.length > 0) {
@@ -119,12 +129,26 @@
     </div>
   </div>
 
+  <div class="log-toolbar log-toolbar--categories">
+    <div class="log-filters log-filters--categories">
+      <button class:active={categoryFilter === 'all'} on:click={() => categoryFilter = 'all'}>
+        {$t('log.filter_all')}
+      </button>
+      {#each categories as cat}
+        <button class:active={categoryFilter === cat} class="category-{cat}" on:click={() => categoryFilter = cat}>
+          {$t(`log.category_${cat}`)}
+        </button>
+      {/each}
+    </div>
+  </div>
+
   <div class="log-entries" bind:this={logContainer} on:copy={handleCopy}>
     {#each filtered as entry (entry.id)}
       <div class="log-entry level-{entry.level}">
         <span class="log-time">{formatTime(entry.time)}</span>
         <span class="log-source">{entry.source}</span>
         <span class="log-level">{entry.level.toUpperCase()}</span>
+        <span class="log-category">{entry.category || 'app'}</span>
         <span class="log-msg">{entry.message}</span>
       </div>
     {/each}
@@ -171,6 +195,16 @@
     color: var(--text-inverse);
     border-color: transparent;
   }
+  .log-toolbar--categories {
+    border-bottom: 0;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+  }
+  .log-filters--categories button {
+    color: var(--text-tertiary);
+    font-size: 9px;
+    letter-spacing: 0.02em;
+  }
   .log-actions {
     display: flex;
     align-items: center;
@@ -207,7 +241,7 @@
   }
   .log-entry {
     display: grid;
-    grid-template-columns: 90px 55px 55px minmax(0, 1fr);
+    grid-template-columns: 90px 55px 55px 62px minmax(0, 1fr);
     gap: var(--space-2);
     padding: 2px var(--space-2);
     border-bottom: 0.5px solid var(--log-border);
@@ -216,10 +250,17 @@
   .log-time,
   .log-source,
   .log-level,
+  .log-category,
   .log-msg { min-width: 0; }
   .log-time  { color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .log-source{ color: var(--text-secondary); font-style: italic; }
   .log-level { font-weight: 700; }
+  .log-category {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
   .log-msg   {
     color: var(--text-primary);
     overflow-wrap: anywhere;

@@ -13,6 +13,7 @@ import (
 
 	"github.com/imonior/wireguide-plus/internal/elevate"
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -22,12 +23,17 @@ import (
 func ensureHelper(ctx context.Context, dataDir string) (*ipc.Client, error) {
 	addr := ipc.DefaultSocketPath()
 	forceReinstall := false
+	logsDir := ""
+	if paths, err := storage.GetPaths(); err == nil {
+		logsDir = paths.LogsDir
+	}
 	args := elevate.Args{
 		SocketPath: addr,
 		// -1 on Windows — the SID below is the owner identity there.
 		SocketUID: os.Getuid(),
 		SocketSID: elevate.CurrentUserSID(),
 		DataDir:   dataDir,
+		LogsDir:   logsDir,
 	}
 
 	// Try an existing helper first (survives GUI restarts).

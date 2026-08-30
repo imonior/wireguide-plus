@@ -16,10 +16,40 @@ import (
 
 	"github.com/imonior/wireguide-plus/internal/autostart"
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
+
+// validNotifyDurations is the closed set of notification-duration choices
+// offered by the Settings <select>. A value outside this set (hand-edited
+// config.json, a value written by a future version) leaves the select
+// blank in the UI, so SaveSettings normalizes back to the default.
+var validNotifyDurations = []int{5000, 10000, 15000, 30000, 60000}
+
+func validNotifyDuration(ms int) bool {
+	for _, v := range validNotifyDurations {
+		if ms == v {
+			return true
+		}
+	}
+	return false
+}
+
+// redactURL hides any userinfo credentials in a proxy URL for audit logs
+// ("http://user:secret@host:7890" → "http://***@host:7890").
+func redactURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = url.User("***")
+	return u.String()
+}
 
 // KnownSSIDs is the response shape for GetKnownSSIDs. The frontend uses
 // it to render a picker so users can tap saved networks instead of
@@ -133,6 +163,20 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 	// LaunchAgent plist / desktop file on every unrelated setting change.
 	prev, _ := s.settingsStore.Load()
 
+	// Sanitize: notification duration must be one of the UI's offered
+	// values, otherwise the Settings <select> renders blank (the frontend
+	// cannot display a value with no matching <option>).
+	if !validNotifyDuration(settings.NotifyDurationMs) {
+		settings.NotifyDurationMs = 10000
+	}
+	// Clamp log retention to a sane range (0 = default 7).
+	if settings.LogRetentionDays < 0 {
+		settings.LogRetentionDays = 0
+	}
+	if settings.LogRetentionDays > 90 {
+		settings.LogRetentionDays = 90
+	}
+
 	// Preserve the manual-off latch: the frontend's settings object never
 	// edits that list, and saving a stale in-memory copy must not silently
 	// drop tunnels the user switched off by hand (manual off wins over
@@ -143,6 +187,36 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 
 	if err := s.settingsStore.Save(settings); err != nil {
 		return err
+	}
+
+	// Audit log: record what changed so the log file answers "who turned
+	// on the proxy / kill switch / …" without diffing config.json by hand.
+	// The proxy URL is redacted so credentials never hit the log.
+	changed := changedSettingsFields(prev, settings)
+	if len(changed) > 0 {
+		slog.Info("settings changed",
+			"category", "settings",
+			"changed", strings.Join(changed, ","),
+			"proxy_mode", settings.ProxyMode,
+			"proxy_url", redactURL(settings.ProxyURL),
+			"auto_start", settings.AutoStart,
+			"start_minimized", settings.StartMinimized,
+			"log_level", settings.LogLevel,
+			"log_retention_days", settings.LogRetentionDays,
+			"auto_update_check", settings.AutoUpdateCheckEnabled(),
+			"notify_duration_ms", settings.NotifyDurationMs,
+			"enable_wg_scripts", settings.EnableWgScripts,
+			"kill_switch", settings.KillSwitch,
+			"dns_protection", settings.DNSProtection,
+			"health_check", settings.HealthCheck,
+			"pin_interface", settings.PinInterface,
+		)
+	}
+
+	// Retention changed → sweep old log files immediately instead of
+	// waiting for the next startup.
+	if prev != nil && prev.LogRetentionDays != settings.LogRetentionDays {
+		s.cleanupLogs(settings.LogRetentionDays)
 	}
 
 	// Proxy setting applies to update checks immediately — the next
@@ -185,6 +259,95 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 	}
 
 	return nil
+}
+
+// changedSettingsFields returns the names of the settings fields that
+// differ between prev and next (nil prev = first save → all fields).
+// Used for the audit log so a settings save logs what actually changed
+// instead of dumping every value every time.
+func changedSettingsFields(prev, next *storage.Settings) []string {
+	if prev == nil {
+		return []string{"all"}
+	}
+	var out []string
+	if prev.Language != next.Language {
+		out = append(out, "language")
+	}
+	if prev.Theme != next.Theme {
+		out = append(out, "theme")
+	}
+	if prev.AutoStart != next.AutoStart {
+		out = append(out, "auto_start")
+	}
+	if prev.StartMinimized != next.StartMinimized {
+		out = append(out, "start_minimized")
+	}
+	if prev.NotifyDurationMs != next.NotifyDurationMs {
+		out = append(out, "notify_duration_ms")
+	}
+	if prev.KillSwitch != next.KillSwitch {
+		out = append(out, "kill_switch")
+	}
+	if prev.DNSProtection != next.DNSProtection {
+		out = append(out, "dns_protection")
+	}
+	if prev.HealthCheck != next.HealthCheck {
+		out = append(out, "health_check")
+	}
+	if prev.PinInterface != next.PinInterface {
+		out = append(out, "pin_interface")
+	}
+	if prev.LogLevel != next.LogLevel {
+		out = append(out, "log_level")
+	}
+	if prev.CompactList != next.CompactList {
+		out = append(out, "compact_list")
+	}
+	if prev.ListSort != next.ListSort {
+		out = append(out, "list_sort")
+	}
+	if prev.ListActiveOnTop != next.ListActiveOnTop {
+		out = append(out, "list_active_on_top")
+	}
+	if prev.ListPaneWidth != next.ListPaneWidth {
+		out = append(out, "list_pane_width")
+	}
+	if prev.AutoUpdateCheckEnabled() != next.AutoUpdateCheckEnabled() {
+		out = append(out, "auto_update_check")
+	}
+	if prev.ProxyMode != next.ProxyMode {
+		out = append(out, "proxy_mode")
+	}
+	if prev.ProxyURL != next.ProxyURL {
+		out = append(out, "proxy_url")
+	}
+	if prev.LogRetentionDays != next.LogRetentionDays {
+		out = append(out, "log_retention_days")
+	}
+	if prev.EnableWgScripts != next.EnableWgScripts {
+		out = append(out, "enable_wg_scripts")
+	}
+	return out
+}
+
+// cleanupLogs sweeps daily log files older than retentionDays for both the
+// GUI and helper log families. Best-effort: cleanup failure is not worth
+// failing a settings save over.
+func (s *TunnelService) cleanupLogs(retentionDays int) {
+	paths, err := storage.GetPaths()
+	if err != nil {
+		return
+	}
+	for _, prefix := range []string{"wireguideplus", "helper"} {
+		n, err := logging.CleanupOldLogs(paths.LogsDir, prefix, retentionDays)
+		if err != nil {
+			slog.Warn("log cleanup failed", "prefix", prefix, "error", err)
+			continue
+		}
+		if n > 0 {
+			slog.Info("removed old log files", "prefix", prefix, "removed", n, "retention_days", retentionDays)
+		}
+	}
 }
 
 // TestProxyResult is the outcome of a proxy connectivity test.

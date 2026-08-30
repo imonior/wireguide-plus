@@ -428,6 +428,19 @@ export function ListTunnelsLocal() {
 }
 
 /**
+ * OpenFolder reveals one of the app-managed directories in the platform
+ * file manager. Only directories the app itself owns are accepted — a
+ * compromised frontend cannot point the opener at arbitrary paths.
+ * 
+ * kind ∈ {"config", "tunnels", "logs"}.
+ * @param {string} kind
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenFolder(kind) {
+    return $Call.ByID(444355543, kind);
+}
+
+/**
  * OpenLocationSettings opens System Settings to the Location Services page so
  * the user can grant SSID access without navigating there manually.
  * @returns {$CancellablePromise<void>}
@@ -541,7 +554,7 @@ export function RunUpdate(info) {
  * SaveAutomationRules atomically replaces one tunnel's Automation rules.
  * It goes through SettingsStore.Update — the cross-process locked
  * read-modify-write — instead of a whole-object SaveSettings, so a
- * concurrent `wireguide ctl` edit to any other tunnel or field can never
+ * concurrent `wireguideplus ctl` edit to any other tunnel or field can never
  * be clobbered by a stale GUI snapshot (issue #27 review follow-up).
  * An empty rules slice removes the tunnel's entry entirely. The helper
  * re-reads settings from disk on every evaluation, so no push is needed.

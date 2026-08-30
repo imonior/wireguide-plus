@@ -57,18 +57,14 @@
       await refreshUpdateState();
       if (info?.available) {
         // New version found: the green "up to date" pill flips to the
-        // "Update" pill automatically (driven by `updateInfo`), so the
-        // pill itself is the success indicator — no extra result line.
-        // updateInfo is always declared (export let updateInfo = null);
-        // assigning here mutates the prop so the parent's binding sees it.
+        // "Update" pill automatically (driven by `updateInfo`), and we
+        // mirror the found version into the result line under the button
+        // so the click has immediate inline feedback.
         updateInfo = info;
+        aboutCheckResult = $t('update.check_result_update_found', { version: info.version });
+      } else {
+        aboutCheckResult = $t('update.check_result_up_to_date', { version: appVersion || '—' });
       }
-      // Up-to-date result is *not* mirrored to aboutCheckResult on
-      // purpose: the pill already says "최신 버전입니다", and adding a
-      // second identical message below the row causes the UI to shift
-      // every time the user clicks "Check now". The "Last checked"
-      // timestamp flipping to "just now" is the silent feedback that
-      // the click actually did something.
     } catch (e) {
       aboutCheckResult = ($t('update.check_failed') || 'Check failed') + ': ' + (e?.message || e);
     } finally {
@@ -129,12 +125,23 @@
   }
 
   let activeTab = 'general';
+
+  // Closed set of notification-duration choices the <select> offers.
+  // A config.json value outside this set renders the select blank (the
+  // browser cannot select an <option> that doesn't exist), so load()
+  // normalizes any out-of-set value back to the default.
+  const VALID_NOTIFY_DURATIONS = [5000, 10000, 15000, 30000, 60000];
+  const DEFAULT_NOTIFY_DURATION = 10000;
+  // Log retention choices offered by the advanced tab.
+  const VALID_LOG_RETENTION_DAYS = [1, 3, 7, 14, 30, 90];
+  const DEFAULT_LOG_RETENTION_DAYS = 7;
+
   let settings = {
     language: getLanguage(),
     theme: 'system',
     auto_start: false,
     start_minimized: false,
-    notify_duration_ms: 10000,
+    notify_duration_ms: DEFAULT_NOTIFY_DURATION,
     kill_switch: false,
     dns_protection: false,
     health_check: false,
@@ -145,9 +152,13 @@
     compact_list: false,
     proxy_mode: 'direct',
     proxy_url: '',
+    log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
+    enable_wg_scripts: false,
   };
   let loaded = false;
   let appVersion = '';
+  let folderError = '';
+  let wgScriptsWarn = false;
 
   async function load() {
     try {
@@ -157,7 +168,11 @@
         settings.theme = s.theme || 'system';
         settings.auto_start = s.auto_start ?? false;
         settings.start_minimized = s.start_minimized ?? false;
-        settings.notify_duration_ms = s.notify_duration_ms || 10000;
+        // Normalize notification duration into the offered set so a
+        // hand-edited config.json can't leave the <select> blank.
+        settings.notify_duration_ms = VALID_NOTIFY_DURATIONS.includes(Number(s.notify_duration_ms))
+          ? Number(s.notify_duration_ms)
+          : DEFAULT_NOTIFY_DURATION;
         settings.kill_switch = s.kill_switch ?? false;
         settings.dns_protection = s.dns_protection ?? false;
         settings.health_check = s.health_check ?? false;
@@ -171,6 +186,10 @@
         settings.auto_update_check = (s.auto_update_check === false) ? false : true;
         settings.proxy_mode = s.proxy_mode || 'direct';
         settings.proxy_url = s.proxy_url || '';
+        // Log retention: 0 in config.json means "default (7)".
+        const retention = Number(s.log_retention_days);
+        settings.log_retention_days = VALID_LOG_RETENTION_DAYS.includes(retention) ? retention : DEFAULT_LOG_RETENTION_DAYS;
+        settings.enable_wg_scripts = s.enable_wg_scripts ?? false;
       }
     } catch (e) {
       console.error('load settings:', e);
@@ -213,6 +232,8 @@
         compact_list: settings.compact_list,
         proxy_mode: settings.proxy_mode,
         proxy_url: settings.proxy_url,
+        log_retention_days: settings.log_retention_days,
+        enable_wg_scripts: settings.enable_wg_scripts,
         // List-ordering prefs are owned by the tunnel-list header, not
         // this screen — carry them from the fresh fetch so saving any
         // Settings toggle doesn't wipe them back to defaults.
@@ -281,6 +302,46 @@
   function onNotifyDurationChange(e) {
     settings.notify_duration_ms = Number(e.target.value);
     scheduleSave();
+  }
+
+  function onLogRetentionChange(e) {
+    settings.log_retention_days = Number(e.target.value);
+    scheduleSave();
+  }
+
+  function onWgScriptsChange(e) {
+    settings.enable_wg_scripts = e.target.checked;
+    // Require an explicit confirmation: enabling runs arbitrary config
+    // commands inside the privileged helper.
+    if (e.target.checked && !wgScriptsWarn) {
+      wgScriptsWarn = true;
+      e.target.checked = true;
+    }
+    scheduleSave();
+  }
+
+  function onWgScriptsWarnConfirm() {
+    wgScriptsWarn = false;
+    settings.enable_wg_scripts = true;
+    scheduleSave();
+  }
+
+  function onWgScriptsWarnCancel() {
+    wgScriptsWarn = false;
+    settings.enable_wg_scripts = false;
+  }
+
+  let openingFolder = false;
+  async function openFolder(kind) {
+    if (openingFolder) return;
+    openingFolder = true;
+    folderError = '';
+    try {
+      await TunnelService.OpenFolder(kind);
+    } catch (e) {
+      folderError = e?.message || String(e);
+    }
+    openingFolder = false;
   }
 
   function onLogLevelChange(e) {
@@ -552,7 +613,12 @@
                   <label class="setting-label" for="notify-duration">{$t('settings.notify_duration')}</label>
                   <p class="setting-desc">{$t('settings.notify_duration_hint')}</p>
                 </div>
-                <select id="notify-duration" value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
+                <!-- bind:value (not value=) keeps the select in sync with
+                     settings.notify_duration_ms on every re-render — the
+                     old value={...} form could briefly render blank after
+                     load() when the incoming value was a non-option
+                     number. -->
+                <select id="notify-duration" bind:value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
                   <option value="5000">5s</option>
                   <option value="10000">10s</option>
                   <option value="15000">15s</option>
@@ -699,12 +765,70 @@
               <div class="setting-row">
                 <label class="setting-label" for="log-level">{$t('settings.log_level')}</label>
                 <select id="log-level" value={settings.log_level} on:change={onLogLevelChange}>
+                  <option value="all">{$t('settings.log_level_all')}</option>
                   <option value="debug">{$t('settings.log_level_debug')}</option>
                   <option value="info">{$t('settings.log_level_info')}</option>
                   <option value="warn">{$t('settings.log_level_warn')}</option>
                   <option value="error">{$t('settings.log_level_error')}</option>
                 </select>
               </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="log-retention">{$t('settings.log_retention')}</label>
+                  <p class="setting-desc">{$t('settings.log_retention_hint')}</p>
+                </div>
+                <select id="log-retention" value={settings.log_retention_days} on:change={onLogRetentionChange}>
+                  {#each VALID_LOG_RETENTION_DAYS as days}
+                    <option value={days}>{$t('settings.log_retention_days', { n: days })}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">{$t('settings.log_folder')}</span>
+                  <p class="setting-desc">{$t('settings.log_folder_hint')}</p>
+                </div>
+                <button class="folder-btn" on:click={() => openFolder('logs')} disabled={openingFolder}>
+                  {$t('settings.open_folder')}
+                </button>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">{$t('settings.tunnels_folder')}</span>
+                  <p class="setting-desc">{$t('settings.tunnels_folder_hint')}</p>
+                </div>
+                <button class="folder-btn" on:click={() => openFolder('tunnels')} disabled={openingFolder}>
+                  {$t('settings.open_folder')}
+                </button>
+              </div>
+              {#if folderError}
+                <div class="folder-error">{$t('settings.open_folder_failed')}: {folderError}</div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_wg_scripts')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="wg-scripts">{$t('settings.wg_scripts')}</label>
+                  <p class="setting-desc">{$t('settings.wg_scripts_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="wg-scripts" type="checkbox" checked={settings.enable_wg_scripts} on:change={onWgScriptsChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              {#if wgScriptsWarn}
+                <div class="wg-scripts-warn">
+                  <p class="wg-scripts-warn-text">{$t('settings.wg_scripts_warn')}</p>
+                  <div class="wg-scripts-warn-actions">
+                    <button class="btn btn--primary" on:click={onWgScriptsWarnConfirm}>{$t('settings.wg_scripts_enable')}</button>
+                    <button class="btn" on:click={onWgScriptsWarnCancel}>{$t('settings.wg_scripts_cancel')}</button>
+                  </div>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -1300,6 +1424,61 @@
     margin: 4px 0 0;
     font: 11px/15px var(--font-sans);
     color: var(--text-muted);
+  }
+
+  /* ========== Advanced tab: folder links, log retention, WG scripts ========== */
+  .folder-btn {
+    height: 26px;
+    padding: 0 12px;
+    font: 500 12px/16px var(--font-sans);
+    color: var(--accent);
+    background: var(--bg-hover);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .folder-btn:hover:not(:disabled) { background: var(--bg-card); }
+  .folder-btn:disabled { opacity: 0.6; cursor: wait; }
+  .folder-error {
+    margin-top: 6px;
+    font: 11px/15px var(--font-sans);
+    color: var(--red);
+    word-break: break-all;
+  }
+  .wg-scripts-warn {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: color-mix(in srgb, var(--yellow, #d9a406) 12%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--yellow, #d9a406) 45%, transparent);
+    border-radius: var(--radius-sm);
+  }
+  .wg-scripts-warn-text {
+    margin: 0 0 8px;
+    font: 400 11px/16px var(--font-sans);
+    color: var(--text-primary);
+  }
+  .wg-scripts-warn-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .wg-scripts-warn-actions .btn {
+    height: 24px;
+    padding: 0 12px;
+    font: 500 11px/14px var(--font-sans);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .wg-scripts-warn-actions .btn--primary {
+    color: #fff;
+    background: var(--red);
+    border: 0;
+  }
+  .wg-scripts-warn-actions .btn--primary:hover { filter: brightness(1.08); }
+  .wg-scripts-warn-actions .btn:not(.btn--primary) {
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+    border: 0.5px solid var(--border);
   }
 
   /* ========== Modal footer — credits row + close button on one line ==========

@@ -19,6 +19,7 @@ import (
 	wgapp "github.com/imonior/wireguide-plus/internal/app"
 	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
@@ -96,6 +97,21 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 			setGUILogLevel(s.LogLevel)
 		}
 		update.SetProxy(s.ProxyMode, s.ProxyURL)
+		// Sweep daily log files older than the configured retention so
+		// the logs folder can't grow without bound. 0 in settings means
+		// the default (7 days).
+		retention := logging.DefaultRetentionDays
+		if s.LogRetentionDays > 0 {
+			retention = s.LogRetentionDays
+		}
+		for _, prefix := range []string{"wireguideplus", "helper"} {
+			n, err := logging.CleanupOldLogs(paths.LogsDir, prefix, retention)
+			if err != nil {
+				slog.Warn("log cleanup failed", "prefix", prefix, "error", err)
+			} else if n > 0 {
+				slog.Info("removed old log files", "prefix", prefix, "removed", n, "retention_days", retention)
+			}
+		}
 	}
 
 	// 2. Helper process (spawn if needed).

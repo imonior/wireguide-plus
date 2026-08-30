@@ -10,6 +10,14 @@ type WireGuardConfig struct {
 	Name      string          `json:"name"`      // Tunnel name (derived from filename)
 	Interface InterfaceConfig `json:"interface"` // [Interface] section
 	Peers     []PeerConfig    `json:"peers"`     // [Peer] sections (1 or more)
+
+	// EnableScripts is injected at runtime by the GUI from user settings
+	// (Settings → advanced → enable WireGuard scripts). It is NOT part of
+	// the on-disk .conf serialization, but it MUST be transmitted over
+	// IPC (hence json tag, not `json:"-"`): the helper's reconnect path
+	// reuses the cached config and applies the same policy as the
+	// initial connect.
+	EnableScripts bool `json:"enable_scripts,omitempty"`
 }
 
 // InterfaceConfig represents the [Interface] section of a .conf file.

@@ -7,7 +7,9 @@ vars:
   # Single source of truth for the app version: the repository-root VERSION
   # file (see tools/bumpversion). Forwarded to the per-platform Taskfiles so
   # every build injects it via -ldflags into internal/version.Version.
-  VERSION: { sh: cat VERSION | tr -d '\r\n' }
+  # go-task trims leading/trailing whitespace (incl. CRLF) from sh output,
+  # so no `tr` pipe needed — `tr` isn't guaranteed on Windows shells.
+  VERSION: { sh: cat VERSION }
 
 includes:
   windows:

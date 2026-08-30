@@ -400,6 +400,19 @@ export class WireGuardConfig {
              */
             this["peers"] = [];
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * EnableScripts is injected at runtime by the GUI from user settings
+             * (Settings → advanced → enable WireGuard scripts). It is NOT part of
+             * the on-disk .conf serialization, but it MUST be transmitted over
+             * IPC (hence json tag, not `json:"-"`): the helper's reconnect path
+             * reuses the cached config and applies the same policy as the
+             * initial connect.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["enable_scripts"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

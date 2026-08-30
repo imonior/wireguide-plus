@@ -17,6 +17,19 @@
     }
     loading = false;
   }
+
+  function statusLabel(server) {
+    switch (server.status) {
+      case 'vpn':
+        return $t('tools.dns_status_vpn');
+      case 'leak':
+        return $t('tools.dns_status_leak');
+      case 'ok':
+        return $t('tools.dns_status_ok');
+      default:
+        return $t('tools.dns_status_timeout');
+    }
+  }
 </script>
 
 <div class="dns-test">
@@ -47,10 +60,11 @@
         <div class="section-label">{$t('tools.dns_servers_detected')}</div>
         <div class="server-list">
           {#each result.dns_servers || [] as server}
-            <div class="server" class:vpn={server.is_vpn} class:leak={!server.is_vpn}>
+            <div class="server" class:vpn={server.status === 'vpn'} class:leak={server.status === 'leak'} class:timeout={server.status === 'timeout'}>
               <span class="server-ip">{server.ip}</span>
               <span class="server-host">{server.hostname || ''}</span>
-              <span class="server-badge">{server.is_vpn ? 'VPN' : '!'}</span>
+              <span class="server-latency">{server.latency_ms > 0 ? `${server.latency_ms}ms` : '—'}</span>
+              <span class="server-badge">{statusLabel(server)}</span>
             </div>
           {/each}
         </div>
@@ -157,15 +171,24 @@
     font: var(--text-body);
   }
   .server-ip { font-family: var(--font-mono); }
-  .server-host { color: var(--text-secondary); flex: 1; }
+  .server-host { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .server-latency {
+    font-family: var(--font-mono);
+    font: var(--text-footnote);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
   .server-badge {
     padding: 1px var(--space-2);
     border-radius: var(--radius-xs);
     font: var(--text-footnote);
     font-weight: 600;
+    white-space: nowrap;
   }
   .vpn .server-badge { background: var(--green); color: var(--text-inverse); }
   .leak .server-badge { background: var(--red); color: var(--text-inverse); }
+  .timeout .server-badge { background: var(--text-tertiary); color: var(--text-inverse); }
+  .timeout .server-latency { color: var(--text-tertiary); }
   .error-msg {
     margin-top: var(--space-3);
     padding: var(--space-2) var(--space-3);

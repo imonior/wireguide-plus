@@ -28,7 +28,10 @@ type DNSLeakResult struct {
 type DNSServer struct {
 	IP       string `json:"ip"`
 	Hostname string `json:"hostname"`
-	IsVPN    bool   `json:"is_vpn"` // true if this is the expected VPN DNS
+	IsVPN    bool   `json:"is_vpn"`    // true if this is the expected VPN DNS
+	Responds bool   `json:"responds"`  // did the probe get a DNS reply (NXDOMAIN)?
+	LatencyMs int   `json:"latency_ms"` // probe round-trip; 0 if it timed out
+	Status   string `json:"status"`    // "vpn" | "ok" | "leak" | "timeout"
 }
 
 // RunDNSLeakTest is a context-less convenience wrapper for callers that
@@ -77,9 +80,10 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 	}
 
 	type probeResult struct {
-		idx     int
+		idx      int
 		hostname string
 		responds bool
+		latency  time.Duration
 	}
 
 	// Pre-fill DNSServers so each slot has at least the IP and IsVPN
@@ -108,8 +112,13 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 			if names, err := (&net.Resolver{}).LookupAddr(lookupCtx, dnsIP); err == nil && len(names) > 0 {
 				hn = names[0]
 			}
+			// Time the probe so the UI can show per-resolver latency
+			// (a slow-but-responding resolver is a useful signal: e.g.
+			// a blocked/rate-limited DNS vs a healthy one).
+			probeStart := time.Now()
 			responds := testDNSServerCtx(lookupCtx, dnsIP, testDomain)
-			probes <- probeResult{idx: idx, hostname: hn, responds: responds}
+			latency := time.Since(probeStart)
+			probes <- probeResult{idx: idx, hostname: hn, responds: responds, latency: latency}
 		}(i, dns)
 	}
 
@@ -121,9 +130,30 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 			result.Leaked = leaked
 			return result
 		case p := <-probes:
-			result.DNSServers[p.idx].Hostname = p.hostname
-			if !result.DNSServers[p.idx].IsVPN && p.responds {
+			entry := &result.DNSServers[p.idx]
+			entry.Hostname = p.hostname
+			entry.Responds = p.responds
+			entry.LatencyMs = int(p.latency.Milliseconds())
+			switch {
+			case entry.IsVPN:
+				entry.Status = "vpn"
+			case p.responds:
+				entry.Status = "leak" // non-VPN resolver answered — DNS is leaking
 				leaked = true
+			default:
+				entry.Status = "timeout"
+			}
+		}
+	}
+
+	// Every DNS server slot should now have a status; belt-and-braces for
+	// any slot that somehow skipped a probe result.
+	for i := range result.DNSServers {
+		if result.DNSServers[i].Status == "" {
+			if result.DNSServers[i].IsVPN {
+				result.DNSServers[i].Status = "vpn"
+			} else {
+				result.DNSServers[i].Status = "timeout"
 			}
 		}
 	}
@@ -207,11 +237,13 @@ func readLinuxResolvers() ([]string, error) {
 }
 
 // readWindowsResolvers uses PowerShell to extract DNS server addresses.
+// Both IPv4 and IPv6 are collected — an IPv6 resolver leaking alongside a
+// clean IPv4 config would otherwise go unnoticed.
 func readWindowsResolvers() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command",
-		`(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses | Sort-Object -Unique`)
+		`(Get-DnsClientServerAddress -AddressFamily IPv4,IPv6 -ErrorAction SilentlyContinue).ServerAddresses | Sort-Object -Unique`)
 	sysexec.Hide(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -222,6 +254,13 @@ func readWindowsResolvers() ([]string, error) {
 	seen := make(map[string]bool)
 	for _, line := range strings.Split(string(out), "\n") {
 		ip := strings.TrimSpace(line)
+		// IPv6 link-local addresses come back with a scope id ("%12");
+		// net.ParseIP rejects it, and the probe would fail anyway without
+		// a zone. Strip it — the probe then treats such a resolver as a
+		// timeout rather than a false leak.
+		if i := strings.IndexByte(ip, '%'); i >= 0 {
+			ip = ip[:i]
+		}
 		if net.ParseIP(ip) != nil && !seen[ip] {
 			seen[ip] = true
 			servers = append(servers, ip)

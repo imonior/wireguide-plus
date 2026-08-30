@@ -71,6 +71,10 @@ func SpawnHelper(ctx context.Context, args Args) error {
 // leave old plists in place.
 func generatePlistContent(exe string, args Args) string {
 	uid := os.Getuid()
+	logsArg := ""
+	if args.LogsDir != "" {
+		logsArg = fmt.Sprintf("\n        <string>--logs-dir=%s</string>", args.LogsDir)
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -83,7 +87,7 @@ func generatePlistContent(exe string, args Args) string {
         <string>--helper</string>
         <string>--socket=%s</string>
         <string>--uid=%d</string>
-        <string>--data-dir=%s</string>
+        <string>--data-dir=%s</string>%s
     </array>
     <!-- RunAtLoad is deliberately false. The job stays loaded across
          reboots (the plist lives in /Library/LaunchDaemons), but launchd
@@ -116,7 +120,7 @@ func generatePlistContent(exe string, args Args) string {
     <string>/var/log/wireguide-helper.log</string>
 </dict>
 </plist>
-`, daemonLabel, daemonBinary, args.SocketPath, uid, args.DataDir)
+`, daemonLabel, daemonBinary, args.SocketPath, uid, args.DataDir, logsArg)
 }
 
 // PlistNeedsReinstall reports whether the on-disk LaunchDaemon plist differs

@@ -4,6 +4,30 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.5] - 2026-08-30
+
+이번 버전은 로그 시스템을 대폭 강화하고(업데이트 확인, 설정 감사, 분류/등급, 보존 기간 정리), 일부 설정 문제를 수정하며, 기본적으로 꺼져 있는 WireGuard 스크립트 지원을 다시 제공합니다.
+
+### ✨ 새로운 기능
+
+- **업데이트 확인 전체 로그** — 수동·자동 확인 모두 실제 요청한 endpoint, 로컬 버전, 최신 버전, `not_modified`, 오류/재시도 정보를 기록합니다. 실패(403, 타임아웃 등)는 `category=update`로 표시되어 Log 화면에서 확인·필터링할 수 있습니다.
+- **설정 변경 감사 로그** — 저장할 때마다 변경된 설정(프록시 모드, kill switch 등)과 주요 값을 기록합니다. 프록시 자격 증명은 마스킹됩니다(`http://***@host`).
+- **로그 분류 및 필터링** — `ipc.LogEntry`에 `category` 필드 추가(app / update / settings / tunnel / network / system). Log 화면에 분류 필터 행 추가(All이 맨 앞, 기본 선택). 각 줄에 분류를 표시하고 복사 시에도 포함됩니다.
+- **로그 보존 기간(기본 7일)** — 일별 순환 저장(`wireguideplus-YYYY-MM-DD.log`) 후, 설정 가능한 보존 기간이 지난 파일을 자동 삭제합니다.
+- **WireGuard 스크립트 지원(PreUp / PostUp / PreDown / PostDown, 기본 꺼짐)** — wg-quick과 동일한 동작(Unix는 `sh -c`, Windows는 `cmd.exe /C`). helper 내에서 30초 타임아웃으로 실행하고 출력은 1000자로 제한합니다. 기본 꺼짐(설정 → 고급). 전체 시스템 권한으로 실행되므로 활성화 시 눈에 띄는 보안 경고를 표시합니다. PostUp 실패로 연결이 중단되지는 않습니다.
+- **DNS leak test 강화** — 각 DNS 서버에 프로브 상태(vpn / ok / leak / timeout)와 지연 시간을 표시합니다. Windows DNS 수집 시 IPv4와 IPv6를 모두 다룹니다.
+- **폴더 열기 바로가기** — 설정에 터널 설정 폴더와 로그 저장 폴더를 여는 클릭 가능한 링크를 추가(크로스 플랫폼).
+
+### 🐛 버그 수정
+
+- **알림 표시 시간 설정을 저장할 수 없던 문제** — 설정 화면을 나갔다가 다시 열어도 값이 리셋되지 않습니다.
+- **설정의 로그 등급에 All이 없던 문제** — 드롭다운에 `All` 추가(Log 화면 기본값과 일치). 싱크 단계에서 레코드가 필터링되지 않습니다.
+
+### 🛠 내부
+
+- **로그 등급 All 전 구간 활성화** — helper/GUI 로그 핸들러가 `all`(`slog.Level(-8)`)을 해석하여 레코드를 놓치지 않습니다.
+- 버전을 **1.1.5**로 업데이트: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm, macOS `Info.plist` 모두 동기화.
+
 ## [1.1.3] - 2026-08-30
 
 이번 버전은 Windows 자동 업데이트가 동작하지 않던 문제를 수정합니다. v1.1.0 자산 이름 변경 이후 Windows 릴리스 자산(`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`)은 OS 토큰을 포함하지 않는데, 업데이트 체커는 자산 이름에 OS 토큰과 아키텍처가 모두 필요했습니다. 따라서 Windows는 자신의 자산과 전혀 매칭되지 않아 '업데이트가 있지만 일치하는 자산 없음' 상태로 자동 업데이트를 할 수 없었습니다.

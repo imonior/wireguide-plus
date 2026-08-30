@@ -4,6 +4,30 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.5] - 2026-08-30
+
+本リリースはログシステムを大幅に強化し（更新チェック・設定監査・カテゴリ分類・保存期間の自動削除）、設定の不具合を修正し、デフォルトで無効の WireGuard スクリプト対応を復活させます。
+
+### ✨ 新機能
+
+- **更新チェックの完全ログ** — 手動・自動チェックとも、実際にリクエストした endpoint・ローカルバージョン・最新バージョン・`not_modified`・エラー/リトライ情報を記録します。失敗（403、タイムアウトなど）は `category=update` 付きで Log 画面に表示・フィルタ可能です。
+- **設定変更の監査ログ** — 保存のたびに変更された設定（プロキシモード、kill switch など）と主要な値を記録します。プロキシの資格情報はマスクされます（`http://***@host`）。
+- **ログのカテゴリ分類とフィルタ** — `ipc.LogEntry` に `category` フィールドを追加（app / update / settings / tunnel / network / system）。Log 画面にカテゴリフィルタ行を追加（All が先頭・デフォルト選択）。各行にカテゴリを表示し、コピー時にも含まれます。
+- **ログ保存期間（デフォルト 7 日）** — 日次ローテーション（`wireguideplus-YYYY-MM-DD.log`）で保存し、設定可能な保存期間を超えたファイルを自動削除します。
+- **WireGuard スクリプト対応（PreUp / PostUp / PreDown / PostDown、デフォルト無効）** — wg-quick と同じ動作（Unix は `sh -c`、Windows は `cmd.exe /C`）。helper 内で 30 秒のタイムアウト付きで実行し、出力は 1000 文字に切り詰めます。デフォルト無効（設定 → 詳細）。完全なシステム権限で実行されるため、有効化時には目立つセキュリティ警告を表示します。PostUp の失敗で接続は中断されません。
+- **DNS leak test の強化** — 各 DNS サーバーにプローブ状態（vpn / ok / leak / timeout）と遅延を表示。Windows の DNS 収集で IPv4 と IPv6 の両方を扱います。
+- **フォルダを開くショートカット** — 設定に、トンネル設定フォルダとログ保存フォルダを開くクリック可能なリンクを追加（クロスプラットフォーム）。
+
+### 🐛 バグ修正
+
+- **通知の表示時間設定が保存できない問題** — 設定画面を離れて再度開いても値がリセットされなくなりました。
+- **設定のログレベルに All がなかった問題** — ドロップダウンに `All` を追加（Log 画面のデフォルトと一致）。シンク側でレコードが除外されません。
+
+### 🛠 内部
+
+- **ログレベル All を全経路で有効化** — helper / GUI のログハンドラが `all`（`slog.Level(-8)`）を解釈し、レコードを落としません。
+- バージョンを **1.1.5** に更新: `VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` をすべて同期。
+
 ## [1.1.3] - 2026-08-30
 
 本リリースは Windows の自動更新が機能しなかった問題を修正します。v1.1.0 のアセット改名以降、Windows のリリースアセット（`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`）には OS トークンが含まれていませんが、更新チェッカーはアセット名に OS トークンとアーキテクチャの両方を要求していました。そのため Windows は自身のアセットに一切マッチせず、「更新あり・一致するアセットなし」と表示されて自動更新できませんでした。

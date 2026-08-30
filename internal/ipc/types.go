@@ -47,10 +47,11 @@ type ReconnectStateDTO struct {
 // to the GUI (and from the GUI to the frontend LogViewer). We keep it flat
 // — no nested attrs — because the viewer just renders a one-line per entry.
 type LogEntry struct {
-	Time    string `json:"time"`    // RFC3339
-	Level   string `json:"level"`   // "debug" | "info" | "warn" | "error"
-	Source  string `json:"source"`  // "helper" | "gui"
-	Message string `json:"message"` // human-readable text (already includes attrs)
+	Time     string `json:"time"`    // RFC3339
+	Level    string `json:"level"`   // "debug" | "info" | "warn" | "error"
+	Source   string `json:"source"`  // "helper" | "gui"
+	Category string `json:"category"` // one of logging.ValidCategories ("app" when unset)
+	Message  string `json:"message"` // human-readable text (already includes attrs)
 }
 
 // SetPinInterfaceRequest is the parameter for Network.SetPinInterface.

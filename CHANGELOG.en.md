@@ -4,6 +4,30 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.5] - 2026-08-30
+
+This release enriches the logging system (update checks, settings audits, categories, retention), fixes a few Settings issues, and brings back opt-in WireGuard scripts.
+
+### ✨ Features
+
+- **Full update-check logging** — manual and scheduled checks now log the endpoint actually queried, the local version, the latest version, `not_modified`, and error/retry details; failures (403, timeouts, …) are tagged with `category=update` so they show up and stay filterable in the Log viewer.
+- **Settings-change audit log** — every save records which settings changed (proxy mode, kill switch, …) together with key values; proxy credentials are redacted (`http://***@host`).
+- **Log categories & filtering** — `ipc.LogEntry` gained a `category` field (app / update / settings / tunnel / network / system); the Log viewer added a category filter row (All first, selected by default) and shows the category per line and when copying.
+- **Log retention (default 7 days)** — logs rotate per day (`wireguideplus-YYYY-MM-DD.log`) and are pruned after a configurable retention period.
+- **Opt-in WireGuard scripts (PreUp / PostUp / PreDown / PostDown)** — mirroring wg-quick (`sh -c` on Unix, `cmd.exe /C` on Windows), run inside the helper with a 30 s timeout and output capped at 1000 chars. Off by default (Settings → advanced); enabling shows a prominent security warning since the commands run with full system privileges. PostUp errors do not abort the connection.
+- **DNS leak test enrichment** — each resolver now reports probe status (`vpn` / `ok` / `leak` / `timeout`) and latency; Windows DNS discovery now collects both IPv4 and IPv6 resolvers.
+- **Open-folder shortcuts** — Settings now has clickable links that open the tunnel config folder and the log storage folder (cross-platform).
+
+### 🐛 Bug Fixes
+
+- **Notification duration could not be saved** — the value no longer resets after leaving and reopening Settings.
+- **Settings log-level picker missed "All"** — the dropdown now offers `All` (matching the Log viewer's default) so no record is filtered at the sink level.
+
+### 🛠 Internal
+
+- **Log level "All" honored everywhere** — helper and GUI log handlers parse `all` (`slog.Level(-8)`) so no record is dropped.
+- Version bumped to **1.1.5**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
+
 ## [1.1.3] - 2026-08-30
 
 This release fixes broken Windows auto-update: since the v1.1.0 asset rename, Windows release assets (`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`) carry no OS token in their names, but the update checker required the asset name to carry both an OS token and the architecture. Windows could therefore never match its own assets, and installed clients only saw "update available but no matching asset" without being able to auto-update.

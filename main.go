@@ -51,6 +51,7 @@ func main() {
 	socketUID := flag.Int("uid", -1, "socket owner UID (Unix only)")
 	ownerSID := flag.String("owner-sid", "", "socket owner SID (Windows only)")
 	dataDir := flag.String("data-dir", "", "data directory for crash recovery")
+	logsDir := flag.String("logs-dir", "", "logs directory for daily helper log files (helper mode)")
 	flag.Parse()
 
 	if *helperMode {
@@ -90,7 +91,7 @@ func main() {
 			}
 		}
 		log.Println("WireGuide helper starting...")
-		if err := helper.Run(*socketPath, *socketUID, *ownerSID, *dataDir); err != nil {
+		if err := helper.Run(*socketPath, *socketUID, *ownerSID, *dataDir, *logsDir); err != nil {
 			log.Fatal("helper error:", err)
 		}
 		return

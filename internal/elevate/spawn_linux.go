@@ -27,13 +27,17 @@ func SpawnHelper(ctx context.Context, args Args) error {
 		return err
 	}
 
-	cmd := exec.Command("pkexec",
+	cmdArgs := []string{
 		exe,
 		"--helper",
 		fmt.Sprintf("--socket=%s", args.SocketPath),
 		fmt.Sprintf("--uid=%d", args.SocketUID),
 		fmt.Sprintf("--data-dir=%s", args.DataDir),
-	)
+	}
+	if args.LogsDir != "" {
+		cmdArgs = append(cmdArgs, fmt.Sprintf("--logs-dir=%s", args.LogsDir))
+	}
+	cmd := exec.Command("pkexec", cmdArgs...)
 	// Put the helper in its own process group so it survives Ctrl+C on the
 	// parent terminal (macOS version uses `& disown` for the same purpose).
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

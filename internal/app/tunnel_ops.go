@@ -213,6 +213,14 @@ func (s *TunnelService) Connect(name string) error {
 		return fmt.Errorf("loading tunnel %s: %w", name, err)
 	}
 
+	// Inject the WireGuard-scripts opt-in from user settings. The helper
+	// executes the config's Pre/PostUp/Down hooks only when this flag is
+	// set — it stays OFF by default because scripts run as root/admin
+	// (Settings shows a prominent warning when enabling).
+	if st, err := s.settingsStore.Load(); err == nil && st != nil {
+		cfg.EnableScripts = st.EnableWgScripts
+	}
+
 	// A manual reconnect releases the manual-off latch: the user has
 	// spoken, so this tunnel's automation rules resume. Done before the
 	// IPC so a failed attempt still leaves automation free to act.

@@ -23,6 +23,10 @@ type Args struct {
 	SocketSID string
 	// DataDir for crash recovery state
 	DataDir string
+	// LogsDir is the user log directory the helper should write its daily
+	// log files (helper-YYYY-MM-DD.log) to. Optional — empty disables
+	// helper-side file logging.
+	LogsDir string
 	// ForceReinstall skips the "already running" socket check and
 	// reinstalls the binary + restarts the daemon. Used when the GUI
 	// detects a helper version mismatch after an app update.
@@ -47,6 +51,11 @@ func ValidateArgs(a Args) error {
 	}
 	if err := validateSpawnPath("DataDir", a.DataDir); err != nil {
 		return err
+	}
+	if a.LogsDir != "" {
+		if err := validateSpawnPath("LogsDir", a.LogsDir); err != nil {
+			return err
+		}
 	}
 	if a.SocketSID != "" && !sidPattern.MatchString(a.SocketSID) {
 		// The SID travels through a PowerShell argument list and is later
