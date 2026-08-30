@@ -20,7 +20,7 @@ wireguide-plus/
 │   │   └── msix/             # MSIX 打包模板
 │   └── linux/nfpm/           # Linux 打包（nfpm）
 ├── Taskfile.yml              # 顶层任务（go-task）
-└── .github/workflows/        # CI（ci.yml）与发布（release.yml）
+└── .github/workflows/        # CI（ci.yml）、发布（release.yml）、notes 刷新（fix-release-notes.yml）
 ```
 
 ## 2. 环境依赖
@@ -85,7 +85,7 @@ task windows:build ARCH=arm64     # arm64（版本资源 syso 走 `-arm` 分支�
 | `bin/wireguideplus-arm64.exe` | ARM64 运行程序 |
 | `bin/wireguideplus-x86-installer.exe` | 32 位安装包（含 32 位程序 + 32 位 wintun-x86.dll） |
 | `bin/wireguideplus-amd64-installer.exe` | 64 位安装包（含 64 位程序 + 64 位 wintun-amd64.dll） |
-| `bin/wireguideplus-arm64-installer.exe` | ARM64 安装包（含 ARM64 程序 + 64 位 wintun-arm64.dll） |
+| `bin/wireguideplus-arm64-installer.exe` | ARM64 安装包（含 ARM64 程序 + ARM64 wintun-arm64.dll） |
 | `bin/wintun-x86.dll` / `bin/wintun-amd64.dll` / `bin/wintun-arm64.dll` | 各架构的 wintun 驱动（文件名即架构，程序据此加载） |
 
 > 运行程序统一命名 `wireguideplus-<arch>.exe`，安装包 `wireguideplus-<arch>-installer.exe`；
@@ -126,7 +126,7 @@ Copy-Item "$env:TEMP\wintun-extract\wintun\bin\amd64\wintun.dll" bin\wintun-amd6
 
 ## 5. NSIS 安装包
 
-安装脚本：`build/windows/nsis/project.nsi`（wails 生成的 `wails_tools.nsh` 为公共宏，**不要修改**）。
+安装脚本：`build/windows/nsis/project.nsi`（wails 生成的 `wails_tools.nsh` 为公共宏，**不要手动修改**；其中的 `INFO_PRODUCTVERSION` 由 `task bump:version` 自动维护，见 §6）。
 
 当前安装包行为：
 
@@ -149,13 +149,15 @@ makensis -DPRODUCT_EXECUTABLE=wireguideplus-arm64.exe -DARG_WAILS_ARM64_BINARY=.
 
 ## 6. 版本资源（exe 属性）
 
-exe 的「详细信息」标签页版本信息由 `build/windows/versioninfo.json.tmpl` 渲染而来（模板变量：`FileDescription`、`InternalName`、`OriginalFilename`，均内嵌架构后缀，如 `WireGuide Plus (amd64) - ...`、`wireguideplus-amd64.exe`）。`generate:syso` 任务先用 `tools/genverinfo` 按构建架构渲染出临时 `versioninfo.gen.json`，再由 `goversioninfo` 生成 `wails_windows_<arch>.syso` 并链接进可执行文件。修改版本号需同步更新：
+exe 的「详细信息」标签页版本信息由 `build/windows/versioninfo.json.tmpl` 渲染而来（模板变量：`FileDescription`、`InternalName`、`OriginalFilename`，均内嵌架构后缀，如 `WireGuide Plus (amd64) - ...`、`wireguideplus-amd64.exe`）。`generate:syso` 任务先用 `tools/genverinfo` 渲染出临时 `versioninfo.gen.json`（`-version` 取自根 `VERSION` 文件，见下方单一源），再由 `goversioninfo` 生成 `wails_windows_<arch>.syso` 并链接进可执行文件。
 
-- `build/windows/versioninfo.json.tmpl`（或 `generate:syso` 的 `-version` 默认值）
-- `build/windows/info.json`
-- `build/config.yml`（`info.productVersion`）
-- `build/windows/nsis/project.nsi`（`INFO_PRODUCTVERSION`）
-- `frontend/package.json`、`CHANGELOG.md`
+**版本号单一源**：所有版本号（Go 程序 `-ldflags`、Windows 版本资源、NSIS / MSIX、Linux nfpm、macOS Info.plist）统一来自仓库根 `VERSION` 文件。发布前只需：
+
+```bash
+task bump:version 1.1.2    # 可选传参；不传则按 VERSION 文件同步
+```
+
+`task bump:version`（`tools/bumpversion`）会一键重写 `build/config.yml`、`build/windows/info.json`、`build/windows/versioninfo.json`、`build/windows/wails.exe.manifest`、`build/windows/nsis/wails_tools.nsh`（`INFO_PRODUCTVERSION`）、`build/windows/msix/*.xml`、`build/linux/nfpm/nfpm.yaml` 及 macOS 两份 Info.plist；Go 程序与版本资源则在构建时自动从 `VERSION` 注入，无需手动修改任何代码或模板。
 
 ## 7. 发布流程（推送 tag 即发布）
 
