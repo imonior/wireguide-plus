@@ -9,8 +9,9 @@
 //
 //   - build/config.yml                     info.version
 //   - build/windows/info.json              fixed.file_version / info.ProductVersion
-//   - build/windows/versioninfo.json       FixedFileInfo + StringFileInfo (the
-//     committed reference for versioninfo.json.tmpl; the build itself uses the
+//   - build/windows/versioninfo.json       StringFileInfo 4-part versions only
+//     (FixedFileInfo numbers stay 0 — see tools/genverinfo; the committed file
+//     is the reference for versioninfo.json.tmpl and the build itself uses the
 //     genverinfo-rendered versioninfo.gen.json)
 //   - build/windows/wails.exe.manifest     assemblyIdentity version (4-part)
 //   - build/windows/nsis/wails_tools.nsh   INFO_PRODUCTVERSION
@@ -78,9 +79,9 @@ func main() {
 	targets := []target{
 		newTarget("build/config.yml", `(version: ")\d+\.\d+\.\d+(")`, newVer),
 		newTarget("build/windows/info.json", `("file_version": ")\d+\.\d+\.\d+\.\d+(")`, fourPart),
-		newTarget("build/windows/info.json", `("ProductVersion": ")\d+\.\d+\.\d+(")`, newVer),
-		newTarget("build/windows/versioninfo.json", `("FileVersion": ")\d+\.\d+\.\d+(")`, newVer),
-		newTarget("build/windows/versioninfo.json", `("ProductVersion": ")\d+\.\d+\.\d+(")`, newVer),
+		newTarget("build/windows/info.json", `("ProductVersion": ")\d+\.\d+\.\d+\.\d+(")`, fourPart),
+		newTarget("build/windows/versioninfo.json", `("FileVersion": ")\d+\.\d+\.\d+\.\d+(")`, fourPart),
+		newTarget("build/windows/versioninfo.json", `("ProductVersion": ")\d+\.\d+\.\d+\.\d+(")`, fourPart),
 		newTarget("build/windows/wails.exe.manifest", `(<assemblyIdentity type="win32" name="com\.imonior\.wireguide-plus" version=")\d+\.\d+\.\d+\.\d+(")`, fourPart),
 		newTarget("build/windows/nsis/wails_tools.nsh", `(!define INFO_PRODUCTVERSION ")\d+\.\d+\.\d+(")`, newVer),
 		newTarget("build/windows/msix/template.xml", `(\n\s*Version=")\d+\.\d+\.\d+\.\d+(")`, fourPart),
@@ -90,16 +91,11 @@ func main() {
 		newTarget("build/darwin/Info.dev.plist", `(<string>)\d+\.\d+\.\d+(</string>)`, newVer),
 	}
 
-	// versioninfo.json FixedFileInfo blocks store each number separately.
-	parts := strings.Split(newVer, ".")
-	targets = append(targets,
-		target{path: "build/windows/versioninfo.json",
-			re:   regexp.MustCompile(`("FileVersion": \{\s*"Major": )\d+(\s*,\s*"Minor": )\d+(\s*,\s*"Build": )\d+(\s*,\s*"Patch": )\d+(\s*\})`),
-			repl: "${1}" + parts[0] + "${2}" + parts[1] + "${3}" + parts[2] + "${4}0${5}"},
-		target{path: "build/windows/versioninfo.json",
-			re:   regexp.MustCompile(`("ProductVersion": \{\s*"Major": )\d+(\s*,\s*"Minor": )\d+(\s*,\s*"Build": )\d+(\s*,\s*"Patch": )\d+(\s*\})`),
-			repl: "${1}" + parts[0] + "${2}" + parts[1] + "${3}" + parts[2] + "${4}0${5}"},
-	)
+	// Note: versioninfo.json's FixedFileInfo version numbers are intentionally
+	// left at 0 (see tools/genverinfo): goversioninfo v1.7 declares its struct
+	// as Major/Minor/Patch/Build, so explicit numbers produce a corrupt binary
+	// version. The 4-part StringFileInfo strings above are the single input;
+	// goversioninfo derives FixedFileInfo from them.
 
 	// Group targets by path so each file is read/written once.
 	byPath := map[string][]target{}

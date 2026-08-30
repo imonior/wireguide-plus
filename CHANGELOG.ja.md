@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.2] - 2026-08-30
+
+本リリースは Windows のファイルバージョン不一致を修正します。公開された 1.1.1 インストーラでは、実行ファイル（`wireguideplus-<arch>.exe`）の「ファイルのバージョン」が **1.1.0.1** と表示されていました（正しくは **1.1.1.0**）。
+
+### 🐛 バグ修正
+
+- **Windows 実行ファイルのファイルバージョン不一致を修正** — 根本原因: `goversioninfo v1.7` は `FixedFileInfo` 構造体を `Major/Minor/Patch/Build` の順序で宣言しており（Windows 標準レイアウトと Build/Patch が入れ替わっている）、JSON に数値を明示的に書くと入れ替わったバイナリバージョンになりました（`1.1.1.0` が `1.1.0.1` に）。`build/windows/versioninfo.json` の `FixedFileInfo` 数値は 0 に固定し、唯一の入力として `StringFileInfo` の4部構成バージョン文字列のみを使用し、goversioninfo がバイナリバージョンをそこから導出します（レイアウト非依存・常に一致）。`tools/genverinfo` は文字列バージョンのみをレンダリングし、`tools/bumpversion` は数値フィールドに触れません。検証済み: `1.1.2.0` 文字列を渡すと goversioninfo は `FixedFileInfo.FileVersion (1.1.2.0)` を出力し、インストール後はエクスプローラーのプロパティページと `FileVersionInfo` の両方が正しく表示されます。
+
+### 🛠 内部
+
+- バージョンを **1.1.2** に更新: `VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh` + `project.nsi`）、MSIX、Linux nfpm、macOS `Info.plist` をすべて同期。
+- NSIS インストーラー/アンインストーラーの説明（`project.nsi`）を修正し、インストーラーとアンインストーラーのバージョン情報が出荷実行ファイルと一致するようにしました。
+
 ## [1.1.1] - 2026-08-30
 
 本リリースは、システム高負荷時に Windows トレイ通知バブルの「メインウィンドウを開く」ボタンで発生する断続的な GUI フリーズを修正します。

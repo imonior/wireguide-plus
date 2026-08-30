@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.2] - 2026-08-30
+
+本次版本修复 Windows 安装包文件版本错位问题：此前发布的 1.1.1 安装包中，运行程序（`wireguideplus-<arch>.exe`）在资源管理器属性页显示的「文件版本」为 **1.1.0.1**（应为 **1.1.1.0**）。
+
+### 🐛 修复（Bug Fixes）
+
+- **修复 Windows 运行程序文件版本错位** — 根因：`goversioninfo v1.7` 将 `FixedFileInfo` 结构体声明为 `Major/Minor/Patch/Build` 顺序（与 Windows 标准布局的 Build/Patch 相反），向 JSON 显式写入数字版本会得到被交换的二进制版本（`1.1.1.0` 变成 `1.1.0.1`）。现在 `build/windows/versioninfo.json` 的 `FixedFileInfo` 数字固定为 0，仅以 `StringFileInfo` 四段版本字符串为唯一输入，由 goversioninfo 推导二进制版本（布局无关、始终匹配）；`tools/genverinfo` 只渲染字符串版本，`tools/bumpversion` 不再触碰数字字段。已验证：传入 `1.1.2.0` 字符串时 goversioninfo 输出 `FixedFileInfo.FileVersion (1.1.2.0)`，安装后属性页与 `FileVersionInfo` 均正确显示。
+
+### 🛠 内部（Internal）
+
+- 版本号更新至 **1.1.2**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh` + `project.nsi`）、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+- 修正 NSIS 安装/卸载描述（`project.nsi`），安装包与卸载程序的文件版本信息与运行程序保持一致。
+
 ## [1.1.1] - 2026-08-30
 
 本次版本修复 Windows 托盘通知气泡「打开主界面」按钮在系统高负载下偶发导致 GUI 卡死的问题。

@@ -4,6 +4,19 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.2] - 2026-08-30
+
+이번 버전은 Windows 파일 버전 불일치를 수정합니다. 배포된 1.1.1 설치 프로그램에서 실행 파일(`wireguideplus-<arch>.exe`)의 "파일 버전"이 **1.1.0.1**로 표시되었습니다(올바른 값은 **1.1.1.0**).
+
+### 🐛 버그 수정
+
+- **Windows 실행 파일 버전 불일치 수정** — 근본 원인: `goversioninfo v1.7`은 `FixedFileInfo` 구조체를 `Major/Minor/Patch/Build` 순서로 선언합니다(Windows 표준 레이아웃과 Build/Patch가 바뀜). JSON에 숫자 버전을 명시적으로 쓰면 뒤바뀐 바이너리 버전이 생성되었습니다(`1.1.1.0`이 `1.1.0.1`로 표시). 이제 `build/windows/versioninfo.json`의 `FixedFileInfo` 숫자는 0으로 고정하고, 유일한 입력으로 `StringFileInfo` 4자리 버전 문자열만 사용하며, goversioninfo가 그로부터 바이너리 버전을 도출합니다(레이아웃 독립, 항상 일치). `tools/genverinfo`는 문자열 버전만 렌더링하고, `tools/bumpversion`은 숫자 필드를 건드리지 않습니다. 검증 완료: `1.1.2.0` 문자열을 전달하면 goversioninfo가 `FixedFileInfo.FileVersion (1.1.2.0)`을 출력하며, 설치 후 속성 페이지와 `FileVersionInfo` 모두 올바르게 표시됩니다.
+
+### 🛠 내부
+
+- 버전을 **1.1.2**로 업데이트: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS(`wails_tools.nsh` + `project.nsi`), MSIX, Linux nfpm, macOS `Info.plist` 모두 동기화.
+- NSIS 설치/제거 프로그램 설명(`project.nsi`)을 수정하여 설치 프로그램과 제거 프로그램의 버전 정보가 배포된 실행 파일과 일치하도록 했습니다.
+
 ## [1.1.1] - 2026-08-30
 
 이번 버전은 Windows 트레이 알림 풍선의 '메인 창 열기' 버튼이 시스템 고부하 시 간헐적으로 GUI를 멈추게 하던 문제를 수정합니다.

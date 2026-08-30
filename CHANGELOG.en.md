@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.2] - 2026-08-30
+
+This release fixes a Windows file-version mismatch: in the published 1.1.1 installer, the running executable (`wireguideplus-<arch>.exe`) reported its "File version" as **1.1.0.1** instead of **1.1.1.0**.
+
+### 🐛 Bug Fixes
+
+- **Fixed the Windows executable file-version mismatch** — root cause: `goversioninfo v1.7` declares its `FixedFileInfo` struct as `Major/Minor/Patch/Build` (Patch and Build swapped vs. the standard Windows layout), so explicitly writing numeric versions into the JSON produced a swapped binary version (`1.1.1.0` became `1.1.0.1`). `build/windows/versioninfo.json` now pins the `FixedFileInfo` numbers to 0 and feeds only the four-part `StringFileInfo` strings as the single input; goversioninfo derives the binary version from them (layout-independent, always matching). `tools/genverinfo` renders string versions only and `tools/bumpversion` no longer touches the numeric fields. Verified: parsing the `1.1.2.0` strings makes goversioninfo emit `FixedFileInfo.FileVersion (1.1.2.0)`, and both Explorer's Properties page and `FileVersionInfo` show the correct value after install.
+
+### 🛠 Internal
+
+- Version bumped to **1.1.2**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS (`wails_tools.nsh` + `project.nsi`), MSIX, Linux nfpm and macOS `Info.plist` all in sync.
+- Corrected the NSIS installer/uninstaller descriptions (`project.nsi`) so the installer and uninstaller version info matches the shipped executable.
+
 ## [1.1.1] - 2026-08-30
 
 This release fixes an intermittent GUI freeze when clicking "Open Window" on the Windows tray notification bubble under high system load.

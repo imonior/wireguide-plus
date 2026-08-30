@@ -28,6 +28,7 @@ import (
 type info struct {
 	Major, Minor, Build, Patch int
 	Version                     string
+	Version4                    string
 	Suffix                      string
 	Description                 string
 	Executable                  string
@@ -70,6 +71,14 @@ func main() {
 		Build:       v[2],
 		Patch:       v[3],
 		Version:     *version,
+		// 4-part form (e.g. "1.1.1.0") for StringFileInfo. The FixedFileInfo
+		// numbers in the template are left at 0 on purpose: goversioninfo v1.7
+		// declares its FileVersion struct as Major/Minor/Patch/Build (Patch and
+		// Build swapped vs. the standard Windows layout), so feeding it numbers
+		// yields a corrupted binary version such as 1.1.0.1 for 1.1.1.0. Feeding
+		// only the string lets goversioninfo derive FixedFileInfo from it, which
+		// is layout-independent and always matches.
+		Version4:    fmt.Sprintf("%d.%d.%d.%d", v[0], v[1], v[2], v[3]),
 		Suffix:      suffix,
 		Description: fmt.Sprintf("WireGuide Plus (%s) - multi-tunnel automated WireGuard VPN client", suffix),
 		Executable:  fmt.Sprintf("wireguideplus-%s.exe", suffix),

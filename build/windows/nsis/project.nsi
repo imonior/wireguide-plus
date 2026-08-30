@@ -47,14 +47,18 @@
 ####
 !include "wails_tools.nsh"
 
-# The version information for this two must consist of 4 parts
+# The version information for this two must consist of 4 parts.
+# The string keys below also use the 4-part form so the StringFileInfo
+# "FileVersion"/"ProductVersion" match the binary VIProductVersion
+# (Explorer's Details page reads the strings; a 3-part value would show
+# "1.1.1" while the binary says "1.1.1.0").
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
 
 VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
 VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
-VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}"
-VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
+VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}.0"
+VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}.0"
 VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
 VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 
