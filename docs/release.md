@@ -81,11 +81,11 @@ log (config: `cliff.toml`), not by GitHub's built-in PR-only generator:
    writes `CHANGELOG.md`.
 2. `softprops/action-gh-release@v2` attaches it via `body_path`.
 
-Everything in the body — the fixed "📦 Downloads" section, the commit groups,
-the "⚠️ Upgrade notes" block (commits prefixed `BREAKING:` / `Upgrade:`), and
-the compare link — is template-controlled in `cliff.toml` and fully
-customizable. To switch generators, set `generate_release_notes: true` or
-point `body_path` at a static file instead.
+Everything in the body — the commit groups (led by the "⚠️ Upgrade notes"
+block for commits prefixed `BREAKING:` / `Upgrade:`), the closing "📦
+Downloads" asset guide, and the compare link — is template-controlled in
+`cliff.toml` and fully customizable. To switch generators, set
+`generate_release_notes: true` or point `body_path` at a static file instead.
 
 The auto-update verifier in `internal/update/checker.go` defends
 against a compromised GitHub account by verifying an Ed25519

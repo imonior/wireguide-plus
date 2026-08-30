@@ -15,9 +15,9 @@
 # commit can use either style and still land in the right group.
 #
 # Commits prefixed `BREAKING:` / `Upgrade:` land in the "0|⚠️ Upgrade
-# notes" group. The `0|` prefix sorts them first in the rendered body (see
-# the group_by note below), so breaking changes / manual upgrade steps are
-# always the first thing after the Downloads section.
+# notes" group. The `0|` prefix sorts them first (see the group_by note
+# below), so breaking changes / manual upgrade steps are the very first
+# thing readers see.
 
 [changelog]
 header = ""
@@ -28,7 +28,21 @@ header = ""
 # strips the prefix before rendering. `|` is used as the separator because
 # it never appears in our group names — splitting on `|` and taking `last`
 # is unambiguous for names like "Build / CI".
+#
+# Body layout: the commit groups render FIRST (what users most want to
+# read), followed by a separator and the static "📦 Downloads" asset guide
+# as a closing section.
 body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+## {{ group | split(pat="|") | last }}
+
+{% for commit in commits %}\
+- {{ commit.message | split(pat="\\n") | first | trim }}
+{% endfor %}
+{% endfor %}\
+
+---
+
 ## 📦 Downloads
 
 The Windows assets are split into two groups:
@@ -53,15 +67,6 @@ macOS: `WireGuide-darwin-arm64.zip` · Linux: `WireGuide-linux-amd64.deb`,
 
 **Verify**: compare each file against `SHA256SUMS` (`SHA256SUMS.sig` signed with the
 Ed25519 key).
-
----
-{% for group, commits in commits | group_by(attribute="group") %}
-## {{ group | split(pat="|") | last }}
-
-{% for commit in commits %}\
-- {{ commit.message | split(pat="\\n") | first | trim }}
-{% endfor %}
-{% endfor %}\
 
 **Full Changelog**: https://github.com/imonior/wireguide-plus/compare/{{ previous.version }}...{{ version }}
 
