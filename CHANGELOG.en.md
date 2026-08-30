@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.3] - 2026-08-30
+
+This release fixes broken Windows auto-update: since the v1.1.0 asset rename, Windows release assets (`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`) carry no OS token in their names, but the update checker required the asset name to carry both an OS token and the architecture. Windows could therefore never match its own assets, and installed clients only saw "update available but no matching asset" without being able to auto-update.
+
+### 🐛 Bug Fixes
+
+- **Fixed Windows auto-update asset matching** — `matchAsset` (`internal/update/checker.go`) now also accepts arch-anchored Windows-native extensions (`.exe` / `.msi` / `.zip`) on Windows without an OS token; macOS / Linux assets still require their own OS token (`darwin` / `linux`), so they can never match a tokenless Windows asset name. Regression tests cover all three Windows architectures matching correctly and the reverse assertions that Linux / macOS must reject tokenless Windows asset names.
+
+### 🛠 Internal
+
+- Version bumped to **1.1.3**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
+
 ## [1.1.2] - 2026-08-30
 
 This release fixes a Windows file-version mismatch: in the published 1.1.1 installer, the running executable (`wireguideplus-<arch>.exe`) reported its "File version" as **1.1.0.1** instead of **1.1.1.0**.

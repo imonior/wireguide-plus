@@ -4,6 +4,18 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.3] - 2026-08-30
+
+이번 버전은 Windows 자동 업데이트가 동작하지 않던 문제를 수정합니다. v1.1.0 자산 이름 변경 이후 Windows 릴리스 자산(`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`)은 OS 토큰을 포함하지 않는데, 업데이트 체커는 자산 이름에 OS 토큰과 아키텍처가 모두 필요했습니다. 따라서 Windows는 자신의 자산과 전혀 매칭되지 않아 '업데이트가 있지만 일치하는 자산 없음' 상태로 자동 업데이트를 할 수 없었습니다.
+
+### 🐛 버그 수정
+
+- **Windows 자동 업데이트 자산 매칭 수정** — `matchAsset`(`internal/update/checker.go`)은 이제 Windows에서 아키텍처 고정 + Windows 전용 확장자(`.exe` / `.msi` / `.zip`)를 가진 자산 이름을 OS 토큰 없이도 허용합니다. macOS / Linux 자산은 여전히 각 OS 토큰(`darwin` / `linux`)이 필요하므로 OS 토큰이 없는 Windows 자산 이름에 잘못 매칭되지 않습니다. 회귀 테스트는 세 가지 Windows 아키텍처의 정상 매칭과, Linux / macOS가 OS 토큰 없는 Windows 자산 이름을 거부해야 한다는 역방향 단언을 다룹니다.
+
+### 🛠 내부
+
+- 버전을 **1.1.3**로 업데이트: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm, macOS `Info.plist` 모두 동기화.
+
 ## [1.1.2] - 2026-08-30
 
 이번 버전은 Windows 파일 버전 불일치를 수정합니다. 배포된 1.1.1 설치 프로그램에서 실행 파일(`wireguideplus-<arch>.exe`)의 "파일 버전"이 **1.1.0.1**로 표시되었습니다(올바른 값은 **1.1.1.0**).

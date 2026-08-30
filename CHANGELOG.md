@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.3] - 2026-08-30
+
+本次版本修复 Windows 客户端自动更新失效的问题：自 v1.1.0 资产改名以来，Windows 发布资产（`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`）命名不含操作系统标识，而更新检查器要求资产名同时携带「OS 标识 + 架构」，导致 Windows 平台永远匹配不到自己的发布资产，已安装用户只会看到「发现新版本但无匹配资产」，无法自动更新。
+
+### 🐛 修复（Bug Fixes）
+
+- **修复 Windows 自动更新资产匹配失效** — `matchAsset`（`internal/update/checker.go`）在 Windows 平台下额外接受「架构锚定 + Windows 专属扩展名」（`.exe` / `.msi` / `.zip`）的资产名，无需 OS 标识；macOS / Linux 资产仍必须携带各自 OS 标识（`darwin` / `linux`），因此不会误匹配 Windows 的无标识资产。新增回归测试覆盖三种架构的正常匹配，以及 Linux / macOS 不得接受无标识 Windows 资产名的反向断言。
+
+### 🛠 内部（Internal）
+
+- 版本号更新至 **1.1.3**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+
 ## [1.1.2] - 2026-08-30
 
 本次版本修复 Windows 安装包文件版本错位问题：此前发布的 1.1.1 安装包中，运行程序（`wireguideplus-<arch>.exe`）在资源管理器属性页显示的「文件版本」为 **1.1.0.1**（应为 **1.1.1.0**）。

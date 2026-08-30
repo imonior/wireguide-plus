@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.3] - 2026-08-30
+
+本リリースは Windows の自動更新が機能しなかった問題を修正します。v1.1.0 のアセット改名以降、Windows のリリースアセット（`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`）には OS トークンが含まれていませんが、更新チェッカーはアセット名に OS トークンとアーキテクチャの両方を要求していました。そのため Windows は自身のアセットに一切マッチせず、「更新あり・一致するアセットなし」と表示されて自動更新できませんでした。
+
+### 🐛 バグ修正
+
+- **Windows の自動更新アセットマッチングを修正** — `matchAsset`（`internal/update/checker.go`）は Windows では、アーキテクチャで固定され Windows 固有の拡張子（`.exe` / `.msi` / `.zip`）を持つアセット名を OS トークンなしでも受け付けるようにしました。macOS / Linux アセットは引き続き自 OS のトークン（`darwin` / `linux`）を要求するため、トークンなしの Windows アセット名に誤マッチしません。回帰テストは、3 つの Windows アーキテクチャの正常マッチと、Linux / macOS がトークンなしの Windows アセット名を拒否する逆アサーションをカバーします。
+
+### 🛠 内部
+
+- バージョンを **1.1.3** に更新: `VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` をすべて同期。
+
 ## [1.1.2] - 2026-08-30
 
 本リリースは Windows のファイルバージョン不一致を修正します。公開された 1.1.1 インストーラでは、実行ファイル（`wireguideplus-<arch>.exe`）の「ファイルのバージョン」が **1.1.0.1** と表示されていました（正しくは **1.1.1.0**）。
