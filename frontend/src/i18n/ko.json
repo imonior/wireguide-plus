@@ -135,7 +135,7 @@
     "section_logging": "로깅",
     "up_to_date": "최신 버전입니다.",
     "proxy": "프록시",
-    "proxy_hint": "업데이트 확인에 사용되는 네트워크 액세스입니다. GitHub에 직접 접속할 수 없을 때 가속 미러 또는 로컬 HTTP/SOCKS5 프록시를 사용할 수 있습니다.",
+    "proxy_hint": "업데이트 확인 및 업데이트 패키지 다운로드에 사용되는 네트워크 액세스입니다. GitHub에 직접 접속할 수 없을 때 가속 미러 또는 로컬 HTTP/SOCKS5 프록시를 사용할 수 있습니다.",
     "proxy_direct": "직접 연결",
     "proxy_mirror_custom": "사용자 지정 가속 미러",
     "proxy_mirror_label": "미러 접두사",
@@ -247,6 +247,9 @@
     "dev_build_hint": "개발 빌드에서는 자동 확인이 비활성화되어 있습니다. 위 버튼으로 수동 확인하세요.",
     "auto_off_hint": "설정에서 자동 확인이 꺼져 있습니다. 위 버튼으로 수동 확인하세요.",
     "install_failed": "업데이트 실패",
+    "open_release_page": "릴리스 페이지 열기",
+    "open_release_page_title": "브라우저에서 최신 릴리스 페이지 열기",
+    "progress_download": "다운로드 중… {percent}%",
     "progress_refresh": "패키지 저장소 확인 중…",
     "progress_install": "다운로드 및 설치 중…"
   },

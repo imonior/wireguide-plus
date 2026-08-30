@@ -589,7 +589,15 @@ func (s *TunnelService) DismissUpdate(version string) error {
 //     letting the cask's postflight handle the killall + relaunch. This
 //     is the "one-click" expectation users have, not "copy this command
 //     into your terminal".
-//   - Non-brew installs → open the GitHub Releases page in the browser.
+//   - Windows/Linux → native in-process update: download the release
+//     asset through the user's configured mirror/proxy, verify its
+//     SHA256 + Ed25519 signature, then launch the platform installer.
+//     No browser round-trip, so it works even where github.com is
+//     unreachable (the reason the Settings mirror/proxy exists). If the
+//     download or verification fails, this method falls back to opening
+//     the GitHub Releases page — the safe manual path — so the user is
+//     never stranded.
+//   - Non-brew macOS → open the GitHub Releases page in the browser.
 //     Auto-replacing an un-notarised `.app` bundle needs sudo and races
 //     with Gatekeeper quarantining of the new binary; redirecting the
 //     user to the download page is the honest path for an indie macOS
@@ -599,101 +607,194 @@ func (s *TunnelService) RunUpdate(info *update.UpdateInfo) error {
 		return fmt.Errorf("no update available")
 	}
 
-	if runtime.GOOS == "darwin" && update.IsBrewInstall() {
-		brewBin := update.BrewPath()
-
-		// `brew update` is pure-network (git fetch on tap repos); 90 s is
-		// generous even on a slow link. If it hangs past that, the GitHub
-		// API or the user's DNS is wedged — we'd rather surface that to
-		// the user via a clear timeout than spin forever with "Updating…".
-		// The progress event keeps the UI honest during that window — the
-		// tap refresh alone was observed taking 75 s with the button stuck
-		// on a static "Updating…" label the whole time.
-		s.emitUpdateProgress("refresh")
-		updCtx, updCancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer updCancel()
-		slog.Info("update: running brew update", "brew", brewBin)
-		if out, err := exec.CommandContext(updCtx, brewBin, "update").CombinedOutput(); err != nil {
-			slog.Warn("brew update failed, continuing with upgrade", "error", err, "output", string(out))
+	switch runtime.GOOS {
+	case "darwin":
+		if update.IsBrewInstall() {
+			return s.runUpdateBrew(info)
 		}
-
-		// `brew upgrade --cask wireguide` runs the cask postflight which
-		// killalls and relaunches us. The postflight typically completes
-		// in 10–20 s; 5 min is a defensive ceiling for slow disks or
-		// signature-check work — if we hit it, brew is genuinely stuck.
-		//
-		// Note: the cask postflight kills *this* process, which is the
-		// parent of brew's exec. Go's exec.CommandContext attaches the
-		// child's Wait, but a SIGKILL on the parent terminates the wait
-		// before brew completes — the new wireguide binary that brew
-		// installs will be launched fresh, so this RunUpdate's return
-		// value never gets surfaced anywhere in practice.
-		upCtx, upCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer upCancel()
-		// --greedy: older Homebrew skips auto_updates casks even when named
-		// explicitly, and the skip exits 0 — so this call reported success
-		// while doing nothing, stranding installs on old versions (observed
-		// live: 0.3.1 pinned for three months of "Update Now" clicks). The
-		// flag forces the upgrade regardless of brew version or cask flags.
-		s.emitUpdateProgress("install")
-		runUpgrade := func() ([]byte, error) {
-			slog.Info("update: running brew upgrade --cask --greedy wireguide")
-			cmd := exec.CommandContext(upCtx, brewBin, "upgrade", "--cask", "--greedy", "wireguide")
-			// We already ran `brew update` above — suppress the implicit
-			// re-update brew would otherwise bolt onto upgrade.
-			cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
-			return cmd.CombinedOutput()
-		}
-		out, err := runUpgrade()
-		if err != nil && strings.Contains(string(out), "untrusted tap") {
-			// Homebrew 6 gates third-party taps behind an explicit trust
-			// grant and refuses to LOAD the cask otherwise ("Refusing to
-			// load cask … from untrusted tap"). Interactive brew asks the
-			// user; our TTY-less subprocess just gets the error. Trusting
-			// our own tap here is legitimate self-service: the user
-			// installed this app from that tap and clicked "Update Now" —
-			// that is the consent the prompt exists to collect. Scoped to
-			// exactly our tap, never a blanket trust.
-			slog.Info("update: tap untrusted on this machine — trusting imonior/tap and retrying")
-			tCtx, tCancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer tCancel()
-			if tOut, tErr := exec.CommandContext(tCtx, brewBin, "trust", "imonior/tap").CombinedOutput(); tErr != nil {
-				return fmt.Errorf("brew trust imonior/tap failed: %w (%s)", tErr, string(tOut))
-			}
-			out, err = runUpgrade()
-		}
-		if err != nil {
-			return fmt.Errorf("brew upgrade failed: %w (%s)", err, string(out))
-		}
-
-		// Reaching this line means brew exited 0 WITHOUT the cask
-		// postflight killing us — i.e. no install actually ran (a real
-		// upgrade killalls this process before CombinedOutput returns).
-		// brew exits 0 on "already installed"-style skips, and treating
-		// that as success is exactly how "Update Now" no-op'd silently in
-		// the past. Verify the bundle on disk actually became the target
-		// version and fail loudly when it didn't.
-		if installed := installedBundleVersion(); installed != "" && installed != info.Version {
-			return fmt.Errorf(
-				"brew exited 0 but /Applications/wireguideplus.app is still %s (expected %s) — brew output: %s",
-				installed, info.Version, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return s.openReleasePage()
+	case "windows", "linux":
+		return s.runUpdateNative(info)
+	default:
+		return s.openReleasePage()
 	}
-
-	slog.Info("update: opening GitHub Releases page (non-brew install)")
-	if s.app != nil {
-		return s.app.Browser.OpenURL("https://github.com/imonior/wireguide-plus/releases/latest")
-	}
-	return exec.Command("open", "https://github.com/imonior/wireguide-plus/releases/latest").Run()
 }
 
-// emitUpdateProgress tells the frontend which phase RunUpdate is in
-// ("refresh" = brew update, "install" = brew upgrade). Best-effort — a
-// nil app (tests) just skips the emit.
-func (s *TunnelService) emitUpdateProgress(phase string) {
+// runUpdateBrew updates a Homebrew cask install via `brew upgrade`. The
+// cask postflight kills and relaunches this process; see the inline
+// notes for the subtle failure modes (exit 0 with nothing installed,
+// untrusted-tap gating).
+func (s *TunnelService) runUpdateBrew(info *update.UpdateInfo) error {
+	brewBin := update.BrewPath()
+
+	// `brew update` is pure-network (git fetch on tap repos); 90 s is
+	// generous even on a slow link. If it hangs past that, the GitHub
+	// API or the user's DNS is wedged — we'd rather surface that to
+	// the user via a clear timeout than spin forever with "Updating…".
+	// The progress event keeps the UI honest during that window — the
+	// tap refresh alone was observed taking 75 s with the button stuck
+	// on a static "Updating…" label the whole time.
+	s.emitUpdateProgress("refresh", 0)
+	updCtx, updCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer updCancel()
+	slog.Info("update: running brew update", "brew", brewBin)
+	if out, err := exec.CommandContext(updCtx, brewBin, "update").CombinedOutput(); err != nil {
+		slog.Warn("brew update failed, continuing with upgrade", "error", err, "output", string(out))
+	}
+
+	// `brew upgrade --cask wireguide` runs the cask postflight which
+	// killalls and relaunches us. The postflight typically completes
+	// in 10–20 s; 5 min is a defensive ceiling for slow disks or
+	// signature-check work — if we hit it, brew is genuinely stuck.
+	//
+	// Note: the cask postflight kills *this* process, which is the
+	// parent of brew's exec. Go's exec.CommandContext attaches the
+	// child's Wait, but a SIGKILL on the parent terminates the wait
+	// before brew completes — the new wireguide binary that brew
+	// installs will be launched fresh, so this RunUpdate's return
+	// value never gets surfaced anywhere in practice.
+	upCtx, upCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer upCancel()
+	// --greedy: older Homebrew skips auto_updates casks even when named
+	// explicitly, and the skip exits 0 — so this call reported success
+	// while doing nothing, stranding installs on old versions (observed
+	// live: 0.3.1 pinned for three months of "Update Now" clicks). The
+	// flag forces the upgrade regardless of brew version or cask flags.
+	s.emitUpdateProgress("install", 0)
+	runUpgrade := func() ([]byte, error) {
+		slog.Info("update: running brew upgrade --cask --greedy wireguide")
+		cmd := exec.CommandContext(upCtx, brewBin, "upgrade", "--cask", "--greedy", "wireguide")
+		// We already ran `brew update` above — suppress the implicit
+		// re-update brew would otherwise bolt onto upgrade.
+		cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+		return cmd.CombinedOutput()
+	}
+	out, err := runUpgrade()
+	if err != nil && strings.Contains(string(out), "untrusted tap") {
+		// Homebrew 6 gates third-party taps behind an explicit trust
+		// grant and refuses to LOAD the cask otherwise ("Refusing to
+		// load cask … from untrusted tap"). Interactive brew asks the
+		// user; our TTY-less subprocess just gets the error. Trusting
+		// our own tap here is legitimate self-service: the user
+		// installed this app from that tap and clicked "Update Now" —
+		// that is the consent the prompt exists to collect. Scoped to
+		// exactly our tap, never a blanket trust.
+		slog.Info("update: tap untrusted on this machine — trusting imonior/tap and retrying")
+		tCtx, tCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer tCancel()
+		if tOut, tErr := exec.CommandContext(tCtx, brewBin, "trust", "imonior/tap").CombinedOutput(); tErr != nil {
+			return fmt.Errorf("brew trust imonior/tap failed: %w (%s)", tErr, string(tOut))
+		}
+		out, err = runUpgrade()
+	}
+	if err != nil {
+		return fmt.Errorf("brew upgrade failed: %w (%s)", err, string(out))
+	}
+
+	// Reaching this line means brew exited 0 WITHOUT the cask
+	// postflight killing us — i.e. no install actually ran (a real
+	// upgrade killalls this process before CombinedOutput returns).
+	// brew exits 0 on "already installed"-style skips, and treating
+	// that as success is exactly how "Update Now" no-op'd silently in
+	// the past. Verify the bundle on disk actually became the target
+	// version and fail loudly when it didn't.
+	if installed := installedBundleVersion(); installed != "" && installed != info.Version {
+		return fmt.Errorf(
+			"brew exited 0 but /Applications/wireguideplus.app is still %s (expected %s) — brew output: %s",
+			installed, info.Version, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// runUpdateNative downloads the release asset in-process (honouring the
+// user's mirror/proxy setting from Settings → Updates) and launches the
+// platform installer. Any failure — network, checksum mismatch,
+// signature verification — falls back to opening the release page in the
+// browser, so the user always has a working path to the new version.
+func (s *TunnelService) runUpdateNative(info *update.UpdateInfo) error {
+	s.emitUpdateProgress("download", 0)
+	path, err := update.DownloadUpdateProgress(info, func(done, total int64) {
+		pct := 0
+		if total > 0 {
+			pct = int(done * 100 / total)
+		}
+		s.emitUpdateProgress("download", pct)
+	})
+	if err != nil {
+		slog.Warn("update: native download/verify failed; opening release page as fallback",
+			"category", "update",
+			"version", info.Version,
+			"error", err)
+		s.emitUpdateProgress("", 0)
+		return s.fallbackOpenRelease(err)
+	}
+	// The installer copies itself into place before returning (NSIS,
+	// Debian), so the temp download can be released here. Failure to
+	// remove is harmless — the OS cleans up %TEMP% eventually.
+	_ = os.Remove(path)
+
+	s.emitUpdateProgress("install", 0)
+	if err := update.Install(path, info); err != nil {
+		slog.Warn("update: native install failed; opening release page as fallback",
+			"category", "update",
+			"version", info.Version,
+			"error", err)
+		s.emitUpdateProgress("", 0)
+		return s.fallbackOpenRelease(err)
+	}
+	return nil
+}
+
+// fallbackOpenRelease opens the release page (the safe manual path) and
+// returns an error explaining both halves of what happened, so the
+// frontend can surface "auto-update failed; the release page was
+// opened".
+func (s *TunnelService) fallbackOpenRelease(cause error) error {
+	if err := s.openReleasePage(); err != nil {
+		slog.Warn("update: also failed to open the release page",
+			"category", "update", "error", err)
+	}
+	return fmt.Errorf("auto-update failed (%v) — the release page has been opened in your browser", cause)
+}
+
+// OpenReleasePage opens the latest-release page in the default browser.
+// This is the explicit "manual update" action the banner offers next to
+// "Update now" — useful when the user prefers to download the installer
+// by hand, or when auto-update isn't an option for their platform.
+func (s *TunnelService) OpenReleasePage() error {
+	return s.openReleasePage()
+}
+
+// openReleasePage is the implementation shared by the explicit
+// OpenReleasePage binding and the auto-update fallback path. Uses the
+// Wails browser (respects the OS default browser, no GitHub dependency
+// beyond opening the page).
+func (s *TunnelService) openReleasePage() error {
+	slog.Info("update: opening GitHub Releases page", "url", update.GitHubReleasesURL)
 	if s.app != nil {
-		s.app.Event.Emit("update_progress", map[string]any{"phase": phase})
+		return s.app.Browser.OpenURL(update.GitHubReleasesURL)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", update.GitHubReleasesURL).Run()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", update.GitHubReleasesURL).Start()
+	default:
+		return exec.Command("xdg-open", update.GitHubReleasesURL).Start()
+	}
+}
+
+// emitUpdateProgress tells the frontend which phase RunUpdate is in and
+// (for "download") the percentage completed:
+//   - "download"  + percent 0–100: native asset download progress
+//   - "install"   + percent 0:   installer launched / brew upgrade running
+//   - "refresh"   + percent 0:   brew tap refresh
+//   - ""          + percent 0:   phase cleared (e.g. after a fallback)
+//
+// Best-effort — a nil app (tests) just skips the emit.
+func (s *TunnelService) emitUpdateProgress(phase string, percent int) {
+	if s.app != nil {
+		s.app.Event.Emit("update_progress", map[string]any{"phase": phase, "percent": percent})
 	}
 }
 

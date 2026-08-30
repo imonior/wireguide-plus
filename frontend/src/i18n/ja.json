@@ -135,7 +135,7 @@
     "section_logging": "ログ",
     "up_to_date": "最新バージョンです。",
     "proxy": "プロキシ",
-    "proxy_hint": "更新確認に使用するネットワークアクセス。GitHub に直接アクセスできない場合は、アクセラレータミラーまたはローカルの HTTP/SOCKS5 プロキシを使用できます。",
+    "proxy_hint": "更新確認と更新パッケージのダウンロードに使用するネットワークアクセス。GitHub に直接アクセスできない場合は、アクセラレータミラーまたはローカルの HTTP/SOCKS5 プロキシを使用できます。",
     "proxy_direct": "直接接続",
     "proxy_mirror_custom": "カスタム加速ミラー",
     "proxy_mirror_label": "ミラープレフィックス",
@@ -247,6 +247,9 @@
     "dev_build_hint": "開発ビルドでは自動確認が無効化されています。上のボタンで手動確認してください。",
     "auto_off_hint": "設定で自動確認がオフになっています。上のボタンで手動確認してください。",
     "install_failed": "アップデート失敗",
+    "open_release_page": "リリースページを開く",
+    "open_release_page_title": "ブラウザで最新リリースページを開く",
+    "progress_download": "ダウンロード中… {percent}%",
     "progress_refresh": "パッケージリポジトリを確認中…",
     "progress_install": "ダウンロードとインストール中…"
   },

@@ -659,6 +659,14 @@
     }
   }
 
+  async function handleOpenRelease() {
+    try {
+      await TunnelService.OpenReleasePage();
+    } catch (e) {
+      showToast('Failed to open release page: ' + (e?.message || e));
+    }
+  }
+
   async function handleDismissUpdate(version) {
     try {
       await TunnelService.DismissUpdate(version);
@@ -776,6 +784,7 @@
       <UpdateNotice
         {updateInfo}
         onInstall={handleUpdate}
+        onOpenRelease={handleOpenRelease}
         onDismiss={handleDismissUpdate} />
 
       {#if currentView === 'tunnels'}
@@ -861,7 +870,7 @@
   {/if}
 
   {#if showSettings}
-    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} />
+    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} />
   {/if}
 
   {#if showConflictWarning}

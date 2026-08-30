@@ -328,12 +328,26 @@ func updateCheckRedirect(req *http.Request, via []*http.Request) error {
 // on the first URL too — otherwise a tampered API body handing us a plain
 // http:// asset URL, or a non-GitHub host, would be fetched with no guard.
 //
+// In mirror mode the configured accelerator host is additionally allowed:
+// resolveAssetURL rewrites asset/checksum URLs through the mirror, and
+// those requests are exactly as trustworthy as the mirror itself. The
+// download's integrity is still guaranteed by the Ed25519-signed
+// SHA256SUMS — a malicious mirror can only serve bytes that fail the
+// signature check.
+//
 // Enforcement is skipped under `go test` so the suite can drive local
 // httptest (http://127.0.0.1) servers; the strict logic lives in
 // checkUpdateURLStrict, which is unit-tested directly.
 func checkUpdateURL(u *url.URL) error {
 	if testing.Testing() {
 		return nil
+	}
+	if v := currentProxy.Load(); v != nil {
+		if cfg, ok := v.(proxyConfig); ok && cfg.mode == "mirror" && cfg.url != "" {
+			if mp, err := url.Parse(cfg.url); err == nil && mp.Hostname() == u.Hostname() {
+				return nil
+			}
+		}
 	}
 	return checkUpdateURLStrict(u)
 }
@@ -463,18 +477,33 @@ func CheckForUpdate() (*UpdateInfo, error) {
 	}, nil
 }
 
+// ProgressFunc receives download progress as (downloadedBytes,
+// totalBytes). totalBytes comes from the release asset size reported by
+// the GitHub API (info.AssetSize), so it is exact even when the HTTP
+// response is chunked. Callers may be invoked frequently (every write
+// batch) — throttle inside the callback if you only want coarse UI
+// updates.
+type ProgressFunc func(downloaded, total int64)
+
 // DownloadUpdate downloads the release asset to a secure temp file and
-// verifies the SHA256 checksum if available.
+// verifies the SHA256 checksum (and Ed25519 signature in release
+// builds) before returning the path.
 //
-// CURRENTLY UNREFERENCED FROM PRODUCTION CODE — macOS uses Homebrew for
-// updates (see internal/app/settings_ops.go → IsBrewInstall path) and
-// Linux/Windows ship without auto-install plumbing yet. This function
-// (and the rest of the verify* / install* family below) is kept on
-// purpose for the day we add native Linux/Windows update flows; it is
-// fully exercised by checker_test.go so it doesn't bit-rot. If you're
-// auditing for dead code and considering deletion: confirm with the
-// maintainer first.
+// Used by the native Windows/Linux auto-update flow (RunUpdate in
+// internal/app/settings_ops.go); DownloadUpdateProgress is the variant
+// that reports progress for the UI.
 func DownloadUpdate(info *UpdateInfo) (string, error) {
+	return downloadUpdate(info, nil)
+}
+
+// DownloadUpdateProgress is DownloadUpdate with a progress callback.
+// onProgress may be nil (identical to DownloadUpdate). The callback is
+// invoked from the download loop; it must not block for long.
+func DownloadUpdateProgress(info *UpdateInfo, onProgress ProgressFunc) (string, error) {
+	return downloadUpdate(info, onProgress)
+}
+
+func downloadUpdate(info *UpdateInfo, onProgress ProgressFunc) (string, error) {
 	if info.DownloadURL == "" {
 		return "", fmt.Errorf("no download URL for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
@@ -484,11 +513,16 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 		return "", fmt.Errorf("refusing to download: invalid AssetSize %d", info.AssetSize)
 	}
 
-	if err := checkUpdateRawURL(info.DownloadURL); err != nil {
+	// Mirror mode rewrites the asset URL through the configured
+	// accelerator (same as the API endpoint) so downloads benefit from
+	// the mirror too — without this, checking succeeded via mirror but
+	// the binary still went direct to GitHub and could be unreachable.
+	dlURL := resolveAssetURL(info.DownloadURL)
+	if err := checkUpdateRawURL(dlURL); err != nil {
 		return "", err
 	}
 	client := newUpdateClient(5 * time.Minute)
-	resp, err := client.Get(info.DownloadURL)
+	resp, err := client.Get(dlURL)
 	if err != nil {
 		return "", fmt.Errorf("downloading: %w", err)
 	}
@@ -527,10 +561,20 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 	}
 	destPath := f.Name()
 
-	// Hash the content as we download it.
+	// Hash the content as we download it. With a progress callback the
+	// writes are routed through a counting wrapper that reports
+	// (bytesSoFar, info.AssetSize) — AssetSize is the authoritative
+	// total from the release API, so the UI shows an accurate percentage
+	// even for chunked transfers.
 	hasher := sha256.New()
 	writer := io.MultiWriter(f, hasher)
-	written, err := io.Copy(writer, limitedBody)
+	var written int64
+	if onProgress != nil {
+		pw := &progressWriter{w: writer, total: info.AssetSize, onProgress: onProgress}
+		written, err = io.Copy(pw, limitedBody)
+	} else {
+		written, err = io.Copy(writer, limitedBody)
+	}
 	if err != nil {
 		f.Close()
 		os.Remove(destPath)
@@ -563,7 +607,7 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 	expectedHash := info.ExpectedHash
 	signatureChecked := false
 	if activePublicKey() != "" {
-		sums, err := verifyChecksumSignature(info.ChecksumURL, client)
+		sums, err := verifyChecksumSignature(resolveAssetURL(info.ChecksumURL), client)
 		if err != nil {
 			os.Remove(destPath)
 			return "", fmt.Errorf("signature verification: %w", err)
@@ -609,6 +653,46 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 	info.SignatureVerified = signatureChecked
 
 	return destPath, nil
+}
+
+// progressWriter counts bytes written and reports (count, total) to the
+// callback on every Write. total may be 0 when the caller has no
+// authoritative size — the callback then receives (count, 0) and should
+// degrade to an indeterminate indicator.
+type progressWriter struct {
+	w          io.Writer
+	total      int64
+	n          int64
+	onProgress ProgressFunc
+}
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+	n, err := p.w.Write(b)
+	p.n += int64(n)
+	p.onProgress(p.n, p.total)
+	return n, err
+}
+
+// resolveAssetURL rewrites a GitHub-hosted asset/checksum URL through
+// the configured accelerator mirror (mirror mode) so downloads — not
+// just the API check — benefit from the mirror. Direct and manual-proxy
+// modes pass the URL through untouched. The result must still pass
+// checkUpdateRawURL, which accepts the mirror's own host in mirror mode
+// (see checkUpdateURL).
+func resolveAssetURL(rawURL string) string {
+	if v := currentProxy.Load(); v != nil {
+		if cfg, ok := v.(proxyConfig); ok && cfg.mode == "mirror" && cfg.url != "" {
+			// Note: NOT mirrorEndpoint — that helper is hard-wired to the
+			// API endpoint path. Asset URLs are arbitrary, so the mirror
+			// prefix is joined with the raw URL directly, the same shape
+			// every accelerator mirror expects: <mirror>/<full original URL>.
+			prefix := strings.TrimRight(strings.TrimSpace(cfg.url), "/")
+			if prefix != "" && ValidMirrorPrefix(prefix) {
+				return prefix + "/" + rawURL
+			}
+		}
+	}
+	return rawURL
 }
 
 // testOverridePubKey lets tests substitute the production

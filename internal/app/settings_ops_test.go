@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 	"testing"
+
+	"github.com/imonior/wireguide-plus/internal/update"
 )
 
 // TestOpenURL_AllowedURL verifies that a valid GitHub URL passes validation.
@@ -49,5 +51,30 @@ func TestOpenURL_JavascriptScheme(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "URL not allowed") {
 		t.Errorf("expected 'URL not allowed' error, got: %v", err)
+	}
+}
+
+// TestRunUpdate_NilInfo: RunUpdate must reject a nil/not-available
+// UpdateInfo before dispatching to any platform-specific path — with a
+// nil app and nil stores, the dispatch would otherwise panic.
+func TestRunUpdate_NilInfo(t *testing.T) {
+	svc := &TunnelService{}
+	err := svc.RunUpdate(nil)
+	if err == nil {
+		t.Fatal("expected error for nil UpdateInfo")
+	}
+	if !strings.Contains(err.Error(), "no update available") {
+		t.Errorf("expected 'no update available' error, got: %v", err)
+	}
+}
+
+func TestRunUpdate_NotAvailable(t *testing.T) {
+	svc := &TunnelService{}
+	err := svc.RunUpdate(&update.UpdateInfo{Available: false, Version: "9.9.9"})
+	if err == nil {
+		t.Fatal("expected error for unavailable UpdateInfo")
+	}
+	if !strings.Contains(err.Error(), "no update available") {
+		t.Errorf("expected 'no update available' error, got: %v", err)
 	}
 }

@@ -1081,3 +1081,125 @@ func removeIfExists(path string) error {
 	}
 	return nil // os.Remove is already handled in DownloadUpdate on failure
 }
+
+// ---------------------------------------------------------------------------
+// DownloadUpdateProgress — progress reporting
+// ---------------------------------------------------------------------------
+
+// TestDownloadUpdateProgress_ReportsProgress verifies the progress
+// callback: it fires (at least once), is monotonic, is capped at the
+// asset size, and the final value equals the exact byte count.
+func TestDownloadUpdateProgress_ReportsProgress(t *testing.T) {
+	bodySize := minAssetSize + 4096
+	body := make([]byte, bodySize)
+	for i := range body {
+		body[i] = byte(i % 256)
+	}
+	h := sha256.Sum256(body)
+	expectedHash := hex.EncodeToString(h[:])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	info := &UpdateInfo{
+		DownloadURL:  srv.URL + "/asset.dmg",
+		AssetName:    "asset.dmg",
+		AssetSize:    int64(bodySize),
+		ExpectedHash: expectedHash,
+	}
+
+	var got []int64
+	path, err := DownloadUpdateProgress(info, func(done, total int64) {
+		got = append(got, done)
+		if total != int64(bodySize) {
+			t.Errorf("progress total = %d, want %d", total, bodySize)
+		}
+	})
+	if err != nil {
+		t.Fatalf("DownloadUpdateProgress failed: %v", err)
+	}
+	defer removeIfExists(path)
+
+	if len(got) == 0 {
+		t.Fatal("expected at least one progress callback")
+	}
+	// Monotonic non-decreasing, capped at the asset size.
+	prev := int64(-1)
+	for _, n := range got {
+		if n < prev {
+			t.Fatalf("progress went backwards: %v", got)
+		}
+		if n > int64(bodySize) {
+			t.Fatalf("progress %d exceeds asset size %d", n, bodySize)
+		}
+		prev = n
+	}
+	if got[len(got)-1] != int64(bodySize) {
+		t.Errorf("final progress = %d, want %d", got[len(got)-1], bodySize)
+	}
+	if !info.HashVerified {
+		t.Error("expected HashVerified to be true")
+	}
+}
+
+// TestDownloadUpdateProgress_NilCallback pins the nil-callback contract:
+// DownloadUpdateProgress(info, nil) behaves exactly like DownloadUpdate.
+func TestDownloadUpdateProgress_NilCallback(t *testing.T) {
+	bodySize := minAssetSize + 1024
+	body := make([]byte, bodySize)
+	h := sha256.Sum256(body)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	info := &UpdateInfo{
+		DownloadURL:  srv.URL + "/asset.dmg",
+		AssetName:    "asset.dmg",
+		AssetSize:    int64(bodySize),
+		ExpectedHash: hex.EncodeToString(h[:]),
+	}
+	path, err := DownloadUpdateProgress(info, nil)
+	if err != nil {
+		t.Fatalf("DownloadUpdateProgress(nil callback) failed: %v", err)
+	}
+	defer removeIfExists(path)
+}
+
+// ---------------------------------------------------------------------------
+// resolveAssetURL — mirror rewriting of asset downloads
+// ---------------------------------------------------------------------------
+
+// TestResolveAssetURL_MirrorMode pins the download-side mirror rewrite:
+// with mode=mirror the raw GitHub asset URL must be rewritten through the
+// accelerator prefix, just like the API endpoint — otherwise checking
+// works via mirror but the binary download still goes direct to GitHub
+// and fails on networks that can't reach it.
+func TestResolveAssetURL_MirrorMode(t *testing.T) {
+	defer SetProxy("direct", "")
+
+	SetProxy("mirror", "https://ghfast.top/")
+	raw := "https://github.com/imonior/wireguide-plus/releases/download/v1.1.5/wireguideplus-amd64-installer.exe"
+	got := resolveAssetURL(raw)
+	want := "https://ghfast.top/" + raw
+	if got != want {
+		t.Errorf("resolveAssetURL = %q, want %q", got, want)
+	}
+}
+
+// TestResolveAssetURL_DirectModeUnchanged: in direct mode (or unset) the
+// URL must pass through untouched.
+func TestResolveAssetURL_DirectModeUnchanged(t *testing.T) {
+	defer SetProxy("direct", "")
+
+	SetProxy("direct", "")
+	raw := "https://github.com/imonior/wireguide-plus/releases/download/v1.1.5/wireguideplus-amd64-installer.exe"
+	if got := resolveAssetURL(raw); got != raw {
+		t.Errorf("resolveAssetURL (direct) = %q, want unchanged %q", got, raw)
+	}
+}

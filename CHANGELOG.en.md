@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.6] - 2026-08-30
+
+This release upgrades the update mechanism: Windows / Linux can now download and install updates in-app (no longer just jumping to the GitHub page), the update notice offers both "Update Now" and "Open Release Page" buttons with a live download progress bar, and mirror mode now also accelerates asset downloads.
+
+### ✨ Features
+
+- **In-app update (Windows / Linux)** — the update notice gained an "Update Now" button: after download completes, the SHA256 checksum (plus Ed25519 signature in release builds) is verified, then the installer runs and the app exits. Homebrew installs on macOS still go through `brew upgrade`.
+- **"Open Release Page" fallback button** — one click opens the matching GitHub Release page in the browser when the download fails, verification fails, or you just want to read the release notes.
+- **Live download progress** — the update flow shows downloaded / total bytes and a percentage (based on the asset size reported by the GitHub API, so it stays accurate even with chunked transfers).
+- **Mirror mode covers asset downloads** — with a GitHub accelerator mirror configured, asset and checksum downloads are rewritten through the mirror prefix too (previously only the API check used the mirror while binaries still hit GitHub directly).
+
+### 🛠 Internal
+
+- Download/install failures are no longer silent: they are logged and fall back to opening the release page, so a working path to the new version always exists.
+- Added unit tests for the progress callback, mirror download rewriting and the `RunUpdate` defensive branches.
+- Version bumped to **1.1.6**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
+
 ## [1.1.5] - 2026-08-30
 
 This release enriches the logging system (update checks, settings audits, categories, retention), fixes a few Settings issues, and brings back opt-in WireGuard scripts.

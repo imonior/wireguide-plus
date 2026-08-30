@@ -11,6 +11,7 @@
   export let onClose = () => {};
   export let updateInfo = null;
   export let onInstall = null;
+  export let onOpenRelease = null;
 
   let aboutUpdating = false;
   let aboutShowVpnWarn = false;
@@ -122,6 +123,10 @@
     } finally {
       aboutUpdating = false;
     }
+  }
+
+  function aboutOpenRelease() {
+    if (onOpenRelease) onOpenRelease();
   }
 
   let activeTab = 'general';
@@ -846,6 +851,9 @@
                       <span class="pill-dot"></span>
                       {aboutUpdating ? $t('update.updating') : $t('update.update_now')}
                     </button>
+                    <button class="pill pill-release" on:click={aboutOpenRelease} disabled={aboutUpdating}>
+                      {$t('update.open_release_page')}
+                    </button>
                   {:else}
                     <span class="pill pill-ok">
                       <Icon name="check" size={11} strokeWidth={2.5} />
@@ -1307,6 +1315,14 @@
     transform: translateY(-1px);
   }
   .pill-update:disabled { opacity: 0.65; cursor: wait; }
+  .pill-release {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 0.5px solid var(--border);
+    cursor: pointer;
+  }
+  .pill-release:hover:not(:disabled) { background: var(--bg-hover); }
+  .pill-release:disabled { opacity: 0.65; cursor: wait; }
 
   .about-check-row {
     display: flex;

@@ -135,7 +135,7 @@
     "section_connection": "连接",
     "section_logging": "日志",
     "proxy": "代理",
-    "proxy_hint": "用于更新检查的网络访问。直连无法访问 GitHub 时，可使用加速镜像或本地 HTTP/SOCKS5 代理。",
+    "proxy_hint": "用于更新检查与更新包下载的网络访问。直连无法访问 GitHub 时，可使用加速镜像或本地 HTTP/SOCKS5 代理。",
     "proxy_direct": "直连",
     "proxy_mirror_custom": "自定义加速镜像",
     "proxy_mirror_label": "镜像前缀",
@@ -247,6 +247,9 @@
     "dev_build_hint": "开发版本中自动检查已禁用。请使用上方按钮手动检查。",
     "auto_off_hint": "自动检查已在设置中关闭。请使用上方按钮手动检查。",
     "install_failed": "更新失败",
+    "open_release_page": "打开发布页",
+    "open_release_page_title": "在浏览器中打开最新版发布页面",
+    "progress_download": "正在下载… {percent}%",
     "progress_refresh": "正在检查软件包仓库…",
     "progress_install": "正在下载并安装…"
   },

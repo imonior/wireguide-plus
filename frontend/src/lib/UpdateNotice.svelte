@@ -11,24 +11,37 @@
   // Nielsen "Top 10 UI Annoyances" all flag them.
   export let updateInfo = null;
   export let onInstall = null;
+  // Explicit manual path: opens the GitHub Releases page. Next to
+  // "Update now" (native in-process download) it gives the user a
+  // choice, and it is also the backend's automatic fallback when the
+  // native download/verification fails.
+  export let onOpenRelease = null;
   export let onDismiss = null;
 
   let installing = false;
   let showConfirm = false;
   let showNotes = false;
-  // Live phase from the backend ("refresh" → brew update, "install" →
-  // brew upgrade). The tap refresh alone can take 75+ s; without this the
-  // button sat on a static label long enough to read as a hang.
+  // Live phase from the backend:
+  //   "download" + percent → native asset download in progress
+  //   "refresh"            → brew tap refresh
+  //   "install"            → installer launched / brew upgrade running
+  // Without these the button sat on a static label long enough to read
+  // as a hang.
   let phase = '';
+  let percent = 0;
   let errorMsg = '';
   let unsubProgress = null;
 
   onMount(() => {
-    unsubProgress = Events.On('update_progress', (e) => { phase = e?.data?.phase || ''; });
+    unsubProgress = Events.On('update_progress', (e) => {
+      phase = e?.data?.phase || '';
+      percent = e?.data?.percent || 0;
+    });
   });
   onDestroy(() => { if (unsubProgress) unsubProgress(); });
 
-  $: phaseLabel = phase === 'refresh' ? $t('update.progress_refresh')
+  $: phaseLabel = phase === 'download' ? $t('update.progress_download', { percent })
+    : phase === 'refresh' ? $t('update.progress_refresh')
     : phase === 'install' ? $t('update.progress_install')
     : '';
 
@@ -42,6 +55,10 @@
     }
   }
 
+  function openReleasePage() {
+    if (onOpenRelease) onOpenRelease();
+  }
+
   async function doInstall() {
     if (installing) return;
     showConfirm = false;
@@ -51,12 +68,15 @@
       if (onInstall) await onInstall();
       // Success without the cask postflight killing us should be
       // impossible now (RunUpdate verifies the on-disk version), so
-      // reaching here means the process survives only briefly.
+      // reaching here means the process survives only briefly. On
+      // Windows the installer is launched and this app stays alive;
+      // the user completes the install in the NSIS dialog.
     } catch (e) {
       errorMsg = ($t('update.install_failed') || 'Update failed') + ': ' + (e?.message || e);
     } finally {
       installing = false;
       phase = '';
+      percent = 0;
     }
   }
 
@@ -95,6 +115,9 @@
     </div>
 
     <div class="banner-actions">
+      <button class="btn-release" on:click={openReleasePage} disabled={installing} title={$t('update.open_release_page_title')}>
+        {$t('update.open_release_page')}
+      </button>
       <button class="btn-update" on:click={requestInstall} disabled={installing}>
         {installing ? $t('update.updating') : $t('update.update_now')}
       </button>
@@ -197,6 +220,19 @@
   .btn-update:active { filter: brightness(0.94); }
   .btn-update:disabled { opacity: 0.5; cursor: wait; }
   .btn-update:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-release {
+    height: 28px;
+    padding: 0 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    font: 400 12px/16px var(--font-sans);
+    cursor: pointer;
+  }
+  .btn-release:hover { background: var(--bg-hover); }
+  .btn-release:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-release:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .btn-dismiss {
     width: 22px;
     height: 22px;
@@ -258,7 +294,7 @@
     margin: 0 0 16px;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .btn-update, .btn-skip, .btn-dismiss {
+    .btn-update, .btn-release, .btn-skip, .btn-dismiss {
       transition: filter 120ms ease, background-color 120ms ease;
     }
   }

@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.6] - 2026-08-30
+
+本版本升级更新机制：Windows / Linux 支持应用内直接下载并安装更新（不再只能跳转 GitHub 页面），更新通知提供「直接升级」与「打开发布页」双按钮并展示实时下载进度；镜像模式下资产下载同样走加速镜像。
+
+### ✨ 新功能
+
+- **应用内直接升级（Windows / Linux）** — 更新通知新增「直接升级」按钮：下载完成后自动校验 SHA256（发布版含 Ed25519 签名），通过后启动安装并退出应用；macOS 的 Homebrew 安装仍走 `brew upgrade`。
+- **「打开发布页」备选按钮** — 下载失败、校验不通过或想查看发布说明时，一键在浏览器打开对应版本的 GitHub Release 页面。
+- **实时下载进度** — 升级过程显示已下载 / 总大小与进度百分比（基于 GitHub API 报告的资产大小，分块传输时同样准确）。
+- **镜像模式覆盖资产下载** — 选择 GitHub 加速镜像（mirror）后，资产与校验和文件的下载同样经镜像前缀重写（此前仅 API 检查走镜像，二进制仍直连 GitHub）。
+
+### 🛠 内部
+
+- 下载或安装失败时不再静默：记录日志并回退到打开发布页，保证始终有可用路径。
+- 新增下载进度回调、镜像下载重写与 `RunUpdate` 防御分支的单元测试。
+- 版本号更新至 **1.1.6**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+
 ## [1.1.5] - 2026-08-30
 
 本版本全面增强日志系统（更新检查、设置审计、分类分级、保留期清理），修复若干设置问题，并重新加入默认关闭的 WireGuard 脚本支持。

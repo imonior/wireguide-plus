@@ -135,7 +135,7 @@
     "section_connection": "Connection",
     "section_logging": "Logging",
     "proxy": "Proxy",
-    "proxy_hint": "Network access for update checks. If GitHub is unreachable directly, use an accelerator mirror or a local HTTP/SOCKS5 proxy.",
+    "proxy_hint": "Network access for update checks and update downloads. If GitHub is unreachable directly, use an accelerator mirror or a local HTTP/SOCKS5 proxy.",
     "proxy_direct": "Direct",
     "proxy_mirror_custom": "Custom accelerator mirror",
     "proxy_mirror_label": "Mirror prefix",
@@ -247,6 +247,9 @@
     "dev_build_hint": "Automatic checks are disabled in development builds. Use the button above to check manually.",
     "auto_off_hint": "Automatic checks are turned off in Settings. Use the button above to check manually.",
     "install_failed": "Update failed",
+    "open_release_page": "Open release page",
+    "open_release_page_title": "Open the latest release page in your browser",
+    "progress_download": "Downloading… {percent}%",
     "progress_refresh": "Checking the package repository…",
     "progress_install": "Downloading and installing…"
   },

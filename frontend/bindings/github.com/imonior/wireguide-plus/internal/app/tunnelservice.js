@@ -450,6 +450,17 @@ export function OpenLocationSettings() {
 }
 
 /**
+ * OpenReleasePage opens the latest-release page in the default browser.
+ * This is the explicit "manual update" action the banner offers next to
+ * "Update now" — useful when the user prefers to download the installer
+ * by hand, or when auto-update isn't an option for their platform.
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenReleasePage() {
+    return $Call.ByID(891358443);
+}
+
+/**
  * OpenURL opens a URL in the default browser. Only HTTPS URLs on
  * github.com are allowed to prevent misuse from a compromised frontend.
  * @param {string} url
@@ -538,7 +549,15 @@ export function RunDNSLeakTest() {
  *     letting the cask's postflight handle the killall + relaunch. This
  *     is the "one-click" expectation users have, not "copy this command
  *     into your terminal".
- *   - Non-brew installs → open the GitHub Releases page in the browser.
+ *   - Windows/Linux → native in-process update: download the release
+ *     asset through the user's configured mirror/proxy, verify its
+ *     SHA256 + Ed25519 signature, then launch the platform installer.
+ *     No browser round-trip, so it works even where github.com is
+ *     unreachable (the reason the Settings mirror/proxy exists). If the
+ *     download or verification fails, this method falls back to opening
+ *     the GitHub Releases page — the safe manual path — so the user is
+ *     never stranded.
+ *   - Non-brew macOS → open the GitHub Releases page in the browser.
  *     Auto-replacing an un-notarised `.app` bundle needs sudo and races
  *     with Gatekeeper quarantining of the new binary; redirecting the
  *     user to the download page is the honest path for an indie macOS
