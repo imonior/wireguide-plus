@@ -752,6 +752,13 @@ func TestCheckForUpdate_NewerVersionAvailable(t *testing.T) {
 }
 
 func TestCheckForUpdate_OlderVersionNotAvailable(t *testing.T) {
+	// A bare `go test` build carries the dev sentinel (0.0.0-dev) instead of
+	// the ldflags-injected release version; pin a stable current version so
+	// the 0.0.1 release below is correctly seen as older.
+	orig := currentVersion
+	currentVersion = "1.1.1"
+	t.Cleanup(func() { currentVersion = orig })
+
 	rel := makeRelease("0.0.1", 5*1024*1024, false)
 	rel.TagName = "v0.0.1"
 	srv := serveRelease(t, rel)

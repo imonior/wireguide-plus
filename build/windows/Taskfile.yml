@@ -63,7 +63,7 @@ tasks:
     vars:
       # SIGN_PUBKEY (optional, release CI): hex Ed25519 public key baked
       # into internal/update so production builds verify SHA256SUMS.sig.
-      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if .EXTRA_TAGS}}-tags {{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui{{if .SIGN_PUBKEY}} -X github.com/imonior/wireguide-plus/internal/update.expectedPublicKey={{.SIGN_PUBKEY}}{{end}}"{{end}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if .EXTRA_TAGS}}-tags {{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l" -ldflags="-X github.com/imonior/wireguide-plus/internal/version.Version={{.VERSION}}"{{else}}-tags production{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X github.com/imonior/wireguide-plus/internal/version.Version={{.VERSION}}{{if .SIGN_PUBKEY}} -X github.com/imonior/wireguide-plus/internal/update.expectedPublicKey={{.SIGN_PUBKEY}}{{end}}"{{end}}'
       SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'
     env:
       GOOS: windows
@@ -88,7 +88,7 @@ tasks:
           Build it first: wails3 task setup:docker
     cmds:
       - task: generate:syso
-      - docker run --rm -v "{{.ROOT_DIR}}:/app" {{.GO_CACHE_MOUNT}} {{.REPLACE_MOUNTS}} -e APP_NAME="{{.APP_NAME}}" {{if .EXTRA_TAGS}}-e EXTRA_TAGS="{{.EXTRA_TAGS}}"{{end}} {{.CROSS_IMAGE}} windows {{.DOCKER_ARCH}}
+      - docker run --rm -v "{{.ROOT_DIR}}:/app" {{.GO_CACHE_MOUNT}} {{.REPLACE_MOUNTS}} -e APP_NAME="{{.APP_NAME}}" -e VERSION="{{.VERSION}}" {{if .EXTRA_TAGS}}-e EXTRA_TAGS="{{.EXTRA_TAGS}}"{{end}} {{.CROSS_IMAGE}} windows {{.DOCKER_ARCH}}
       - docker run --rm -v "{{.ROOT_DIR}}:/app" alpine chown -R $(id -u):$(id -g) /app/bin
       - rm -f *.syso
     vars:
@@ -166,7 +166,7 @@ tasks:
       tools/genverinfo, so Properties -> Details always shows the platform.
     dir: build
     cmds:
-      - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION | default "1.1.1"}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
+      - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
       - cmd: goversioninfo -64=false -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_386.syso windows/versioninfo.gen.json
         when:
           - '{{.ARCH}} == "386"'

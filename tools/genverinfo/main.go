@@ -8,6 +8,10 @@
 //	          -tmpl windows/versioninfo.json.tmpl \
 //	          -out  windows/versioninfo.gen.json
 //
+// When -version is omitted the tool falls back to the repository-root VERSION
+// file (the single source of truth, read relative to the CWD), so a bare
+// `go run ../tools/genverinfo -arch amd64` from build/ stays correct.
+//
 // Stdlib-only so CI needs nothing beyond the Go toolchain, mirroring
 // tools/updatesign.
 package main
@@ -35,10 +39,19 @@ type info struct {
 
 func main() {
 	arch := flag.String("arch", "amd64", "GOARCH of the build (386/amd64/arm64)")
-	version := flag.String("version", "1.1.1", "product version as x.y.z")
+	version := flag.String("version", "", "product version as x.y.z (default: read ../VERSION, the single source of truth)")
 	tmplPath := flag.String("tmpl", "windows/versioninfo.json.tmpl", "path to the template, relative to CWD")
 	outPath := flag.String("out", "windows/versioninfo.gen.json", "path to write the rendered JSON")
 	flag.Parse()
+
+	if *version == "" {
+		data, err := os.ReadFile("../VERSION")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "genverinfo: -version not set and cannot read ../VERSION:", err)
+			os.Exit(1)
+		}
+		*version = strings.TrimSpace(string(data))
+	}
 
 	suffix := *arch
 	if suffix == "386" {

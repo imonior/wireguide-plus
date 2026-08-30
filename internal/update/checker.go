@@ -20,12 +20,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/imonior/wireguide-plus/internal/version"
 )
 
 const (
 	githubRepo     = "imonior/wireguide-plus"
 	apiEndpoint    = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
-	currentVersion = "1.1.1"
 
 	// GitHubReleasesURL is the human-facing releases page.
 	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"
@@ -70,7 +71,16 @@ func MirroredEndpoint(prefix string) string { return mirrorEndpoint(prefix) }
 // + ldflags is the standard Go pattern for build-time secrets.
 var expectedPublicKey = ""
 
-// CurrentVersion returns the hardcoded app version string.
+// currentVersion is the app version, injected at build time from the
+// repository-root VERSION file via
+//
+//	-ldflags "-X github.com/imonior/wireguide-plus/internal/version.Version=<v>"
+//
+// (see build/*/Taskfile.yml). Bare `go build` / `go test` fall back to the
+// version package's dev sentinel, which also marks the binary as a dev build.
+var currentVersion = version.Version
+
+// CurrentVersion returns the app version string.
 func CurrentVersion() string { return currentVersion }
 
 // IsDevBuild reports whether this binary was built from an in-progress

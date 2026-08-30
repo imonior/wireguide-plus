@@ -1,20 +1,47 @@
 version: '3'
 
-includes:
-  windows: ./build/windows/Taskfile.yml
-  darwin: ./build/darwin/Taskfile.yml
-  linux: ./build/linux/Taskfile.yml
-
 vars:
   APP_NAME: wireguideplus
   BIN_DIR: bin
   VITE_PORT: 9245
+  # Single source of truth for the app version: the repository-root VERSION
+  # file (see tools/bumpversion). Forwarded to the per-platform Taskfiles so
+  # every build injects it via -ldflags into internal/version.Version.
+  VERSION: { sh: cat VERSION | tr -d '\r\n' }
+
+includes:
+  windows:
+    taskfile: ./build/windows/Taskfile.yml
+    vars: { VERSION: '{{.VERSION}}' }
+  darwin:
+    taskfile: ./build/darwin/Taskfile.yml
+    vars: { VERSION: '{{.VERSION}}' }
+  linux:
+    taskfile: ./build/linux/Taskfile.yml
+    vars: { VERSION: '{{.VERSION}}' }
 
 tasks:
   build:
     summary: Builds the application
     cmds:
       - task: "{{OS}}:build"
+
+  bump:version:
+    summary: Synchronizes the VERSION file into all static build/package metadata files
+    desc: |
+      Single source of truth: the repository-root VERSION file. Edit it (or pass
+      the new version as an argument, e.g. `task bump:version 1.1.2`) and run this
+      task — it rewrites build/config.yml, the Windows version resources / manifest
+      / NSIS / MSIX files, the Linux nfpm metadata and the macOS Info.plist files in
+      one pass. Go binaries pick the version up automatically at build time from
+      VERSION (via -ldflags), so no Go code needs to change on a version bump.
+    cmds:
+      - cmd: go run ./tools/bumpversion
+        when: '{{eq .NEW_VERSION ""}}'
+      - cmd: go run ./tools/bumpversion {{.NEW_VERSION}}
+        when: '{{ne .NEW_VERSION ""}}'
+    vars:
+      NEW_VERSION: '{{.NEW_VERSION | default ""}}'
 
   package:
     summary: Packages a production build of the application

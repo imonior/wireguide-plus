@@ -11,7 +11,7 @@ the Homebrew cask.
 
 ### Workflow triggers
 
-The two workflows fire on **events**, not on any analysis of what changed:
+The workflows fire on **events**, not on any analysis of what changed:
 
 - `.github/workflows/ci.yml` — runs **only** on `pull_request` and manual
   `workflow_dispatch`. Pushes to `main` (merged PRs, doc-only edits,
@@ -21,10 +21,10 @@ The two workflows fire on **events**, not on any analysis of what changed:
   sniffing: any `v*` tag triggers the full cross-platform build, regardless
   of what the diff contains.
 - `.github/workflows/fix-release-notes.yml` — manual `workflow_dispatch`
-  utility: regenerates the body of the **latest** tag with git-cliff and
-  overwrites it via `gh release edit`. Used when a noise commit (e.g. GitHub's
-  "Add files via upload") slipped into a published changelog after a
-  `cliff.toml` parser change.
+  utility: regenerates the body of an **already-published tag** with git-cliff
+  (the tag is a required input) and overwrites it via `gh release edit`. Used
+  when a noise commit (e.g. GitHub's "Add files via upload") slipped into a
+  published changelog after a `cliff.toml` parser change.
 
 To build without a tag, trigger `ci.yml` manually via `workflow_dispatch`.
 
@@ -34,6 +34,14 @@ To build without a tag, trigger `ci.yml` manually via `workflow_dispatch`.
   functional change (and keep `CHANGELOG.md` current): new tag → new release
   page, fresh assets, cask bump. GitHub does not compare version numbers, so
   the tag name is the only signal the pipeline sees.
+- The app version itself lives in **exactly one place** — the repository-root
+  `VERSION` file. `task bump:version` (`tools/bumpversion`) rewrites every
+  static build/package metadata file from it in one pass (build/config.yml,
+  Windows version resources / manifest / NSIS / MSIX, Linux nfpm, macOS
+  Info.plist). The Go binaries read `VERSION` at build time via
+  `-ldflags "-X github.com/imonior/wireguide-plus/internal/version.Version=<v>"`,
+  so a version bump touches three things and nothing else: the `VERSION` file,
+  `CHANGELOG.md`, and the git tag.
 - **Never force-push an existing tag** (`git push -f origin v1.1.0`). GitHub
   forbids re-pushing a tag that already exists; force-pushing one makes
   `softprops/action-gh-release` **reuse the old release page** — assets mix
@@ -48,10 +56,17 @@ gh secret list                         # UPDATE_SIGNING_KEY must be present
 grep UPDATE_SIGNING_PUBKEY .github/workflows/release.yml
 go run ./tools/updatesign pub          # must print the same public hex
 
-# 2. cut the release — make sure CHANGELOG.md already describes the new version
-git tag v1.1.0 && git push origin v1.1.0
+# 2. bump the version — the VERSION file is the single source of truth:
+echo 1.1.2 > VERSION
+task bump:version                      # rewrites every static build/package metadata file
+#    (or, one step: task bump:version 1.1.2)
+#    Go binaries need no edits: build/*/Taskfile.yml inject VERSION at build time.
 
-# 3. watch the pipeline
+# 3. make sure CHANGELOG.md (and its en / zh-TW / ja siblings) already
+#    describe the new version, then cut:
+git tag v1.1.2 && git push origin v1.1.2
+
+# 4. watch the pipeline
 gh run watch
 ```
 
