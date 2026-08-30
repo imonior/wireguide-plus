@@ -49,7 +49,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 3. **Windows 버전 리소스 표준화** — exe 속성 「세부 정보」의 버전 정보가 비어 있던
    문제를 수정했습니다 (`goversioninfo`로 생성).
 4. **안정성 수정** — 업데이트 확인 스케줄 중복 제거, 더 정확한 물리 어댑터 감지 등
-   (자세한 내용은 [CHANGELOG](CHANGELOG.en.md) 참조).
+   (자세한 내용은 [CHANGELOG](CHANGELOG.ko.md) 참조).
 
 ### 개선
 

@@ -62,7 +62,7 @@ task bump:version                      # rewrites every static build/package met
 #    (or, one step: task bump:version 1.1.2)
 #    Go binaries need no edits: build/*/Taskfile.yml inject VERSION at build time.
 
-# 3. make sure CHANGELOG.md (and its en / zh-TW / ja siblings) already
+# 3. make sure CHANGELOG.md (and its en / zh-TW / ja / ko siblings) already
 #    describe the new version, then cut:
 git tag v1.1.2 && git push origin v1.1.2
 

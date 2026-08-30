@@ -1,108 +1,108 @@
 # Changelog
 
-All notable changes to WireGuide Plus will be documented in this file.
+WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
-> 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
+> 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
 ## [1.1.1] - 2026-08-30
 
-本版本修復 Windows 系統匣通知氣泡「開啟主視窗」按鈕在系統高負載下偶發導致 GUI 卡死的問題。
+이번 버전은 Windows 트레이 알림 풍선의 '메인 창 열기' 버튼이 시스템 고부하 시 간헐적으로 GUI를 멈추게 하던 문제를 수정합니다.
 
-### 🐛 錯誤修正
+### 🐛 버그 수정
 
-- **修復通知氣泡「開啟主視窗」偶發卡死** — 當系統 CPU 爭用激烈（例如 Windows 維護程序佔滿核心）或 WebView2 回應延遲時，點擊系統匣通知氣泡的「Open Window」按鈕會同步阻塞等待 UI 執行緒，整個 GUI 看似凍結（VPN 隧道不受影響）。`showDock`（`internal/gui/dock_other.go`）改為經 `application.InvokeAsync` 在 Wails UI 執行緒非同步執行：呼叫端立即返回，視窗顯示/聚焦皆在 UI 執行緒內聯完成，不再跨執行緒等待；同時加 recover 防護，意外 panic 不會打斷主執行緒回呼鏈。
+- **알림 풍선의 '메인 창 열기'가 간헐적으로 GUI를 멈추지 않게 수정** — 시스템 CPU 경쟁이 심할 때(예: Windows 유지 관리 프로세스가 코어를 점유) 또는 WebView2 응답이 지연될 때, 트레이 알림 풍선의 'Open Window' 버튼을 클릭하면 UI 스레드를 동기적으로 차단·대기하여 GUI 전체가 멈춘 것처럼 보였습니다(VPN 터널은 영향 없음). `showDock`(`internal/gui/dock_other.go`)은 `application.InvokeAsync`를 통해 Wails UI 스레드에서 비동기 실행되도록 변경했습니다. 호출자는 즉시 반환되고, 창 표시/포커스는 모두 UI 스레드에서 인라인으로 처리되어 스레드 간 대기가 없습니다. 또한 recover 가드를 추가하여 예상치 못한 panic이 메인 스레드 콜백 체인을 중단하지 않습니다.
 
-### 🛠 內部
+### 🛠 내부
 
-- 版本提升至 **1.1.1**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.1.0`）、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh`）、MSIX、Linux nfpm、`tools/genverinfo` 全部同步。
+- 버전을 **1.1.1**로 업데이트: `internal/update/checker.go` 메인 버전, `build/config.yml`, `windows/info.json`(`1.1.1.0`), `windows/wails.exe.manifest`, NSIS(`wails_tools.nsh`), MSIX, Linux nfpm, `tools/genverinfo` 모두 동기화.
 
 ## [1.1.0] - 2026-08-28
 
-本版本專注於可辨識度、代理（Proxy）的穩健性與啟動時的自動化規則評估：系統匣狀態改用高對比文字符號、代理提供三種明確模式並附連線測試、無效的代理 URL 不再導致更新檢查失敗、啟動時會在連線前先評估自動化規則。
+이번 버전은 식별성, 프록시 견고성, 시작 시 자동화 규칙에 중점을 둡니다. 트레이 상태는 식별하기 쉬운 글리프로 변경하고, 프록시는 세 가지 모드의 의미를 명확히 하고 연결 테스트를 추가했으며, 잘못된 프록시 URL이 업데이트 확인을 깨뜨리지 않게 했고, 시작 시 자동화 규칙을 먼저 판단한 후 연결합니다.
 
-### ✨ 功能
+### ✨ 새로운 기능
 
-- **系統匣狀態符號** — Windows 系統匣選單的連線狀態改用純文字符號：`●` 實心 = 已連線、`○` 空心 = 已斷線（Windows 系統匣彈出選單由 GDI 繪製，無法顯示彩色 emoji — `🟢` 會退化為灰色輪廓，新舊狀態難以分辨）；macOS 選單列（原生 AppKit 繪製）維持彩色 emoji。啟動/過渡狀態有各自的標記。
-- **代理模式與連線測試** — 設定 → 代理現在提供三種明確模式：**直接連線**（完全忽略系統/環境代理）、**GitHub 鏡像**（`mirror`，例如 `https://ghfast.top` 加速前綴）、**手動代理**（`manual`，完整的 http/https/socks5 URL）。新增**「測試連線」按鈕**：儲存前先對 GitHub Releases API 發出往返請求，並回報成功與延遲。
-- **代理立即生效** — 儲存代理設定後，下一次排程更新檢查（以及手動「立即檢查」）無需重新啟動即生效；GUI 啟動時也會直接套用已儲存的代理，避免「啟動當下用壞掉的設定檢查一次」。
+- **트레이 상태 글리프 식별성 개선 (Tray state glyphs)** — Windows 트레이 메뉴의 연결 상태를 순수 텍스트 글리프로 구분하도록 변경했습니다. `●` 채움=연결됨, `○` 비움=연결 안 됨(Windows 트레이 팝업은 GDI로 그려져 컬러 이모지를 렌더링할 수 없으며, `🟢`는 회색 외곽선으로 퇴화하여 새/구 상태를 구분하기 어렵습니다). macOS 메뉴 바(AppKit 네이티브 렌더링)는 계속 컬러 이모지를 사용합니다. 시작 중/전환 상태는 별도 표시가 있습니다.
+- **프록시 3-모드 의미 명확화 + 연결 테스트 (Proxy modes & test)** — 설정 → 프록시의 옵션을 세 가지로 통일하고 의미가 더 이상 혼동되지 않게 했습니다. **직접 연결**(시스템/환경 프록시를 완전히 무시), **GitHub 미러**(`mirror`, 예: `https://ghfast.top` 가속 접두사), **수동 프록시**(`manual`, http/https/socks5 전체 URL). **"연결 테스트"** 버튼을 추가했습니다. 저장 전에 GitHub Releases API에 왕복 요청을 보내 성공 여부와 지연 시간을 보고합니다.
+- **프록시 설정 즉시 적용 (Proxy applies immediately)** — 프록시 구성을 저장하면 다음 예약 업데이트 확인(및 수동 "지금 확인")이 재시작 없이 바로 적용됩니다. GUI 시작 시에도 저장된 프록시를 바로 적용하여 "시작 직후 잘못된 구성으로 검사가 실행되는" 상황을 방지합니다.
 
-### 🐛 錯誤修正
+### 🐛 버그 수정
 
-- **無效的代理 URL 不再導致更新檢查失敗** — `config.json` 中損壞的手動代理（例如 `proxy_url = "https://"`）過去會直接被 `http.ProxyURL` 取用，導致每次更新檢查都以 `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config` 失敗。現在 URL 會在啟動時與每次使用時驗證（`internal/update/proxy.go`）；無效值會記錄 `WARN update: ignoring invalid manual proxy URL` 並退回直接連線 — 檢查不再失敗。
-- **修正「先連線、後被規則切斷」的啟動感受** — 啟動規則評估移到 helper 啟動之後立即執行（記錄 `startup rule re-evaluation`），讓每條隧道的目標狀態先由規則決定；另外加入 `scheduleRuleCheck` 備援：啟動後 60 秒內，任何由 RPC 驅動的手動連線（例如還原上次工作階段）會在 3 秒後依規則重新評估並修正，不必等待 30 秒輪詢；觸發來源也會記錄下來以便除錯。
-- **無效的鏡像前綴不再默默破壞檢查** — `mirror` 模式的加速前綴同樣會驗證 scheme/host；非法值退回官方 API 端點。
+- **잘못된 프록시 URL이 업데이트 확인을 깨뜨리지 않도록 수정** — `config.json`에 불완전한 수동 프록시(예: `proxy_url = "https://"`)가 있으면 기존에는 `http.ProxyURL`이 그대로 사용되어 매번 업데이트 확인 시 `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config` 오류가 발생했습니다. 이제 시작 시와 사용할 때마다 URL을 검증하고(`internal/update/proxy.go`), 잘못된 값은 `WARN update: ignoring invalid manual proxy URL`을 기록하고 직접 연결로 폴백하므로 검사가 더 이상 실패하지 않습니다.
+- **"먼저 연결 후 규칙에 따라 해제"되는 시작 인상을 수정** — 시작 규칙 평가를 helper 시작 직후로 앞당겨 실행하고(로그 `startup rule re-evaluation`), 각 터널의 목표 상태가 규칙에 의해 먼저 결정되도록 했습니다. 또한 `scheduleRuleCheck` 폴백을 추가했습니다. 시작 후 60초 창 내의 모든 RPC 수동 연결(예: 마지막 세션 복원)은 3초 후 규칙에 따라 다시 평가되어 수정되며, 30초 폴링을 기다리지 않습니다. 로그에 트리거 출처를 기록하여 문제 해결에 도움이 됩니다.
+- **잘못된 미러 접두사가 조용히 검사를 깨뜨리지 않도록 수정** — `mirror` 모드의 가속 접두사도 scheme/host 검증을 수행하며, 잘못된 값은 공식 API 엔드포인트로 폴백합니다.
 
-### 🛠 內部
+### 🛠 내부
 
-- 版本提升至 **1.1.0**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.0.0`）、`windows/wails.exe.manifest`、NSIS、MSIX 與 Linux nfpm 全部同步。
-- **Windows 版本資源標準化** — `wails3 generate syso` 產生的資源語言為 `0x0000`，且 `VS_FIXEDFILEINFO.ProductVersion` 為零，導致 Windows 檔案總管 / `FileVersionInfo` 無法讀取（內容頁版本欄空白）。改用 `goversioninfo`（設定：`build/windows/versioninfo.json`）產生標準的 `0409/04B0` 資源；`generate:syso` 任務已同步更新；exe 與安裝程式的內容現在能正確顯示 `1.1.0`。
-- **新增 Windows x86（32 位元）建置** — `task windows:build ARCH=386` 產生 32 位元二進位檔與 `wireguide-x86-installer.exe` 安裝程式（NSIS 腳本支援 x86、安裝至 Program Files、內含 x86 版 `wintun.dll`）。
-- **平台邊界釐清** — 移除 iOS 建置任務與設定註解；Android / iOS 不受支援（無法同時多隧道、無法依 Wi-Fi SSID 自動連線）；README 已說明；macOS / Linux 增強版開發中。
-- **系統整合強化** — 新增**「最小化啟動」**設定（直接進入系統匣、不顯示主視窗；設定 → 啟動）；新增**系統匣連線通知**：啟動 10 秒後顯示目前連線狀態，網路變更（Wi-Fi 切換、拔除網路線、網路中斷等）導致隧道連線狀態改變後，也會延遲 10 秒顯示穩定後的最新狀態。氣泡通知含動作選單（開啟主視窗 / 斷線），可手動關閉，或在設定的停留時間（預設 10 秒，可在設定 → 啟動 → 通知停留時間調整；`internal/gui/notify_windows.go`）後自動關閉。
-- **雙架構發布** — 每次建置同時產生 32 位元（x86）與 64 位元（amd64）的二進位檔與安裝程式（`task windows:build:all`，自動更新 wintun.dll 架構）；應用程式/安裝程式說明統一為「多隧道 + 自動化」，移除跨平台用語。
-- **安裝體驗** — 安裝程式預設安裝至 Program Files（32 位元安裝程式自動選擇 Program Files (x86)），安裝過程中可變更目錄；預設建立「開始」功能表捷徑（含「解除安裝 WireGuide Plus」項目，圖示與應用程式一致），可在「捷徑選項」頁面取消勾選；一律建立桌面捷徑（`build/windows/nsis/project.nsi`）。
-- **開發與發布文件** — 建置/封裝文件從 README 移至獨立的 `docs/DEVELOPMENT.md`；GitHub Release 工作流程現已包含 32 位元 Windows 產物與 CI 工具鏈（`goversioninfo`）；推送本機 `v*` 標籤即自動建置（Windows x86+amd64、macOS arm64、Linux amd64+arm64）、簽署並發布（`docs/release.md`）。
-- 調整 Windows 介面卡名稱比對（`internal/wifi/known_windows.go`、`detect_windows.go`），物理介面卡偵測更精確。
-- 視窗標題統一為 **WireGuide Plus**。
-- 更新檢查在排程器內去重，避免一輪內多次觸發（失敗只記錄一次，含重試間隔）。
+- 버전을 **1.1.0**으로 업데이트: `internal/update/checker.go` 메인 버전, `build/config.yml`, `windows/info.json`(`1.1.0.0`), `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm 모두 동기화.
+- **Windows 버전 리소스 표준화** — `wails3 generate syso`로 생성된 버전 리소스는 언어가 `0x0000`이고 `VS_FIXEDFILEINFO.ProductVersion`이 0이라서 Windows 탐색기 / `FileVersionInfo`가 읽을 수 없었습니다(속성 페이지 버전 필드가 비어 있음). `goversioninfo`(구성: `build/windows/versioninfo.json`)로 전환하여 표준 `0409/04B0` 리소스를 생성하도록 하고 `generate:syso` 작업도 함께 업데이트했습니다. 이제 exe와 설치 패키지의 속성 페이지에 `1.1.0`이 올바르게 표시됩니다.
+- **Windows x86(32비트) 빌드 추가** — `task windows:build ARCH=386`로 32비트 실행 프로그램과 `wireguide-x86-installer.exe` 설치 패키지를 생성합니다(NSIS 스크립트가 x86 아키텍처를 지원하고, Program Files에 설치하며, x86용 `wintun.dll`을 패키징).
+- **플랫폼 경계 명확화** — iOS 빌드 작업과 구성 주석을 제거했습니다. 이 프로젝트는 Android / iOS를 지원하지 않습니다(멀티 채널 동시 연결 불가, SSID 기반 자동 연결 불가). README에 그 내용을 반영했으며, macOS / Linux 강화판은 추후 개발 예정입니다.
+- **시스템 통합 강화** — **"최소화 시작"** 설정 추가(시작 시 메인 창을 표시하지 않고 시스템 트레이로 바로 최소화, 설정 → 시작). **연결 상태 트레이 알림** 추가: 시작 후 10초 지연 후 현재 연결 상태를 표시하고, 네트워크 변경(Wi-Fi 전환, 랜 케이블 분리/연결, 네트워크 끊김 등)으로 터널 연결 상태가 바뀌면 안정화된 최신 상태를 10초 지연 후 표시합니다. 알림 풍선에는 작업 메뉴(메인 창 열기 / 연결 끊기)가 있으며, 수동으로 닫거나 설정에 따라 자동으로 닫을 수 있습니다(기본 10초 유지, 설정 → 시작 → 알림 유지 시간에서 조정, `internal/gui/notify_windows.go`).
+- **듀얼 아키텍처 릴리스** — 매 빌드마다 32비트(x86)와 64비트(amd64) 프로그램과 해당 설치 패키지를 함께 생성합니다(`task windows:build:all`, wintun.dll 아키텍처 자동 갱신 포함). 소프트웨어/설치 패키지 설명을 "다중 터널 + 자동화" 중심으로 통일하고, 크로스 플랫폼(cross-platform) 표현을 제거했습니다.
+- **설치 경험** — 설치 패키지는 기본적으로 Program Files에 설치되며(32비트 설치 패키지는 Program Files (x86)을 자동 선택), 설치 중에 디렉터리를 직접 지정할 수 있습니다. 시작 메뉴 바로 가기("WireGuide Plus 제거" 항목 포함, 제거 항목 아이콘은 실행 프로그램과 동일)가 기본 생성되며 "바로 가기 옵션" 페이지에서 체크를 해제할 수 있습니다. 바탕 화면 바로 가기는 항상 생성됩니다(`build/windows/nsis/project.nsi`).
+- **개발 및 릴리스 문서** — 빌드/패키징 설명을 README에서 별도 개발 문서 `docs/DEVELOPMENT.md`로 옮겼습니다. GitHub Release 워크플로우에 32비트 Windows 산출물과 CI 툴체인(goversioninfo)을 추가했으며, 로컬에서 `v*` 태그를 푸시하면 자동으로 빌드(Windows x86+amd64, macOS arm64, Linux amd64+arm64), 서명 및 배포됩니다(`docs/release.md`).
+- Windows 네트워크 어댑터 이름 매칭 로직 조정(`internal/wifi/known_windows.go`, `detect_windows.go`), 물리 네트워크 카드 인식이 더 정확해졌습니다.
+- 창 제목을 **WireGuide Plus**로 통일.
+- 업데이트 확인이 스케줄러 내에서 중복 제거되어 한 라운드에 여러 번 트리거되지 않습니다(실패는 한 번만 기록하고 재시도 간격을 제공).
 
 ## [1.0.0] - 2026-08-28
 
-里程碑版本：A11y 無障礙語意重構、Windows 網路出口路由邏輯變更、Wails3 建置/圖示/權限清理，加上簡體中文介面與系統匣開關。
+이정표(milestone) 버전: A11y 접근성 의미론 리팩터링, Windows 네트워크 출구 라우팅 로직 조정, Wails3 빌드/아이콘/권한 정리, 그리고 중국어 간체 UI와 트레이 토글이 추가되었습니다.
 
-### ✨ 功能
+### ✨ 새로운 기능
 
-- **簡體中文介面（Chinese UI）** — 全介面完整的簡體中文翻譯，涵蓋全部 199 個字串：隧道清單、歷史、工具（DNS 洩漏測試 / 路由表）、日誌、設定、更新、自動化編輯器。首次啟動自動跟隨系統語言（偵測 `zh-*` 地區），或在設定 → 一般 → 語言中手動切換（持久化）。
-- **系統匣開關** — 系統匣中的每條隧道現在都是獨立的可點擊開關：勾選連線、取消勾選斷線；連線 emoji（🟢 已連線 / 🟡 連線中 / ○ 已斷線）保留在標籤旁。手動斷線的隧道在重新連線或 WireGuide 重新啟動前，保持不受自動化規則影響（manual-off）。
+- **중국어 간체 UI (Chinese UI)** — 전체 인터페이스에 중국어 간체 번역을 추가했습니다. 터널 목록, 기록, 도구(DNS 누출 테스트/라우팅 테이블), 로그, 설정, 업데이트, 자동화 편집기 등 총 199개 문자열을 모두 커버합니다. 첫 실행 시 시스템 언어를 자동으로 따르며(`zh-*` 로케일 자동 감지), 설정 → 일반 → 언어에서 수동으로 전환하고 영구 저장할 수도 있습니다.
+- **트레이 메뉴 토글 (Tray toggles)** — 시스템 트레이의 각 터널이 독립적으로 클릭 가능한 토글이 되었습니다. 체크하면 연결, 체크 해제하면 연결 끊김. 연결 상태 이모지(🟢 연결됨/🟡 연결 중/○ 연결 안 됨)는 라벨 옆에 유지됩니다. 수동으로 끈 터널은 다시 연결하거나 WireGuide를 재시작할 때까지 자동화 규칙 면제(manual-off)가 유지됩니다.
 
-#### 前端 A11y 無障礙重構
+#### 프런트엔드 A11y 접근성 리팩터링
 
-> 範圍：所有平台（Windows/macOS/Linux）的 Svelte 前端，不限於 Windows。
+> 영향 범위: 전 플랫폼(Windows/macOS/Linux) Svelte 프런트엔드, Windows에 한정되지 않음.
 
-- 所有 modal 覆蓋層的底色（scrim）移除 `role="button"` 與 `tabindex="0"`，還原為純遮罩，螢幕閱讀器不再把全螢幕背景視為可互動按鈕。
-- 所有對話框使用 `tabindex="-1"`，並維持標準的 `role="dialog" aria-modal="true"`，符合 WCAG 對話框語意。
-- ESC 關閉統一：原本沒有的對話框（匯入結果、歷史、更新通知、自動化編輯器）改在元件最上層掛載 `<svelte:window on:keydown>`（處理器會檢查對話框狀態；Svelte 不允許在 `{#if}` 內掛載）；其餘沿用 App.svelte 的全域捕捉處理器 — 避免多對話框 ESC 衝突，也不破壞 CodeMirror 的按鍵捕捉。
-- `Settings.svelte`：`<nav role="tablist">` 改為一般 `<div>`，消除頁籤語意警告；分隔條維持 `role="separator"`，但加上 `tabindex="0"` 與真正的鍵盤操作（方向鍵調整大小、Enter/Space 重設）。
-- `frontend/vite.config.js`：svelte 外掛的 `onwarn` 過濾靜態誤報（`a11y_click_events_have_key_events`、`a11y_no_static_element_interactions`、`a11y_no_noninteractive_tabindex`、`a11y_no_noninteractive_element_interactions`）；生產建置警告歸零，無邏輯變更。
-- 涉及檔案：`src/App.svelte`、`src/lib/History.svelte`、`src/lib/ConflictWarning.svelte`、`src/lib/TunnelDetail.svelte`、`src/lib/UpdateNotice.svelte`、`src/lib/Settings.svelte`、`src/lib/AutomationEditor.svelte`
+- 모든 모달 오버레이에서 스크림의 `role="button"`과 `tabindex="0"`을 제거했습니다. 스크림이 순수한 마스크 의미로 돌아가, 화면 읽기 프로그램이 전체 화면 배경을 상호작용 가능한 버튼으로 인식하지 않게 됩니다.
+- 모든 dialog에 `tabindex="-1"`을 통일하고 표준 `role="dialog" aria-modal="true"`를 유지하여 WCAG 팝업 의미론 규범을 따릅니다.
+- ESC 닫기 통합 처리: 누락되어 있던 팝업(가져오기 결과, 기록, 업데이트 알림, 자동화 편집기)에 **컴포넌트 최상위**에서 `<svelte:window on:keydown>`을 연결했습니다(handler 내에서 팝업 상태를 조건으로 판단, Svelte는 `{#if}` 내부에 마운트할 수 없음). 나머지 팝업은 App.svelte의 전역 capture 핸들러를 재사용하여, 다중 팝업 ESC 충돌을 피하면서 CodeMirror의 키 캡처를 깨뜨리지 않습니다.
+- `Settings.svelte`: `<nav role="tablist">`를 일반 `<div>`로 변경하여 탭 의미론 불일치 경고를 제거했습니다. 분할 막대 `pane-resizer`는 `role="separator"`를 유지하면서 `tabindex="0"`과 실제 키보드 조작(방향 키로 너비 조정, Enter/Space로 초기화)을 추가했습니다.
+- `frontend/vite.config.js`의 svelte 플러그인 `onwarn`이 정적 오탐을 필터링합니다(`a11y_click_events_have_key_events`, `a11y_no_static_element_interactions`, `a11y_no_noninteractive_tabindex`, `a11y_no_noninteractive_element_interactions`). 프로덕션 빌드 경고가 0이 되며 비즈니스 로직 변경은 없습니다.
+- 관련 파일: `src/App.svelte`, `src/lib/History.svelte`, `src/lib/ConflictWarning.svelte`, `src/lib/TunnelDetail.svelte`, `src/lib/UpdateNotice.svelte`, `src/lib/Settings.svelte`, `src/lib/AutomationEditor.svelte`
 
-#### Windows 背景 helper：網路出口路由邏輯
+#### Windows 백그라운드 helper: 네트워크 출구 라우팅 로직 조정
 
-> 範圍：僅 Windows 的 Go helper 程式碼；其他作業系統不受影響。
+> 영향 범위: Windows 플랫폼 Go helper 코드만, 다른 플랫폼은 변경 없음.
 
-- helper 啟動時會捕捉主要上游物理介面卡的 LUID，記錄系統初始的預設出口物理介面；此 LUID 是開機時的快照，不會在執行期間的網路切換時自動更新。
-- 修正網路介面篩選邏輯：排除 TUN/隧道/回環虛擬介面卡，僅物理介面卡可作為上游候選；不再把 TUN 虛擬介面卡當作物理介面卡綁定/鎖定。
-- WireGuard UDP 出口完全交由 Windows 路由表 + 各介面卡的 InterfaceMetric 躍點數決定；軟體不再強制綁定固定物理介面卡。
-- 加入分流（`full_tunnel=false`）邏輯約束：Peer Endpoint IP 必須明確包含在 `AllowedIPs` 中，避免握手 UDP 封包被路由丟棄（`no-handshake`）。
-- 日誌：`network primary upstream interface initial luid` 輸出主要物理介面卡 LUID 供除錯；日誌中的 `tunnel connected` 僅代表 TUN 介面卡就緒，不代表遠端 peer 握手成功。
-- 除錯提示：在 Windows 上請優先使用 `Find-NetRoute -RemoteIPAddress <peer-ip>` 判斷目標 IP 的實際出口介面卡；PowerShell 的 `Get-NetAdapter.Luid` 是結構體，無法直接與 Go 的 uint64 輸出比較。
+- helper 시작 단계에서 주 업스트림 물리 네트워크 카드의 LUID를 수집하여 시스템 초기 기본 출구 물리 인터페이스를 기록합니다. 이 LUID는 시작 시점의 스냅샷으로, 런타임 중 네트워크 전환 시 캐시가 자동으로 갱신되지 않습니다.
+- 네트워크 인터페이스 필터링 로직 수정: TUN/터널/루프백 가상 네트워크 카드를 필터링하고 물리 네트워크 카드만 업스트림 후보로 선택합니다. TUN 가상 네트워크 카드 자체에는 물리 네트워크 카드 바인딩 잠금을 적용하지 않습니다.
+- WireGuard UDP 패킷의 출발은 전적으로 Windows 라우팅 테이블 + 네트워크 카드 InterfaceMetric 홉 수로 선택됩니다. 소프트웨어가 더 이상 특정 물리 네트워크 카드에 강제로 바인딩하지 않습니다.
+- 분할 터널 모드(`full_tunnel=false`) 논리 제약 추가: Peer Endpoint IP를 `AllowedIPs`에 명시적으로 추가해야 합니다. 핸드셰이크 UDP 패킷이 라우팅에서 버려져 `no-handshake`가 발생하는 것을 방지합니다.
+- 로그 강화: `network primary upstream interface initial luid`가 주 물리 네트워크 카드 LUID를 출력하여 문제 해결에 사용합니다. 로그의 `tunnel connected`는 TUN 어댑터가 준비되었음을 의미할 뿐, 원격 Peer 핸드셰이크 성공과 동일하지 않다는 점을 명확히 했습니다.
+- 문제 해결 도구 팁: Windows에서는 `Find-NetRoute -RemoteIPAddress <peer-ip>`를 우선 사용하여 대상 IP의 실제 출구 네트워크 카드를 확인하세요. PowerShell `Get-NetAdapter.Luid`는 구조체이므로 Go가 출력하는 uint64 값과 직접 등가 비교할 수 없습니다.
 
-### 🛠 建置與專案
+### 🛠 빌드 및 엔지니어링
 
-大部分是 Windows 建置行為；跨平台部分已標註。
+주로 Windows 빌드 동작이며, 크로스 플랫폼 부분은 별도로 표기했습니다.
 
-1. **Wails3 Windows 圖示建置行為**（僅 Windows）— `task build` 完整建置會自動執行 `wails3 generate icons`，讀取 `build/appicon.png` 並覆寫 `windows/icon.ico`；手動編輯的 `windows/icon.ico` 會被完整建置覆寫。`windows/icon.ico` 是最終嵌入 exe 的圖示；`build/appicon.png` 只是來源素材；`task windows:build` 偵錯建置會略過圖示產生、保留現有 `windows/icon.ico`。exe / 視窗標題列 / 工作列圖示皆重用 exe 內的 ico 資源；系統匣圖示需要另外的 Go `embed` 資源。
-2. **Windows 版本資訊管理**（僅 Windows）— exe 檔案詳細資料來自 `windows/info.json`；`FileVersion` 必須是 4 段數字 `major.minor.patch.build`。介面顯示的版本由 Go 常數（`internal/update/checker.go`）維護，需與 `info.json` 手動保持同步；日後可透過 ldflags 建置時注入達成單一版本來源。
-3. **Windows UAC / 系統管理員權限**（僅 Windows）— 目前架構：GUI 啟動 helper 子程序；helper 操作 TUN 介面卡並修改路由需要管理員權限，而提升子程序權限會觸發 UAC 提示 — Windows 的安全性無法完全靜默繞過。短期：`windows/wails.exe.manifest` 加入 `requireAdministrator`，將 UAC 提示移至雙擊 exe 啟動時（仍需使用者確認）；長期：將 helper 重構為 Windows 系統服務（LocalSystem、背景執行），GUI 以一般使用者身分透過 IPC 通訊，完全消除 UAC 提示。
+1. **Wails3 Windows 아이콘 빌드 동작**(Windows 전용) — `task build` 전체 빌드는 자동으로 `wails3 generate icons`를 실행하여 `build/appicon.png`를 읽고 `windows/icon.ico`를 덮어씁니다. 수동으로 수정한 `windows/icon.ico`는 전체 빌드 시 덮어써집니다. `windows/icon.ico`가 최종적으로 exe에 임베드되는 아이콘이며, `build/appicon.png`는 소스 자산일 뿐입니다. `task windows:build` 디버그 빌드는 아이콘 생성을 건너뛰고 기존 `windows/icon.ico`를 유지합니다. exe / 창 제목 표시줄 / 작업 표시줄 아이콘은 exe 내부의 ico 리소스를 재사용하며, 시스템 트레이 아이콘은 Go `embed` 독립 리소스가 필요합니다.
+2. **Windows 버전 정보 관리**(Windows 전용) — exe 파일 상세 정보는 `windows/info.json`이 제어하며, `FileVersion`은 4자리 숫자 형식 `major.minor.patch.build`이어야 합니다. UI에 표시되는 버전은 Go 상수로 유지되며(`internal/update/checker.go`), `info.json`과 수동으로 동기화해야 합니다. 향후 ldflags 컴파일 주입을 통해 단일 버전 소스로 통합할 수 있습니다.
+3. **Windows UAC / 관리자 권한 정리**(Windows 전용) — 현재 아키텍처는 GUI 프로세스가 helper 하위 프로세스를 실행합니다. helper가 TUN 네트워크 카드를 조작하고 라우팅을 수정하려면 관리자 권한이 필요하며, 하위 프로세스 권한 상승은 UAC 팝업을 트리거합니다. Windows 보안 메커니즘을 완전히 조용히 우회할 수는 없습니다. 단기 방안: `windows/wails.exe.manifest`에 `requireAdministrator`를 추가하여 UAC 팝업을 exe 더블 클릭 시작 시점으로 옮깁니다(여전히 사용자 확인 필요). 장기 권장: helper를 Windows 시스템 서비스로 재구성(LocalSystem 권한으로 백그라운드 실행)하고, GUI는 일반 사용자 권한으로 IPC를 통해 통신하여 UAC 팝업을 완전히 제거합니다.
 
-### 🐛 調查
+### 🐛 문제 조사 기록
 
-調查筆記，無程式碼變更，供開發者參考。
+조사 기록이며 코드 변경이 없습니다. 개발 참고용입니다.
 
-- 症狀：helper 記錄 `tunnel connected`，但 GUI 顯示 `no handshake`。
-  - 根本原因：建立 TUN 裝置 ≠ 與遠端 peer 完成 WireGuard 加密握手；請讀取 wg 核心的 `latest handshake` 狀態來判斷真實連線狀況。
-  - 分流的陷阱：Peer IP 不在 `AllowedIPs` 中 → 握手 UDP 封包被路由丟棄。
-  - 其他可能：Windows 對外防火牆阻擋 WireGuard UDP、端點網域 DNS 解析失敗。
-- 監聽於 `0.0.0.0` 的本機代理：代理程序的流量是獨立的，不會自動流入 WireGuard 隧道；流量方向由 Windows 路由表與隧道的 `AllowedIPs` 共同決定。
+- 증상: helper 로그에 `tunnel connected`가 출력되지만 GUI에 `no handshake`가 표시됩니다.
+  - 근본 원인 구분: TUN 장치 생성 완료 ≠ WireGuard가 원격 Peer와 암호화 핸드셰이크를 완료함. wg 커널의 `latest handshake` 상태를 읽어 실제 연결성을 판단해야 합니다.
+  - 분할 터널 모드에서 자주 겪는 함정: Peer IP가 `AllowedIPs`에 없어 핸드셰이크 UDP 패킷이 라우팅에서 버려집니다.
+  - 기타 가능성: Windows 아웃바운드 방화벽이 WireGuard UDP를 차단, endpoint 도메인 DNS 해석 오류.
+- 로컬 프록시가 `0.0.0.0`을 수신: 프록시 프로세스 트래픽은 독립적이며 WireGuard 터널로 자동 유입되지 않습니다. 트래픽 경로는 Windows 라우팅 테이블과 터널의 `AllowedIPs`가 함께 결정합니다.
 
-### 📝 附註
+### 📝 참고
 
-1. **變更範圍**
-   - Svelte 前端 A11y 程式碼：**適用於所有平台（Windows / Linux / macOS）** — ESC 處理與無障礙語意會影響所有桌面平台。
-   - helper 網路出口路由：**僅 Windows 的 Go 程式碼變更**；其他作業系統不受影響。
-   - 建置、manifest、ico、info.json、UAC：**僅 Windows**。
-2. 前端 A11y 變更與 helper 的背景網路邏輯完全解耦，不影響隧道建立、路由或自動化 Wi-Fi 規則。
-3. helper 記錄的上游 LUID 只是開機時的快照，在 Wi-Fi / 有線網路切換時不會自動更新。
+1. **변경 영향 범위 구분**
+   - Svelte 프런트엔드 A11y 코드: **전 플랫폼 적용(Windows / Linux / macOS)**. 팝업 ESC, 접근성 의미론 변경은 모든 데스크톱 플랫폼에 적용됩니다.
+   - helper 네트워크 출구 라우팅 로직: **Windows 플랫폼 Go 코드만 수정**, 다른 OS는 영향 없음.
+   - 빌드, manifest, ico, info.json, UAC 관련: **Windows 플랫폼만 해당**.
+2. 프런트엔드 A11y 수정과 helper 백그라운드 네트워크 로직은 완전히 분리되어 있으며, 터널 생성, 라우팅, 자동화 Wi-Fi 규칙 실행에 영향을 주지 않습니다.
+3. helper가 기록하는 업스트림 LUID는 시작 순간의 스냅샷일 뿐입니다. Wi-Fi/유선 네트워크 전환 시 이 값이 자동으로 갱신되지 않습니다.
 
 ## [0.5.1] - 2026-08-11
 
