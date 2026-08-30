@@ -4,7 +4,7 @@
 // built for (e.g. FileDescription "WireGuide Plus (amd64) - ...", InternalName
 // "wireguideplus-amd64.exe").
 //
-//	genverinfo -arch amd64 -version 1.1.0 \
+//	genverinfo -arch amd64 -version 1.1.1 \
 //	          -tmpl windows/versioninfo.json.tmpl \
 //	          -out  windows/versioninfo.gen.json
 //
@@ -35,7 +35,7 @@ type info struct {
 
 func main() {
 	arch := flag.String("arch", "amd64", "GOARCH of the build (386/amd64/arm64)")
-	version := flag.String("version", "1.1.0", "product version as x.y.z")
+	version := flag.String("version", "1.1.1", "product version as x.y.z")
 	tmplPath := flag.String("tmpl", "windows/versioninfo.json.tmpl", "path to the template, relative to CWD")
 	outPath := flag.String("out", "windows/versioninfo.gen.json", "path to write the rendered JSON")
 	flag.Parse()

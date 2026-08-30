@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.1] - 2026-08-30
+
+本版本修復 Windows 系統匣通知氣泡「開啟主視窗」按鈕在系統高負載下偶發導致 GUI 卡死的問題。
+
+### 🐛 錯誤修正
+
+- **修復通知氣泡「開啟主視窗」偶發卡死** — 當系統 CPU 爭用激烈（例如 Windows 維護程序佔滿核心）或 WebView2 回應延遲時，點擊系統匣通知氣泡的「Open Window」按鈕會同步阻塞等待 UI 執行緒，整個 GUI 看似凍結（VPN 隧道不受影響）。`showDock`（`internal/gui/dock_other.go`）改為經 `application.InvokeAsync` 在 Wails UI 執行緒非同步執行：呼叫端立即返回，視窗顯示/聚焦皆在 UI 執行緒內聯完成，不再跨執行緒等待；同時加 recover 防護，意外 panic 不會打斷主執行緒回呼鏈。
+
+### 🛠 內部
+
+- 版本提升至 **1.1.1**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.1.0`）、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh`）、MSIX、Linux nfpm、`tools/genverinfo` 全部同步。
+
 ## [1.1.0] - 2026-08-28
 
 本版本專注於可辨識度、代理（Proxy）的穩健性與啟動時的自動化規則評估：系統匣狀態改用高對比文字符號、代理提供三種明確模式並附連線測試、無效的代理 URL 不再導致更新檢查失敗、啟動時會在連線前先評估自動化規則。

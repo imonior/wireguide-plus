@@ -25,7 +25,7 @@ import (
 const (
 	githubRepo     = "imonior/wireguide-plus"
 	apiEndpoint    = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
-	currentVersion = "1.1.0"
+	currentVersion = "1.1.1"
 
 	// GitHubReleasesURL is the human-facing releases page.
 	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"

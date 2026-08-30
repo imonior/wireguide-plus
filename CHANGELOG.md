@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.1] - 2026-08-30
+
+本次版本修复 Windows 托盘通知气泡「打开主界面」按钮在系统高负载下偶发导致 GUI 卡死的问题。
+
+### 🐛 修复（Bug Fixes）
+
+- **修复通知气泡「打开主界面」偶发卡死** — 当系统 CPU 争用激烈（例如 Windows 维护进程占满核心）或 WebView2 响应延迟时，点击托盘通知气泡的「Open Window」按钮会同步阻塞等待 UI 线程，整个 GUI 看似冻结（VPN 隧道不受影响）。`showDock`（`internal/gui/dock_other.go`）改为经 `application.InvokeAsync` 在 Wails UI 线程异步执行：调用方立即返回，窗口显示/聚焦均在 UI 线程内联完成，不再跨线程等待；同时加 recover 防护，意外 panic 不会打断主线程回调链。
+
+### 🛠 内部（Internal）
+
+- 版本号更新至 **1.1.1**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.1.0`）、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh`）、MSIX、Linux nfpm、`tools/genverinfo` 全部同步。
+
 ## [1.1.0] - 2026-08-28
 
 本次版本聚焦可辨识性、代理健壮性与启动自动化规则：托盘状态改用高辨识图标、代理三模式语义明确并新增连通性测试、无效代理 URL 不再破坏更新检查、启动时先按自动化规则判断再连接。

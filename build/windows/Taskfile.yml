@@ -166,7 +166,7 @@ tasks:
       tools/genverinfo, so Properties -> Details always shows the platform.
     dir: build
     cmds:
-      - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION | default "1.1.0"}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
+      - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION | default "1.1.1"}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
       - cmd: goversioninfo -64=false -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_386.syso windows/versioninfo.gen.json
         when:
           - '{{.ARCH}} == "386"'

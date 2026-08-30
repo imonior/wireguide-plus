@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.1.1] - 2026-08-30
+
+This release fixes an intermittent GUI freeze when clicking "Open Window" on the Windows tray notification bubble under high system load.
+
+### 🐛 Bug Fixes
+
+- **Notification bubble "Open Window" no longer freezes the GUI intermittently** — under heavy CPU contention (e.g. a Windows maintenance process pegging a core) or WebView2 latency, clicking "Open Window" on the tray notification bubble synchronously waited on the UI thread, making the whole GUI appear frozen (the VPN tunnel kept working). `showDock` (`internal/gui/dock_other.go`) now runs asynchronously via `application.InvokeAsync` on the Wails UI thread: the caller returns immediately, window show/focus execute inline on the UI thread, and no cross-thread wait remains; a recover guard also prevents an unexpected panic from breaking the main-thread callback chain.
+
+### 🛠 Internal
+
+- Version bumped to **1.1.1**: `internal/update/checker.go` main version, `build/config.yml`, `windows/info.json` (`1.1.1.0`), `windows/wails.exe.manifest`, NSIS (`wails_tools.nsh`), MSIX, Linux nfpm and `tools/genverinfo` all in sync.
+
 ## [1.1.0] - 2026-08-28
 
 This release focuses on distinguishability, proxy robustness and startup automation rules: tray state uses high-contrast glyphs, the proxy has three clearly defined modes with a connectivity test, invalid proxy URLs no longer break update checks, and startup now evaluates automation rules before connecting.

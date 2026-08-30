@@ -37,7 +37,7 @@
 !define INFO_PROJECTNAME    "wireguideplus"
 ####
 ## !define INFO_PROJECTNAME    "my-project" # Default "wireguide"
-## !define INFO_PRODUCTVERSION "1.1.0"     # Default "0.1.0"
+## !define INFO_PRODUCTVERSION "1.1.1"     # Default "0.1.0"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ####

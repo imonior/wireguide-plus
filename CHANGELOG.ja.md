@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md)
 
+## [1.1.1] - 2026-08-30
+
+本リリースは、システム高負荷時に Windows トレイ通知バブルの「メインウィンドウを開く」ボタンで発生する断続的な GUI フリーズを修正します。
+
+### 🐛 バグ修正
+
+- **通知バブルの「メインウィンドウを開く」が GUI を断続的にフリーズさせなくなりました** — CPU 競合が激しい状況（例: Windows メンテナンスプロセスがコアを占有）や WebView2 の遅延時、トレイ通知バブルの「Open Window」ボタンをクリックすると UI スレッドへの同期待ちが発生し、GUI 全体がフリーズしているように見えました（VPN トンネルは動作継続）。`showDock`（`internal/gui/dock_other.go`）は `application.InvokeAsync` 経由で Wails UI スレッド上で非同期実行されるようになり、呼び出し元は即座に戻り、ウィンドウの表示/フォーカスは UI スレッド内でインライン実行されるため、スレッド間待機は残りません。また、予期しない panic がメインスレッドのコールバックチェーンを壊さないよう recover ガードも追加しました。
+
+### 🛠 内部
+
+- バージョンを **1.1.1** に更新: `internal/update/checker.go` のメインバージョン、`build/config.yml`、`windows/info.json`（`1.1.1.0`）、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh`）、MSIX、Linux nfpm、`tools/genverinfo` をすべて同期。
+
 ## [1.1.0] - 2026-08-28
 
 本リリースは識別性・プロキシの堅牢性・起動時の自動化ルール評価に注力しています。トレイの接続状態が高コントラストの文字グリフになり、プロキシは明確な3モード＋接続テスト付きになり、不正なプロキシ URL でも更新確認が失敗しなくなり、起動時は接続前に自動化ルールが評価されるようになりました。
