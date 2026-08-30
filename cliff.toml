@@ -97,6 +97,12 @@ commit_parsers = [
     # Skip noise.
     { message = '^Merge ', skip = true },
     { message = '^v\d', skip = true },  # version-bump commits restate the release
+    # GitHub's "Add files via upload" web-upload commits have nothing to do
+    # with the product and pollute the Features group (matched by '^Add ').
+    { message = '^Add files via upload', skip = true },
+    # 'chore: bump version to X.Y.Z' restates the release itself; don't
+    # surface it in the changelog body.
+    { message = '^chore:\s*bump version', skip = true },
 
     # Breaking changes / manual upgrade steps — surfaced first (0| sorts
     # ahead of the platform groups below).

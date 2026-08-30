@@ -1,0 +1,42 @@
+name: Refresh release notes
+
+# One-off utility: regenerate the release body of an already-published tag
+# using git-cliff (the same generator release.yml uses) and overwrite it via
+# `gh release edit`. Mainly used when a noise commit (e.g. GitHub's
+# "Add files via upload") slipped into a published changelog after a cliff.toml
+# parser change. Run manually via Actions -> "Refresh release notes".
+#
+#   tag input: the tag whose body should be regenerated (default v1.1.1).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag whose release body should be regenerated (e.g. v1.1.1)'
+        required: true
+        default: 'v1.1.1'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git-cliff needs full history + tags to compute the commit range
+          # since the previous release.
+          fetch-depth: 0
+
+      - name: Regenerate release notes for tag
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ inputs.tag }} --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
+      - name: Overwrite release body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ inputs.tag }}" --notes-file RELEASE_NOTES.md
