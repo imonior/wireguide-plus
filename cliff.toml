@@ -13,6 +13,11 @@
 # style (Windows:, macOS:, CI:, Add , Fix , Polish , etc.) and also fall
 # back to standard Conventional Commits (feat:, fix:, etc.) so a future
 # commit can use either style and still land in the right group.
+#
+# Commits prefixed `BREAKING:` / `Upgrade:` land in the "0|⚠️ Upgrade
+# notes" group. The `0|` prefix sorts them first in the rendered body (see
+# the group_by note below), so breaking changes / manual upgrade steps are
+# always the first thing after the Downloads section.
 
 [changelog]
 header = ""
@@ -87,6 +92,10 @@ commit_parsers = [
     # Skip noise.
     { message = '^Merge ', skip = true },
     { message = '^v\d', skip = true },  # version-bump commits restate the release
+
+    # Breaking changes / manual upgrade steps — surfaced first (0| sorts
+    # ahead of the platform groups below).
+    { message = '^(BREAKING|Breaking|UPGRADE|Upgrade)[\s:]', group = "0|⚠️ Upgrade notes" },
 
     # Project's existing prefix convention.
     { message = '^Windows[\s:]', group = "1|Windows" },
