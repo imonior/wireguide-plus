@@ -30,6 +30,31 @@
         return $t('tools.dns_status_timeout');
     }
   }
+
+  // Transport fingerprint from the backend probe: which encrypted channel
+  // (if any) this resolver offers besides/besides cleartext UDP 53.
+  function encryptionLabel(enc) {
+    switch (enc) {
+      case 'plain':
+        return $t('tools.dns_enc_plain');
+      case 'dot':
+        return $t('tools.dns_enc_dot');
+      case 'doh':
+        return $t('tools.dns_enc_doh');
+      case 'plain+dot':
+        return $t('tools.dns_enc_plain_dot');
+      case 'plain+doh':
+        return $t('tools.dns_enc_plain_doh');
+      default:
+        return $t('tools.dns_enc_unknown');
+    }
+  }
+
+  // "In use" = the resolver actually answered the probe query, i.e. it is
+  // the DNS server traffic really went out through — the leak signal.
+  function isInUse(server) {
+    return server.status === 'leak' || (server.status === 'vpn' && server.responds);
+  }
 </script>
 
 <div class="dns-test">
@@ -60,14 +85,39 @@
         <div class="section-label">{$t('tools.dns_servers_detected')}</div>
         <div class="server-list">
           {#each result.dns_servers || [] as server}
-            <div class="server" class:vpn={server.status === 'vpn'} class:leak={server.status === 'leak'} class:timeout={server.status === 'timeout'}>
-              <span class="server-ip">{server.ip}</span>
+            <div class="server" class:vpn={server.status === 'vpn'} class:leak={server.status === 'leak'} class:timeout={server.status === 'timeout'} class:inuse={isInUse(server)}>
+              <span class="server-ip">
+                {server.ip}
+                {#if isInUse(server)}
+                  <span class="server-current">{$t('tools.dns_current_dns')}</span>
+                {/if}
+              </span>
               <span class="server-host">{server.hostname || ''}</span>
+              <span class="server-enc">
+                <span class="enc-chip enc-{server.encryption || 'none'}">{encryptionLabel(server.encryption)}</span>
+              </span>
               <span class="server-latency">{server.latency_ms > 0 ? `${server.latency_ms}ms` : '—'}</span>
               <span class="server-badge">{statusLabel(server)}</span>
             </div>
           {/each}
         </div>
+        <p class="server-note">{$t('tools.dns_server_note')}</p>
+      </div>
+
+      <div class="dns-explainer">
+        <h4 class="explainer-title">{$t('tools.dns_how_to_read')}</h4>
+        {#if result.leaked}
+          <p>{$t('tools.dns_explain_leaked')}</p>
+        {:else}
+          <p>{$t('tools.dns_explain_safe')}</p>
+        {/if}
+        <h4 class="explainer-title">{$t('tools.dns_prevent_leaks_title')}</h4>
+        <ul class="explainer-list">
+          <li>{$t('tools.dns_prevent_1')}</li>
+          <li>{$t('tools.dns_prevent_2')}</li>
+          <li>{$t('tools.dns_prevent_3')}</li>
+          <li>{$t('tools.dns_prevent_4')}</li>
+        </ul>
       </div>
     {/if}
   </div>
@@ -197,5 +247,63 @@
     border-radius: var(--radius-sm);
     color: var(--error-text);
     font: var(--text-body);
+  }
+  .server-current {
+    display: inline-block;
+    margin-left: var(--space-1);
+    padding: 0 4px;
+    border-radius: var(--radius-xs);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+    font: 9px/1.6 var(--font-sans);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .server-enc { flex-shrink: 0; }
+  .enc-chip {
+    display: inline-block;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-xs);
+    font: 10px/1.6 var(--font-sans);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .enc-plain, .enc-plain\+dot, .enc-plain\+doh { background: color-mix(in srgb, var(--yellow) 16%, transparent); color: var(--yellow); }
+  .enc-dot, .enc-doh { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+  .enc-none { background: var(--bg-hover); color: var(--text-tertiary); }
+  .server-note {
+    margin: var(--space-2) var(--space-1) 0;
+    font: var(--text-footnote);
+    color: var(--text-tertiary);
+    line-height: 1.5;
+  }
+  .dns-explainer {
+    margin-top: var(--space-4);
+    padding: var(--space-3);
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font: var(--text-body);
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .explainer-title {
+    margin: 0 0 var(--space-1);
+    font: var(--text-footnote);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-primary);
+  }
+  .explainer-title:not(:first-child) { margin-top: var(--space-3); }
+  .explainer-list {
+    margin: var(--space-1) 0 0;
+    padding-left: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 </style>

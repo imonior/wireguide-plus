@@ -71,6 +71,7 @@ export function startLogListener() {
         id: s.version,
         time: e.time,
         level: (e.level || 'info').toLowerCase(),
+        category: e.category || 'app',
         source: e.source || 'gui',
         message: e.message || '',
       };

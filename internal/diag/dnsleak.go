@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -26,12 +27,13 @@ type DNSLeakResult struct {
 
 // DNSServer represents a detected DNS resolver.
 type DNSServer struct {
-	IP       string `json:"ip"`
-	Hostname string `json:"hostname"`
-	IsVPN    bool   `json:"is_vpn"`    // true if this is the expected VPN DNS
-	Responds bool   `json:"responds"`  // did the probe get a DNS reply (NXDOMAIN)?
-	LatencyMs int   `json:"latency_ms"` // probe round-trip; 0 if it timed out
-	Status   string `json:"status"`    // "vpn" | "ok" | "leak" | "timeout"
+	IP         string `json:"ip"`
+	Hostname   string `json:"hostname"`
+	IsVPN      bool   `json:"is_vpn"`     // true if this is the expected VPN DNS
+	Responds   bool   `json:"responds"`   // did the probe get a DNS reply (NXDOMAIN)?
+	LatencyMs  int    `json:"latency_ms"` // probe round-trip; 0 if it timed out
+	Status     string `json:"status"`     // "vpn" | "ok" | "leak" | "timeout"
+	Encryption string `json:"encryption"` // "plain" | "dot" | "doh" | "plain+dot" | "plain+doh" | "none"
 }
 
 // RunDNSLeakTest is a context-less convenience wrapper for callers that
@@ -80,10 +82,11 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 	}
 
 	type probeResult struct {
-		idx      int
-		hostname string
-		responds bool
-		latency  time.Duration
+		idx        int
+		hostname   string
+		responds   bool
+		latency    time.Duration
+		encryption string
 	}
 
 	// Pre-fill DNSServers so each slot has at least the IP and IsVPN
@@ -118,7 +121,8 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 			probeStart := time.Now()
 			responds := testDNSServerCtx(lookupCtx, dnsIP, testDomain)
 			latency := time.Since(probeStart)
-			probes <- probeResult{idx: idx, hostname: hn, responds: responds, latency: latency}
+			enc := probeEncryption(lookupCtx, dnsIP, responds)
+			probes <- probeResult{idx: idx, hostname: hn, responds: responds, latency: latency, encryption: enc}
 		}(i, dns)
 	}
 
@@ -134,6 +138,7 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 			entry.Hostname = p.hostname
 			entry.Responds = p.responds
 			entry.LatencyMs = int(p.latency.Milliseconds())
+			entry.Encryption = p.encryption
 			switch {
 			case entry.IsVPN:
 				entry.Status = "vpn"
@@ -160,6 +165,94 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 
 	result.Leaked = leaked
 	return result
+}
+
+// probeEncryption fingerprints the resolver's transport layer so the UI can
+// tell the user whether their DNS traffic is (likely) encrypted:
+//
+//	"plain"     — UDP 53 answered; traffic goes out in cleartext
+//	"dot"       — TCP 853 spoke TLS (DoT) but plain 53 did not answer
+//	"doh"       — TCP 443 is open (DoH candidate) but 853/plain did not work
+//	"plain+dot" — both UDP 53 and TLS on 853 answered
+//	"plain+doh" — UDP 53 answered and 443 is open (DoH candidate)
+//	"none"      — nothing reachable
+//
+// The probes are best-effort with short per-port budgets so a firewall that
+// silently drops TCP SYN does not stall the test: a "none"/"timeout" result
+// simply means we could not establish a transport, not proof the port is
+// closed. TCP-443-open is only a DoH *candidate* — any HTTPS service shares
+// that port — so the UI words it as "possibly DoH".
+func probeEncryption(ctx context.Context, server string, respondsUDP bool) string {
+	host := server
+	if h, _, err := net.SplitHostPort(server); err == nil {
+		host = h
+	}
+	host = strings.TrimSpace(host)
+	if host == "" || net.ParseIP(host) == nil {
+		return "none"
+	}
+
+	type portResult struct {
+		port string
+		dot  bool
+	}
+	results := make(chan portResult, 2)
+
+	// DoT: TCP 853 + TLS handshake. A ServerHello — even one that fails
+	// certificate validation (we skip verification — we only care that a
+	// TLS service actually answered on 853) — proves the port speaks TLS.
+	results <- func() portResult {
+		d := net.Dialer{Timeout: 1500 * time.Millisecond}
+		conn, err := tls.DialWithDialer(&d, "tcp", net.JoinHostPort(host, "853"), &tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+		})
+		if err != nil {
+			return portResult{port: "853"}
+		}
+		conn.Close()
+		return portResult{port: "853", dot: true}
+	}()
+
+	// DoH: TCP 443 reachable.
+	results <- func() portResult {
+		d := net.Dialer{Timeout: 1500 * time.Millisecond}
+		conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "443"))
+		if err != nil {
+			return portResult{port: "443"}
+		}
+		conn.Close()
+		return portResult{port: "443", dot: true}
+	}()
+
+	dot := false
+	doh := false
+	for range 2 {
+		select {
+		case r := <-results:
+			if r.port == "853" {
+				dot = r.dot
+			} else if r.port == "443" {
+				doh = r.dot
+			}
+		case <-ctx.Done():
+			// ctx expired mid-probe; whatever we have is the best answer
+		}
+	}
+
+	switch {
+	case respondsUDP && dot:
+		return "plain+dot"
+	case respondsUDP && doh:
+		return "plain+doh"
+	case respondsUDP:
+		return "plain"
+	case dot:
+		return "dot"
+	case doh:
+		return "doh"
+	}
+	return "none"
 }
 
 // testDNSServerCtx is testDNSServer with caller-supplied context. The

@@ -151,6 +151,34 @@ export class DNSServer {
              */
             this["is_vpn"] = false;
         }
+        if (!("responds" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["responds"] = false;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+        if (!("encryption" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["encryption"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -248,6 +276,13 @@ export class RouteEntry {
              * @type {string}
              */
             this["flags"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["is_vpn"] = undefined;
         }
 
         Object.assign(this, $$source);

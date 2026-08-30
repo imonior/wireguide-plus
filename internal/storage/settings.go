@@ -31,6 +31,10 @@ type Settings struct {
 	// 0 means the default (7). Files older than this are removed at
 	// startup and whenever settings are saved.
 	LogRetentionDays int `json:"log_retention_days,omitempty"`
+	// HistoryRetentionDays is how many days of connection history to keep.
+	// 0 means the default (7). Records older than this are pruned whenever
+	// the history is loaded for display.
+	HistoryRetentionDays int `json:"history_retention_days,omitempty"`
 	// EnableWgScripts controls whether PreUp/PostUp/PreDown/PostDown
 	// scripts embedded in tunnel configs are executed. OFF by default:
 	// scripts run inside the privileged helper (root/admin) and arbitrary
@@ -196,8 +200,9 @@ func DefaultSettings() *Settings {
 		DNSProtection:   false,
 		HealthCheck:     false,
 		PinInterface:    false, // off by default — enable for dual-network setups
-		LogLevel:        "info",
-		LogRetentionDays: logging.DefaultRetentionDays,
+		LogLevel:            "info",
+		LogRetentionDays:     logging.DefaultRetentionDays,
+		HistoryRetentionDays: DefaultHistoryRetentionDays,
 		AutoUpdateCheck: &on,
 		ListSort:        "name_asc",
 		ListActiveOnTop: true,

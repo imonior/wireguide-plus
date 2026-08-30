@@ -18,7 +18,14 @@
     loading = false;
   }
 
-  function isVPN(iface) {
+  // Prefer the backend's authoritative per-route flag (it matches the
+  // route's interface against the actually-active tunnel interface names),
+  // then fall back to the old name heuristic for platforms where the
+  // backend can't tell (e.g. non-Windows builds).
+  function isVPN(route) {
+    if (route.is_vpn === true) return true;
+    if (route.is_vpn === false) return false;
+    const iface = route.interface || '';
     return iface.startsWith('utun') || iface.startsWith('wg') || iface.startsWith('tun');
   }
 
@@ -54,13 +61,15 @@
           <span>{$t('tools.route_header_iface')}</span>
         </div>
         {#each routes as route}
-          <div class="route-row" class:vpn={isVPN(route.interface)}>
+          <div class="route-row" class:vpn={isVPN(route)}>
             <span class="dest">{route.destination}</span>
             <span class="gw">{route.gateway || '-'}</span>
-            <span class="iface" class:vpn-iface={isVPN(route.interface)}>
+            <span class="iface" class:vpn-iface={isVPN(route)}>
               {route.interface}
-              {#if isVPN(route.interface)}
+              {#if isVPN(route)}
                 <span class="vpn-badge">{$t('tools.route_vpn_badge')}</span>
+              {:else}
+                <span class="direct-badge">{$t('tools.route_direct_badge')}</span>
               {/if}
             </span>
           </div>
@@ -180,6 +189,15 @@
     padding: 1px var(--space-1);
     background: var(--green);
     color: var(--text-inverse);
+    border-radius: var(--radius-xs);
+    font: var(--text-footnote);
+    font-weight: 600;
+  }
+  .direct-badge {
+    padding: 1px var(--space-1);
+    background: var(--bg-hover);
+    color: var(--text-tertiary);
+    border: 0.5px solid var(--border);
     border-radius: var(--radius-xs);
     font: var(--text-footnote);
     font-weight: 600;

@@ -14,9 +14,13 @@ type DNSLeakResult struct {
 
 // DNSServer mirrors diag.DNSServer.
 type DNSServer struct {
-	IP       string `json:"ip"`
-	Hostname string `json:"hostname"`
-	IsVPN    bool   `json:"is_vpn"`
+	IP         string `json:"ip"`
+	Hostname   string `json:"hostname"`
+	IsVPN      bool   `json:"is_vpn"`
+	Responds   bool   `json:"responds"`
+	LatencyMs  int    `json:"latency_ms"`
+	Status     string `json:"status"`
+	Encryption string `json:"encryption"`
 }
 
 // RouteEntry mirrors diag.RouteEntry for Wails JSON serialisation.
@@ -25,6 +29,7 @@ type RouteEntry struct {
 	Gateway     string `json:"gateway"`
 	Interface   string `json:"interface"`
 	Flags       string `json:"flags"`
+	IsVPN       bool   `json:"is_vpn,omitempty"`
 }
 
 // RunDNSLeakTest performs a DNS leak test using the currently active tunnel's
@@ -49,19 +54,38 @@ func (s *TunnelService) RunDNSLeakTest() (*DNSLeakResult, error) {
 	}
 	for _, srv := range r.DNSServers {
 		out.DNSServers = append(out.DNSServers, DNSServer{
-			IP:       srv.IP,
-			Hostname: srv.Hostname,
-			IsVPN:    srv.IsVPN,
+			IP:         srv.IP,
+			Hostname:   srv.Hostname,
+			IsVPN:      srv.IsVPN,
+			Responds:   srv.Responds,
+			LatencyMs:  srv.LatencyMs,
+			Status:     srv.Status,
+			Encryption: srv.Encryption,
 		})
 	}
 	return out, nil
 }
 
-// GetRoutingTable returns the current OS routing table.
+// GetRoutingTable returns the current OS routing table, flagging every row
+// whose interface matches an active tunnel so the UI can distinguish
+// VPN traffic from direct traffic.
 func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 	entries, err := diag.GetRoutingTable()
 	if err != nil {
 		return nil, err
+	}
+	// Collect the interface names of every currently active tunnel
+	// (primary + multi-tunnel members).
+	vpnIfaces := map[string]bool{}
+	if st, err := s.GetStatus(); err == nil && st != nil {
+		all := make([]ConnectionStatus, 0, 1+len(st.Tunnels))
+		all = append(all, *st)
+		all = append(all, st.Tunnels...)
+		for _, t := range all {
+			if t.InterfaceName != "" {
+				vpnIfaces[t.InterfaceName] = true
+			}
+		}
 	}
 	out := make([]RouteEntry, 0, len(entries))
 	for _, e := range entries {
@@ -70,6 +94,7 @@ func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 			Gateway:     e.Gateway,
 			Interface:   e.Interface,
 			Flags:       e.Flags,
+			IsVPN:       vpnIfaces[e.Interface],
 		})
 	}
 	return out, nil

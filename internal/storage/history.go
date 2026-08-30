@@ -18,6 +18,10 @@ import (
 // without paginating.
 const HistoryMaxRecords = 200
 
+// DefaultHistoryRetentionDays is the default time-based retention for
+// connection history. 0 in settings means "use this default".
+const DefaultHistoryRetentionDays = 7
+
 // Session is one VPN session record. EndTime is a pointer so a still-active
 // session (no end yet) can be distinguished from a completed session that
 // happens to have ended at time.Time{} — the previous flat-struct design
@@ -353,6 +357,38 @@ func trimSessions(sessions []Session) []Session {
 		return sessions
 	}
 	return sessions[len(sessions)-HistoryMaxRecords:]
+}
+
+// TrimByAge removes completed sessions whose end time is older than maxAge.
+// Still-open sessions are always kept, regardless of age, so the live
+// session can never be pruned from underneath the UI. A maxAge <= 0 is a
+// no-op (time-based retention disabled). Returns the number of rows
+// removed so callers can log the prune. Persists via the same debounced
+// flush path as every other mutator.
+func (h *HistoryStore) TrimByAge(maxAge time.Duration) int {
+	if maxAge <= 0 {
+		return 0
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	sessions := h.loadLocked()
+	cutoff := time.Now().Add(-maxAge)
+	kept := sessions[:0]
+	removed := 0
+	for i := range sessions {
+		s := sessions[i]
+		if s.EndTime != nil && s.EndTime.Before(cutoff) {
+			removed++
+			continue
+		}
+		kept = append(kept, s)
+	}
+	if removed == 0 {
+		return 0
+	}
+	h.commitLocked(kept)
+	return removed
 }
 
 // newSessionID returns a 16-hex-char random ID. crypto/rand failure falls

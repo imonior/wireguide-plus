@@ -59,7 +59,7 @@
         const row = {
           _id: ++ruleId,
           when: {
-            type: r.when?.type || 'network',
+            type: r.when?.type || inferType(r.when),
             ssid: r.when?.ssid || '',
             subnet: r.when?.subnet || '',
             gateway_mac: r.when?.gateway_mac || '',
@@ -71,7 +71,10 @@
         };
         // Seed the last-committed form so an existing rule that turns
         // incomplete mid-edit keeps its on-disk value (see persistSet).
-        row._committed = cleanedRule(row);
+        // Fall back to the raw disk rule when the form can't represent it
+        // (cleanedRule returns null) — the on-disk rule must never be
+        // dropped just because the editor opened and saved.
+        row._committed = cleanedRule(row) || { when: row.when, do: row.do };
         return row;
       });
     } catch (e) {
@@ -94,6 +97,20 @@
       if (gen !== loadGen) return;
       currentGatewayMAC = mac;
     } catch (_) { if (gen === loadGen) currentGatewayMAC = ''; }
+  }
+  // Infer the condition type of a rule that somehow lacks one (e.g. written
+  // by an older tool or hand-edited). Falling back to 'network' here was a
+  // data-loss bug: an "otherwise" rule (which has no ssid/subnet/MAC) would
+  // be reloaded as an incomplete 'network' rule, cleanedRule() returned
+  // null, and the next save silently dropped the rule (issue: "otherwise
+  // rules get lost"). Inferring from whichever condition field is present
+  // keeps such rules intact.
+  function inferType(w) {
+    if (w?.type) return w.type;
+    if (w?.ssid) return 'ssid';
+    if (w?.subnet) return 'subnet';
+    if (w?.gateway_mac) return 'network';
+    return 'none_match';
   }
   const MAX_RULES = 50;
   function addRule() {

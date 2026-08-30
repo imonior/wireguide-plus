@@ -31,6 +31,22 @@
     return true;
   });
 
+  // Per-level / per-category counts so the filter buttons show *why* e.g.
+  // "DEBUG" still lists everything (there may simply be no debug records).
+  $: levelCounts = (() => {
+    const c = { debug: 0, info: 0, warn: 0, error: 0 };
+    for (const e of ordered) c[e.level] = (c[e.level] || 0) + 1;
+    return c;
+  })();
+  $: categoryCounts = (() => {
+    const c = {};
+    for (const e of ordered) {
+      const k = e.category || 'app';
+      c[k] = (c[k] || 0) + 1;
+    }
+    return c;
+  })();
+
   $: {
     const v = $logs?.version ?? 0;
     if (v !== prevVersion) {
@@ -111,10 +127,14 @@
 <div class="log-viewer">
   <div class="log-toolbar">
     <div class="log-filters">
-      <button class:active={filter === 'all'} on:click={() => filter = 'all'}>{$t('log.filter_all')}</button>
+      <button class:active={filter === 'all'} on:click={() => filter = 'all'}>
+        {$t('log.filter_all')}
+        <span class="filter-count">{ordered.length}</span>
+      </button>
       {#each levels as lvl}
         <button class:active={filter === lvl} class="level-{lvl}" on:click={() => filter = lvl}>
           {lvl.toUpperCase()}
+          <span class="filter-count">{levelCounts[lvl] || 0}</span>
         </button>
       {/each}
     </div>
@@ -133,10 +153,12 @@
     <div class="log-filters log-filters--categories">
       <button class:active={categoryFilter === 'all'} on:click={() => categoryFilter = 'all'}>
         {$t('log.filter_all')}
+        <span class="filter-count">{ordered.length}</span>
       </button>
       {#each categories as cat}
         <button class:active={categoryFilter === cat} class="category-{cat}" on:click={() => categoryFilter = cat}>
           {$t(`log.category_${cat}`)}
+          <span class="filter-count">{categoryCounts[cat] || 0}</span>
         </button>
       {/each}
     </div>
@@ -195,6 +217,13 @@
     color: var(--text-inverse);
     border-color: transparent;
   }
+  .filter-count {
+    margin-left: 4px;
+    font-size: 9px;
+    font-weight: 500;
+    opacity: 0.65;
+  }
+  .log-filters button.active .filter-count { opacity: 0.9; }
   .log-toolbar--categories {
     border-bottom: 0;
     padding-top: var(--space-1);

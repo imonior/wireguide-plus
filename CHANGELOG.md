@@ -4,6 +4,29 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.7] - 2026-08-31
+
+本版本集中修复 1.1.6 反馈的问题：自动化规则不再丢失、DNS 泄漏检测补全状态与加密方式、路由表区分 VPN / 直连、日志过滤修正、通知时长与代理显示问题；并新增连接历史保留时长设置与安装完成后「运行」选项。
+
+### 🐛 修复
+
+- **自动化规则不再丢失（含 otherwise）** — 编辑器加载时不再把缺失条件类型的规则误判为不完整而丢弃；无法被表单表示的磁盘规则也会原样保留，杜绝「打开设置后规则消失」。
+- **DNS 泄漏检测补全结果** — 每台 DNS 服务器现在正确显示探测状态（VPN / 泄漏 / 正常 / 无响应）与延迟；新增「使用中」标记指出当前实际出口 DNS。
+- **DNS 加密方式探测** — 检测每台解析器支持的传输：明文 UDP/53、DoT（TCP/853 TLS）、DoH（TCP/443 候选），并在检测后给出结果解读与防泄漏建议（使用 VPN DNS、加密 DNS、全隧道模式等）。
+- **路由表区分 VPN / 直连** — 后端按活动隧道接口权威标记 `is_vpn`，路由明细正确显示 VPN / Direct 徽章，不再依赖接口名猜测。
+- **日志过滤修正** — 日志事件补传 `category` 字段，分类筛选真正生效；级别/分类按钮显示各档计数，直观看出当前日志分布。
+- **通知持续时间设置** — 修复下拉框在部分 Svelte 版本下渲染空白、无法显示所选时长的问题。
+- **代理显示一致性** — direct 模式下不再残留代理地址；CLI 修改代理模式后设置界面实时同步。
+
+### ✨ 优化
+
+- **连接历史保留时长** — 设置 → 高级新增「历史记录保留时长」（默认 7 天，可关闭），超出自动滚动清理（仍保留 200 条硬上限）。
+- **安装完成提示运行** — Windows 安装器完成页新增「运行 WireGuide Plus」选项（默认勾选）。
+
+### 🛠 内部
+
+- 版本号更新至 **1.1.7**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、NSIS、MSIX、Linux nfpm 全部同步。
+
 ## [1.1.6] - 2026-08-30
 
 本版本升级更新机制：Windows / Linux 支持应用内直接下载并安装更新（不再只能跳转 GitHub 页面），更新通知提供「直接升级」与「打开发布页」双按钮并展示实时下载进度；镜像模式下资产下载同样走加速镜像。

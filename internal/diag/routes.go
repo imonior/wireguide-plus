@@ -28,6 +28,10 @@ type RouteEntry struct {
 	Gateway     string `json:"gateway"`
 	Interface   string `json:"interface"`
 	Flags       string `json:"flags"`
+	// IsVPN is set by the app layer when this route's interface matches
+	// a currently active tunnel interface. The diagnostics UI uses it to
+	// distinguish "through the tunnel" routes from direct ones.
+	IsVPN bool `json:"is_vpn,omitempty"`
 }
 
 // GetRoutingTable returns the current OS routing table.

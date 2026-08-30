@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/imonior/wireguide-plus/internal/config"
 	"github.com/imonior/wireguide-plus/internal/diag"
@@ -598,15 +599,39 @@ func (s *TunnelService) CloseHistorySessions(reason string) {
 // GetConnectionHistory returns recorded sessions newest-first. Always returns
 // a non-nil slice so the frontend doesn't have to special-case "no history
 // yet" vs. "load failed".
+//
+// Before returning, the store is pruned to the configured
+// HistoryRetentionDays so the file can't grow without bound on machines
+// that connect daily.
 func (s *TunnelService) GetConnectionHistory() ([]storage.Session, error) {
 	if s.historyStore == nil {
 		return []storage.Session{}, nil
 	}
+	s.pruneHistoryLocked()
 	out := s.historyStore.GetAll()
 	if out == nil {
 		out = []storage.Session{}
 	}
 	return out, nil
+}
+
+// pruneHistoryLocked trims history.json to the configured retention window.
+func (s *TunnelService) pruneHistoryLocked() {
+	if s.settingsStore == nil {
+		return
+	}
+	cfg, err := s.settingsStore.Load()
+	if err != nil || cfg == nil {
+		return
+	}
+	days := cfg.HistoryRetentionDays
+	if days <= 0 {
+		days = storage.DefaultHistoryRetentionDays
+	}
+	if removed := s.historyStore.TrimByAge(time.Duration(days) * 24 * time.Hour); removed > 0 {
+		slog.Info("history: pruned expired sessions",
+			"removed", removed, "retention_days", days)
+	}
 }
 
 // ClearConnectionHistory wipes the history file.

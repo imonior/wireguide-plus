@@ -4,6 +4,29 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.7] - 2026-08-31
+
+This release fixes the issues reported on 1.1.6: automation rules no longer go missing, DNS leak detection now reports status and encryption, the route table marks VPN vs. direct routes, log filtering is fixed, and the notification-duration & proxy display issues are resolved. It also adds a connection-history retention setting and a "Run" option after installation.
+
+### 🐛 Fixes
+
+- **Automation rules no longer get lost (including "otherwise")** — the editor no longer misreads rules that lack a condition type as incomplete and drops them; on-disk rules the form can't represent are preserved verbatim, so rules can't vanish just by opening settings.
+- **DNS leak detection completes its results** — each DNS server now correctly shows its probe status (VPN / Leak / OK / No reply) and latency, plus an "In use" marker identifying the current egress resolver.
+- **DNS encryption fingerprint** — per-resolver transport detection: plaintext UDP/53, DoT (TCP/853 TLS), DoH (TCP/443 candidate); after the test, the UI explains the result and lists leak-prevention steps (use VPN DNS, encrypted DNS, full-tunnel mode, etc.).
+- **Route table distinguishes VPN / Direct** — the backend authoritatively flags `is_vpn` by matching active tunnel interfaces, so rows show correct VPN / Direct badges instead of name guessing.
+- **Log filtering fixed** — log events now carry the `category` field so category filters actually work; level/category buttons show per-bucket counts so the distribution is visible at a glance.
+- **Notification duration setting** — fixed a dropdown that rendered blank under some Svelte versions, hiding the selected duration.
+- **Proxy display consistency** — direct mode no longer leaves a stale proxy address behind; proxy mode changes made via CLI now sync into the settings UI live.
+
+### ✨ Improvements
+
+- **Connection-history retention** — Settings → Advanced now offers "Keep history for" (default 7 days, can be disabled); older sessions are pruned automatically (the 200-record hard cap still applies).
+- **Run after install** — the Windows installer's finish page offers "Run WireGuide Plus" (checked by default).
+
+### 🛠 Internal
+
+- Version bumped to **1.1.7**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, NSIS, MSIX, Linux nfpm all in sync.
+
 ## [1.1.6] - 2026-08-30
 
 This release upgrades the update mechanism: Windows / Linux can now download and install updates in-app (no longer just jumping to the GitHub page), the update notice offers both "Update Now" and "Open Release Page" buttons with a live download progress bar, and mirror mode now also accelerates asset downloads.

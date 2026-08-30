@@ -223,6 +223,10 @@ export function GetConfigText(name) {
  * GetConnectionHistory returns recorded sessions newest-first. Always returns
  * a non-nil slice so the frontend doesn't have to special-case "no history
  * yet" vs. "load failed".
+ * 
+ * Before returning, the store is pruned to the configured
+ * HistoryRetentionDays so the file can't grow without bound on machines
+ * that connect daily.
  * @returns {$CancellablePromise<storage$0.Session[]>}
  */
 export function GetConnectionHistory() {
@@ -270,7 +274,9 @@ export function GetKnownSSIDs() {
 }
 
 /**
- * GetRoutingTable returns the current OS routing table.
+ * GetRoutingTable returns the current OS routing table, flagging every row
+ * whose interface matches an active tunnel so the UI can distinguish
+ * VPN traffic from direct traffic.
  * @returns {$CancellablePromise<$models.RouteEntry[]>}
  */
 export function GetRoutingTable() {

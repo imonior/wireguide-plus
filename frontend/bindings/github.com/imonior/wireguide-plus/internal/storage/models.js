@@ -212,6 +212,16 @@ export class Settings {
              */
             this["log_retention_days"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * HistoryRetentionDays is how many days of connection history to keep.
+             * 0 means the default (7). Records older than this are pruned whenever
+             * the history is loaded for display.
+             * @member
+             * @type {number | undefined}
+             */
+            this["history_retention_days"] = undefined;
+        }
         if (!("enable_wg_scripts" in $$source)) {
             /**
              * EnableWgScripts controls whether PreUp/PostUp/PreDown/PostDown
@@ -331,18 +341,18 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField18_0 = $$createType0;
-        const $$createField19_0 = $$createType2;
-        const $$createField20_0 = $$createType3;
+        const $$createField19_0 = $$createType0;
+        const $$createField20_0 = $$createType2;
+        const $$createField21_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField18_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField19_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField20_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField20_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

@@ -140,6 +140,10 @@
   // Log retention choices offered by the advanced tab.
   const VALID_LOG_RETENTION_DAYS = [1, 3, 7, 14, 30, 90];
   const DEFAULT_LOG_RETENTION_DAYS = 7;
+  // History retention choices. 0 = no time-based pruning (only the
+  // hard 200-record cap applies).
+  const VALID_HISTORY_RETENTION_DAYS = [0, 1, 3, 7, 14, 30, 90];
+  const DEFAULT_HISTORY_RETENTION_DAYS = 7;
 
   let settings = {
     language: getLanguage(),
@@ -158,6 +162,7 @@
     proxy_mode: 'direct',
     proxy_url: '',
     log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
+    history_retention_days: DEFAULT_HISTORY_RETENTION_DAYS,
     enable_wg_scripts: false,
   };
   let loaded = false;
@@ -191,9 +196,18 @@
         settings.auto_update_check = (s.auto_update_check === false) ? false : true;
         settings.proxy_mode = s.proxy_mode || 'direct';
         settings.proxy_url = s.proxy_url || '';
+        // A leftover proxy_url while in direct mode is confusing (the UI
+        // shows "Direct" but an address lingers underneath) — keep the
+        // data consistent with the visible mode.
+        if (settings.proxy_mode === 'direct') settings.proxy_url = '';
         // Log retention: 0 in config.json means "default (7)".
         const retention = Number(s.log_retention_days);
         settings.log_retention_days = VALID_LOG_RETENTION_DAYS.includes(retention) ? retention : DEFAULT_LOG_RETENTION_DAYS;
+        // History retention: 0 in config.json means "default (7)".
+        const histRetention = Number(s.history_retention_days);
+        settings.history_retention_days = VALID_HISTORY_RETENTION_DAYS.includes(histRetention)
+          ? histRetention
+          : DEFAULT_HISTORY_RETENTION_DAYS;
         settings.enable_wg_scripts = s.enable_wg_scripts ?? false;
       }
     } catch (e) {
@@ -238,6 +252,7 @@
         proxy_mode: settings.proxy_mode,
         proxy_url: settings.proxy_url,
         log_retention_days: settings.log_retention_days,
+        history_retention_days: settings.history_retention_days,
         enable_wg_scripts: settings.enable_wg_scripts,
         // List-ordering prefs are owned by the tunnel-list header, not
         // this screen — carry them from the fresh fetch so saving any
@@ -311,6 +326,11 @@
 
   function onLogRetentionChange(e) {
     settings.log_retention_days = Number(e.target.value);
+    scheduleSave();
+  }
+
+  function onHistoryRetentionChange(e) {
+    settings.history_retention_days = Number(e.target.value);
     scheduleSave();
   }
 
@@ -480,6 +500,12 @@
     if (p.health_check != null) settings.health_check = p.health_check;
     if (p.pin_interface != null) settings.pin_interface = p.pin_interface;
     if (p.log_level != null) settings.log_level = p.log_level;
+    // Proxy fields too — otherwise a `wireguideplus ctl` mode switch
+    // leaves the select and the URL input stale until the modal is
+    // reopened (and direct mode can linger showing a dead address).
+    if (p.proxy_mode != null) settings.proxy_mode = p.proxy_mode;
+    if (p.proxy_url != null) settings.proxy_url = p.proxy_url;
+    if (settings.proxy_mode === 'direct') settings.proxy_url = '';
     settings = settings; // trigger reactivity
   }
 
@@ -618,12 +644,14 @@
                   <label class="setting-label" for="notify-duration">{$t('settings.notify_duration')}</label>
                   <p class="setting-desc">{$t('settings.notify_duration_hint')}</p>
                 </div>
-                <!-- bind:value (not value=) keeps the select in sync with
-                     settings.notify_duration_ms on every re-render — the
-                     old value={...} form could briefly render blank after
-                     load() when the incoming value was a non-option
-                     number. -->
-                <select id="notify-duration" bind:value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
+                <!-- value= + on:change (NOT bind:value): Svelte's select
+                     binding compares option values strictly, so a number
+                     (5000) never matches an <option value="5000"> string
+                     and the control renders blank. The value= form lets
+                     the browser coerce and always shows the selected
+                     duration; load() normalizes into the offered set so it
+                     can't render blank either. -->
+                <select id="notify-duration" value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
                   <option value="5000">5s</option>
                   <option value="10000">10s</option>
                   <option value="15000">15s</option>
@@ -785,6 +813,20 @@
                 <select id="log-retention" value={settings.log_retention_days} on:change={onLogRetentionChange}>
                   {#each VALID_LOG_RETENTION_DAYS as days}
                     <option value={days}>{$t('settings.log_retention_days', { n: days })}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="history-retention">{$t('settings.history_retention')}</label>
+                  <p class="setting-desc">{$t('settings.history_retention_hint')}</p>
+                </div>
+                <select id="history-retention" value={settings.history_retention_days} on:change={onHistoryRetentionChange}>
+                  <option value="0">{$t('settings.history_retention_off')}</option>
+                  {#each VALID_HISTORY_RETENTION_DAYS as days}
+                    {#if days !== 0}
+                      <option value={days}>{$t('settings.log_retention_days', { n: days })}</option>
+                    {/if}
                   {/each}
                 </select>
               </div>
