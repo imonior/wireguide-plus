@@ -4,6 +4,15 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.9] - 2026-08-31
+
+This release fixes in-app updates failing right after a successful download: the updater deleted the temp installer before launching it, so Windows reported the file as missing and fell back to the release page.
+
+### 🐛 Fixes
+
+- **In-app update could not install** — `runUpdateNative` removed the downloaded installer with `os.Remove(path)` *before* calling `Install`, while the Windows install path execs that very file (`fork/exec …wireguide-update-*.exe: The system cannot find the file specified`). A 100% download was therefore always followed by a launch failure. The temp file is now released only after the installer has been launched; on Windows the exe is usually locked while the installer runs, so removal may fail — harmless, since %TEMP% is cleaned up by the OS.
+- **One manual upgrade required** — the updater on 1.1.7 / 1.1.8 has the same flaw, so upgrading in-app from those versions still hits it. Please install 1.1.9 manually once (Settings → Updates → open the release page); from then on in-app updates work normally.
+
 ## [1.1.8] - 2026-08-31
 
 This release aligns the automation editor's guidance with the rule semantics and hardens old-format rule handling: rules run top to bottom with the first match winning, conditions of the same action are OR-ed, and "otherwise" acts as the fallback placed last, usually with the opposite action. Legacy rules that lack a condition type no longer trigger spurious reloads.

@@ -728,11 +728,6 @@ func (s *TunnelService) runUpdateNative(info *update.UpdateInfo) error {
 		s.emitUpdateProgress("", 0)
 		return s.fallbackOpenRelease(err)
 	}
-	// The installer copies itself into place before returning (NSIS,
-	// Debian), so the temp download can be released here. Failure to
-	// remove is harmless — the OS cleans up %TEMP% eventually.
-	_ = os.Remove(path)
-
 	s.emitUpdateProgress("install", 0)
 	if err := update.Install(path, info); err != nil {
 		slog.Warn("update: native install failed; opening release page as fallback",
@@ -742,6 +737,13 @@ func (s *TunnelService) runUpdateNative(info *update.UpdateInfo) error {
 		s.emitUpdateProgress("", 0)
 		return s.fallbackOpenRelease(err)
 	}
+	// Release the temp download only AFTER Install has launched the
+	// installer — Install execs the file, and removing it first makes
+	// the launch fail with `fork/exec: The system cannot find the file
+	// specified` (seen live on 1.1.7's in-app updater). On Windows the
+	// running installer usually keeps the exe locked, so removal may be
+	// refused; that's harmless — the OS cleans up %TEMP% eventually.
+	_ = os.Remove(path)
 	return nil
 }
 

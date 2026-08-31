@@ -4,6 +4,15 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.9] - 2026-08-31
+
+本版本修复应用内更新「下载成功却无法安装」的问题：更新流程在启动安装器之前就删除了临时下载文件，导致 Windows 上启动安装器时提示「找不到文件」并回退到浏览器页面。
+
+### 🐛 修复
+
+- **应用内更新无法安装** — `runUpdateNative` 原来在 `Install` 之前就执行 `os.Remove(path)` 删除临时下载的安装包，而 Windows 安装流程是直接执行该文件（`fork/exec …wireguide-update-*.exe: The system cannot find the file specified`），因此下载 100% 后必然启动失败。现已调整为安装器启动成功后再释放临时文件；Windows 上安装器运行期间文件通常被锁定、删除可能失败，但由系统临时目录自动清理，无影响。
+- **需要手动升级一次** — 1.1.7 / 1.1.8 的更新流程存在同样问题；请从本版本起手动下载安装一次（设置 → 更新 → 打开发布页），此后应用内更新即可正常工作。
+
 ## [1.1.8] - 2026-08-31
 
 本版本对齐自动化规则的判定语义与界面引导，并进一步加固编辑器对旧格式规则的兼容：规则自上而下、首个匹配生效，同一动作的条件之间为「或」关系，「否则」作为兜底应放在最后并执行相反动作；磁盘上缺失条件类型的旧规则不再触发无谓重载。
