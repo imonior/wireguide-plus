@@ -195,11 +195,10 @@
         // Settings.AutoUpdateCheckEnabled() semantics.
         settings.auto_update_check = (s.auto_update_check === false) ? false : true;
         settings.proxy_mode = s.proxy_mode || 'direct';
+        // proxy_url is intentionally kept even in direct mode: it is the
+        // remembered value restored when switching back to a custom
+        // mirror / manual proxy.
         settings.proxy_url = s.proxy_url || '';
-        // A leftover proxy_url while in direct mode is confusing (the UI
-        // shows "Direct" but an address lingers underneath) — keep the
-        // data consistent with the visible mode.
-        if (settings.proxy_mode === 'direct') settings.proxy_url = '';
         // Log retention: 0 in config.json means "default (7)".
         const retention = Number(s.log_retention_days);
         settings.log_retention_days = VALID_LOG_RETENTION_DAYS.includes(retention) ? retention : DEFAULT_LOG_RETENTION_DAYS;
@@ -437,22 +436,22 @@
 
   // Current <select> value: 'direct', one of the mirror presets,
   // 'mirror' (custom mirror prefix), or 'manual'.
-  function proxySelectValue() {
-    if (settings.proxy_mode === 'mirror') {
-      for (const p of MIRROR_PRESETS) {
-        if (settings.proxy_url === p.value) return p.value;
-      }
-      return 'mirror';
-    }
-    if (settings.proxy_mode !== 'manual') return 'direct';
-    return 'manual';
-  }
+  // Must be a reactive statement, not a plain helper: Svelte can't trace
+  // which settings fields a function body reads, so a template
+  // `value={fn()}` is evaluated once and never re-run after load() fills
+  // settings — the select would stay stuck on "Direct" after reopening
+  // the settings screen.
+  $: proxySelect = settings.proxy_mode === 'mirror'
+    ? (MIRROR_PRESETS.some((p) => p.value === settings.proxy_url) ? settings.proxy_url : 'mirror')
+    : (settings.proxy_mode === 'manual' ? 'manual' : 'direct');
 
   function onProxyChange(e) {
     const v = e.target.value;
     if (v === 'direct') {
       settings.proxy_mode = 'direct';
-      settings.proxy_url = '';
+      // Keep settings.proxy_url as history — switching back to a custom
+      // mirror or a local proxy restores the last used address instead
+      // of showing an empty input.
     } else if (v === 'manual') {
       settings.proxy_mode = 'manual';
       settings.proxy_url = settings.proxy_url || '';
@@ -505,7 +504,6 @@
     // reopened (and direct mode can linger showing a dead address).
     if (p.proxy_mode != null) settings.proxy_mode = p.proxy_mode;
     if (p.proxy_url != null) settings.proxy_url = p.proxy_url;
-    if (settings.proxy_mode === 'direct') settings.proxy_url = '';
     settings = settings; // trigger reactivity
   }
 
@@ -644,19 +642,18 @@
                   <label class="setting-label" for="notify-duration">{$t('settings.notify_duration')}</label>
                   <p class="setting-desc">{$t('settings.notify_duration_hint')}</p>
                 </div>
-                <!-- value= + on:change (NOT bind:value): Svelte's select
-                     binding compares option values strictly, so a number
-                     (5000) never matches an <option value="5000"> string
-                     and the control renders blank. The value= form lets
-                     the browser coerce and always shows the selected
-                     duration; load() normalizes into the offered set so it
-                     can't render blank either. -->
+                <!-- value= + on:change (NOT bind:value) + numeric option
+                     values — exactly the pattern used by the log-retention
+                     select below, which persists reliably. The static
+                     <option value="5000"> string form caused number/string
+                     mismatches in some Svelte versions, so options are
+                     rendered from VALID_NOTIFY_DURATIONS (numbers), and
+                     load() normalizes into the offered set so it can't
+                     render blank either. -->
                 <select id="notify-duration" value={settings.notify_duration_ms} on:change={onNotifyDurationChange}>
-                  <option value="5000">5s</option>
-                  <option value="10000">10s</option>
-                  <option value="15000">15s</option>
-                  <option value="30000">30s</option>
-                  <option value="60000">60s</option>
+                  {#each VALID_NOTIFY_DURATIONS as ms}
+                    <option value={ms}>{ms / 1000}s</option>
+                  {/each}
                 </select>
               </div>
             </div>
@@ -686,7 +683,7 @@
                   <label class="setting-label" for="proxy-select">{$t('settings.proxy')}</label>
                   <p class="setting-desc">{$t('settings.proxy_hint')}</p>
                 </div>
-                <select id="proxy-select" value={proxySelectValue()} on:change={onProxyChange}>
+                <select id="proxy-select" value={proxySelect} on:change={onProxyChange}>
                   <option value="direct">{$t('settings.proxy_direct')}</option>
                   {#each MIRROR_PRESETS as p}
                     <option value={p.value}>{p.label}</option>

@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.10] - 2026-08-31
+
+This release fixes the three UI issues reported on 1.1.9 and improves the settings interaction: the DNS leak test page no longer constrains its width and marks the host's own DNS servers; log level filtering is now exact; notification duration and proxy selection save and display correctly again, and custom mirror / local proxy inputs remember the last saved address.
+
+### 🐛 Fixes
+
+- **DNS leak test width** — removed the 640px max-width so the page fills the window like the History and Routes pages.
+- **Host DNS marker** — every probed resolver comes from the host's own DNS configuration (manual or DHCP); each row now shows a "System" chip so they are easy to tell apart from VPN-provided DNS.
+- **Log level filtering** — clicking DEBUG / INFO / WARN / ERROR now shows only records of that level (previously "level and above", which looked like a no-op whenever a level had no records).
+- **Notification duration** — the dropdown now uses the same dynamic option pattern as log retention / history retention / language, so changes persist and are shown when reopening settings.
+- **Proxy mode display** — the proxy select no longer sticks on "Direct" after reopening settings (Svelte cannot track which fields a function body reads, so `value={fn()}` was only evaluated once). It now recomputes reactively and shows the saved mirror / manual mode.
+- **Proxy address memory** — switching back to "custom mirror" or a local proxy restores the last saved address in the input (e.g. a previously saved mirror prefix); empty history shows a blank input with a hint.
+
 ## [1.1.9] - 2026-08-31
 
 This release fixes in-app updates failing right after a successful download: the updater deleted the temp installer before launching it, so Windows reported the file as missing and fell back to the release page.

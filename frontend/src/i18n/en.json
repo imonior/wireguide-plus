@@ -198,6 +198,7 @@
     "dns_leak_safe": "No DNS leaks detected",
     "dns_leak_leaked": "DNS leak detected",
     "dns_servers_detected": "DNS Servers Detected",
+    "dns_system_dns": "System",
     "dns_status_vpn": "VPN",
     "dns_status_leak": "Leak",
     "dns_status_ok": "OK",

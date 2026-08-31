@@ -198,6 +198,7 @@
     "dns_leak_safe": "DNS 유출이 감지되지 않았습니다",
     "dns_leak_leaked": "DNS 유출이 감지되었습니다",
     "dns_servers_detected": "감지된 DNS 서버",
+    "dns_system_dns": "시스템",
     "dns_status_vpn": "VPN",
     "dns_status_leak": "유출",
     "dns_status_ok": "정상",

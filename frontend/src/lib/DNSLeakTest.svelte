@@ -88,6 +88,9 @@
             <div class="server" class:vpn={server.status === 'vpn'} class:leak={server.status === 'leak'} class:timeout={server.status === 'timeout'} class:inuse={isInUse(server)}>
               <span class="server-ip">
                 {server.ip}
+                {#if server.is_system}
+                  <span class="server-sys">{$t('tools.dns_system_dns')}</span>
+                {/if}
                 {#if isInUse(server)}
                   <span class="server-current">{$t('tools.dns_current_dns')}</span>
                 {/if}
@@ -152,7 +155,6 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--space-4) var(--space-4) var(--space-5);
-    max-width: 640px;
   }
   .page-description {
     margin: 0 0 var(--space-3);
@@ -247,6 +249,19 @@
     border-radius: var(--radius-sm);
     color: var(--error-text);
     font: var(--text-body);
+  }
+  .server-sys {
+    display: inline-block;
+    margin-left: var(--space-1);
+    padding: 0 4px;
+    border-radius: var(--radius-xs);
+    background: color-mix(in srgb, var(--blue) 14%, transparent);
+    color: var(--blue);
+    font: 9px/1.6 var(--font-sans);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
   }
   .server-current {
     display: inline-block;

@@ -15,14 +15,17 @@
   let copyFeedback = false;
 
   const levels = ['debug', 'info', 'warn', 'error'];
-  const levelRank = { debug: 0, info: 1, warn: 2, error: 3 };
 
   // Materialize the ring-buffer into a chronological array — only when
   // LogViewer is mounted (here). Push path in logs.js is O(1) and
   // allocation-free; the slice/concat happens only on this read.
   $: ordered = orderedLogs($logs);
   $: filtered = ordered.filter((entry) => {
-    if (filter !== 'all' && (levelRank[entry.level] ?? 1) < (levelRank[filter] ?? 1)) {
+    // Exact-level filtering: clicking "INFO" shows only info records —
+    // the count badges already show how many records each level has, so
+    // a ">= level" filter (which silently kept showing everything when a
+    // level had zero records) only confused users.
+    if (filter !== 'all' && (entry.level || 'info') !== filter) {
       return false;
     }
     if (categoryFilter !== 'all' && (entry.category || 'app') !== categoryFilter) {
@@ -31,8 +34,8 @@
     return true;
   });
 
-  // Per-level / per-category counts so the filter buttons show *why* e.g.
-  // "DEBUG" still lists everything (there may simply be no debug records).
+  // Per-level / per-category counts so the filter buttons always show how
+  // many records each level/category actually has.
   $: levelCounts = (() => {
     const c = { debug: 0, info: 0, warn: 0, error: 0 };
     for (const e of ordered) c[e.level] = (c[e.level] || 0) + 1;

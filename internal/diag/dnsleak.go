@@ -30,6 +30,7 @@ type DNSServer struct {
 	IP         string `json:"ip"`
 	Hostname   string `json:"hostname"`
 	IsVPN      bool   `json:"is_vpn"`     // true if this is the expected VPN DNS
+	IsSystem   bool   `json:"is_system"`  // true if this resolver comes from the host's own DNS configuration (DHCP or manual)
 	Responds   bool   `json:"responds"`   // did the probe get a DNS reply (NXDOMAIN)?
 	LatencyMs  int    `json:"latency_ms"` // probe round-trip; 0 if it timed out
 	Status     string `json:"status"`     // "vpn" | "ok" | "leak" | "timeout"
@@ -98,8 +99,9 @@ func RunDNSLeakTestContext(ctx context.Context, expectedDNS []string) *DNSLeakRe
 	result.DNSServers = make([]DNSServer, len(systemDNS))
 	for i, dns := range systemDNS {
 		result.DNSServers[i] = DNSServer{
-			IP:    dns,
-			IsVPN: expectedSet[dns],
+			IP:       dns,
+			IsVPN:    expectedSet[dns],
+			IsSystem: true, // every probed resolver comes from the host's own DNS config
 		}
 	}
 

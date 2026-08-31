@@ -10,15 +10,15 @@
         <key>CFBundleIdentifier</key>
             <string>com.imonior.wireguide-plus</string>
         <key>CFBundleVersion</key>
-            <string>1.1.9</string>
+            <string>1.1.10</string>
         <key>CFBundleGetInfoString</key>
             <string>WireGuide Plus - WireGuard VPN Client (dev)</string>
         <key>CFBundleShortVersionString</key>
-            <string>1.1.9</string>
+            <string>1.1.10</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
-            <string>1.1.9</string>
+            <string>1.1.10</string>
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>

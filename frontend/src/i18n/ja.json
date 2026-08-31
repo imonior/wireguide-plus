@@ -198,6 +198,7 @@
     "dns_leak_safe": "DNS 漏洩は検出されませんでした",
     "dns_leak_leaked": "DNS 漏洩を検出しました",
     "dns_servers_detected": "検出された DNS サーバー",
+    "dns_system_dns": "システム",
     "dns_status_vpn": "VPN",
     "dns_status_leak": "漏洩",
     "dns_status_ok": "正常",

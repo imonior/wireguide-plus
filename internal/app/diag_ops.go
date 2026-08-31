@@ -17,6 +17,7 @@ type DNSServer struct {
 	IP         string `json:"ip"`
 	Hostname   string `json:"hostname"`
 	IsVPN      bool   `json:"is_vpn"`
+	IsSystem   bool   `json:"is_system"`
 	Responds   bool   `json:"responds"`
 	LatencyMs  int    `json:"latency_ms"`
 	Status     string `json:"status"`
@@ -57,6 +58,7 @@ func (s *TunnelService) RunDNSLeakTest() (*DNSLeakResult, error) {
 			IP:         srv.IP,
 			Hostname:   srv.Hostname,
 			IsVPN:      srv.IsVPN,
+			IsSystem:   srv.IsSystem,
 			Responds:   srv.Responds,
 			LatencyMs:  srv.LatencyMs,
 			Status:     srv.Status,

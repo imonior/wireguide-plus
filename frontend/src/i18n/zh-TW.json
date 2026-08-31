@@ -198,6 +198,7 @@
     "dns_leak_safe": "未偵測到 DNS 洩漏",
     "dns_leak_leaked": "偵測到 DNS 洩漏",
     "dns_servers_detected": "偵測到的 DNS 伺服器",
+    "dns_system_dns": "本機",
     "dns_status_vpn": "VPN",
     "dns_status_leak": "洩漏",
     "dns_status_ok": "正常",

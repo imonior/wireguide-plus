@@ -151,6 +151,13 @@ export class DNSServer {
              */
             this["is_vpn"] = false;
         }
+        if (!("is_system" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_system"] = false;
+        }
         if (!("responds" in $$source)) {
             /**
              * @member
