@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.8] - 2026-08-31
+
+This release aligns the automation editor's guidance with the rule semantics and hardens old-format rule handling: rules run top to bottom with the first match winning, conditions of the same action are OR-ed, and "otherwise" acts as the fallback placed last, usually with the opposite action. Legacy rules that lack a condition type no longer trigger spurious reloads.
+
+### ✨ Improvements
+
+- **Automation semantics guidance** — the editor hint and the "otherwise" row description now spell out the model: "otherwise" fires when no rule above it matched, keep it last as the fallback, and its action is usually the opposite of the rules above (updated in all five languages). The evaluation logic itself is unchanged: ordered first-match, `none_match` matches unconditionally — exactly the behaviour you described.
+
+### 🐛 Fixes
+
+- **Old-format rules no longer trigger spurious reloads** — the disk-vs-local comparison now uses the same type inference as loading (a legacy rule missing `type`, e.g. an old "otherwise", no longer falls back to `network`), so a config change is no longer misread as an external edit forcing an extra reload.
+
+### 🛠 Internal
+
+- Regenerated bindings and verified they match the Go API exactly (no diff).
+- Version bumped to **1.1.8**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, NSIS, MSIX, Linux nfpm all in sync.
+
 ## [1.1.7] - 2026-08-31
 
 This release fixes the issues reported on 1.1.6: automation rules no longer go missing, DNS leak detection now reports status and encryption, the route table marks VPN vs. direct routes, log filtering is fixed, and the notification-duration & proxy display issues are resolved. It also adds a connection-history retention setting and a "Run" option after installation.

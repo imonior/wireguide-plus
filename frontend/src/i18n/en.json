@@ -280,7 +280,7 @@
   },
   "automation": {
     "title": "Automation",
-    "hint": "Rules run top to bottom; the first matching condition wins. Pick a condition and type its value, or use the suggestion for the network you're on. \"This network\" matches a specific router by its gateway MAC (precise; tells apart networks that share a subnet); \"subnet\" matches an IP range. Add separate rules to connect and to disconnect.",
+    "hint": "Rules run top to bottom; the first matching condition wins. Pick a condition and type its value, or use the suggestion for the network you're on. \"This network\" matches a specific router by its gateway MAC (precise; tells apart networks that share a subnet); \"subnet\" matches an IP range. Add separate rules to connect and to disconnect. An \"otherwise\" rule fires when none of the rules above it match — keep it last as the fallback, usually with the opposite action.",
     "empty": "No rules — this tunnel is never auto-managed. Add a rule below.",
     "add_rule": "Add rule",
     "action": "Action",
@@ -291,7 +291,7 @@
     "cond_ssid": "on Wi-Fi network",
     "cond_subnet": "on subnet",
     "cond_none": "otherwise",
-    "cond_none_desc": "no other rule matched",
+    "cond_none_desc": "matches when no rule above matched — keep it last as the fallback",
     "ssid_placeholder": "Wi-Fi name",
     "ssid_select_hint": "Select or enter a Wi-Fi name",
     "cond_network": "on this network",

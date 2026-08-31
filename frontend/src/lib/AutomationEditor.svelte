@@ -296,7 +296,12 @@
   function normRule(d) {
     return {
       do: d?.do || 'connect',
-      type: d?.when?.type || 'network',
+      // Same fallback as load(): a disk rule that lacks a type (e.g. an old
+      // "otherwise" written as {when:{}}) must read back as none_match, not
+      // as an incomplete 'network' — otherwise diskDiffers() sees the
+      // reloaded none_match vs persisted none_match as different and
+      // triggers a spurious reload on every config_changed.
+      type: inferType(d?.when),
       ssid: (d?.when?.ssid || '').trim(),
       subnet: (d?.when?.subnet || '').trim(),
       mac: macCanon(d?.when?.gateway_mac || ''),

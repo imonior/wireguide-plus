@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.1.8] - 2026-08-31
+
+本版本對齊自動化規則的判定語義與介面引導，並進一步加固編輯器對舊格式規則的相容：規則自上而下、首個比對生效，同一動作的條件之間為「或」關係，「否則」作為兜底應放在最後並執行相反動作；磁碟上缺少條件類型的舊規則不再觸發無謂重載。
+
+### ✨ 優化
+
+- **自動化規則語義引導對齊** — 編輯器說明與「否則」條目文案更新：明確「否則」在上方規則皆未比對時生效、建議放在最後作為兜底、動作通常與上方規則相反（五種語言同步）。判定邏輯本身保持不變：依序、首個比對生效、`otherwise` 無條件兜底——與你期望的行為一致。
+
+### 🐛 修復
+
+- **舊格式規則不再觸發無謂重載** — 編輯器比對磁碟與本地規則時統一使用與載入相同的類型推斷（缺少 `type` 的舊「否則」規則不再回退為 network），避免每次設定變更都誤判為外部修改而觸發一次多餘重載。
+
+### 🛠 內部
+
+- 重新生成 bindings 並驗證與 Go API 完全一致（無差異）。
+- 版本號更新至 **1.1.8**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、NSIS、MSIX、Linux nfpm 全部同步。
+
 ## [1.1.7] - 2026-08-31
 
 本版本集中修復 1.1.6 回報的問題：自動化規則不再遺失、DNS 洩漏檢測補全狀態與加密方式、路由表區分 VPN / 直連、日誌過濾修正、通知時長與代理顯示問題；並新增連線歷史保留時長設定與安裝完成後「執行」選項。
