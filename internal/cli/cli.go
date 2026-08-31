@@ -899,7 +899,21 @@ func cmdDNSLeak(_ []string) int {
 			}
 		}
 	}
-	res := diag.RunDNSLeakTest(expected)
+	// Public cross-check resolvers: user's customized list (non-empty) →
+	// network-fetched cache (non-empty) → built-in defaults. An empty custom
+	// list restores the defaults — public probing is never disabled, and the
+	// system (local/VPN) DNS block is always probed and shown first.
+	var publicDNS []string
+	if ss, err := settingsStore(); err == nil {
+		if s, err := ss.Load(); err == nil {
+			if len(s.DNSTestPublicServers) > 0 {
+				publicDNS = s.DNSTestPublicServers
+			} else if len(s.DNSTestPublicFetched) > 0 {
+				publicDNS = s.DNSTestPublicFetched
+			}
+		}
+	}
+	res := diag.RunDNSLeakTestWithPublic(expected, publicDNS)
 	if res == nil {
 		fmt.Fprintln(os.Stderr, "dnsleak: no result")
 		return 1
@@ -914,7 +928,14 @@ func cmdDNSLeak(_ []string) int {
 		fmt.Println("OK: DNS is pinned to the tunnel")
 	}
 	for _, srv := range res.DNSServers {
-		fmt.Printf("  resolver %s\n", srv.IP)
+		tag := "public"
+		switch {
+		case srv.IsVPN:
+			tag = "vpn"
+		case srv.IsLocal:
+			tag = "local"
+		}
+		fmt.Printf("  resolver %-40s [%s] %s\n", srv.IP, tag, srv.Status)
 	}
 	if res.Leaked {
 		return 1

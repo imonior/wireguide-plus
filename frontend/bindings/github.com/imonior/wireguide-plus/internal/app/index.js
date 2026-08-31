@@ -13,6 +13,7 @@ export {
     DNSLeakResult,
     DNSServer,
     KnownSSIDs,
+    PublicDNSRefresh,
     RouteEntry,
     TestProxyResult,
     TunnelInfo,

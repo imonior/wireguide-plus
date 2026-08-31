@@ -331,6 +331,41 @@ export class Settings {
              */
             this["proxy_url"] = undefined;
         }
+        if (!("dns_test_public_servers" in $$source)) {
+            /**
+             * DNSTestPublicServers is the user's customized list of public DNS
+             * resolvers probed as a cross-check by the DNS leak test. nil or empty
+             * means "no customization" — the effective list falls back to the
+             * network-fetched list (DNSTestPublicFetched) when available, else the
+             * built-in defaults. A non-empty list replaces the defaults verbatim.
+             * Clearing the list NEVER disables public probing: public cross-check is
+             * core to the leak test, so an empty custom list simply restores the
+             * default cross-check set. The DNS leak panel edits this list.
+             * @member
+             * @type {string[]}
+             */
+            this["dns_test_public_servers"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DNSTestPublicFetched caches the last network-fetched public DNS list
+             * (see diag.FetchPublicResolvers) so the effective default cross-check
+             * set stays current even offline / when a later refresh fails. It is
+             * overridden by DNSTestPublicServers when the user customizes.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["dns_test_public_fetched"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * DNSTestPublicFetchedAt is the unix timestamp of the last successful
+             * network fetch of DNSTestPublicFetched (0 = never fetched).
+             * @member
+             * @type {number | undefined}
+             */
+            this["dns_test_public_fetched_at"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -344,6 +379,8 @@ export class Settings {
         const $$createField19_0 = $$createType0;
         const $$createField20_0 = $$createType2;
         const $$createField21_0 = $$createType3;
+        const $$createField24_0 = $$createType3;
+        const $$createField25_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
             $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
@@ -353,6 +390,12 @@ export class Settings {
         }
         if ("manual_off_tunnels" in $$parsedSource) {
             $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
+        }
+        if ("dns_test_public_servers" in $$parsedSource) {
+            $$parsedSource["dns_test_public_servers"] = $$createField24_0($$parsedSource["dns_test_public_servers"]);
+        }
+        if ("dns_test_public_fetched" in $$parsedSource) {
+            $$parsedSource["dns_test_public_fetched"] = $$createField25_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

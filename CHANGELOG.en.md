@@ -4,6 +4,30 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.2.5] - 2026-09-01
+
+This release rebuilds the DNS leak test around public-resolver cross-checking: alongside the resolvers from the host's own network configuration, the test now also probes well-known public DNS servers for cross-verification, tags every resolver by its source (Local / VPN / Public), and lets you refresh or customize the public list. A new "Browser test" button opens browserleaks.com for browser-level DNS and WebRTC leak checks. It also fixes Windows connection popups that could freeze, and ships a new app icon.
+
+### ✨ New features
+
+- **Public DNS cross-check** — the test now also probes well-known public resolvers (Google, Cloudflare, OpenDNS, Quad9, Alibaba, Tencent DNSPod, 114DNS, Baidu, AdGuard, NextDNS, Comodo, plus common IPv6 addresses) so answers can be cross-verified against traffic leaving the tunnel. A public resolver answering only means it is reachable — not a leak.
+- **Refresh from the network** — "Fetch from network" pulls the currently most reliable resolvers from public-dns.info (up to 30, 10-second timeout) and caches the last successful fetch so the list stays usable offline.
+- **Custom public resolver list** — add, edit or remove entries (IP or hostname) freely; the list is persisted in settings. Clearing it restores the built-in defaults — public probing always stays on.
+- **Resolver source tags** — system resolvers are now tagged by the interface they come from: physical adapters (WLAN / Ethernet) are "Local", tunnel interfaces are "VPN", the rest are "Public". Local resolvers are listed first, with the source interface name (Windows enumerates per-adapter DNS, Linux parses resolvectl output).
+- **Browser test** — a new "Browser test" button opens browserleaks.com in your default browser for browser-level DNS and WebRTC leak detection (probe data is sent to the third-party site).
+
+### 🐛 Fixes
+
+- **Windows connection popup freeze** — the popup's message loop was not pinned to the OS thread that created it; after the goroutine migrated threads, click / close / timer messages stopped arriving and the popup looked frozen. The thread is now locked for the popup's lifetime, so it can be dismissed and auto-closes normally.
+- **Popup text drawing hardening** — text drawing now uses `UTF16FromString` with error handling, so an invalid UTF-16 string can no longer crash the popup.
+
+### 🛠 Internal
+
+- The CLI `dnsleak` command is enhanced in sync: each resolver row shows a `vpn / local / public` tag and its status, and the customized public list from settings is used.
+- Leak detection corrected: only a physical (non-VPN) resolver answering is a leak; VPN resolvers are tagged as VPN; public resolvers answering show "OK" rather than a leak.
+- New probe-plan and parsing tests for the DNS leak module; bindings regenerated.
+- New app icon across platforms; build tasks simplified.
+
 ## [1.1.10] - 2026-08-31
 
 This release fixes the three UI issues reported on 1.1.9 and improves the settings interaction: the DNS leak test page no longer constrains its width and marks the host's own DNS servers; log level filtering is now exact; notification duration and proxy selection save and display correctly again, and custom mirror / local proxy inputs remember the last saved address.

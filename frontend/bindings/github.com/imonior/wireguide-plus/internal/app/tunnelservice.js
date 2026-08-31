@@ -274,6 +274,20 @@ export function GetKnownSSIDs() {
 }
 
 /**
+ * GetPublicDNSServers returns the public-resolver cross-check list the DNS
+ * leak test will probe — i.e. the same list effectivePublicResolvers
+ * computes. The UI seeds its editable list from this value; saving an edited
+ * (or empty) list back via SavePublicDNSServers persists it as the user's
+ * custom list.
+ * @returns {$CancellablePromise<string[]>}
+ */
+export function GetPublicDNSServers() {
+    return $Call.ByID(4016539089).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType8($result);
+    }));
+}
+
+/**
  * GetRoutingTable returns the current OS routing table, flagging every row
  * whose interface matches an active tunnel so the UI can distinguish
  * VPN traffic from direct traffic.
@@ -518,6 +532,21 @@ export function ReconcileHistoryFromStatus(activeNames, rxByTunnel, txByTunnel, 
 }
 
 /**
+ * RefreshPublicDNSServers fetches the latest public DNS resolver list from
+ * the network (public-dns.info) and caches it in settings as the new default
+ * cross-check set. On success the fetched list becomes effective immediately
+ * unless the user has a custom list (which still takes precedence). The
+ * result reports the fetched list, the list now in effect, the fetch
+ * timestamp, and whether the fetch itself succeeded.
+ * @returns {$CancellablePromise<$models.PublicDNSRefresh | null>}
+ */
+export function RefreshPublicDNSServers() {
+    return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType25($result);
+    }));
+}
+
+/**
  * RenameTunnel changes a tunnel's name. Rejects rename of the connected
  * tunnel since the interface name is derived from it.
  * 
@@ -537,14 +566,30 @@ export function RenameTunnel(oldName, newName) {
 }
 
 /**
+ * ResetPublicDNSServers clears the user's customized public-resolver list so
+ * the DNS leak test falls back to the network-fetched list (if available)
+ * or the built-in defaults.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResetPublicDNSServers() {
+    return $Call.ByID(2427126722);
+}
+
+/**
  * RunDNSLeakTest performs a DNS leak test using the currently active tunnel's
  * DNS servers as the expected (VPN) resolvers. If no tunnel is connected, the
  * expected set is empty — all detected resolvers will be flagged as leaks.
+ * 
+ * The result always lists the system-configured (local/VPN) resolvers FIRST,
+ * in the same order `ipconfig /all` / `scutil --dns` report them, with the
+ * public cross-check resolvers after. Public cross-check probing is never
+ * disabled by the settings (an empty custom list just falls back to the
+ * built-in / network-fetched defaults).
  * @returns {$CancellablePromise<$models.DNSLeakResult | null>}
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType27($result);
     }));
 }
 
@@ -589,6 +634,20 @@ export function RunUpdate(info) {
  */
 export function SaveAutomationRules(tunnel, rules) {
     return $Call.ByID(3991232048, tunnel, rules);
+}
+
+/**
+ * SavePublicDNSServers persists the user's customized public-resolver list
+ * for the DNS leak test. An empty list clears the customization and restores
+ * the default cross-check set (network-fetched if available, else built-in) —
+ * it does NOT disable public probing, which is core to the feature. Entries
+ * are trimmed and deduplicated; invalid entries are skipped. Only entries
+ * that are valid IP addresses or resolvable hostnames are kept.
+ * @param {string[]} list
+ * @returns {$CancellablePromise<void>}
+ */
+export function SavePublicDNSServers(list) {
+    return $Call.ByID(140633158, list);
 }
 
 /**
@@ -726,7 +785,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType28($result);
     }));
 }
 
@@ -787,6 +846,8 @@ const $$createType20 = $Create.Nullable($$createType19);
 const $$createType21 = $models.ZipImportResult.createFrom;
 const $$createType22 = $Create.Array($$createType21);
 const $$createType23 = $Create.Array($$createType19);
-const $$createType24 = $models.DNSLeakResult.createFrom;
+const $$createType24 = $models.PublicDNSRefresh.createFrom;
 const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = $models.TestProxyResult.createFrom;
+const $$createType26 = $models.DNSLeakResult.createFrom;
+const $$createType27 = $Create.Nullable($$createType26);
+const $$createType28 = $models.TestProxyResult.createFrom;

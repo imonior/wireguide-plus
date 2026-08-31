@@ -90,6 +90,24 @@ type Settings struct {
 	// accelerator prefix used when ProxyMode is "mirror" (e.g.
 	// "https://ghfast.top").
 	ProxyURL string `json:"proxy_url,omitempty"`
+
+	// DNSTestPublicServers is the user's customized list of public DNS
+	// resolvers probed as a cross-check by the DNS leak test. nil or empty
+	// means "no customization" — the effective list falls back to the
+	// network-fetched list (DNSTestPublicFetched) when available, else the
+	// built-in defaults. A non-empty list replaces the defaults verbatim.
+	// Clearing the list NEVER disables public probing: public cross-check is
+	// core to the leak test, so an empty custom list simply restores the
+	// default cross-check set. The DNS leak panel edits this list.
+	DNSTestPublicServers []string `json:"dns_test_public_servers"`
+	// DNSTestPublicFetched caches the last network-fetched public DNS list
+	// (see diag.FetchPublicResolvers) so the effective default cross-check
+	// set stays current even offline / when a later refresh fails. It is
+	// overridden by DNSTestPublicServers when the user customizes.
+	DNSTestPublicFetched []string `json:"dns_test_public_fetched,omitempty"`
+	// DNSTestPublicFetchedAt is the unix timestamp of the last successful
+	// network fetch of DNSTestPublicFetched (0 = never fetched).
+	DNSTestPublicFetchedAt int64 `json:"dns_test_public_fetched_at,omitempty"`
 }
 
 // IsManualOff reports whether the user has manually switched the tunnel

@@ -151,12 +151,19 @@ export class DNSServer {
              */
             this["is_vpn"] = false;
         }
-        if (!("is_system" in $$source)) {
+        if (!("is_local" in $$source)) {
             /**
              * @member
              * @type {boolean}
              */
-            this["is_system"] = false;
+            this["is_local"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["source_iface"] = undefined;
         }
         if (!("responds" in $$source)) {
             /**
@@ -244,6 +251,69 @@ export class KnownSSIDs {
             $$parsedSource["known"] = $$createField1_0($$parsedSource["known"]);
         }
         return new KnownSSIDs(/** @type {Partial<KnownSSIDs>} */($$parsedSource));
+    }
+}
+
+/**
+ * PublicDNSRefresh is the result of RefreshPublicDNSServers: the list
+ * fetched from the live feed, the resolver list now in effect (custom list
+ * takes precedence over the fetched one), when the live feed was last
+ * fetched (0 = never / failed), and an optional fetch error string.
+ */
+export class PublicDNSRefresh {
+    /**
+     * Creates a new PublicDNSRefresh instance.
+     * @param {Partial<PublicDNSRefresh>} [$$source = {}] - The source object to create the PublicDNSRefresh.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["fetched"] = undefined;
+        }
+        if (!("effective" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["effective"] = [];
+        }
+        if (!("fetched_at" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["fetched_at"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PublicDNSRefresh instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PublicDNSRefresh}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType2;
+        const $$createField1_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("fetched" in $$parsedSource) {
+            $$parsedSource["fetched"] = $$createField0_0($$parsedSource["fetched"]);
+        }
+        if ("effective" in $$parsedSource) {
+            $$parsedSource["effective"] = $$createField1_0($$parsedSource["effective"]);
+        }
+        return new PublicDNSRefresh(/** @type {Partial<PublicDNSRefresh>} */($$parsedSource));
     }
 }
 

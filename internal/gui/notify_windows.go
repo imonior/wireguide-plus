@@ -4,6 +4,7 @@ package gui
 
 import (
 	"log/slog"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -355,6 +356,14 @@ func loadCursor(hinst uintptr, id int32) uintptr {
 }
 
 func runPopupLoop(names []string, connected bool, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+	// The window's message queue is bound to the OS thread that created it.
+	// A plain goroutine can migrate between OS threads between syscalls, which
+	// would make GetMessage/DispatchMessage run on a different thread than the
+	// window — the popup would never receive clicks, WM_TIMER or WM_DESTROY and
+	// appear frozen (dismissing with ✕ or auto-close would hang). Pin this
+	// goroutine to one OS thread for the whole popup lifetime.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	d := &popupData{
 		names:        names,
 		connected:    connected,
@@ -715,8 +724,11 @@ func drawTextOut(hdc uintptr, s string, x, y int32) {
 	if s == "" {
 		return
 	}
-	text := windows.StringToUTF16Ptr(s)
-	procTextOutW.Call(hdc, uintptr(x), uintptr(y), uintptr(unsafe.Pointer(text)), uintptr(len(s)))
+	u16, err := windows.UTF16FromString(s)
+	if err != nil {
+		return
+	}
+	procTextOutW.Call(hdc, uintptr(x), uintptr(y), uintptr(unsafe.Pointer(&u16[0])), uintptr(len(u16)))
 }
 
 func measureText(hdc uintptr, font uintptr, s string) int32 {
@@ -725,8 +737,11 @@ func measureText(hdc uintptr, font uintptr, s string) int32 {
 	}
 	selectFont(hdc, font)
 	var sz popupPoint
-	text := windows.StringToUTF16Ptr(s)
-	procGetTextExtentPoint32W.Call(hdc, uintptr(unsafe.Pointer(text)), uintptr(len(s)), uintptr(unsafe.Pointer(&sz)))
+	u16, err := windows.UTF16FromString(s)
+	if err != nil {
+		return 0
+	}
+	procGetTextExtentPoint32W.Call(hdc, uintptr(unsafe.Pointer(&u16[0])), uintptr(len(u16)), uintptr(unsafe.Pointer(&sz)))
 	return sz.X
 }
 
