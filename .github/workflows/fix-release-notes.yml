@@ -22,7 +22,7 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # git-cliff needs full history + tags to compute the commit range
           # since the previous release.

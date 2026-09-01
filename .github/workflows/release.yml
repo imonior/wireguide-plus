@@ -35,13 +35,13 @@ jobs:
     # build from source.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20.19.2'
 
@@ -72,7 +72,7 @@ jobs:
           cd bin
           hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuidePlus-darwin-arm64.dmg"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-arm64
           path: |
@@ -105,13 +105,13 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20.19.2'
 
@@ -206,7 +206,7 @@ jobs:
       - name: Upload unsigned installer for SignPath
         if: steps.signpath-cfg.outputs.enabled == 'true'
         id: upload-unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           # transient name — the final published artifact stays
           # 'windows-${{ matrix.asset }}' and contains the signed exe;
@@ -262,7 +262,7 @@ jobs:
           grep -q '^Valid' /tmp/sigstatus
       # --- end signing -------------------------------------------------
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.asset }}
           path: |
@@ -285,13 +285,13 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20.19.2'
 
@@ -334,7 +334,7 @@ jobs:
         run: |
           tar -czf "bin/WireGuidePlus-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           path: |
@@ -348,7 +348,7 @@ jobs:
     needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # git-cliff needs the full history + all tags to compute the
           # commit range since the previous release. Shallow clone (the
@@ -356,7 +356,7 @@ jobs:
           # out empty.
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true  # flattens platform sub-dirs into one folder
@@ -376,7 +376,7 @@ jobs:
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.12'
 
@@ -415,7 +415,7 @@ jobs:
           OUTPUT: CHANGELOG.md
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           draft: false
@@ -446,7 +446,7 @@ jobs:
 
       - name: Checkout homebrew-tap
         if: steps.check_token.outputs.skip == 'false'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: imonior/homebrew-tap
           token: ${{ secrets.TAP_PUSH_TOKEN }}
@@ -454,7 +454,7 @@ jobs:
 
       - name: Download arm64 artifact
         if: steps.check_token.outputs.skip == 'false'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: macos-arm64
           path: dl
