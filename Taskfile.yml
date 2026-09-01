@@ -7,9 +7,15 @@ vars:
   # Single source of truth for the app version: the repository-root VERSION
   # file (see tools/bumpversion). Forwarded to the per-platform Taskfiles so
   # every build injects it via -ldflags into internal/version.Version.
-  # go-task trims leading/trailing whitespace (incl. CRLF) from sh output,
-  # so no `tr` pipe needed — `tr` isn't guaranteed on Windows shells.
-  VERSION: { sh: cat VERSION }
+  # Must work under BOTH `wails3 task` (embedded go-task, which lacks the
+  # catFile built-in) and standalone `task`, on every platform:
+  #   - Windows: `cat` doesn't exist and the sh fallback (WSL bash) lacks
+  #     unix tools in PATH, so delegate to PowerShell. `.Trim()` strips the
+  #     CRLF that Get-Content -Raw preserves (the wails3 task runner does
+  #     not trim sh output the way stock go-task does).
+  #   - Linux/macOS: plain `cat`.
+  VERSION:
+    sh: '{{if eq OS "windows"}}powershell -NoProfile -Command "(Get-Content -Raw VERSION).Trim()"{{else}}cat VERSION{{end}}'
 
 includes:
   windows:

@@ -167,19 +167,17 @@ tasks:
     dir: build
     cmds:
       - cmd: go run ../tools/genverinfo -arch {{.ARCH}} -version {{.VERSION}} -tmpl windows/versioninfo.json.tmpl -out windows/versioninfo.gen.json
-      - cmd: goversioninfo -64=false -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_386.syso windows/versioninfo.gen.json
-        when:
-          - '{{.ARCH}} == "386"'
+      # The `when:` keyword is silently ignored by the task runner embedded
+      # in `wails3 task` (it executes every branch), which would link x86 and
+      # arm64 version resources into the amd64 exe. Use an inline template
+      # if/else instead — it is evaluated as part of the cmd string and works
+      # identically under `wails3 task` and standalone `task`.
+      #
       # arm64 MUST use `-arm` (IMAGE_FILE_MACHINE_ARM64). Using `-64`
       # (AMD64 machine) here links fine but the resulting .rsrc is tagged
       # as AMD64 and Explorer / FileVersionInfo then report empty version
       # info on the ARM64 build.
-      - cmd: goversioninfo -arm -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_arm64.syso windows/versioninfo.gen.json
-        when:
-          - '{{.ARCH}} == "arm64"'
-      - cmd: goversioninfo -64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_amd64.syso windows/versioninfo.gen.json
-        when:
-          - '{{.ARCH}} == "amd64"'
+      - cmd: '{{if eq .ARCH "386"}}goversioninfo -64=false{{else if eq .ARCH "arm64"}}goversioninfo -arm{{else}}goversioninfo -64{{end}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -o ../wails_windows_{{.ARCH}}.syso windows/versioninfo.gen.json'
       - cmd: powershell -NoProfile -Command "Remove-Item -Force windows/versioninfo.gen.json -ErrorAction SilentlyContinue"
         platforms: [windows]
       - cmd: rm -f windows/versioninfo.gen.json
