@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.0] - 2026-09-02
+
+### ✨ New
+
+- **"Install updates silently" setting (Settings → Updates)** — When on, downloaded updates install headlessly without showing the installer UI, then relaunch the app. Off by default.
+- **Windows updates use the interactive installer by default** — "Update now" downloads the asset and then launches the regular installation wizard; you confirm the install in the wizard, and its finish page (run checkbox on by default) launches the new version.
+
+### 🐛 Fixes
+
+- **Linux relaunches the app after an update** — deb/rpm package-manager updates now restart the app automatically so the new version loads (previously you had to open it manually).
+
+> macOS keeps the in-place app-bundle update introduced in 1.4.0 (a system authorization prompt appears when writing to /Applications; the app relaunches automatically).
+
 ## [1.4.1] - 2026-09-02
 
 ### 🐛 Fixes

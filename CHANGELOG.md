@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.0] - 2026-09-02
+
+### ✨ 新增
+
+- **"自动静默升级"设置（设置 → 更新）** — 开启后，更新下载完成将直接静默安装（不显示安装向导），完成后自动重新打开软件。默认关闭。
+- **Windows 更新默认走交互式安装** — "立即更新"下载完成后会启动与普通安装相同的安装向导，你可以在安装向导中确认安装，安装完成页默认勾选"运行"，完成后自动打开新版本。
+
+### 🐛 修复
+
+- **Linux 更新完成后自动打开软件** — deb/rpm 包管理器更新完成后会自动重启应用以加载新版本（此前需要手动重新打开）。
+
+> macOS 保持 1.4.0 起的应用内原位替换更新（安装时如需写入 /Applications 会弹出系统授权，完成后自动重启）。
+
 ## [1.4.1] - 2026-09-02
 
 ### 🐛 修复

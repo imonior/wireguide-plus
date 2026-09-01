@@ -22,12 +22,12 @@
 		"Comments": "https://github.com/imonior/wireguide-plus",
 		"CompanyName": "imonior",
 		"FileDescription": "WireGuide Plus - multi-tunnel automated WireGuard VPN client",
-		"FileVersion": "1.4.1.0",
+		"FileVersion": "1.5.0.0",
 		"InternalName": "wireguide-plus.exe",
 		"LegalCopyright": "\u00A9 2026 imonior",
 		"OriginalFilename": "wireguide-plus.exe",
 		"ProductName": "WireGuide Plus",
-		"ProductVersion": "1.4.1.0"
+		"ProductVersion": "1.5.0.0"
 	},
 	"VarFileInfo": {
 		"Translation": {
