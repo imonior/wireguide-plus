@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/imonior/wireguide-plus/internal/sysexec"
 )
@@ -69,17 +70,36 @@ func installLinux(path string) error {
 }
 
 func installWindows(path string) error {
-	// Run .msi installer
-	if len(path) > 4 && path[len(path)-4:] == ".msi" {
-		cmd := exec.Command("msiexec", "/i", path)
-		sysexec.Hide(cmd)
-		return cmd.Run()
+	// MSI: silent install; msiexec itself needs admin rights.
+	if len(path) > 4 && strings.EqualFold(path[len(path)-4:], ".msi") {
+		return runInstallerElevated("msiexec", "/i", path, "/qn")
 	}
-	// Run .exe installer
-	cmd := exec.Command(path)
+	// NSIS .exe installer: request elevation and run silently so the user
+	// only sees the UAC prompt. A direct exec.Command from a non-elevated
+	// process fails with ERROR_ELEVATION_REQUIRED because the installer's
+	// manifest requests admin rights (it writes to Program Files).
+	return runInstallerElevated(path, "/S")
+}
+
+// runInstallerElevated launches the installer via PowerShell's
+// Start-Process -Verb RunAs. This triggers the Windows UAC elevation prompt
+// when the parent process is not already elevated, and is a no-op prompt
+// when it already is. The installer is detached so the parent can exit.
+func runInstallerElevated(path string, args ...string) error {
+	// Pass the target path as $args[0] to avoid PowerShell quoting pitfalls
+	// for paths that may contain single quotes.
+	quoted := make([]string, 0, len(args))
+	for _, a := range args {
+		// Escape single quotes by doubling them; Windows paths cannot contain
+		// double quotes, so single-quoting each argument is safe.
+		quoted = append(quoted, "'"+strings.ReplaceAll(a, "'", "''")+"'")
+	}
+	argList := strings.Join(quoted, ",")
+	script := fmt.Sprintf("Start-Process -Verb RunAs -FilePath $args[0] -ArgumentList %s", argList)
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script, path)
 	sysexec.Hide(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to start installer with administrator rights: %w", err)
 	}
-	return cmd.Process.Release()
+	return nil
 }
