@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.7] - 2026-09-01
+
+### 🐛 修复
+
+- **Windows 应用内更新安装器启动失败** — 用 Windows ShellExecute `runas` 替代 PowerShell `Start-Process -Verb RunAs`，避免 PowerShell 执行策略/路径问题导致的 `exit status 1`；同时将下载的安装器复制到 `%LOCALAPPDATA%\wireguideplus\updates` 持久目录，防止 `Install` 返回后临时文件被清理，导致 UAC 确认后安装器找不到 exe。
+- **Linux 应用内更新健壮性** — 安装资产同样先复制到持久目录（`$XDG_DATA_HOME/wireguideplus/updates`）再启动，消除 AppImage 异步启动与临时文件清理的竞态；扩展名匹配改为大小写不敏感并支持 `.AppImage`；`.tar.gz` 等未知格式不再被当作可执行文件运行，而是明确失败并回退到下载页；`pkexec` 失败时保留其输出，便于判断是否为 polkit 代理缺失。
+
 ## [1.3.6] - 2026-09-01
 
 本版本将更名前旧版（"wireguide"）数据的迁移改为**用户可见的交互式引导**：启动时扫描旧版遗留的配置、隧道与日志，由你决定迁移哪些、如何处理重名冲突，并可先对比新旧目录再动手，不再静默覆盖。

@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.7] - 2026-09-01
+
+### 🐛 Bug Fixes
+
+- **Windows in-app updater installer launch failure** — Replaced PowerShell `Start-Process -Verb RunAs` with Windows ShellExecute `runas`, avoiding `exit status 1` caused by PowerShell execution policy/path issues. Also copies the downloaded installer to a persistent directory (`%LOCALAPPDATA%\wireguideplus\updates`) so the temporary file is not deleted before the UAC-confirmed installer starts.
+- **Linux in-app updater robustness** — The update asset is also staged to a persistent directory (`$XDG_DATA_HOME/wireguideplus/updates`) before launching, removing the race between asynchronous AppImage startup and temp-file cleanup; extension matching is now case-insensitive and handles `.AppImage`; unknown formats like `.tar.gz` are no longer executed as programs but fail clearly and fall back to the download page; `pkexec` failures now keep their output so a missing polkit agent is easy to diagnose.
+
 ## [1.3.6] - 2026-09-01
 
 This release turns migration of pre-rename ("wireguide") data into a **user-visible interactive flow**: on startup the app scans for legacy configs, tunnels and logs, lets you choose what to migrate and how to handle name conflicts, and lets you compare the old and new folders before committing — no more silent overwrites.

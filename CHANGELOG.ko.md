@@ -4,6 +4,13 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.3.7] - 2026-09-01
+
+### 🐛 수정
+
+- **Windows 앱 내 업데이트 설치 프로그램 시작 실패** — PowerShell `Start-Process -Verb RunAs`를 Windows ShellExecute `runas`로 대체하여 PowerShell 실행 정책/경로 문제로 인한 `exit status 1`을 방지합니다. 또한 다운로드한 설치 프로그램을 `%LOCALAPPDATA%\wireguideplus\updates` 영구 디렉터리에 복사하여 UAC 확인 후 설치 프로그램이 exe를 찾지 못하는 문제를 방지합니다.
+- **Linux 앱 내 업데이트 견고성** — 업데이트 자산도 시작 전에 영구 디렉터리(`$XDG_DATA_HOME/wireguideplus/updates`)로 스테이징하여 AppImage 비동기 시작과 임시 파일 정리의 경쟁을 제거합니다. 확장자 매칭을 대소문자 구분 없이 만들고 `.AppImage`를 지원합니다. `.tar.gz` 등 알려지지 않은 형식을 실행 파일로 실행하지 않고 명확히 실패 처리한 후 다운로드 페이지로 폴백합니다. `pkexec` 실패 시 출력을 보존하여 polkit 에이전트 부재를 쉽게 진단할 수 있습니다.
+
 ## [1.3.6] - 2026-09-01
 
 이번 버전에서는 리네임 이전("wireguide") 데이터 마이그레이션을 **사용자가 직접 확인하는 대화형 플로우**로 변경했습니다. 시작 시 이전 버전의 설정·터널·로그를 스캔하고, 무엇을 마이그레이션할지·이름 충돌을 어떻게 처리할지 선택할 수 있으며, 새/기존 폴더를 비교한 후 실행할 수 있습니다. 조용한 덮어쓰기는 폐지되었습니다.
