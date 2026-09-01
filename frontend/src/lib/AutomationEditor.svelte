@@ -274,7 +274,7 @@
     open = false;
     loadedFor = '';
   }
-  // Live-reflect an external edit to config.json (e.g. `wireguide ctl
+  // Live-reflect an external edit to config.json (e.g. `wireguideplus ctl
   // automation ...`, or another window) while the editor is open — the
   // file is the single source of truth for COMPLETE rules, so a genuine
   // external change reloads rather than sitting on a stale in-memory copy
@@ -291,7 +291,7 @@
   //
   // normRule puts a disk rule and a persistSet() rule through the SAME
   // normalization (load()'s type fallback, MAC canonicalization), so e.g.
-  // a dash-separated MAC written by `wireguide ctl` never reads as a
+  // a dash-separated MAC written by `wireguideplus ctl` never reads as a
   // difference from our colon form and forces a spurious reload.
   function normRule(d) {
     return {

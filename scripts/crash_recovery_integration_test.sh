@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-binary=${1:?wireguide binary required}
+binary=${1:?wireguideplus binary required}
 vpn_config=${2:?VPN config required}
 test_root=${3:?isolated test directory required}
 uid_num=${4:-$(id -u)}
@@ -16,11 +16,11 @@ backup_resolv="$test_root/resolv.conf.before"
 helper_pidfile="$test_root/helper.pid"
 recovery_log="$test_root/recovery.log"
 test_log="$test_root/test.log"
-socket="$runtime_dir/wireguide-${uid_num}.sock"
+socket="$runtime_dir/wireguideplus-${uid_num}.sock"
 unit_suffix="${BASHPID:-$$}"
-source_unit="wireguide-crash-source-$unit_suffix"
-recovered_unit="wireguide-crash-recovered-$unit_suffix"
-recovery_unit="wireguide-network-recovery-$unit_suffix"
+source_unit="wireguideplus-crash-source-$unit_suffix"
+recovered_unit="wireguideplus-crash-recovered-$unit_suffix"
+recovery_unit="wireguideplus-network-recovery-$unit_suffix"
 name=crash-recovery-audit
 
 mkdir -p "$runtime_dir" "$config_dir" "$data_dir" "$helper_data"

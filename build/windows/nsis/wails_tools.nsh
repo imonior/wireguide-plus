@@ -5,7 +5,7 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "wireguide"
+    !define INFO_PROJECTNAME "wireguideplus"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "My Company"
@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "My Product"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.2.5"
+    !define INFO_PRODUCTVERSION "1.3.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "© 2026, My Company"

@@ -35,21 +35,21 @@ const startTimeout = 10 * time.Minute
 // enough that a silent CLI looks hung rather than blocked on the user.
 const authHintAfter = 15 * time.Second
 
-// cmdStart launches the WireGuide app and waits until the helper is
+// cmdStart launches the WireGuide Plus app and waits until the helper is
 // reachable.
 //
 // Deliberately the ONLY command that starts anything. `connect`, `status`
 // and friends fail with "is the app running?" instead of silently starting
 // a VPN stack behind the user's back — the same contract the docker CLI has
 // with dockerd. Starting is an explicit act because on macOS it costs an
-// admin-password prompt, and because a running WireGuide is exactly what
+// admin-password prompt, and because a running WireGuide Plus is exactly what
 // the helper treats as consent to apply automation rules.
 func cmdStart(_ []string) int {
 	// Already up? Then this is a no-op, not an error — `ctl start` should
 	// be safe to put at the top of a script.
 	if c, err := dialHelper(); err == nil {
 		c.Close()
-		fmt.Println("WireGuide is already running")
+		fmt.Println("WireGuide Plus is already running")
 		return 0
 	}
 
@@ -58,7 +58,7 @@ func cmdStart(_ []string) int {
 		return 1
 	}
 
-	fmt.Println("starting WireGuide…")
+	fmt.Println("starting WireGuide Plus…")
 	if runtime.GOOS == "darwin" {
 		fmt.Println("(macOS may ask for your administrator password to start the VPN helper)")
 	}
@@ -70,7 +70,7 @@ func cmdStart(_ []string) int {
 		time.Sleep(500 * time.Millisecond)
 		if c, err := dialHelper(); err == nil {
 			c.Close()
-			fmt.Println("WireGuide is running")
+			fmt.Println("WireGuide Plus is running")
 			return 0
 		}
 		if !hinted && time.Since(start) > authHintAfter {
@@ -98,7 +98,7 @@ func cmdStop(_ []string) int {
 	if err != nil {
 		// Nothing to stop is success: `ctl stop` states a desired end
 		// state, and we're already in it.
-		fmt.Println("WireGuide is not running")
+		fmt.Println("WireGuide Plus is not running")
 		return 0
 	}
 	defer c.Close()
@@ -110,12 +110,12 @@ func cmdStop(_ []string) int {
 		fmt.Fprintln(os.Stderr, "stop:", err)
 		if strings.Contains(err.Error(), "method not found") {
 			fmt.Fprintln(os.Stderr,
-				"this helper predates 'ctl stop' — quit WireGuide from its tray icon, or restart the app once to upgrade the helper.")
+				"this helper predates 'ctl stop' — quit WireGuide Plus from its tray icon, or restart the app once to upgrade the helper.")
 		}
 		return 1
 	}
 	if resp.NotifiedGUI {
-		fmt.Println("stopping WireGuide…")
+		fmt.Println("stopping WireGuide Plus…")
 	} else {
 		fmt.Println("no app was running; stopped the leftover helper")
 	}
@@ -127,7 +127,7 @@ func cmdStop(_ []string) int {
 		time.Sleep(500 * time.Millisecond)
 		probe, perr := dialHelper()
 		if perr != nil {
-			fmt.Println("WireGuide stopped")
+			fmt.Println("WireGuide Plus stopped")
 			return 0
 		}
 		probe.Close()
@@ -215,7 +215,7 @@ func bundleFromExePath(exe string) string {
 func spawnSelfDetached() error {
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("cannot locate the WireGuide executable: %w", err)
+		return fmt.Errorf("cannot locate the WireGuide Plus executable: %w", err)
 	}
 	cmd := exec.Command(exe)
 	// Detach stdio: inheriting the terminal would keep the app tied to the
@@ -223,7 +223,7 @@ func spawnSelfDetached() error {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	sysexec.Detach(cmd)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cannot launch the WireGuide app: %w", err)
+		return fmt.Errorf("cannot launch the WireGuide Plus app: %w", err)
 	}
 	// Release the child so it isn't reaped when the CLI exits.
 	return cmd.Process.Release()

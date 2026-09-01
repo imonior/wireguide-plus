@@ -22,7 +22,7 @@ const nftCmdTimeout = 30 * time.Second
 // validIfaceName matches valid Linux interface names (alphanumeric, underscore, hyphen, max 15 chars).
 var validIfaceName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,15}$`)
 
-const nftTable = "wireguide"
+const nftTable = "wireguideplus"
 
 // LinuxFirewall implements FirewallManager using nftables.
 type LinuxFirewall struct {
@@ -349,21 +349,30 @@ func nftApply(rules string) error {
 	return nil
 }
 
-// nftDeleteDNSTable removes the wireguide_dns nftables table with a bounded
-// timeout. Returns the same (output, error) shape callers expect.
+// nftDeleteDNSTable removes the wireguideplus_dns nftables table with a
+// bounded timeout, plus the pre-plus "wireguide_dns" table an older install
+// may have left behind. Returns the same (output, error) shape callers expect.
 func nftDeleteDNSTable() ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), nftCmdTimeout)
 	defer cancel()
-	return exec.CommandContext(ctx, "nft", "delete", "table", "inet", nftTable+"_dns").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "nft", "delete", "table", "inet", nftTable+"_dns").CombinedOutput()
+	if err == nil {
+		// Best-effort sweep of the old table name from previous versions.
+		_ = exec.CommandContext(ctx, "nft", "delete", "table", "inet", "wireguide_dns").Run()
+	}
+	return out, err
 }
 
-// nftFlush deletes the main wireguide nftables table and returns any error.
+// nftFlush deletes the main wireguideplus nftables table (plus the old
+// "wireguide" table name from previous versions) and returns any error.
 func nftFlush() error {
 	ctx, cancel := context.WithTimeout(context.Background(), nftCmdTimeout)
 	defer cancel()
 	if out, err := exec.CommandContext(ctx, "nft", "delete", "table", "inet", nftTable).CombinedOutput(); err != nil {
 		return fmt.Errorf("nft delete table: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
+	// Best-effort sweep of the old table name from previous versions.
+	_ = exec.CommandContext(ctx, "nft", "delete", "table", "inet", "wireguide").Run()
 	return nil
 }
 

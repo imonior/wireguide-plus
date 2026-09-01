@@ -18,7 +18,7 @@ The 2.0 service-ization effort is **specific to Windows**:
 | Platform | Current privileged mechanism | 2.0 work needed |
 |---|---|---|
 | Windows | UAC-spawned elevated helper tied to the GUI (no service at all) | **Full system-service re-architecture — this guide** |
-| macOS | Helper already runs as a LaunchDaemon (`/Library/LaunchDaemons/com.wireguide.helper.plist`, `RunAtLoad=false` — see `internal/elevate/spawn_darwin.go`) | None for 2.0. Making it persist at boot is a one-line plist change, deferred |
+| macOS | Helper already runs as a LaunchDaemon (`/Library/LaunchDaemons/com.wireguideplus.helper.plist`, `RunAtLoad=false` — see `internal/elevate/spawn_darwin.go`) | None for 2.0. Making it persist at boot is a one-line plist change, deferred |
 | Linux | Helper spawned via `pkexec` on demand (`internal/elevate/spawn_linux.go`) | None for 2.0. A small systemd unit would cover "run at boot"; low value, deferred |
 
 In short: macOS and Linux already have (or trivially can get) system-level
@@ -143,7 +143,7 @@ missing"; the CLI is reused as-is.
   the wintun driver, drive WFP, access the network). Do NOT use
   `NetworkService` (no driver loading / WFP rights).
 - **Pipe name**: the service uses a global pipe, e.g.
-  `\\.\pipe\wireguide` (distinct from `ipc.DefaultSocketPath()`); extend per
+  `\\.\pipe\wireguideplus` (distinct from `ipc.DefaultSocketPath()`); extend per
   user if multi-user lands (see 5.3).
 
 ## 5. Implementation Roadmap

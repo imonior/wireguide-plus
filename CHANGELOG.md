@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.0] - 2026-09-01
+
+本版本将应用更名为 **WireGuide Plus**：窗口标题、托盘、自启动项、helper 日志、Homebrew cask、更新临时文件与 nftables 表名等全链路统一为 plus 命名，并在升级时自动清理旧版残留的启动项、守护进程与防火墙表。同时改进 macOS 托盘图标（改用应用图标红色变体）与路由诊断显示。
+
+### ✨ 新功能
+
+- **macOS 托盘图标改用应用图标** — 菜单栏图标使用应用图标的红色变体，在浅色 / 深色菜单栏下都清晰可辨；未内嵌图标时回退到原单色 W 模板。
+- **macOS 路由诊断规范化** — `netstat -rn` 会把 127.0.0.0/8 显示成 "127"、192.168.1.0/24 显示成 "192.168.1"；诊断页现在会展开回规范点分十进制 + 前缀，显示不再像截断。
+
+### 🛠 内部
+
+- **全链路更名 WireGuide Plus**：macOS 自启动 `com.wireguideplus.gui`、LaunchDaemon 与 helper 日志路径、Linux 桌面图标、Windows 自启动注册表值、FWPM 会话 / Provider 名、nftables 表 `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` 与 Caskroom 路径、更新临时文件前缀、macOS 授权弹窗文案全部统一。
+- **升级兼容清理**：升级 / 卸载时移除旧版残留的 `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon 与 helper、旧 helper 日志、`wireguide.desktop` 自启动项、旧 nft 表与旧 FWPM Provider。
+- **发布产物改名**：macOS zip / dmg 与 Linux deb 资产名改为 `WireGuidePlus-*`；NSIS PATH 提示与 MSIX 模板可执行文件名同步。
+- **测试脚本同步**：systemd unit 与测试 socket 统一为 `wireguideplus-*` 前缀。
+
 ## [1.2.5] - 2026-09-01
 
 本版本重构 DNS 泄漏检测：新增「公共 DNS 交叉验证」——测试时除本机配置的解析器外，还会向知名公共 DNS 发送探测以交叉核实；系统解析器按来源网卡分类标记「本机 / VPN / 公共」；公共列表支持从网络刷新与自由编辑。新增「浏览器检测」按钮，一键打开 browserleaks.com 做浏览器级 DNS 与 WebRTC 泄漏检测。同时修复 Windows 连接通知弹窗可能冻结无响应的问题，并更新应用图标。

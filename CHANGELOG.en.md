@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.0] - 2026-09-01
+
+This release rebrands the application as **WireGuide Plus** end-to-end: window title, tray, autostart items, helper log, Homebrew cask, update temp files and nftables table names all use the plus naming, and upgrades now clean up the legacy items left behind by older installs (launch agents, daemon, firewall tables). It also improves the macOS menu-bar icon and route diagnostics.
+
+### ✨ New Features
+
+- **macOS menu-bar icon now uses the app icon** — the tray shows a red-tinted variant of the app icon that stays legible on both light and dark menu bars; it falls back to the monochrome W template when no icon was embedded.
+- **Canonical macOS route display** — `netstat -rn` prints compressed network routes (127.0.0.0/8 as "127", 192.168.1.0/24 as "192.168.1"); the diagnostics page now expands them back to canonical dotted-quad + prefix form.
+
+### 🛠 Internals
+
+- **Rebrand to WireGuide Plus** — macOS autostart `com.wireguideplus.gui`, LaunchDaemon and helper log paths, Linux desktop icon, Windows autostart registry value, FWPM session / provider names, nftables tables `wireguideplus` / `wireguideplus_dns`, Homebrew cask `wireguideplus` and Caskroom paths, update temp file prefix, and the macOS authorization prompt all unified.
+- **Upgrade cleanup** — upgrades/uninstalls remove the legacy `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon and helper, old helper log, `wireguide.desktop`, old nft tables and the old FWPM provider.
+- **Release asset renames** — macOS zip/dmg and Linux deb assets are now named `WireGuidePlus-*`; the NSIS PATH hint and MSIX template executable names follow.
+- **Test script sync** — systemd units and test sockets use the `wireguideplus-*` prefix.
+
 ## [1.2.5] - 2026-09-01
 
 This release rebuilds the DNS leak test around public-resolver cross-checking: alongside the resolvers from the host's own network configuration, the test now also probes well-known public DNS servers for cross-verification, tags every resolver by its source (Local / VPN / Public), and lets you refresh or customize the public list. A new "Browser test" button opens browserleaks.com for browser-level DNS and WebRTC leak checks. It also fixes Windows connection popups that could freeze, and ships a new app icon.

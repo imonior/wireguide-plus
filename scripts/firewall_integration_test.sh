@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-binary=${1:?wireguide binary required}
+binary=${1:?wireguideplus binary required}
 vpn_config=${2:?VPN config required}
 test_root=${3:?isolated test directory required}
 uid_num=${4:-$(id -u)}
@@ -16,7 +16,7 @@ backup_resolv="$test_root/resolv.conf.before"
 helper_pidfile="$test_root/helper.pid"
 recovery_log="$test_root/recovery.log"
 test_log="$test_root/test.log"
-socket="$runtime_dir/wireguide-${uid_num}.sock"
+socket="$runtime_dir/wireguideplus-${uid_num}.sock"
 name=firewall-audit
 split_name=firewall-split-audit
 split_config="$test_root/split.conf"
@@ -46,7 +46,7 @@ cleanup() {
   cli set dns-protection off >>"$test_log" 2>&1 || true
   cli set killswitch off >>"$test_log" 2>&1 || true
   sudo -n "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log" || true
-  sudo -n systemctl stop wireguide-network-recovery.timer wireguide-network-recovery.service 2>/dev/null || true
+  sudo -n systemctl stop wireguideplus-network-recovery.timer wireguideplus-network-recovery.service 2>/dev/null || true
   if (( rc == 0 )); then
     log "PASS: firewall integration and product-OFF recovery completed"
   else
@@ -56,7 +56,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-sudo -n systemd-run --quiet --unit=wireguide-network-recovery --on-active=2m \
+sudo -n systemd-run --quiet --unit=wireguideplus-network-recovery --on-active=2m \
   "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log"
 log "independent 2-minute emergency recovery armed"
 
@@ -65,12 +65,12 @@ getent ahosts www.google.com >/dev/null
 cli import "$vpn_config" "$name" >>"$test_log" 2>&1
 cli import "$split_config" "$split_name" >>"$test_log" 2>&1
 
-sudo -n systemd-run --quiet --unit=wireguide-fulltest-helper --service-type=exec \
+sudo -n systemd-run --quiet --unit=wireguideplus-fulltest-helper --service-type=exec \
   --setenv="XDG_CONFIG_HOME=$config_dir" --setenv="XDG_DATA_HOME=$data_dir" \
   "$binary" --helper --socket "$socket" --uid "$uid_num" --data-dir "$helper_data"
 for _ in {1..100}; do [[ -S "$socket" ]] && break; sleep 0.1; done
 [[ -S "$socket" ]]
-main_pid=$(sudo -n systemctl show -p MainPID --value wireguide-fulltest-helper.service)
+main_pid=$(sudo -n systemctl show -p MainPID --value wireguideplus-fulltest-helper.service)
 [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]
 printf '%s\n' "$main_pid" >"$helper_pidfile"
 
@@ -85,7 +85,7 @@ getent ahosts www.google.com >/dev/null
 # handshake could never leave the host.
 cli disconnect "$name" >>"$test_log" 2>&1
 cli set killswitch on >>"$test_log" 2>&1
-sudo -n nft list table inet wireguide >>"$test_log"
+sudo -n nft list table inet wireguideplus >>"$test_log"
 if http_ok https://www.google.com/generate_204; then
   log "FAIL: pre-enabled kill switch did not block with no VPN"
   exit 1
@@ -97,7 +97,7 @@ grep -q '"interface_name": "wg-' <<<"$status_json"
 http_ok https://www.google.com/generate_204
 getent ahosts www.google.com >/dev/null
 cli set killswitch off >>"$test_log" 2>&1
-if sudo -n nft list table inet wireguide >/dev/null 2>&1; then
+if sudo -n nft list table inet wireguideplus >/dev/null 2>&1; then
   log "FAIL: pre-enable sequence left kill-switch table after OFF"
   exit 1
 fi
@@ -107,10 +107,10 @@ log "pre-enabled kill switch blockade/connect/normal-OFF passed"
 # DNS protection: prove the table is installed, DNS still resolves through
 # the configured VPN resolver, and the normal OFF path removes the table.
 cli set dns-protection on >>"$test_log" 2>&1
-sudo -n nft list table inet wireguide_dns >>"$test_log"
+sudo -n nft list table inet wireguideplus_dns >>"$test_log"
 getent ahosts www.google.com >/dev/null
 cli set dns-protection off >>"$test_log" 2>&1
-if sudo -n nft list table inet wireguide_dns >/dev/null 2>&1; then
+if sudo -n nft list table inet wireguideplus_dns >/dev/null 2>&1; then
   log "FAIL: DNS-protection table survived product OFF"
   exit 1
 fi
@@ -126,12 +126,12 @@ status_json=$(cli status --json 2>>"$test_log")
 full_iface=$(python3 -c 'import json,sys; print(next(v["interface_name"] for v in json.load(sys.stdin) if v["tunnel_name"]=="firewall-audit"))' <<<"$status_json")
 split_iface=$(python3 -c 'import json,sys; print(next(v["interface_name"] for v in json.load(sys.stdin) if v["tunnel_name"]=="firewall-split-audit"))' <<<"$status_json")
 cli set killswitch on >>"$test_log" 2>&1
-nft_rules=$(sudo -n nft list table inet wireguide)
+nft_rules=$(sudo -n nft list table inet wireguideplus)
 grep -q "$full_iface" <<<"$nft_rules"
 grep -q "$split_iface" <<<"$nft_rules"
 http_ok https://www.google.com/generate_204
 cli disconnect "$split_name" >>"$test_log" 2>&1
-nft_rules=$(sudo -n nft list table inet wireguide)
+nft_rules=$(sudo -n nft list table inet wireguideplus)
 grep -q "$full_iface" <<<"$nft_rules"
 if grep -q "$split_iface" <<<"$nft_rules"; then
   log "FAIL: disconnected split tunnel remained permitted by kill switch"
@@ -143,7 +143,7 @@ log "multi-tunnel kill-switch add/selective-remove passed"
 
 # Kill switch while connected must preserve VPN traffic.
 cli set killswitch on >>"$test_log" 2>&1
-sudo -n nft list table inet wireguide >>"$test_log"
+sudo -n nft list table inet wireguideplus >>"$test_log"
 http_ok https://www.google.com/generate_204
 log "kill switch ON preserved VPN HTTPS"
 
@@ -160,7 +160,7 @@ log "kill switch intentionally blocked internet with VPN down"
 # This is the primary assertion requested by the test: normal feature OFF,
 # not the emergency script, must restore internet and remove nftables state.
 cli set killswitch off >>"$test_log" 2>&1
-if sudo -n nft list table inet wireguide >/dev/null 2>&1; then
+if sudo -n nft list table inet wireguideplus >/dev/null 2>&1; then
   log "FAIL: kill-switch table survived product OFF"
   exit 1
 fi

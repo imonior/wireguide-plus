@@ -1,4 +1,4 @@
-# git-cliff config for WireGuide release notes.
+# git-cliff config for WireGuide Plus release notes.
 #
 # Why this exists: the project does not use Conventional Commits, and most
 # work lands as direct pushes to main rather than through PRs. GitHub's
@@ -62,15 +62,15 @@ exe and the matching `wintun.dll` (extract into one folder and run):
 
 ### macOS
 
-- [WireGuide-darwin-arm64.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-darwin-arm64.zip) — portable app bundle
-- [WireGuide-darwin-arm64.dmg](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-darwin-arm64.dmg) — drag-and-drop installer
+- [WireGuidePlus-darwin-arm64.zip](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-darwin-arm64.zip) — portable app bundle
+- [WireGuidePlus-darwin-arm64.dmg](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-darwin-arm64.dmg) — drag-and-drop installer
 
 ### Linux
 
-- [WireGuide-linux-amd64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-amd64.deb) — Debian/Ubuntu, amd64
-- [WireGuide-linux-arm64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-arm64.deb) — Debian/Ubuntu, arm64
-- [WireGuide-linux-amd64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-amd64-portable.tar.gz) — portable, amd64
-- [WireGuide-linux-arm64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuide-linux-arm64-portable.tar.gz) — portable, arm64
+- [WireGuidePlus-linux-amd64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-linux-amd64.deb) — Debian/Ubuntu, amd64
+- [WireGuidePlus-linux-arm64.deb](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-linux-arm64.deb) — Debian/Ubuntu, arm64
+- [WireGuidePlus-linux-amd64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-linux-amd64-portable.tar.gz) — portable, amd64
+- [WireGuidePlus-linux-arm64-portable.tar.gz](https://github.com/imonior/wireguide-plus/releases/download/{{ version }}/WireGuidePlus-linux-arm64-portable.tar.gz) — portable, arm64
 
 ### Checksums
 

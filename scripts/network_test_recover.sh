@@ -11,7 +11,7 @@ recovery_log=${3:?recovery log path required}
 exec >>"$recovery_log" 2>&1
 echo "$(date -Is) recovery starting"
 
-systemctl stop wireguide-fulltest-helper.service 2>/dev/null || true
+systemctl stop wireguideplus-fulltest-helper.service 2>/dev/null || true
 
 if [[ -s "$helper_pidfile" ]]; then
   helper_pid=$(<"$helper_pidfile")
@@ -32,7 +32,7 @@ while IFS= read -r iface; do
 done < <(ip -o link show | awk -F': ' '{print $2}')
 
 # A killed wireguard-go process can leave its Unix UAPI socket behind even
-# after the TUN is gone. Restrict deletion to WireGuide's hashed wg-* names.
+# after the TUN is gone. Restrict deletion to WireGuide Plus's hashed wg-* names.
 find /var/run/wireguard -maxdepth 1 -type s -name 'wg-*.sock' -delete 2>/dev/null || true
 
 for family in -4 -6; do
@@ -47,8 +47,8 @@ for family in -4 -6; do
   done
 done
 
-nft delete table inet wireguide 2>/dev/null || true
-nft delete table inet wireguide_dns 2>/dev/null || true
+nft delete table inet wireguideplus 2>/dev/null || true
+nft delete table inet wireguideplus_dns 2>/dev/null || true
 
 if [[ -f "$backup_resolv" ]]; then
   install -m 0644 "$backup_resolv" /etc/resolv.conf

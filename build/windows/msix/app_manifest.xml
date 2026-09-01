@@ -10,7 +10,7 @@
   <Identity
     Name="com.imonior.wireguide-plus"
     Publisher="CN=imonior"
-    Version="1.2.5.0"
+    Version="1.3.0.0"
     ProcessorArchitecture="x64" />
   
   <Properties>
@@ -29,7 +29,7 @@
   </Resources>
   
   <Applications>
-    <Application Id="com.imonior.wireguide-plus" Executable="wireguide" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="com.imonior.wireguide-plus" Executable="wireguideplus" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="WireGuide Plus"
         Description="WireGuide Plus - multi-tunnel automated WireGuard VPN client"
@@ -41,7 +41,7 @@
       </uap:VisualElements>
       
       <Extensions>
-        <desktop:Extension Category="windows.fullTrustProcess" Executable="wireguide" />
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="wireguideplus" />
         
         
       </Extensions>

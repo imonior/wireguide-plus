@@ -585,7 +585,7 @@ func (s *TunnelService) DismissUpdate(version string) error {
 
 // RunUpdate performs the update end-to-end:
 //
-//   - Homebrew installs → `brew update && brew upgrade --cask wireguide`,
+//   - Homebrew installs → `brew update && brew upgrade --cask wireguideplus`,
 //     letting the cask's postflight handle the killall + relaunch. This
 //     is the "one-click" expectation users have, not "copy this command
 //     into your terminal".
@@ -642,7 +642,7 @@ func (s *TunnelService) runUpdateBrew(info *update.UpdateInfo) error {
 		slog.Warn("brew update failed, continuing with upgrade", "error", err, "output", string(out))
 	}
 
-	// `brew upgrade --cask wireguide` runs the cask postflight which
+	// `brew upgrade --cask wireguideplus` runs the cask postflight which
 	// killalls and relaunches us. The postflight typically completes
 	// in 10–20 s; 5 min is a defensive ceiling for slow disks or
 	// signature-check work — if we hit it, brew is genuinely stuck.
@@ -662,8 +662,8 @@ func (s *TunnelService) runUpdateBrew(info *update.UpdateInfo) error {
 	// flag forces the upgrade regardless of brew version or cask flags.
 	s.emitUpdateProgress("install", 0)
 	runUpgrade := func() ([]byte, error) {
-		slog.Info("update: running brew upgrade --cask --greedy wireguide")
-		cmd := exec.CommandContext(upCtx, brewBin, "upgrade", "--cask", "--greedy", "wireguide")
+		slog.Info("update: running brew upgrade --cask --greedy wireguideplus")
+		cmd := exec.CommandContext(upCtx, brewBin, "upgrade", "--cask", "--greedy", "wireguideplus")
 		// We already ran `brew update` above — suppress the implicit
 		// re-update brew would otherwise bolt onto upgrade.
 		cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")

@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.0] - 2026-09-01
+
+このバージョンでは、アプリを **WireGuide Plus** に全面リブランドしました：ウィンドウタイトル、トレイ、自動起動項目、helper ログ、Homebrew cask、更新一時ファイル、nftables テーブル名など、全経路が plus 命名に統一され、アップグレード時に旧バージョンが残した起動項目・デーモン・ファイアウォールテーブルも自動的に掃除されます。さらに macOS のメニューバーアイコンとルーティング診断表示も改善しました。
+
+### ✨ 新機能
+
+- **macOS メニューバーアイコンをアプリアイコンに変更** — アプリアイコンの赤いバリアントを使用し、ライト / ダークどちらのメニューバーでも視認性を確保。アイコンが埋め込まれていない場合は従来のモノクロ W テンプレートにフォールバックします。
+- **macOS ルート診断の正規化** — `netstat -rn` はネットワークルートを圧縮表示します（127.0.0.0/8 は "127"、192.168.1.0/24 は "192.168.1"）。診断ページで正規のドット付き 10 進数 + プレフィックスに展開して表示します。
+
+### 🛠 内部
+
+- **WireGuide Plus への全面リブランド**：macOS 自動起動 `com.wireguideplus.gui`、LaunchDaemon と helper ログパス、Linux デスクトップアイコン、Windows 自動起動レジストリ値、FWPM セッション / Provider 名、nftables テーブル `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` と Caskroom パス、更新一時ファイルのプレフィックス、macOS の認証プロンプト文言をすべて統一。
+- **アップグレード時のクリーンアップ**：旧バージョンが残した `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon と helper、旧 helper ログ、`wireguide.desktop`、旧 nft テーブル、旧 FWPM Provider を削除します。
+- **リリース成果物のリネーム**：macOS zip / dmg と Linux deb を `WireGuidePlus-*` に変更。NSIS の PATH ヒントと MSIX テンプレートの実行ファイル名も同期しました。
+- **テストスクリプト同期**：systemd unit とテスト用 socket を `wireguideplus-*` プレフィックスに統一しました。
+
 ## [1.2.5] - 2026-09-01
 
 本バージョンでは DNS リークテストを再構築し、新たに「パブリック DNS クロスチェック」を追加しました：ローカル設定のリゾルバに加えて、既知のパブリック DNS にもクエリを送って突き合わせます。システムリゾルバは取得元インターフェースごとに「ローカル / VPN / パブリック」に分類・表示し、パブリックリストはネットワークからの更新と自由な編集に対応しました。「ブラウザーでテスト」ボタンから browserleaks.com を開いてブラウザーレベルの DNS / WebRTC リークチェックもできます。Windows の接続通知ポップアップがフリーズする問題も修正し、アプリアイコンも一新しました。

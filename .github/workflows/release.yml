@@ -62,7 +62,7 @@ jobs:
         # resulting .zip stays Gatekeeper-quarantine-friendly.
         run: |
           cd bin
-          ditto -c -k --sequesterRsrc --keepParent wireguideplus.app "WireGuide-darwin-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent wireguideplus.app "WireGuidePlus-darwin-arm64.zip"
 
       - name: Create DMG (installer)
         # hdiutil builds the drag-and-drop .dmg installer from the .app
@@ -70,14 +70,14 @@ jobs:
         # mirroring Windows' installer + portable.zip split.
         run: |
           cd bin
-          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuide-darwin-arm64.dmg"
+          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuidePlus-darwin-arm64.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
           path: |
-            bin/WireGuide-darwin-arm64.zip
-            bin/WireGuide-darwin-arm64.dmg
+            bin/WireGuidePlus-darwin-arm64.zip
+            bin/WireGuidePlus-darwin-arm64.dmg
           if-no-files-found: error
           retention-days: 7
 
@@ -316,21 +316,21 @@ jobs:
         run: |
           wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           dpkg-deb --info bin/wireguideplus.deb
-          mv bin/wireguideplus.deb "bin/WireGuide-linux-${{ matrix.arch }}.deb"
+          mv bin/wireguideplus.deb "bin/WireGuidePlus-linux-${{ matrix.arch }}.deb"
 
       - name: Package portable tarball
         # Portable build = the bare binary in a tarball (no package manager
         # needed); pairs with the .deb installer, mirroring Windows'
         # installer + portable.zip split.
         run: |
-          tar -czf "bin/WireGuide-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
+          tar -czf "bin/WireGuidePlus-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
           path: |
-            bin/WireGuide-linux-${{ matrix.arch }}.deb
-            bin/WireGuide-linux-${{ matrix.arch }}-portable.tar.gz
+            bin/WireGuidePlus-linux-${{ matrix.arch }}.deb
+            bin/WireGuidePlus-linux-${{ matrix.arch }}-portable.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -459,8 +459,8 @@ jobs:
           # Strip the leading 'v' from vX.Y.Z so the cask `version` line
           # matches Homebrew convention.
           version="${TAG#v}"
-          sha256=$(sha256sum dl/WireGuide-darwin-arm64.zip | awk '{print $1}')
-          cask="tap/Casks/wireguide.rb"
+          sha256=$(sha256sum dl/WireGuidePlus-darwin-arm64.zip | awk '{print $1}')
+          cask="tap/Casks/wireguideplus.rb"
 
           # Heredoc-rewrite the whole cask in one shot. Doing it via sed
           # against the old file would chain three fragile regex edits
@@ -469,11 +469,11 @@ jobs:
           # just regenerate the bits that change. Everything *outside*
           # the version/sha256/url block stays byte-identical.
           cat > "$cask" <<EOF
-          cask "wireguide" do
+          cask "wireguideplus" do
             version "$version"
             sha256 "$sha256"
 
-            url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuide-darwin-arm64.zip"
+            url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuidePlus-darwin-arm64.zip"
             name "WireGuide Plus"
             desc "Multi-tunnel automated WireGuard VPN client"
             homepage "https://github.com/imonior/wireguide-plus"
@@ -535,10 +535,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Detect a no-op (rerun of the same tag) so the workflow
           # doesn't fail trying to push an empty diff.
-          if git diff --quiet Casks/wireguide.rb; then
+          if git diff --quiet Casks/wireguideplus.rb; then
             echo "cask already up to date for ${TAG}; nothing to commit."
             exit 0
           fi
-          git add Casks/wireguide.rb
-          git commit -m "wireguide ${TAG}: arm64 cask bump"
+          git add Casks/wireguideplus.rb
+          git commit -m "wireguideplus ${TAG}: arm64 cask bump"
           git push

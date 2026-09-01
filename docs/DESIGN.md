@@ -1,8 +1,8 @@
-# WireGuide Architecture & Design
+# WireGuide Plus Architecture & Design
 
 ## Overview
 
-WireGuide is a **two-process** WireGuard VPN client:
+WireGuide Plus is a **two-process** WireGuard VPN client:
 
 - **GUI process** (unprivileged) — Wails v3 + Svelte webview, system tray, config editor
 - **Helper process** (root) — wireguard-go TUN, routing, DNS, firewall, reconnect
@@ -36,7 +36,7 @@ This mirrors the architecture of `wg-quick` (which also runs as root) but wraps 
 
 ## Multi-Tunnel Architecture
 
-WireGuide supports **multiple simultaneous WireGuard tunnels**. The `tunnel.Manager` maintains a `map[string]*tunnelEntry` keyed by tunnel name, where each entry holds its own independent state:
+WireGuide Plus supports **multiple simultaneous WireGuard tunnels**. The `tunnel.Manager` maintains a `map[string]*tunnelEntry` keyed by tunnel name, where each entry holds its own independent state:
 
 ```go
 type tunnelEntry struct {
@@ -176,7 +176,7 @@ Per-platform backends, all driven by the same `Firewall.SetKillSwitch` IPC metho
 Rules are loaded into the `com.apple/wireguide` anchor (slash, not dot — pf's `*` wildcard doesn't cross the `/` path separator, so a dot-named anchor would never match the system wildcard). macOS ships with `anchor "com.apple/*" all` in pf.conf, so our anchor is automatically evaluated — **we never modify the main ruleset**.
 
 ```
-# WireGuide kill switch rules (loaded into anchor)
+# WireGuide Plus kill switch rules (loaded into anchor)
 pass quick on lo0 all                           # loopback
 pass out quick proto udp to 1.2.3.4 port 443   # WG endpoint
 pass out quick proto udp from any port 68 to any port 67  # DHCP
@@ -227,7 +227,7 @@ never auto-touched. A tunnel the user switched off manually from the GUI
 or tray is **exempt from connect rules**: it lands on
 `Settings.ManualOffTunnels` (persisted in `config.json`), and the engine
 skips its connect decisions until the user connects it again (which
-clears the flag) or WireGuide restarts (which clears all flags). Legacy
+clears the flag) or WireGuide Plus restarts (which clears all flags). Legacy
 `Settings.WifiRules` (SSID-only auto-connect + global trusted list) is
 migrated once into this model by `Settings.EnsureAutomation`.
 
@@ -268,8 +268,8 @@ helper's authoritative current SSID).
 
 Rules are edited in the GUI (tunnel detail → **Automation**: condition/
 action rows, self-entry with current-value autocomplete, drag-to-reorder,
-inline MAC/CIDR validation) or from the CLI (`wireguide ctl automation
-add/rm/rules`, and `wireguide ctl automation` for a read-only preview of
+inline MAC/CIDR validation) or from the CLI (`wireguideplus ctl automation
+add/rm/rules`, and `wireguideplus ctl automation` for a read-only preview of
 the current decision). Both edit `Settings.Automation` in `config.json`,
 which the helper rereads on every evaluation — no restart needed.
 
@@ -346,7 +346,7 @@ Wake detected (all tunnels)
 
 ## Helper Version Sync
 
-GUI and helper share the same binary (`wireguide` / `wireguide --helper`). On startup, `ensureHelper` pings the helper and compares `AppVersion`:
+GUI and helper share the same binary (`wireguideplus` / `wireguideplus --helper`). On startup, `ensureHelper` pings the helper and compares `AppVersion`:
 
 - Match -> use existing helper
 - Mismatch -> Shutdown RPC -> `ForceReinstall` -> `installAndLoadDaemon` (bootout old, copy new binary, bootstrap)
@@ -364,7 +364,7 @@ JSON-RPC 2.0 over a Unix domain socket (macOS/Linux; permissions `0600`, peer UI
 | `Helper.ForceShutdown` | GUI->Helper | Bypass graceful teardown; `os.Exit` after best-effort firewall cleanup. Used by the upgrade path when `Shutdown` is wedged. |
 | `Helper.Subscribe` | GUI->Helper | Subscribe to event notifications |
 | `Helper.SetLogLevel` | GUI->Helper | Change runtime log level |
-| `Helper.RequestQuit` | CLI->Helper | Ask the helper to shut the app down (`wireguide ctl stop`) |
+| `Helper.RequestQuit` | CLI->Helper | Ask the helper to shut the app down (`wireguideplus ctl stop`) |
 | `Tunnel.Connect` | GUI->Helper | Start VPN tunnel (`ConnectRequest`) |
 | `Tunnel.Disconnect` | GUI->Helper | Stop tunnel (`DisconnectRequest`, optional `TunnelName`) |
 | `Tunnel.Rename` | GUI->Helper | Rename tunnel (`RenameRequest`) — atomic update under `connectMu` |
@@ -377,15 +377,15 @@ JSON-RPC 2.0 over a Unix domain socket (macOS/Linux; permissions `0600`, peer UI
 | `Monitor.SetHealthCheck` | GUI->Helper | Toggle per-tunnel health check |
 | `Network.SetPinInterface` | GUI->Helper | Toggle `-ifscope` route pinning |
 | `Wifi.ReportSSID` | GUI->Helper | Forward current SSID from GUI (macOS 14+ Location Services workaround) |
-| `Automation.Preview` | CLI->Helper | Read-only dump of the current network context + per-tunnel rule decision (`wireguide ctl automation`) |
+| `Automation.Preview` | CLI->Helper | Read-only dump of the current network context + per-tunnel rule decision (`wireguideplus ctl automation`) |
 | `event.status` | Helper->GUI | 1 Hz status broadcast (includes `active_tunnels` list) |
 | `event.reconnect` | Helper->GUI | Reconnect state changes |
 | `event.log` | Helper->GUI | Structured log entries |
 | `event.wifi_ssid` | Helper->GUI | SSID changed (`WifiSSIDPayload{OldSSID, NewSSID}`) |
 | `event.auto_connect` | Helper->GUI | Wi-Fi rule fired and connected (`AutoConnectPayload{TunnelName}`) |
 | `event.critical_error` | Helper->GUI | A background goroutine exceeded the `goSafe` restart budget; tunnel state may not match reality. The GUI surfaces this via a banner/toast. |
-| `event.settings_changed` | Helper->GUI | Broadcast whenever a setting changes over IPC (`SettingsChangedPayload`), keeping other clients — e.g. the GUI after a `wireguide ctl set` — in sync |
-| `event.quit` | Helper->GUI | Helper asks the GUI to quit (relays `Helper.RequestQuit` from `wireguide ctl stop`) |
+| `event.settings_changed` | Helper->GUI | Broadcast whenever a setting changes over IPC (`SettingsChangedPayload`), keeping other clients — e.g. the GUI after a `wireguideplus ctl set` — in sync |
+| `event.quit` | Helper->GUI | Helper asks the GUI to quit (relays `Helper.RequestQuit` from `wireguideplus ctl stop`) |
 
 ### Key Request/Response Types
 
@@ -436,7 +436,7 @@ All background goroutines wrapped in `goSafe()` — recovers panics, logs stack 
 
 | Install method | Update mechanism |
 |---------------|-----------------|
-| Homebrew | `brew upgrade --cask --greedy wireguide` (GUI triggers; `HOMEBREW_NO_AUTO_UPDATE=1` since the checker already knows the target version) |
+| Homebrew | `brew upgrade --cask --greedy wireguideplus` (GUI triggers; `HOMEBREW_NO_AUTO_UPDATE=1` since the checker already knows the target version) |
 | Binary zip | Opens GitHub Releases page in browser |
 
 The Homebrew path is verified, not trusted: after `brew` exits 0, the installed
@@ -460,7 +460,7 @@ Homebrew cask `uninstall` block only quits the app (no sudo). Helper cleanup is 
 | App Store | Not possible | Required |
 | Root required | Yes (TUN device) | No (sandboxed) |
 
-WireGuide chose wireguard-go for multi-platform support and full control over networking. The tradeoff is requiring root and not being distributable via App Store.
+WireGuide Plus chose wireguard-go for multi-platform support and full control over networking. The tradeoff is requiring root and not being distributable via App Store.
 
 ### Why Go + Wails instead of Swift/Electron?
 

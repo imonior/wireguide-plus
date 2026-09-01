@@ -65,11 +65,13 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// Settings changes can reach us without an import cycle.
 	wgapp.SetGUILogLevelSetter(setGUILogLevel)
 
-	// Pre-render the Windows tray icon variants now that main.go has
-	// populated customTrayIconPNG via SetTrayIconPNG. macOS uses the
-	// template path built in tray.go's init(); the Windows builder
-	// needs the embedded app icon, which init() can't see.
+	// Pre-render the tray icon variants now that main.go has populated
+	// customTrayIconPNG via SetTrayIconPNG. Windows/Linux get the full
+	// app-icon set; macOS gets its own 64px app-icon set (the monochrome
+	// W template built in tray.go's init() stays as the fallback when no
+	// source PNG was embedded).
 	buildWindowsTrayIcons()
+	buildMacTrayIcons()
 
 	// 1. Local storage
 	paths, err := storage.GetPaths()
@@ -274,9 +276,15 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// render every later SetIcon monochrome.
 	tray := app.SystemTray.New()
 	if runtime.GOOS == "darwin" {
-		// White W first (historical default); the appearance observer
-		// swaps in the black set only if the menu bar is really light.
-		tray.SetIcon(trayOffIconDark)
+		// App-icon variant when the embedded source was built (macOS now
+		// mirrors the app icon). Falls back to the white W template
+		// (historical default); the appearance observer swaps that for
+		// the black set only if the menu bar is really light.
+		if len(trayOffIconMac) > 0 {
+			tray.SetIcon(trayOffIconMac)
+		} else {
+			tray.SetIcon(trayOffIconDark)
+		}
 	} else {
 		tray.SetLabel("WireGuide Plus")
 		// Windows and Linux need an explicit icon at startup. Without it,

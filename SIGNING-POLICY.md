@@ -42,7 +42,7 @@ via `codesign`; Linux ships unsigned).
 
 ## Roles
 
-WireGuide is currently maintained by a single person. The same
+WireGuide Plus is currently maintained by a single person. The same
 individual fulfills the three SignPath-required roles:
 
 | Role | Filled by |
@@ -88,7 +88,7 @@ not a recovery workaround.
 
 ## Privacy &amp; data handling
 
-WireGuide does not transmit telemetry, analytics, crash reports, or
+WireGuide Plus does not transmit telemetry, analytics, crash reports, or
 configuration content to the maintainer, SignPath, or any third party.
 WireGuard tunnels carry only the peer traffic the user has explicitly
 configured; nothing about the user's machine, session, or usage is

@@ -200,11 +200,11 @@ Section
     # installer's admin token. `"` can't appear in a Windows path, so the
     # SetEnvironmentVariable marshalling below is safe. $$x is an escaped
     # literal `$x` for PowerShell.
-    System::Call 'kernel32::SetEnvironmentVariable(t "WIREGUIDE_DIR", t "$INSTDIR")'
-    nsExec::ExecToLog `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$d=$$env:WIREGUIDE_DIR; $$p=[Environment]::GetEnvironmentVariable('Path','Machine'); if(($$p -split ';') -notcontains $$d){[Environment]::SetEnvironmentVariable('Path',$$p.TrimEnd(';')+';'+$$d,'Machine')}"`
+    System::Call 'kernel32::SetEnvironmentVariable(t "WIREGUIDEPLUS_DIR", t "$INSTDIR")'
+    nsExec::ExecToLog `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$d=$$env:WIREGUIDEPLUS_DIR; $$p=[Environment]::GetEnvironmentVariable('Path','Machine'); if(($$p -split ';') -notcontains $$d){[Environment]::SetEnvironmentVariable('Path',$$p.TrimEnd(';')+';'+$$d,'Machine')}"`
     Pop $0
     ${If} $0 != 0
-        DetailPrint "Note: could not add WireGuide to PATH (exit $0). Use the full path to wireguide.exe, or add it to PATH manually."
+        DetailPrint "Note: could not add WireGuide Plus to PATH (exit $0). Use the full path to ${PRODUCT_EXECUTABLE}, or add it to PATH manually."
     ${EndIf}
 
     !insertmacro wails.associateFiles
@@ -226,8 +226,8 @@ Section "uninstall"
 
     # Remove the install dir from the system PATH (mirror of the install
     # step; $INSTDIR passed via env var, not interpolated — see install).
-    System::Call 'kernel32::SetEnvironmentVariable(t "WIREGUIDE_DIR", t "$INSTDIR")'
-    nsExec::ExecToLog `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$d=$$env:WIREGUIDE_DIR; $$p=[Environment]::GetEnvironmentVariable('Path','Machine'); $$n=(($$p -split ';') | Where-Object { $$_ -ne $$d }) -join ';'; [Environment]::SetEnvironmentVariable('Path',$$n,'Machine')"`
+    System::Call 'kernel32::SetEnvironmentVariable(t "WIREGUIDEPLUS_DIR", t "$INSTDIR")'
+    nsExec::ExecToLog `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$d=$$env:WIREGUIDEPLUS_DIR; $$p=[Environment]::GetEnvironmentVariable('Path','Machine'); $$n=(($$p -split ';') | Where-Object { $$_ -ne $$d }) -join ';'; [Environment]::SetEnvironmentVariable('Path',$$n,'Machine')"`
 
     RMDir /r $INSTDIR
 

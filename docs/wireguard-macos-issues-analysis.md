@@ -1,12 +1,12 @@
 # WireGuard Official macOS App Issues Analysis
 
-This document summarizes the known issues with the official WireGuard macOS client and explains why WireGuide was created as an alternative.
+This document summarizes the known issues with the official WireGuard macOS client and explains why WireGuide Plus was created as an alternative.
 
 ## Background
 
 The official WireGuard macOS app (wireguard-apple) has not been updated since **February 2023**. As macOS has progressed through Sonoma (14), Sequoia (15), and Tahoe (26), numerous issues have accumulated.
 
-WireGuide was born from a specific incident: on an M1 MacBook Air running macOS Tahoe, the official client caused CPU throttling and complete network loss upon tunnel activation, while the same configuration worked fine on an M4 Mac mini.
+WireGuide Plus was born from a specific incident: on an M1 MacBook Air running macOS Tahoe, the official client caused CPU throttling and complete network loss upon tunnel activation, while the same configuration worked fine on an M4 Mac mini.
 
 ---
 
@@ -119,9 +119,9 @@ Sources:
 
 ---
 
-## WireGuide vs Official App: Version Comparison
+## WireGuide Plus vs Official App: Version Comparison
 
-| | Official wireguard-apple | WireGuide |
+| | Official wireguard-apple | WireGuide Plus |
 |---|---|---|
 | wireguard-go version | `2023-02-09` (`1e2c3e5a3c14`) | **`2025-05-21`** (`f333402bd9cb`) |
 | Missing critical fixes | 66 commits | **All included** |
@@ -139,7 +139,7 @@ Sources:
 
 The official WireGuard macOS client's issues stem from its abandonment (no updates since Feb 2023) combined with Apple's continuous changes to macOS networking APIs. The M1 MacBook Air CPU throttling incident was not an isolated edge case — it was a predictable consequence of running outdated software with known CPU-related bugs on thermally constrained hardware under an OS version that introduced breaking changes to the VPN framework.
 
-WireGuide addresses these issues by:
+WireGuide Plus addresses these issues by:
 1. Using the latest wireguard-go with all 66 fixes included
 2. Bypassing NetworkExtension entirely (using wireguard-go directly)
 3. Implementing proper sleep/wake recovery and kill switch functionality

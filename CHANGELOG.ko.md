@@ -4,6 +4,22 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.3.0] - 2026-09-01
+
+이번 버전에서는 앱을 **WireGuide Plus**로 전면 리브랜딩했습니다: 창 제목, 트레이, 자동 시작 항목, helper 로그, Homebrew cask, 업데이트 임시 파일, nftables 테이블 이름 등 전체 경로가 plus 명칭으로 통일되었고, 업그레이드 시 이전 버전이 남긴 자동 시작 항목·데몬·방화벽 테이블도 자동으로 정리됩니다. 또한 macOS 메뉴바 아이콘과 라우팅 진단 표시도 개선했습니다.
+
+### ✨ 새 기능
+
+- **macOS 메뉴바 아이콘을 앱 아이콘으로 변경** — 앱 아이콘의 빨간 변형을 사용하여 밝은/어두운 메뉴바 모두에서 선명하게 보입니다. 아이콘이 내장되지 않은 경우 기존 모노크롬 W 템플릿으로 대체됩니다.
+- **macOS 라우트 진단 정규화** — `netstat -rn`은 네트워크 라우트를 압축 표시합니다(127.0.0.0/8은 "127", 192.168.1.0/24는 "192.168.1"). 진단 페이지에서 정식 점분 10진수 + 접두사 형태로 확장해 표시합니다.
+
+### 🛠 내부
+
+- **WireGuide Plus 전면 리브랜딩**: macOS 자동 시작 `com.wireguideplus.gui`, LaunchDaemon 및 helper 로그 경로, Linux 데스크톱 아이콘, Windows 자동 시작 레지스트리 값, FWPM 세션/Provider 이름, nftables 테이블 `wireguideplus`/`wireguideplus_dns`, Homebrew cask `wireguideplus` 및 Caskroom 경로, 업데이트 임시 파일 접두사, macOS 인증 프롬프트 문구를 모두 통일했습니다.
+- **업그레이드 정리**: 이전 버전이 남긴 `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon 및 helper, 이전 helper 로그, `wireguide.desktop`, 이전 nft 테이블, 이전 FWPM Provider를 제거합니다.
+- **릴리스 산출물 이름 변경**: macOS zip/dmg와 Linux deb를 `WireGuidePlus-*`로 변경. NSIS PATH 힌트와 MSIX 템플릿 실행 파일 이름도 동기화했습니다.
+- **테스트 스크립트 동기화**: systemd unit과 테스트 소켓을 `wireguideplus-*` 접두사로 통일했습니다.
+
 ## [1.2.5] - 2026-09-01
 
 이번 버전은 DNS 누출 테스트를 재구성했습니다: 새로 추가된 '공용 DNS 교차 검증'을 통해 로컬 설정의 리졸버 외에도 잘 알려진 공용 DNS에 쿼리를 보내 교차 확인합니다. 시스템 리졸버는 출처 인터페이스별로 '로컬 / VPN / 공용'으로 분류·표시하고, 공용 목록은 네트워크에서 새로고침하거나 자유롭게 편집할 수 있습니다. '브라우저에서 테스트' 버튼으로 browserleaks.com을 열어 브라우저 수준의 DNS / WebRTC 누출 검사도 가능합니다. Windows 연결 알림 팝업이 멈추는 문제도 수정하고 앱 아이콘도 교체했습니다.

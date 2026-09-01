@@ -1,4 +1,4 @@
-// WireGuide — single-binary WireGuard client.
+// WireGuide Plus — single-binary WireGuard client.
 //
 // The same binary runs in two modes:
 //   - default:  GUI mode, runs as the current user (Wails window + tray).
@@ -28,18 +28,18 @@ import (
 var assets embed.FS
 
 // trayIconBytes is the source PNG we hand to the GUI for the system-tray
-// icon. macOS keeps using the white-W template (the existing buildTrayOn/
-// OffIcon path), but on Windows the white-on-transparent template
-// disappeared against light system-tray backgrounds and Wails composited
-// the full app icon's transparent corners onto a white square. Sending
-// the rounded red app icon directly — pre-resized with alpha intact —
-// gives the menu-bar look the user expected.
+// icon. On Windows the white-on-transparent template disappeared against
+// light system-tray backgrounds and Wails composited the full app icon's
+// transparent corners onto a white square; macOS likewise switched from
+// the white-W template to the app icon so the menu-bar icon matches the
+// app everywhere. Sending the app icon directly — pre-resized with alpha
+// intact — gives the menu-bar look the user expected.
 //
 //go:embed build/appicon.png
 var trayIconBytes []byte
 
 func main() {
-	// `wireguide ctl …` is the command-line control interface (issue #10).
+	// `wireguideplus ctl …` is the command-line control interface (issue #10).
 	// Dispatched before flag parsing because it has its own positional
 	// sub-commands rather than the helper/GUI flag set.
 	if len(os.Args) > 1 && os.Args[1] == "ctl" {
@@ -90,7 +90,7 @@ func main() {
 				redirectStderrToFile(f)
 			}
 		}
-		log.Println("WireGuide helper starting...")
+		log.Println("WireGuide Plus helper starting...")
 		if err := helper.Run(*socketPath, *socketUID, *ownerSID, *dataDir, *logsDir); err != nil {
 			log.Fatal("helper error:", err)
 		}

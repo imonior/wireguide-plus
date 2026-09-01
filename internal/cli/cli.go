@@ -81,11 +81,11 @@ func Run(args []string) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `wireguideplus ctl — control the WireGuide helper from the command line
+	fmt.Fprint(w, `wireguideplus ctl — control the WireGuide Plus helper from the command line
 
 App:
-  wireguideplus ctl start                     launch WireGuide (app + helper) and wait
-  wireguideplus ctl stop                      quit WireGuide (app + helper)
+  wireguideplus ctl start                     launch WireGuide Plus (app + helper) and wait
+  wireguideplus ctl stop                      quit WireGuide Plus (app + helper)
 
 Tunnels:
   wireguideplus ctl status [--json]           show connection status
@@ -123,7 +123,7 @@ Examples:
   wireguideplus ctl automation add work disconnect mac:b0:38:6c:54:8b:ab
   wireguideplus ctl automation add work connect else
 
-WireGuide must be running for connect/disconnect/status — start it with
+WireGuide Plus must be running for connect/disconnect/status — start it with
 'wireguideplus ctl start' (or by opening the app). Nothing else starts it for you.
 list, import, rename, delete and automation edits work against local files.
 `)
@@ -142,7 +142,7 @@ func dialHelper() (*ipc.Client, error) {
 	addr := ipc.DefaultSocketPath()
 	c, err := ipc.NewTransientClient(addr)
 	if err != nil {
-		return nil, fmt.Errorf("cannot reach the WireGuide helper (is the app running?): %w", err)
+		return nil, fmt.Errorf("cannot reach the WireGuide Plus helper (is the app running?): %w", err)
 	}
 	// Confirm it's actually alive, not just a stale socket.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -150,7 +150,7 @@ func dialHelper() (*ipc.Client, error) {
 	var ping ipc.PingResponse
 	if err := c.CallWithContext(ctx, ipc.MethodPing, nil, &ping); err != nil {
 		c.Close()
-		return nil, fmt.Errorf("the WireGuide helper is not responding (is the app running?): %w", err)
+		return nil, fmt.Errorf("the WireGuide Plus helper is not responding (is the app running?): %w", err)
 	}
 	return c, nil
 }

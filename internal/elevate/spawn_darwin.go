@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	daemonLabel  = "com.wireguide.helper"
+	daemonLabel  = "com.wireguideplus.helper"
 	daemonPlist  = "/Library/LaunchDaemons/" + daemonLabel + ".plist"
 	daemonBinary = "/Library/PrivilegedHelperTools/" + daemonLabel
 )
@@ -95,7 +95,7 @@ func generatePlistContent(exe string, args Args) string {
          wants WireGuide active. A root helper running at boot with no
          window and no tray icon would evaluate Wi-Fi automation rules —
          and could bring a tunnel up — while the user believes the app is
-         closed. Users who want WireGuide from boot enable auto_start,
+         closed. Users who want WireGuide Plus from boot enable auto_start,
          which installs the GUI LaunchAgent; the GUI then spawns the
          helper through the normal path. installAndLoadDaemon kickstarts
          the job explicitly after bootstrap, since with RunAtLoad=false
@@ -115,9 +115,9 @@ func generatePlistContent(exe string, args Args) string {
     <key>ThrottleInterval</key>
     <integer>5</integer>
     <key>StandardErrorPath</key>
-    <string>/var/log/wireguide-helper.log</string>
+    <string>/var/log/wireguideplus-helper.log</string>
     <key>StandardOutPath</key>
-    <string>/var/log/wireguide-helper.log</string>
+    <string>/var/log/wireguideplus-helper.log</string>
 </dict>
 </plist>
 `, daemonLabel, daemonBinary, args.SocketPath, uid, args.DataDir, logsArg)
@@ -214,6 +214,8 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 			`cp -f %s %s && `+
 			`chown root:wheel %s && `+
 			`chmod 644 %s && `+
+			`launchctl bootout system/com.wireguide.helper 2>/dev/null; `+
+			`rm -f /Library/LaunchDaemons/com.wireguide.helper.plist /Library/PrivilegedHelperTools/com.wireguide.helper 2>/dev/null; `+
 			`launchctl bootout system/%s 2>/dev/null; `+
 			`i=0; while [ $i -lt 20 ] && launchctl print system/%s >/dev/null 2>&1; do sleep 0.1; i=$((i+1)); done; `+
 			`launchctl bootstrap system %s && `+
@@ -234,7 +236,7 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 	escaped := strings.ReplaceAll(shellScript, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
 	osascriptCmd := fmt.Sprintf(
-		`do shell script "%s" with administrator privileges with prompt "WireGuide needs administrator access to install its VPN helper service.\n\nThe helper runs as a background service to manage VPN tunnels, firewall rules, and network configuration. This prompt appears on first launch or after an app update."`,
+		`do shell script "%s" with administrator privileges with prompt "WireGuide Plus needs administrator access to install its VPN helper service.\n\nThe helper runs as a background service to manage VPN tunnels, firewall rules, and network configuration. This prompt appears on first launch or after an app update."`,
 		escaped,
 	)
 

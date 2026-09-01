@@ -122,14 +122,14 @@ func TestCurrentVersion(t *testing.T) {
 
 func TestFetchExpectedHash_Found(t *testing.T) {
 	const wantHash = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-	checksumBody := fmt.Sprintf("%s  WireGuide-darwin-arm64.dmg\ndeadbeef  other-file.zip\n", wantHash)
+	checksumBody := fmt.Sprintf("%s  WireGuidePlus-darwin-arm64.dmg\ndeadbeef  other-file.zip\n", wantHash)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, checksumBody)
 	}))
 	defer srv.Close()
 
-	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuide-darwin-arm64.dmg", srv.Client())
+	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuidePlus-darwin-arm64.dmg", srv.Client())
 	if got != wantHash {
 		t.Errorf("fetchExpectedHash = %q, want %q", got, wantHash)
 	}
@@ -141,7 +141,7 @@ func TestFetchExpectedHash_NotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuide-darwin-arm64.dmg", srv.Client())
+	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuidePlus-darwin-arm64.dmg", srv.Client())
 	if got != "" {
 		t.Errorf("fetchExpectedHash = %q, want empty", got)
 	}
@@ -151,11 +151,11 @@ func TestFetchExpectedHash_CaseInsensitiveFilename(t *testing.T) {
 	const wantHash = "aabbccdd"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Filename casing differs from query.
-		fmt.Fprintf(w, "%s  wireguide-Darwin-ARM64.dmg\n", wantHash)
+		fmt.Fprintf(w, "%s  wireguidePlus-Darwin-ARM64.dmg\n", wantHash)
 	}))
 	defer srv.Close()
 
-	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuide-Darwin-ARM64.dmg", srv.Client())
+	got := fetchExpectedHash(context.Background(), srv.URL, "WireGuidePlus-Darwin-ARM64.dmg", srv.Client())
 	if got != wantHash {
 		t.Errorf("fetchExpectedHash = %q, want %q (case-insensitive match)", got, wantHash)
 	}
@@ -180,7 +180,7 @@ func TestFetchExpectedHash_ServerError(t *testing.T) {
 // makeRelease builds a JSON-serialisable Release with one asset matching the
 // current platform and an optional checksum asset.
 func makeRelease(version string, assetSize int64, includeChecksum bool) Release {
-	assetName := fmt.Sprintf("WireGuide-%s-%s.dmg", runtime.GOOS, runtime.GOARCH)
+	assetName := fmt.Sprintf("WireGuidePlus-%s-%s.dmg", runtime.GOOS, runtime.GOARCH)
 	assets := []Asset{
 		{Name: assetName, BrowserDownloadURL: "https://example.com/" + assetName, Size: assetSize},
 	}
@@ -635,13 +635,13 @@ func TestDownloadUpdate_HTTPError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMatchAsset_FindsPlatformAsset(t *testing.T) {
-	name := fmt.Sprintf("WireGuide-%s-%s.dmg", runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("WireGuidePlus-%s-%s.dmg", runtime.GOOS, runtime.GOARCH)
 	// The decoy must never match the running platform. A linux-amd64
 	// decoy broke this test the first time it ran on Linux CI: both
 	// assets matched and the decoy's .tar.gz is the preferred extension
 	// there, so matchAsset (correctly) returned the decoy.
 	assets := []Asset{
-		{Name: "WireGuide-plan9-mips.tar.gz"},
+		{Name: "WireGuidePlus-plan9-mips.tar.gz"},
 		{Name: name},
 	}
 	got := matchAsset(assets)
@@ -652,7 +652,7 @@ func TestMatchAsset_FindsPlatformAsset(t *testing.T) {
 
 func TestMatchAsset_NoMatch(t *testing.T) {
 	assets := []Asset{
-		{Name: "WireGuide-plan9-mips.tar.gz"},
+		{Name: "WireGuidePlus-plan9-mips.tar.gz"},
 	}
 	got := matchAsset(assets)
 	if got != "" {
@@ -874,16 +874,16 @@ func TestIsBrewInstall_ReturnsBool(t *testing.T) {
 }
 
 func TestIsBrewInstall_NoCaskroom(t *testing.T) {
-	// On most dev/CI machines, /opt/homebrew/Caskroom/wireguide and
-	// /usr/local/Caskroom/wireguide do not exist, so IsBrewInstall should
+	// On most dev/CI machines, /opt/homebrew/Caskroom/wireguideplus and
+	// /usr/local/Caskroom/wireguideplus do not exist, so IsBrewInstall should
 	// return false. If this test runs on a machine where WireGuide IS
 	// installed via brew, the result is legitimately true — skip.
 	result := IsBrewInstall()
 	// We can't assert false universally, but we CAN check the logic:
 	// if neither Caskroom path exists, the result MUST be false.
 	caskroomPaths := []string{
-		"/opt/homebrew/Caskroom/wireguide",
-		"/usr/local/Caskroom/wireguide",
+		"/opt/homebrew/Caskroom/wireguideplus",
+		"/usr/local/Caskroom/wireguideplus",
 	}
 	anyCaskroom := false
 	for _, p := range caskroomPaths {
@@ -925,7 +925,7 @@ func TestVerifyEd25519_ValidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	content := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv, content)
 	if err := verifyEd25519(content, sig, pub); err != nil {
 		t.Fatalf("expected valid signature to verify, got %v", err)
@@ -937,9 +937,9 @@ func TestVerifyEd25519_TamperedContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	content := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv, content)
-	tampered := []byte("ffffff  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	tampered := []byte("ffffff  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	if err := verifyEd25519(tampered, sig, pub); err == nil {
 		t.Fatal("expected tampered content to fail verification")
 	}
@@ -950,7 +950,7 @@ func TestVerifyEd25519_TamperedSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	content := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv, content)
 	// Flip a single bit anywhere in the signature.
 	sig[0] ^= 0x01
@@ -968,7 +968,7 @@ func TestVerifyEd25519_WrongKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	content := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv1, content)
 	// Verify against a DIFFERENT public key — must fail.
 	if err := verifyEd25519(content, sig, pub2); err == nil {
@@ -1003,7 +1003,7 @@ func TestVerifyChecksumSignature_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sums := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	sums := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv, sums)
 
 	mux := http.NewServeMux()
@@ -1036,13 +1036,13 @@ func TestVerifyChecksumSignature_TamperedSums(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sums := []byte("abc1234  WireGuide-1.0.0-darwin-arm64.dmg\n")
+	sums := []byte("abc1234  WireGuidePlus-1.0.0-darwin-arm64.dmg\n")
 	sig := ed25519.Sign(priv, sums)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/SHA256SUMS", func(w http.ResponseWriter, r *http.Request) {
 		// Server returns a TAMPERED SHA256SUMS — original sig should fail.
-		w.Write([]byte("ffffff  WireGuide-1.0.0-darwin-arm64.dmg\n"))
+		w.Write([]byte("ffffff  WireGuidePlus-1.0.0-darwin-arm64.dmg\n"))
 	})
 	mux.HandleFunc("/SHA256SUMS.sig", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(sig)

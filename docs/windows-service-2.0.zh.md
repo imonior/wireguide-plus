@@ -15,7 +15,7 @@
 | 平台 | 当前提权机制 | 2.0 是否需要工作 |
 |---|---|---|
 | Windows | UAC 拉起的提权 helper，生命周期绑定 GUI（完全没有服务机制） | **完整系统服务重构 —— 本文档** |
-| macOS | helper 已是 LaunchDaemon（`/Library/LaunchDaemons/com.wireguide.helper.plist`，`RunAtLoad=false`，见 `internal/elevate/spawn_darwin.go`） | 2.0 无需。开机常驻只需改一行 plist，延后 |
+| macOS | helper 已是 LaunchDaemon（`/Library/LaunchDaemons/com.wireguideplus.helper.plist`，`RunAtLoad=false`，见 `internal/elevate/spawn_darwin.go`） | 2.0 无需。开机常驻只需改一行 plist，延后 |
 | Linux | helper 由 `pkexec` 按需拉起（`internal/elevate/spawn_linux.go`） | 2.0 无需。配一个 systemd unit 即可开机常驻，价值低，延后 |
 
 一句话：macOS 和 Linux **已经有（或很容易获得）系统级守护机制**，Windows 是唯一没有服务层的平台——当前提权 helper 随 GUI 生、随 GUI 死。因此本文档专写 Windows。
@@ -112,7 +112,7 @@
 | C. 外部工具（NSSM/winsw） | 把任意 exe 包装成服务 | ❌ 增加外部依赖，且拿不到 SCM 生命周期事件 |
 
 - **服务账户**：`LocalSystem`（需要写 `%PROGRAMDATA%`、加载 wintun 驱动、操作 WFP、访问网络）。不要用 `NetworkService`（无驱动加载与 WFP 权限）。
-- **管道名**：服务实例使用全局管道，建议 `\\.\pipe\wireguide`（与 `ipc.DefaultSocketPath()` 区分），多用户阶段按需扩展（见 5.3）。
+- **管道名**：服务实例使用全局管道，建议 `\\.\pipe\wireguideplus`（与 `ipc.DefaultSocketPath()` 区分），多用户阶段按需扩展（见 5.3）。
 
 ## 5. 实施路线
 

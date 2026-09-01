@@ -65,16 +65,24 @@ var (
 	trayOnIconLight  []byte // black W + green dot (light menu bar)
 	trayOffIconLight []byte // black W, no badge
 
-	// Windows-only variants rendered from the full app icon (rounded
+	// macOS variants rendered from the full app icon (red disc + white
+	// dragon glyph) so the menu-bar icon matches the app icon. Built at
+	// runtime after SetTrayIconPNG supplies the source PNG (init() can't
+	// see customTrayIconPNG); nil leaves macIcons on the monochrome W
+	// template pair above.
+	trayOnIconMac  []byte // app icon + green dot badge
+	trayOffIconMac []byte // app icon, no badge
+
+	// Windows/Linux variants rendered from the full app icon (rounded
 	// red tile + white W) so the system tray actually shows something
-	// visible against light tray backgrounds. macOS keeps the
-	// monochrome template above because the menu bar tints icons.
+	// visible against light tray backgrounds.
 	trayOnIconWindows  []byte // app icon + green dot badge
 	trayOffIconWindows []byte // app icon, no badge
 
-	// customTrayIconPNG is the source the Windows builders read from. Set
-	// by SetTrayIconPNG before gui.Run; init can't read it because Go
-	// runs package init() at load time, well before main wires this up.
+	// customTrayIconPNG is the source the macOS/Windows builders read
+	// from. Set by SetTrayIconPNG before gui.Run; init can't read it
+	// because Go runs package init() at load time, well before main
+	// wires this up.
 	customTrayIconPNG []byte
 )
 
@@ -144,6 +152,49 @@ func buildWindowsTrayIcons() {
 
 	trayOffIconWindows = render(false)
 	trayOnIconWindows = render(true)
+}
+
+// buildMacTrayIcons renders the app icon (red disc + white dragon glyph)
+// at menu-bar size for macOS, optionally with a green dot badge for the
+// "connected" state. Called once from gui.Run after SetTrayIconPNG has
+// populated the source bytes. Safe to call with an unset source — leaves
+// the macOS variants nil and macIcons falls back to the monochrome W
+// template set.
+//
+// macOS renders at 64×64, matching the previous template's native size
+// (a crisp 22pt @3x in the menu bar). The app icon is a red disc with a
+// white dragon, so it stays legible on both dark and light menu bars —
+// the colour no longer has to follow the menu-bar appearance, which is
+// why macIcons prefers these over the white/black W pair. The disc's own
+// rounded silhouette carries through the CatmullRom downscale, so no
+// extra corner masking is needed (unlike Windows' square tile).
+func buildMacTrayIcons() {
+	if len(customTrayIconPNG) == 0 {
+		return
+	}
+	src, err := png.Decode(bytes.NewReader(customTrayIconPNG))
+	if err != nil {
+		slog.Warn("tray: decode appicon for macOS tray failed", "error", err)
+		return
+	}
+
+	const trayPx = 64
+	render := func(withBadge bool) []byte {
+		dst := image.NewNRGBA(image.Rect(0, 0, trayPx, trayPx))
+		draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+		if withBadge {
+			drawGreenBadge(dst)
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, dst); err != nil {
+			slog.Warn("tray: encode macOS tray icon failed", "error", err)
+			return nil
+		}
+		return buf.Bytes()
+	}
+
+	trayOffIconMac = render(false)
+	trayOnIconMac = render(true)
 }
 
 // applyRoundedCorners zeros the alpha of pixels that lie outside a
@@ -405,9 +456,15 @@ type trayManager struct {
 	darkMenuBar atomic.Bool
 }
 
-// macIcons returns the on/off icon pair matching the current menu-bar
+// macIcons returns the on/off icon pair for the macOS menu bar. When the
+// app-icon variants were built (SetTrayIconPNG supplied the source PNG)
+// those win — the red disc stays legible on any menu-bar appearance.
+// Otherwise fall back to the monochrome W pair keyed off the observed
 // appearance.
 func (t *trayManager) macIcons() (on, off []byte) {
+	if len(trayOnIconMac) > 0 && len(trayOffIconMac) > 0 {
+		return trayOnIconMac, trayOffIconMac
+	}
 	if t.darkMenuBar.Load() {
 		return trayOnIconDark, trayOffIconDark
 	}

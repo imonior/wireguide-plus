@@ -1008,7 +1008,7 @@
     gap: 12px;
     padding: 8px 16px 18px 16px;
   }
-  /* Actual WireGuide logo bitmap. drop-shadow follows the squircle alpha
+  /* Actual WireGuide Plus logo bitmap. drop-shadow follows the squircle alpha
    * shape (unlike box-shadow which would draw a rectangle). */
   .brand-mark {
     width: 38px;

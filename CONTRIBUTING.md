@@ -1,4 +1,4 @@
-# Contributing to WireGuide
+# Contributing to WireGuide Plus
 
 Thanks for your interest in contributing!
 
@@ -35,7 +35,7 @@ task build
 - `internal/firewall/` — Kill switch (macOS `pf` / Linux `nftables` / Windows WFP)
 - `internal/wifi/` — Automation rule model, network fingerprinting
 - `internal/ipc/` — JSON-RPC 2.0 transport (Unix socket / named pipe)
-- `internal/cli/` — `wireguide ctl` command-line interface
+- `internal/cli/` — `wireguideplus ctl` command-line interface
 - `internal/update/` — Update checker and Ed25519 release verification
 - `frontend/` — Svelte UI
 

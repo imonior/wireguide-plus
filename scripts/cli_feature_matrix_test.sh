@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-binary=${1:?wireguide binary required}
+binary=${1:?wireguideplus binary required}
 vpn_config=${2:?VPN config required}
 test_root=${3:?isolated test directory required}
 uid_num=${4:-$(id -u)}
@@ -17,7 +17,7 @@ backup_resolv="$test_root/resolv.conf.before"
 helper_pidfile="$test_root/helper.pid"
 recovery_log="$test_root/recovery.log"
 test_log="$test_root/test.log"
-socket="$runtime_dir/wireguide-${uid_num}.sock"
+socket="$runtime_dir/wireguideplus-${uid_num}.sock"
 
 mkdir -p "$runtime_dir" "$config_dir" "$data_dir" "$helper_data" "$generated_dir"
 chmod 700 "$test_root" "$generated_dir"
@@ -35,7 +35,7 @@ cleanup() {
   cli set dns-protection off >>"$test_log" 2>&1 || true
   cli set killswitch off >>"$test_log" 2>&1 || true
   sudo -n "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log" || true
-  sudo -n systemctl stop wireguide-network-recovery.timer wireguide-network-recovery.service 2>/dev/null || true
+  sudo -n systemctl stop wireguideplus-network-recovery.timer wireguideplus-network-recovery.service 2>/dev/null || true
   if (( rc == 0 )); then
     log "PASS: CLI feature matrix and recovery completed"
   else
@@ -69,7 +69,7 @@ derive_config "$generated_dir/split-v6.conf" "fd42:4242::1/128" "" "" no
 derive_config "$generated_dir/split-custom.conf" "10.255.254.88/32" "51888" "0xca70" no
 derive_config "$generated_dir/table-off.conf" "10.255.254.99/32" "off" "" no
 
-sudo -n systemd-run --quiet --unit=wireguide-network-recovery --on-active=5m \
+sudo -n systemd-run --quiet --unit=wireguideplus-network-recovery --on-active=5m \
   "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log"
 log "independent 5-minute emergency recovery armed"
 
@@ -103,12 +103,12 @@ fi
 cli automation rm split-v4 1 >>"$test_log" 2>&1
 log "import/duplicate rejection/rename/rule migration/validation passed"
 
-sudo -n systemd-run --quiet --unit=wireguide-fulltest-helper --service-type=exec \
+sudo -n systemd-run --quiet --unit=wireguideplus-fulltest-helper --service-type=exec \
   --setenv="XDG_CONFIG_HOME=$config_dir" --setenv="XDG_DATA_HOME=$data_dir" \
   "$binary" --helper --socket "$socket" --uid "$uid_num" --data-dir "$helper_data"
 for _ in {1..100}; do [[ -S "$socket" ]] && break; sleep 0.1; done
 [[ -S "$socket" ]]
-main_pid=$(sudo -n systemctl show -p MainPID --value wireguide-fulltest-helper.service)
+main_pid=$(sudo -n systemctl show -p MainPID --value wireguideplus-fulltest-helper.service)
 [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]
 printf '%s\n' "$main_pid" >"$helper_pidfile"
 

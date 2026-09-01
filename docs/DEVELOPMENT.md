@@ -52,7 +52,7 @@ wireguide-plus/
 ```bash
 # 开发构建（当前平台）
 task build
-./bin/wireguide
+./bin/wireguideplus
 
 # 前端热更新开发（前后端分离调试）
 cd frontend && npm run dev

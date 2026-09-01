@@ -8,10 +8,10 @@
 大多数测试脚本用法一致（`network_test_recover.sh` 除外，见下）：
 
 ```
-sudo bash scripts/<测试脚本>.sh <wireguide 二进制路径> <VPN 配置文件> <隔离测试目录>
+sudo bash scripts/<测试脚本>.sh <wireguideplus 二进制路径> <VPN 配置文件> <隔离测试目录>
 ```
 
-- 参数 1：`wireguide` 可执行文件（先 `wails3 task linux:build` 或使用构建产物）
+- 参数 1：`wireguideplus` 可执行文件（先 `wails3 task linux:build` 或使用构建产物）
 - 参数 2：一个可用的 WireGuard 配置文件（用于建立测试隧道）
 - 参数 3：隔离的测试工作目录（测试会在其中放 runtime/config/data/helper 等）
 - 参数 4（可选）：`uid_num`，默认取当前 `id -u`

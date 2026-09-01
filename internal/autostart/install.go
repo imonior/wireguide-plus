@@ -69,7 +69,7 @@ func installMacAutostart(appPath string) error {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.wireguide.gui</string>
+    <string>com.wireguideplus.gui</string>
     <key>ProgramArguments</key>
     <array>
         <string>%s</string>
@@ -80,7 +80,7 @@ func installMacAutostart(appPath string) error {
 </plist>
 `, safeAppPath)
 
-	return os.WriteFile(filepath.Join(plistDir, "com.wireguide.gui.plist"), []byte(plist), 0644)
+	return os.WriteFile(filepath.Join(plistDir, "com.wireguideplus.gui.plist"), []byte(plist), 0644)
 }
 
 func removeMacAutostart() error {
@@ -88,7 +88,12 @@ func removeMacAutostart() error {
 	if err != nil {
 		return fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return os.Remove(filepath.Join(home, "Library", "LaunchAgents", "com.wireguide.gui.plist"))
+	// Remove the current plist, plus the pre-plus "com.wireguide.gui.plist"
+	// left behind by an older install, so upgrades don't orphan a launch item.
+	for _, name := range []string{"com.wireguideplus.gui.plist", "com.wireguide.gui.plist"} {
+		_ = os.Remove(filepath.Join(home, "Library", "LaunchAgents", name))
+	}
+	return nil
 }
 
 // --- Linux: XDG autostart ---
@@ -111,9 +116,9 @@ func installLinuxAutostart(appPath string) error {
 	quotedPath := `"` + strings.ReplaceAll(appPath, `"`, `\"`) + `"`
 	desktop := fmt.Sprintf(`[Desktop Entry]
 Type=Application
-Name=WireGuide
+Name=WireGuide Plus
 Exec=%s
-Icon=wireguide
+Icon=wireguideplus
 Terminal=false
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
@@ -128,7 +133,12 @@ func removeLinuxAutostart() error {
 		home, _ := os.UserHomeDir()
 		configHome = filepath.Join(home, ".config")
 	}
-	return os.Remove(filepath.Join(configHome, "autostart", "wireguideplus.desktop"))
+	// Remove the current desktop file, plus the pre-plus "wireguide.desktop"
+	// an older install may have left behind.
+	for _, name := range []string{"wireguideplus.desktop", "wireguide.desktop"} {
+		_ = os.Remove(filepath.Join(configHome, "autostart", name))
+	}
+	return nil
 }
 
 // --- Windows: Registry Run key ---
@@ -139,19 +149,23 @@ func installWindowsAutostart(appPath string) error {
 	quotedPath := `"` + appPath + `"`
 	cmd := exec.Command("reg", "add",
 		`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,
-		"/v", "WireGuide", "/t", "REG_SZ", "/d", quotedPath, "/f")
+		"/v", "WireGuidePlus", "/t", "REG_SZ", "/d", quotedPath, "/f")
 	sysexec.Hide(cmd)
 	return cmd.Run()
 }
 
 func removeWindowsAutostart() error {
-	cmd := exec.Command("reg", "delete",
-		`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,
-		"/v", "WireGuide", "/f")
-	sysexec.Hide(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "not found") {
-		return err
+	// Delete the current value name plus the pre-plus "WireGuide" value an
+	// older install may have created, so upgrades don't leave a stale entry.
+	for _, name := range []string{"WireGuidePlus", "WireGuide"} {
+		cmd := exec.Command("reg", "delete",
+			`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,
+			"/v", name, "/f")
+		sysexec.Hide(cmd)
+		out, err := cmd.CombinedOutput()
+		if err != nil && !strings.Contains(string(out), "not found") {
+			return err
+		}
 	}
 	return nil
 }

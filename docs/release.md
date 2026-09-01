@@ -78,10 +78,10 @@ Release assets produced per tag:
 | `wireguideplus-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
 | `wireguideplus-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
 | `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 与 bare `wintun-<arch>.dll` 均不单独发布） | build-windows |
-| `WireGuide-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
-| `WireGuide-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
-| `WireGuide-linux-amd64.deb` / `WireGuide-linux-arm64.deb` (installers) | build-linux |
-| `WireGuide-linux-amd64-portable.tar.gz` / `WireGuide-linux-arm64-portable.tar.gz` (portable, bare `wireguideplus` binary) | build-linux |
+| `WireGuidePlus-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
+| `WireGuidePlus-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
+| `WireGuidePlus-linux-amd64.deb` / `WireGuidePlus-linux-arm64.deb` (installers) | build-linux |
+| `WireGuidePlus-linux-amd64-portable.tar.gz` / `WireGuidePlus-linux-arm64-portable.tar.gz` (portable, bare `wireguideplus` binary) | build-linux |
 | `SHA256SUMS` + `SHA256SUMS.sig` | release |
 
 > Windows always ships 32-bit, 64-bit and ARM64 installers per the release
@@ -143,7 +143,42 @@ go run ./tools/updatesign verify -pub <hex> -in SHA256SUMS
 
 ---
 
-## 1. One-time setup (already done)
+## 1. Homebrew tap — first-release setup
+
+macOS users install WireGuide Plus through the project's own Homebrew
+tap (`brew tap imonior/tap && brew install --cask wireguideplus`). The cask
+lives in a **separate repository you must own up front** —
+`imonior/homebrew-tap`: a plain, self-hosted Git repo named with the
+`homebrew-tap` suffix (Homebrew convention), **not** a fork of the
+official `Homebrew/homebrew-cask`. The `update-cask` job in
+`release.yml` rewrites and pushes `Casks/wireguideplus.rb` on every stable
+tag, so the tap is CI-maintained after it exists; only the creation is
+manual, and it only happens once.
+
+Before the **first** release, do this one-time setup:
+
+1. **Create the tap repository** — on GitHub, create a new empty
+   repository named `homebrew-tap` under the `imonior` account. Leave
+   the "Add a README" checkbox **unchecked**: CI creates
+   `Casks/wireguideplus.rb` itself on the first release, and an
+   auto-generated README/license would just conflict with that push.
+2. **(Optional) seed the initial cask** — clone the upstream
+   `korjwl1/homebrew-tap` (or author `Casks/wireguideplus.rb` from the
+   heredoc template in `release.yml`) and push it, so the repo isn't
+   empty and `brew tap imonior/tap` works even before the next
+   release. This step is cosmetic — the workflow regenerates the whole
+   file every release anyway.
+3. **Configure `TAP_PUSH_TOKEN`** — generate a fine-grained PAT with
+   **Contents: Read and write** access to `imonior/homebrew-tap` only,
+   and store it as the `TAP_PUSH_TOKEN` secret in the *wireguide-plus*
+   repository's Settings → Secrets. Without this secret the
+   `update-cask` job prints a skip notice and passes (fork-friendly, so
+   a missing token never fails a release) — but then macOS Homebrew
+   users never receive new versions.
+
+---
+
+## 2. One-time setup (already done)
 
 ```bash
 go run ./tools/updatesign gen -out ~/.wireguide/release-signing.key
@@ -155,7 +190,7 @@ Older binaries built with `expectedPublicKey == ""` (all releases up
 to and including v0.3.1, and every dev build) skip verification and
 rely on SHA256 alone — they are unaffected by any of this.
 
-## 2. Signing a release
+## 3. Signing a release
 
 Nothing manual: the tag-triggered workflow bakes the public key into
 every platform build, then signs `SHA256SUMS` in the `release` job and
@@ -163,7 +198,7 @@ attaches `SHA256SUMS.sig` to the GitHub Release. The step **fails the
 whole release** if the secret is missing or mismatched, because the
 just-built binaries would otherwise refuse all future auto-updates.
 
-## 3. Rotating the key
+## 4. Rotating the key
 
 Rotate when the key may have leaked (GitHub org compromise, laptop
 loss if the backup was on it) or on long-cadence hygiene:

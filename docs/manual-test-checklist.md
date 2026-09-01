@@ -16,8 +16,8 @@ rules itself, so these tests verify behavior **both with the GUI running
 and after Cmd+Q'ing the GUI**.
 
 Rules can be authored in the GUI (tunnel detail → **Automation**) or from
-the CLI (`wireguide ctl automation add/rm/rules`). The read-only preview
-`wireguide ctl automation` prints the current network context (SSID,
+the CLI (`wireguideplus ctl automation add/rm/rules`). The read-only preview
+`wireguideplus ctl automation` prints the current network context (SSID,
 gateway MAC, physical IPs) and each tunnel's decision — use it to check
 expectations without reading logs.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +81,12 @@ func parseDarwinRouteOutput(out string) []RouteEntry {
 			continue
 		}
 		entry := RouteEntry{
-			Destination: fields[0],
+			// macOS netstat elides trailing ".0" octets for network routes
+			// (127.0.0.0/8 prints as "127", 169.254.0.0/16 as "169.254",
+			// 192.168.1.0/24 as "192.168.1"); expand them back to canonical
+			// dotted-quad + prefix so the diagnostics UI shows unambiguous
+			// destinations instead of truncated-looking "127".
+			Destination: expandDarwinNetAddr(fields[0]),
 			Gateway:     fields[1],
 		}
 		if len(fields) > 2 {
@@ -92,6 +98,47 @@ func parseDarwinRouteOutput(out string) []RouteEntry {
 		routes = append(routes, entry)
 	}
 	return routes
+}
+
+// expandDarwinNetAddr normalizes macOS netstat's compressed IPv4 network
+// notation back into canonical dotted-quad + prefix form. `netstat -rn
+// -f inet` on macOS/FreeBSD prints network routes with the trailing zero
+// octets elided:
+//
+//	127.0.0.0/8   → "127"
+//	169.254.0.0/16 → "169.254"
+//	192.168.1.0/24 → "192.168.1"
+//
+// Host addresses (127.0.0.1), IPv6 addresses, "default" and link-layer
+// names (link#4) pass through untouched.
+func expandDarwinNetAddr(s string) string {
+	// IPv6 (contains ':') and anything with a netmask/prefix already
+	// present are left alone.
+	if strings.Contains(s, ":") || strings.Contains(s, "/") {
+		return s
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) > 3 {
+		// Full dotted-quad — already canonical.
+		return s
+	}
+	// 1..3 dotted-decimal octets: verify every octet is pure digits so
+	// "default", "link#4", "fe80" etc. never get mangled.
+	octets := len(parts)
+	for _, p := range parts {
+		if p == "" {
+			return s
+		}
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				return s
+			}
+		}
+	}
+	for len(parts) < 4 {
+		parts = append(parts, "0")
+	}
+	return strings.Join(parts, ".") + "/" + strconv.Itoa(octets*8)
 }
 
 func getRoutesLinuxFull() ([]RouteEntry, error) {

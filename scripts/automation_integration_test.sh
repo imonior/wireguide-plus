@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-binary=${1:?wireguide binary required}
+binary=${1:?wireguideplus binary required}
 vpn_config=${2:?VPN config required}
 test_root=${3:?isolated test directory required}
 uid_num=${4:-$(id -u)}
@@ -16,7 +16,7 @@ backup_resolv="$test_root/resolv.conf.before"
 helper_pidfile="$test_root/helper.pid"
 recovery_log="$test_root/recovery.log"
 test_log="$test_root/test.log"
-socket="$runtime_dir/wireguide-${uid_num}.sock"
+socket="$runtime_dir/wireguideplus-${uid_num}.sock"
 split_config="$test_root/automation-split.conf"
 name=automation-audit
 
@@ -39,7 +39,7 @@ cleanup() {
   trap - EXIT INT TERM
   [[ -n "${keepalive_pid:-}" ]] && kill "$keepalive_pid" 2>/dev/null || true
   sudo -n "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log" || true
-  sudo -n systemctl stop wireguide-network-recovery.timer wireguide-network-recovery.service 2>/dev/null || true
+  sudo -n systemctl stop wireguideplus-network-recovery.timer wireguideplus-network-recovery.service 2>/dev/null || true
   if (( rc == 0 )); then
     log "PASS: live automation SSID/subnet/MAC/else matrix completed"
   else
@@ -56,19 +56,19 @@ subnet=$(ip -4 route show dev "$default_if" proto kernel scope link | awk '$1 ~ 
 gateway_mac=$(ip neigh show "$gateway" dev "$default_if" | awk 'NR==1 {for(i=1;i<=NF;i++) if($i=="lladdr") {print $(i+1); exit}}')
 [[ -n "$ssid" && -n "$subnet" && -n "$gateway_mac" ]]
 
-sudo -n systemd-run --quiet --unit=wireguide-network-recovery --on-active=4m \
+sudo -n systemd-run --quiet --unit=wireguideplus-network-recovery --on-active=4m \
   "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log"
 log "independent 4-minute emergency recovery armed"
 
 cli import "$split_config" "$name" >>"$test_log" 2>&1
 cli automation add "$name" connect "ssid:$ssid" >>"$test_log" 2>&1
 
-sudo -n systemd-run --quiet --unit=wireguide-fulltest-helper --service-type=exec \
+sudo -n systemd-run --quiet --unit=wireguideplus-fulltest-helper --service-type=exec \
   --setenv="XDG_CONFIG_HOME=$config_dir" --setenv="XDG_DATA_HOME=$data_dir" \
   "$binary" --helper --socket "$socket" --uid "$uid_num" --data-dir "$helper_data"
 for _ in {1..100}; do [[ -S "$socket" ]] && break; sleep 0.1; done
 [[ -S "$socket" ]]
-main_pid=$(sudo -n systemctl show -p MainPID --value wireguide-fulltest-helper.service)
+main_pid=$(sudo -n systemctl show -p MainPID --value wireguideplus-fulltest-helper.service)
 [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]
 printf '%s\n' "$main_pid" >"$helper_pidfile"
 

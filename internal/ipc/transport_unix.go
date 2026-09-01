@@ -18,7 +18,7 @@ import (
 func Listen(addr string, ownerUID int, ownerSID string) (net.Listener, error) {
 	_ = ownerSID
 	// Ensure parent directory exists. On macOS the socket lives in
-	// /var/run/wireguide/ — the helper (root) creates it, and the GUI
+	// /var/run/wireguideplus/ — the helper (root) creates it, and the GUI
 	// (unprivileged user) needs to traverse it to reach the socket.
 	// 0755 allows traversal; the socket itself is chmod 0600 + chowned
 	// to the GUI user, so only that user can actually connect.

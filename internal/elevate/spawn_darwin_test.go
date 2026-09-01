@@ -24,7 +24,7 @@ func testArgs() Args {
 // install, so a malformed template would surface as a failed admin-prompt
 // install rather than a build error.
 func TestGeneratedPlistLints(t *testing.T) {
-	plist := generatePlistContent("/Library/PrivilegedHelperTools/com.wireguide.helper", testArgs())
+	plist := generatePlistContent("/Library/PrivilegedHelperTools/com.wireguideplus.helper", testArgs())
 
 	path := filepath.Join(t.TempDir(), "test.plist")
 	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
@@ -36,7 +36,7 @@ func TestGeneratedPlistLints(t *testing.T) {
 }
 
 // TestPlistDoesNotRunAtLoad pins the helper's boot behaviour. RunAtLoad=false
-// is the whole reason a closed WireGuide leaves no root process behind: with
+// is the whole reason a closed WireGuide Plus leaves no root process behind: with
 // it true, launchd starts the helper at every boot with no GUI, no window and
 // no tray icon, and the helper's Wi-Fi automation rules could bring a tunnel
 // up while the user believes the app is closed.
@@ -44,7 +44,7 @@ func TestGeneratedPlistLints(t *testing.T) {
 // The runtime half of the same rule lives in helper.Run, which arms the
 // startup grace window unconditionally. Both must hold.
 func TestPlistDoesNotRunAtLoad(t *testing.T) {
-	plist := generatePlistContent("/Library/PrivilegedHelperTools/com.wireguide.helper", testArgs())
+	plist := generatePlistContent("/Library/PrivilegedHelperTools/com.wireguideplus.helper", testArgs())
 
 	path := filepath.Join(t.TempDir(), "test.plist")
 	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
@@ -59,7 +59,7 @@ func TestPlistDoesNotRunAtLoad(t *testing.T) {
 	}
 	if got := strings.TrimSpace(string(out)); got != "false" {
 		t.Errorf("RunAtLoad = %q, want \"false\" — the helper must not start at boot; "+
-			"users who want WireGuide from login enable auto_start, which installs the GUI LaunchAgent", got)
+			"users who want WireGuide Plus from login enable auto_start, which installs the GUI LaunchAgent", got)
 	}
 }
 

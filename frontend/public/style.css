@@ -1,4 +1,4 @@
-/* WireGuide Theme System
+/* WireGuide Plus Theme System
  *
  * Color palette: "Midnight Slate" (dark) / "Cloud Slate" (light).
  * Grounded in color psychology research:
@@ -21,7 +21,7 @@
 
 /* ============================================================
    DARK THEME — "Crimson Slate"
-   Blue-slate surfaces, WireGuide brand red accent (logo-derived).
+   Blue-slate surfaces, WireGuide Plus brand red accent (logo-derived).
    Hue rotation: surfaces stay at ~230° (cool, calm chrome) while the
    accent jumps to ~358° (warm, attention-getting brand red). The
    cool-warm contrast is what makes the red "pop" against the bg —
@@ -184,7 +184,7 @@
 
 /* ============================================================
    LIGHT THEME — "Crimson Cloud"
-   Blue-slate off-white surfaces, WireGuide brand red accent.
+   Blue-slate off-white surfaces, WireGuide Plus brand red accent.
    Logo's red `#A01D21` works directly on light bg (6.2:1 contrast).
    ============================================================ */
 [data-theme="light"] {
@@ -205,7 +205,7 @@
     --text-muted:     #6b7280;   /* gray-500. ~4.6:1 ✓ AA */
     --text-inverse:   #fff5f5;   /* warm-white on red accent buttons */
 
-    /* --- Accent — WireGuide brand red (logo's vivid top color) --- */
+    /* --- Accent — WireGuide Plus brand red (logo's vivid top color) --- */
     --accent:        #A01D21;   /* logo top. ~6.2:1 on --bg-primary ✓ AA */
     --accent-deep:   #5E1012;   /* logo bottom — gradient endpoint */
     --accent-darker: #3d0a0c;   /* deeper still — shadows */

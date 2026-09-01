@@ -63,7 +63,7 @@ type WindowsFirewall struct {
 	// AddKillSwitchTunnel so RemoveKillSwitchTunnel can delete only that
 	// tunnel's filters without disturbing the base catch-all set or
 	// other tunnels' filters. Keyed by interface name (which on Windows
-	// is "WireGuide" today but the map is multi-tunnel-ready for the
+	// is "WireGuidePlus" today but the map is multi-tunnel-ready for the
 	// per-tunnel-adapter naming change we'll need to ship later).
 	tunnelFilterIDs map[string][]uint64
 
@@ -147,7 +147,7 @@ var (
 // will simply fail to add the provider/sublayer if cleanup missed,
 // which surfaces as a louder error than a silent leak.
 func SweepOrphanedFilters() {
-	displayName := utf16Ptr("WireGuide-Sweeper")
+	displayName := utf16Ptr("WireGuidePlus-Sweeper")
 	sess := fwpmSession0{
 		displayData:          fwpmDisplayData0{name: displayName},
 		txnWaitTimeoutInMSec: 0xFFFFFFFF,
@@ -187,8 +187,8 @@ func (f *WindowsFirewall) ensureSession() error {
 	if f.sessionHandle != 0 {
 		return nil
 	}
-	displayName := utf16Ptr("WireGuide")
-	displayDesc := utf16Ptr("WireGuide kill-switch and DNS-protection filters")
+	displayName := utf16Ptr("WireGuidePlus")
+	displayDesc := utf16Ptr("WireGuide Plus kill-switch and DNS-protection filters")
 	sess := fwpmSession0{
 		displayData:          fwpmDisplayData0{name: displayName, description: displayDesc},
 		flags:                fwpmSessionFlagDynamic,
@@ -204,7 +204,7 @@ func (f *WindowsFirewall) ensureSession() error {
 
 	provider := fwpmProvider0{
 		providerKey: providerKey,
-		displayData: fwpmDisplayData0{name: utf16Ptr("WireGuide-Provider")},
+		displayData: fwpmDisplayData0{name: utf16Ptr("WireGuidePlus-Provider")},
 	}
 	if status := fwpmProviderAdd0(handle, &provider); status != 0 {
 		fwpmEngineClose0(handle)

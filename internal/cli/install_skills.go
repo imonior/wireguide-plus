@@ -15,12 +15,12 @@ import (
 // user's other instructions.
 const skillFrontmatter = `---
 name: wireguideplus-ctl
-description: Control the WireGuide VPN client from the command line (the ` + "`wireguideplus ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle kill switch / DNS protection, and run diagnostics. Use when the user wants to script WireGuide, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
+description: Control the WireGuide Plus VPN client from the command line (the ` + "`wireguideplus ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle kill switch / DNS protection, and run diagnostics. Use when the user wants to script WireGuide Plus, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
 ---
 `
 
 const skillBody = "# Using `wireguideplus ctl`\n" + `
-` + "`wireguideplus ctl`" + ` is the command-line interface to the WireGuide VPN client. It
+` + "`wireguideplus ctl`" + ` is the command-line interface to the WireGuide Plus VPN client. It
 talks to the already-running, already-elevated helper over a local socket
 (like ` + "`tailscale`/`tailscaled`" + `), so it needs no per-command sudo and works the
 same on macOS/Windows/Linux.

@@ -555,7 +555,7 @@ func downloadUpdate(info *UpdateInfo, onProgress ProgressFunc) (string, error) {
 
 	// Use os.CreateTemp to avoid predictable temp paths (symlink attacks).
 	ext := filepath.Ext(info.AssetName)
-	f, err := os.CreateTemp("", "wireguide-update-*"+ext)
+	f, err := os.CreateTemp("", "wireguideplus-update-*"+ext)
 	if err != nil {
 		return "", err
 	}
@@ -1143,8 +1143,8 @@ func BrewPath() string {
 // their PATH while the install is still managed by brew.
 func IsBrewInstall() bool {
 	caskroomPaths := []string{
-		"/opt/homebrew/Caskroom/wireguide",
-		"/usr/local/Caskroom/wireguide",
+		"/opt/homebrew/Caskroom/wireguideplus",
+		"/usr/local/Caskroom/wireguideplus",
 	}
 	for _, p := range caskroomPaths {
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
