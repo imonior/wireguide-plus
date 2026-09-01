@@ -47,9 +47,14 @@ individual fulfills the three SignPath-required roles:
 
 | Role | Filled by |
 |------|-----------|
-| Committer (writes code, tags releases) | imonior |
-| Reviewer (audits the change before release) | imonior |
-| Approver (authorizes the signing request) | imonior |
+| Committer (writes code, tags releases) | `<your-github-username>` |
+| Reviewer (audits the change before release) | `<your-github-username>` |
+| Approver (authorizes the signing request) | `<your-github-username>` |
+
+TODO: replace the placeholders with the maintainer's GitHub username once
+the SignPath Foundation OSS application is approved. The repo itself stays
+at `github.com/imonior/wireguide-plus`; the vulnerability-report link below
+is unchanged.
 
 If additional maintainers join the project, the table will be updated
 and signing approval will become a two-person process (the committer

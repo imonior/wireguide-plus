@@ -228,6 +228,15 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          # FIXME: this slug is inherited from the upstream fork this repo
+          # was forked from — the maintainer does not own a SignPath account
+          # yet, so no project named `wireguide` exists in their (future)
+          # organization. Once the SignPath Foundation OSS application is
+          # approved (see SIGNING-POLICY.md), create the project at
+          # signpath.io with the slug of your choice (suggested:
+          # wireguide-plus) and put that slug here. This value is inert
+          # until SIGNPATH_API_TOKEN is configured, so leaving it as-is
+          # does not break current releases.
           project-slug: wireguide
           # Tagged releases only — the policy's origin verification
           # also enforces this, but conditioning here makes the
