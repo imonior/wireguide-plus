@@ -1241,6 +1241,10 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    /* Allow the pane to shrink below its content's natural width so the
+       whole window can go down to minWindowWidth (720) without the detail
+       content forcing a wider layout. */
+    min-width: 0;
     overflow-y: auto;
     background: var(--bg-primary);
   }

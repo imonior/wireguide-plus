@@ -35,8 +35,11 @@ const (
 	defaultWindowHeight = 740
 
 	// Hard minimum the window can be resized to (MinWidth/MinHeight).
-	minWindowWidth  = 920
-	minWindowHeight = 640
+	// 720 = sidebar 200 + list-pane minimum 190 + resize handle 5 + a
+	// ~325 px detail pane — the narrowest the 3-pane layout can go without
+	// wrapping badly; 560 keeps the detail pane's vertical rhythm usable.
+	minWindowWidth  = 720
+	minWindowHeight = 560
 
 	// Persistence floor for saved/restored window geometry. Anything
 	// below this is treated as invalid (destroyed window reading 0×0,
@@ -228,29 +231,36 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// detail flex) ~760 px for the detail pane, which is enough for the
 	// stats grid + info rows + notes textarea + actions row to breathe.
 	//
-	// Min size pins the smallest pretty-looking shape (≈1.44 ratio) while
-	// still leaving the detail pane wide enough that nothing wraps weirdly.
+	// Min size (720 × 560) matches the 3-pane layout's content floor:
+	// sidebar 200 + list-pane minimum 190 + resize handle 5 leaves a
+	// ~325 px detail pane — narrow enough to run on small screens while
+	// still fitting the stats/info rows without wrapping weirdly.
 	//
 	// A saved window.json overrides the default geometry so the window
 	// reopens exactly where the user left it (see saveWindowState below).
 	// The acceptance floor is deliberately small (persistWindowFloor) —
 	// not minWindow× — because on small screens / high display scaling a
-	// valid window can be smaller than 920×640 in DIPs, and rejecting it
+	// valid window can be smaller than 720×560 in DIPs, and rejecting it
 	// would silently disable geometry memory for those setups. Window
 	// size/position here are DIPs (Wails' Position()/Size() and options
 	// X/Y/Width/Height are all DIP-based), so this is consistent.
 	// (On Windows an X==0 && Y==0 state means "let the OS place the
 	// window", so saveWindowState nudges a genuine corner position to
-	// (1,1) to make it round-trip.)
+	// (1,1) to make it round-trip; the same rule means a restored (0,0)
+	// is treated as "no position" and the window stays centered.)
 	winWidth, winHeight := defaultWindowWidth, defaultWindowHeight
 	winX, winY := 0, 0
+	restorePosition := false
 	if ws, err := windowStore.Load(); err == nil && ws != nil &&
 		ws.Width >= persistWindowFloor && ws.Height >= persistWindowFloor {
 		winWidth, winHeight = ws.Width, ws.Height
-		winX, winY = ws.X, ws.Y
+		if ws.X != 0 || ws.Y != 0 {
+			winX, winY = ws.X, ws.Y
+			restorePosition = true
+		}
 	}
 
-	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	opts := application.WebviewWindowOptions{
 		Title:          "WireGuide Plus",
 		Width:          winWidth,
 		Height:         winHeight,
@@ -266,7 +276,23 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		},
 		BackgroundColour: application.NewRGB(30, 30, 30), // matches --bg-primary dark (#1E1E1E)
 		URL:              "/",
-	})
+	}
+	// WindowStartPosition's zero value is WindowCentered, which makes every
+	// platform ignore X/Y and center the window instead. Opt into explicit
+	// positioning (WindowXY) only when a real saved position exists — without
+	// this, window size persisted but position always reset to centered.
+	if restorePosition {
+		opts.InitialPosition = application.WindowXY
+	}
+	win := app.Window.NewWithOptions(opts)
+
+	// Linux re-applies X/Y as relative to the current monitor's work area
+	// after showing the window (webview_window_linux.go), which would shift a
+	// saved absolute position by that monitor's origin. Re-apply the position
+	// once as absolute so it sticks on every platform.
+	if restorePosition {
+		win.SetPosition(winX, winY)
+	}
 
 	// macOS standard: close button hides the window instead of destroying it.
 	// The app stays alive in the tray; "Show Window" brings it back.
