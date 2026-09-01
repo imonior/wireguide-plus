@@ -467,6 +467,17 @@ export class TunnelInfo {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Protocol is "" or "wireguard" for standard WireGuard tunnels and
+             * "amneziawg" for AmneziaWG tunnels. The frontend shows an AWG badge
+             * when it is set, so users can tell at a glance why an AWG tunnel's
+             * status path behaves differently (e.g. no `wg` CLI access).
+             * @member
+             * @type {string | undefined}
+             */
+            this["protocol"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * CreatedAtUnix is the .conf file's mtime; LastUsedUnix is the most
              * recent connection start from history (0 if never connected). Both
              * feed the tunnel-list "date added" / "last used" sort (issue #17).

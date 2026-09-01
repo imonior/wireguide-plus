@@ -95,55 +95,18 @@ func GetPaths() (*Paths, error) {
 		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
 
-	// Move user data left behind by pre-rename builds (the app used the
-	// directory "wireguide" before it became "wireguideplus"). Runs at most
-	// once: it only acts when the legacy directory exists AND the new one
-	// does not yet contain anything.
-	migrateFromLegacyPaths(&p)
+	// NOTE: legacy "wireguide" data is NOT migrated here anymore. Pre-rename
+	// builds auto-copied it when the new directory was empty; that silent
+	// behaviour was removed in favour of an interactive prompt (see
+	// legacy.go) so the user decides whether to migrate configs, tunnels and
+	// logs, how to handle conflicts, and can compare the old/new folders
+	// first. The GUI calls DetectLegacyData/MigrateLegacyData at startup.
 
 	return &p, nil
 }
 
 // legacyAppName is the config-directory name used before the rename.
 const legacyAppName = "wireguide"
-
-// migrateFromLegacyPaths copies user data (config.json, history.json,
-// tunnels/*.conf) from the legacy "wireguide" directory to the current
-// location. Logs are intentionally not migrated — they are recreated fresh
-// at the new path. Failures are logged as warnings and never fail startup:
-// the user simply starts with an empty config, which the UI handles.
-func migrateFromLegacyPaths(current *Paths) {
-	old := legacyConfigDir()
-	if old == "" || !pathExists(old) || pathExists(current.ConfigDir) {
-		return
-	}
-	for _, f := range []string{"config.json", "history.json"} {
-		src := filepath.Join(old, f)
-		if !pathExists(src) {
-			continue
-		}
-		if err := copyFile(src, filepath.Join(current.ConfigDir, f)); err != nil {
-			slog.Warn("legacy data migration skipped", "file", f, "error", err)
-			return
-		}
-	}
-	srcTunnels := filepath.Join(old, "tunnels")
-	if pathExists(srcTunnels) {
-		if entries, err := os.ReadDir(srcTunnels); err == nil {
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				if err := copyFile(filepath.Join(srcTunnels, e.Name()),
-					filepath.Join(current.TunnelsDir, e.Name())); err != nil {
-					slog.Warn("legacy tunnel migration skipped", "file", e.Name(), "error", err)
-					return
-				}
-			}
-		}
-	}
-	slog.Info("migrated user data from legacy directory", "from", old, "to", current.ConfigDir)
-}
 
 // legacyConfigDir returns the pre-rename config directory for this OS.
 func legacyConfigDir() string {

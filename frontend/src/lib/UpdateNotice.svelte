@@ -254,22 +254,19 @@
   .popup-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.35);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 300;
   }
-  @media (prefers-color-scheme: dark) {
-    .popup-backdrop { background: rgba(0,0,0,0.55); }
-  }
   .popup {
-    background: var(--bg-primary);
+    background: var(--bg-card);
     border: 0.5px solid var(--border);
     border-radius: 10px;
     padding: 20px 24px;
     width: 380px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    box-shadow: var(--shadow-md);
   }
   .popup-actions {
     display: flex;

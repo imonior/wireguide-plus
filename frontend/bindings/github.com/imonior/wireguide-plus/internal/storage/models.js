@@ -14,6 +14,303 @@ import * as wifi$0 from "../wifi/models.js";
 import * as time$0 from "../../../../../time/models.js";
 
 /**
+ * LegacyDataItem describes one file that exists in the legacy directory and
+ * can be copied to the current location.
+ */
+export class LegacyDataItem {
+    /**
+     * Creates a new LegacyDataItem instance.
+     * @param {Partial<LegacyDataItem>} [$$source = {}] - The source object to create the LegacyDataItem.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * @member
+             * @type {LegacyDataKind}
+             */
+            this["kind"] = LegacyDataKind.$zero;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * display name, e.g. "config.json", "tunnels/office.conf", "logs/wireguide.log"
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("size" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size"] = 0;
+        }
+        if (!("source_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["source_path"] = "";
+        }
+        if (!("target_path" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["target_path"] = "";
+        }
+        if (!("target_exists" in $$source)) {
+            /**
+             * a file with the same name already exists at the target
+             * @member
+             * @type {boolean}
+             */
+            this["target_exists"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LegacyDataItem instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LegacyDataItem}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LegacyDataItem(/** @type {Partial<LegacyDataItem>} */($$parsedSource));
+    }
+}
+
+/**
+ * LegacyDataKind classifies a migratable file so the UI can group and label
+ * items.
+ * @readonly
+ * @enum {string}
+ */
+export const LegacyDataKind = {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero: "",
+
+    /**
+     * config.json, history.json
+     */
+    LegacyConfigFile: "config",
+
+    /**
+     * tunnels/*.conf
+     */
+    LegacyTunnelFile: "tunnel",
+
+    /**
+     * legacy logs dir files
+     */
+    LegacyLogFile: "log",
+};
+
+/**
+ * LegacyDataReport is the result of a legacy-data scan. Found is true when at
+ * least one migratable item exists. Migrated/Dismissed reflect the persisted
+ * migration state so the GUI can avoid nagging a user who already decided.
+ */
+export class LegacyDataReport {
+    /**
+     * Creates a new LegacyDataReport instance.
+     * @param {Partial<LegacyDataReport>} [$$source = {}] - The source object to create the LegacyDataReport.
+     */
+    constructor($$source = {}) {
+        if (!("found" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["found"] = false;
+        }
+        if (!("legacy_config_dir" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["legacy_config_dir"] = "";
+        }
+        if (!("legacy_logs_dir" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["legacy_logs_dir"] = "";
+        }
+        if (!("items" in $$source)) {
+            /**
+             * @member
+             * @type {LegacyDataItem[]}
+             */
+            this["items"] = [];
+        }
+        if (!("config_count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["config_count"] = 0;
+        }
+        if (!("tunnel_count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["tunnel_count"] = 0;
+        }
+        if (!("log_count" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["log_count"] = 0;
+        }
+        if (!("conflict_count" in $$source)) {
+            /**
+             * items whose target already exists
+             * @member
+             * @type {number}
+             */
+            this["conflict_count"] = 0;
+        }
+        if (!("migrated" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["migrated"] = false;
+        }
+        if (!("dismissed" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["dismissed"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LegacyDataReport instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LegacyDataReport}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("items" in $$parsedSource) {
+            $$parsedSource["items"] = $$createField3_0($$parsedSource["items"]);
+        }
+        return new LegacyDataReport(/** @type {Partial<LegacyDataReport>} */($$parsedSource));
+    }
+}
+
+/**
+ * MigrateOptions controls a migration run.
+ */
+export class MigrateOptions {
+    /**
+     * Creates a new MigrateOptions instance.
+     * @param {Partial<MigrateOptions>} [$$source = {}] - The source object to create the MigrateOptions.
+     */
+    constructor($$source = {}) {
+        if (!("overwrite" in $$source)) {
+            /**
+             * Overwrite replaces target files that already exist. Without it,
+             * conflicting items are skipped (reported in MigrateResult.Skipped).
+             * @member
+             * @type {boolean}
+             */
+            this["overwrite"] = false;
+        }
+        if (!("include_logs" in $$source)) {
+            /**
+             * IncludeLogs migrates the legacy logs directory. Off by default:
+             * logs are recreatable and often useless after an upgrade.
+             * @member
+             * @type {boolean}
+             */
+            this["include_logs"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MigrateOptions instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MigrateOptions}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MigrateOptions(/** @type {Partial<MigrateOptions>} */($$parsedSource));
+    }
+}
+
+/**
+ * MigrateResult reports per-file outcomes by display name.
+ */
+export class MigrateResult {
+    /**
+     * Creates a new MigrateResult instance.
+     * @param {Partial<MigrateResult>} [$$source = {}] - The source object to create the MigrateResult.
+     */
+    constructor($$source = {}) {
+        if (!("migrated" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["migrated"] = [];
+        }
+        if (!("skipped" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["skipped"] = [];
+        }
+        if (!("failed" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["failed"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MigrateResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MigrateResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType2;
+        const $$createField1_0 = $$createType2;
+        const $$createField2_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("migrated" in $$parsedSource) {
+            $$parsedSource["migrated"] = $$createField0_0($$parsedSource["migrated"]);
+        }
+        if ("skipped" in $$parsedSource) {
+            $$parsedSource["skipped"] = $$createField1_0($$parsedSource["skipped"]);
+        }
+        if ("failed" in $$parsedSource) {
+            $$parsedSource["failed"] = $$createField2_0($$parsedSource["failed"]);
+        }
+        return new MigrateResult(/** @type {Partial<MigrateResult>} */($$parsedSource));
+    }
+}
+
+/**
  * Session is one VPN session record. EndTime is a pointer so a still-active
  * session (no end yet) can be distinguished from a completed session that
  * happens to have ended at time.Time{} — the previous flat-struct design
@@ -234,6 +531,21 @@ export class Settings {
              */
             this["enable_wg_scripts"] = false;
         }
+        if (!("enable_awg" in $$source)) {
+            /**
+             * EnableAWG controls whether AmneziaWG (AWG) tunnel configs are allowed
+             * to connect. ON by default. It is an escape hatch: AWG runs on a fork
+             * of WireGuard (amneziawg-go) with obfuscation, and if that backend
+             * misbehaves on a given machine the user can disable it and get a clear
+             * "AmneziaWG is disabled" error instead of a broken connect. Disabling
+             * does NOT downgrade AWG configs to plain WireGuard — the server side
+             * requires the obfuscated handshake, so AWG tunnels simply refuse to
+             * connect until this is re-enabled.
+             * @member
+             * @type {boolean}
+             */
+            this["enable_awg"] = false;
+        }
         if (!("list_sort" in $$source)) {
             /**
              * ListSort controls tunnel-list ordering: "name_asc" (default),
@@ -376,33 +688,35 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField19_0 = $$createType0;
-        const $$createField20_0 = $$createType2;
-        const $$createField21_0 = $$createType3;
-        const $$createField24_0 = $$createType3;
-        const $$createField25_0 = $$createType3;
+        const $$createField20_0 = $$createType3;
+        const $$createField21_0 = $$createType5;
+        const $$createField22_0 = $$createType2;
+        const $$createField25_0 = $$createType2;
+        const $$createField26_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField20_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField20_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField21_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField22_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField24_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField25_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField25_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField26_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
 }
 
 // Private type creation functions
-const $$createType0 = wifi$0.Rules.createFrom;
-const $$createType1 = wifi$0.Automation.createFrom;
-const $$createType2 = $Create.Nullable($$createType1);
-const $$createType3 = $Create.Array($Create.Any);
+const $$createType0 = LegacyDataItem.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = wifi$0.Rules.createFrom;
+const $$createType4 = wifi$0.Automation.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);

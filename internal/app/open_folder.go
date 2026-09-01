@@ -14,13 +14,17 @@ const (
 	FolderConfig  FolderKind = "config"
 	FolderTunnels FolderKind = "tunnels"
 	FolderLogs    FolderKind = "logs"
+	// Legacy locations (pre-rename "wireguide" dirs). Exposed so the
+	// migration dialog can let the user compare old vs new before deciding.
+	FolderLegacyConfig FolderKind = "legacy-config"
+	FolderLegacyLogs   FolderKind = "legacy-logs"
 )
 
 // OpenFolder reveals one of the app-managed directories in the platform
 // file manager. Only directories the app itself owns are accepted — a
 // compromised frontend cannot point the opener at arbitrary paths.
 //
-// kind ∈ {"config", "tunnels", "logs"}.
+// kind ∈ {"config", "tunnels", "logs", "legacy-config", "legacy-logs"}.
 func (s *TunnelService) OpenFolder(kind string) error {
 	paths, err := storage.GetPaths()
 	if err != nil {
@@ -34,6 +38,10 @@ func (s *TunnelService) OpenFolder(kind string) error {
 		dir = paths.TunnelsDir
 	case FolderLogs:
 		dir = paths.LogsDir
+	case FolderLegacyConfig:
+		dir = storage.LegacyConfigDir()
+	case FolderLegacyLogs:
+		dir = storage.LegacyLogsDir()
 	default:
 		return fmt.Errorf("unknown folder kind: %s", kind)
 	}

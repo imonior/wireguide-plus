@@ -408,9 +408,9 @@
     font: 600 9px/16px var(--font-sans);
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--accent) 82%, #b16ce8);
-    background: color-mix(in srgb, #a855f7 13%, transparent);
-    border: 1px solid color-mix(in srgb, #a855f7 32%, transparent);
+    color: var(--purple);
+    background: color-mix(in srgb, var(--purple) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--purple) 32%, transparent);
   }
   .tunnel-meta {
     overflow: hidden;

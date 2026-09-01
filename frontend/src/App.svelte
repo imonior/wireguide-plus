@@ -12,6 +12,7 @@
   import RouteVisualization from './lib/RouteVisualization.svelte';
   import StatsDashboard from './lib/StatsDashboard.svelte';
   import UpdateNotice from './lib/UpdateNotice.svelte';
+  import LegacyMigration from './lib/LegacyMigration.svelte';
   import { tunnels, selectedTunnel, refreshTunnels, refreshStatus, subscribeToEvents, unsubscribe, initialLoad, connectionStatus } from './stores/tunnels.js';
   import { applyTheme, initThemeWatcher } from './stores/theme.js';
   import { startLogListener, stopLogListener } from './stores/logs.js';
@@ -44,6 +45,10 @@
   // last-checked timestamp. Loaded once at startup; refreshed by the
   // Settings → About "Check now" flow.
   let updateState = null;
+  // Legacy ("wireguide") data migration prompt. Set from the startup scan in
+  // onMount; see LegacyMigration.svelte.
+  let legacyReport = null;
+  let showLegacyMigration = false;
   let filesDroppedUnsub = null;
   let helperUnsub = null;
   let helperResetUnsub = null;
@@ -69,6 +74,11 @@
       e.stopPropagation();
     } else if (showZipResult) {
       showZipResult = false;
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (showLegacyMigration) {
+      // ESC on the migration modal is the same as "Later".
+      showLegacyMigration = false;
       e.preventDefault();
       e.stopPropagation();
     }
@@ -115,6 +125,10 @@
 
     await initialLoad(TunnelService);
     subscribeToEvents();
+    // Scan for data left behind by pre-rename ("wireguide") installs; the
+    // modal only appears while legacy data exists and hasn't been migrated
+    // or dismissed by the user.
+    await checkLegacyMigration();
     // Refresh status once on launch — the helper's eventLoop only
     // BROADCASTS on diff, so a fresh GUI subscriber connecting to a
     // long-running helper would otherwise see no status events
@@ -642,6 +656,37 @@
     conflictList = [];
   }
 
+  // Legacy migration finished — reload tunnels/settings so the migrated data
+  // shows up immediately.
+  function handleLegacyMigrated() {
+    showLegacyMigration = false;
+    legacyReport = null;
+    applySettingsToUI().catch(() => {});
+    refreshTunnels(TunnelService).catch(() => {});
+    refreshStatus(TunnelService).catch(() => {});
+  }
+
+  // Scan for data left behind by pre-rename ("wireguide") installs. When
+  // found (and the user hasn't already migrated or dismissed it), show the
+  // migration modal. Best-effort: a scan failure must not block startup.
+  async function checkLegacyMigration() {
+    try {
+      const legacy = await TunnelService.CheckLegacyData();
+      if (legacy?.found && !legacy.migrated && !legacy.dismissed) {
+        legacyReport = legacy;
+        showLegacyMigration = true;
+      }
+    } catch (_) { /* legacy scan is best-effort */ }
+  }
+
+  // Settings → Advanced "legacy data" entry: clear the persisted state and
+  // re-run the scan so the migration modal shows again (e.g. after the user
+  // chose "Later").
+  async function rescanLegacyMigration() {
+    try { await TunnelService.ResetLegacyMigration(); } catch (_) {}
+    await checkLegacyMigration();
+  }
+
   async function handleConnect(e) {
     const { name } = e.detail;
     await doConnect(name);
@@ -680,14 +725,14 @@
      separate components mounted conditionally below; they pick up the new
      language on their next open (deliberate — otherwise changing language
      mid-interaction would destroy the modal). -->
-<div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult) && currentView === 'tunnels' ? true : undefined}>
+<div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration) && currentView === 'tunnels' ? true : undefined}>
   <!-- Wails adds .file-drop-target-active class to .app when dragging files.
        We only render the overlay when drop-target is actually active — i.e.
        on the tunnels view with no modal open — so it can never steal clicks
        from modals. The data-file-drop-target attribute above also removes
        the drop affordance entirely in those states so Wails doesn't even
        detect the drag. -->
-  {#if currentView === 'tunnels' && !(showSettings || showEditor || showConflictWarning || showZipResult)}
+  {#if currentView === 'tunnels' && !(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration)}
     <div class="drop-overlay">
       <div class="drop-overlay-content">
         <div class="drop-icon">
@@ -870,7 +915,7 @@
   {/if}
 
   {#if showSettings}
-    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} />
+    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} onLegacyRescan={rescanLegacyMigration} />
   {/if}
 
   {#if showConflictWarning}
@@ -878,6 +923,13 @@
       conflicts={conflictList}
       on:proceed={handleConflictProceed}
       on:cancel={handleConflictCancel} />
+  {/if}
+
+  {#if showLegacyMigration && legacyReport}
+    <LegacyMigration
+      report={legacyReport}
+      onClose={() => { showLegacyMigration = false; legacyReport = null; }}
+      onMigrated={handleLegacyMigrated} />
   {/if}
 
   {#if showZipResult}

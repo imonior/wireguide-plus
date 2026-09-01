@@ -243,6 +243,99 @@ export class InterfaceConfig {
              */
             this["extra_keys"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * AmneziaWG obfuscation parameters (device-level). These are sent to
+             * amneziawg-go via UAPI when Protocol == "amneziawg"; they are ignored
+             * (and rejected by the validator) for standard WireGuard configs.
+             * H1-H4 accept a single value or a "min-max" range string, matching
+             * amneziawg-go's UintRange format.
+             * Junk packet count (device-level)
+             * @member
+             * @type {number | undefined}
+             */
+            this["jc"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Junk packet min length
+             * @member
+             * @type {number | undefined}
+             */
+            this["jmin"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Junk packet max length
+             * @member
+             * @type {number | undefined}
+             */
+            this["jmax"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Init packet padding
+             * @member
+             * @type {number | undefined}
+             */
+            this["s1"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Response packet padding
+             * @member
+             * @type {number | undefined}
+             */
+            this["s2"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Cookie packet padding
+             * @member
+             * @type {number | undefined}
+             */
+            this["s3"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Transport packet padding
+             * @member
+             * @type {number | undefined}
+             */
+            this["s4"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Init header range
+             * @member
+             * @type {string | undefined}
+             */
+            this["h1"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Response header range
+             * @member
+             * @type {string | undefined}
+             */
+            this["h2"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Cookie header range
+             * @member
+             * @type {string | undefined}
+             */
+            this["h3"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Transport header range
+             * @member
+             * @type {string | undefined}
+             */
+            this["h4"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -399,6 +492,18 @@ export class WireGuardConfig {
              * @type {PeerConfig[]}
              */
             this["peers"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Protocol selects the protocol backend: "" or "wireguard" = standard
+             * WireGuard, "amneziawg" = AmneziaWG. It is derived from the config
+             * content at parse time (presence of any AWG obfuscation key marks the
+             * config as AWG) and is NOT part of the .conf serialization — the same
+             * content always re-derives the same protocol.
+             * @member
+             * @type {string | undefined}
+             */
+            this["protocol"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**

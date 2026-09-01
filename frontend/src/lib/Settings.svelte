@@ -12,6 +12,11 @@
   export let updateInfo = null;
   export let onInstall = null;
   export let onOpenRelease = null;
+  // Re-triggers the legacy ("wireguide") data migration dialog from
+  // App.svelte after clearing the persisted "don't prompt again" state.
+  export let onLegacyRescan = null;
+
+  let legacyRescanBusy = false;
 
   let aboutUpdating = false;
   let aboutShowVpnWarn = false;
@@ -127,6 +132,22 @@
 
   function aboutOpenRelease() {
     if (onOpenRelease) onOpenRelease();
+  }
+
+  // Advanced → "legacy data": clear the persisted migration state, then ask
+  // App.svelte to re-run the scan (which re-shows the migration modal on
+  // top of this one).
+  async function rescanLegacy() {
+    if (legacyRescanBusy) return;
+    legacyRescanBusy = true;
+    try {
+      await TunnelService.ResetLegacyMigration();
+      if (onLegacyRescan) await onLegacyRescan();
+    } catch (e) {
+      console.error('rescan legacy failed', e);
+    } finally {
+      legacyRescanBusy = false;
+    }
   }
 
   let activeTab = 'general';
@@ -763,6 +784,21 @@
                     on:change={onDnsProtectionChange} />
                   <span class="toggle-track"></span>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_legacy')}</h4>
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">{$t('settings.legacy_migration')}</span>
+                  <p class="setting-desc">{$t('settings.legacy_migration_hint')}</p>
+                </div>
+                <button class="folder-btn" on:click={rescanLegacy} disabled={legacyRescanBusy}>
+                  {$t('settings.legacy_migration_scan')}
+                </button>
               </div>
             </div>
           </div>

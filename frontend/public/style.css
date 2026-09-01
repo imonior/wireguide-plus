@@ -388,6 +388,37 @@ button::-moz-focus-inner {
     padding: 0;
 }
 
+/* Scrollbars — themed so long lists (tunnels, logs, history) don't fall
+ * back to the stock WebView chrome (visibly wrong on Windows; macOS keeps
+ * its auto-hiding overlay style but the thumb is painted with theme tokens).
+ * Firefox honors scrollbar-*; WebKit engines honor the -webkit-* rules. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
 /* Keyboard focus indicator — never disable without replacement.
  * Uses :focus-visible so mouse clicks don't trigger rings on buttons. */
 :focus-visible {

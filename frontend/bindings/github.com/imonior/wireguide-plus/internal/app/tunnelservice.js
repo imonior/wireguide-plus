@@ -76,6 +76,18 @@ export function CheckForUpdate() {
 }
 
 /**
+ * CheckLegacyData scans for data left behind by pre-rename ("wireguide")
+ * installs and reports what could be migrated, including any name conflicts
+ * with the current install. Nothing is copied by this call.
+ * @returns {$CancellablePromise<storage$0.LegacyDataReport | null>}
+ */
+export function CheckLegacyData() {
+    return $Call.ByID(1544519138).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType5($result);
+    }));
+}
+
+/**
  * CheckSSIDPermission reports whether the process can read the current SSID.
  * Used by the frontend to prompt the user for Location Services access before
  * Wi-Fi auto-connect rules can fire.
@@ -83,7 +95,7 @@ export function CheckForUpdate() {
  */
 export function CheckSSIDPermission() {
     return $Call.ByID(3068076773).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType6($result);
     }));
 }
 
@@ -182,6 +194,16 @@ export function DisconnectTunnel(name) {
 }
 
 /**
+ * DismissLegacyMigration records the user's "don't remind me again" choice so
+ * the startup prompt stays hidden. The migration entry in Settings can
+ * re-trigger the flow later.
+ * @returns {$CancellablePromise<void>}
+ */
+export function DismissLegacyMigration() {
+    return $Call.ByID(4206414758);
+}
+
+/**
  * DismissUpdate persists a version dismissal so the in-app banner stays
  * hidden across restarts until a newer version arrives.
  * @param {string} version
@@ -231,7 +253,7 @@ export function GetConfigText(name) {
  */
 export function GetConnectionHistory() {
     return $Call.ByID(798093599).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType8($result);
     }));
 }
 
@@ -244,7 +266,7 @@ export function GetConnectionHistory() {
  */
 export function GetCurrentNetwork() {
     return $Call.ByID(2229332100).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType9($result);
     }));
 }
 
@@ -257,7 +279,7 @@ export function GetCurrentNetwork() {
  */
 export function GetCurrentSubnets() {
     return $Call.ByID(2835331156).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType10($result);
     }));
 }
 
@@ -269,7 +291,7 @@ export function GetCurrentSubnets() {
  */
 export function GetKnownSSIDs() {
     return $Call.ByID(591870616).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType11($result);
     }));
 }
 
@@ -283,7 +305,7 @@ export function GetKnownSSIDs() {
  */
 export function GetPublicDNSServers() {
     return $Call.ByID(4016539089).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType10($result);
     }));
 }
 
@@ -295,7 +317,7 @@ export function GetPublicDNSServers() {
  */
 export function GetRoutingTable() {
     return $Call.ByID(1939855255).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType13($result);
     }));
 }
 
@@ -304,7 +326,7 @@ export function GetRoutingTable() {
  */
 export function GetSettings() {
     return $Call.ByID(3436066580).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType15($result);
     }));
 }
 
@@ -316,7 +338,7 @@ export function GetSettings() {
  */
 export function GetStatus() {
     return $Call.ByID(1904259883).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType17($result);
     }));
 }
 
@@ -328,7 +350,7 @@ export function GetStatus() {
  */
 export function GetTunnelDetail(name) {
     return $Call.ByID(1211015818, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType19($result);
     }));
 }
 
@@ -338,7 +360,7 @@ export function GetTunnelDetail(name) {
  */
 export function GetUpdateState() {
     return $Call.ByID(1422034669).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType20($result);
     }));
 }
 
@@ -359,7 +381,7 @@ export function GetVersion() {
  */
 export function ImportConfig(name, content) {
     return $Call.ByID(3041138216, name, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
     }));
 }
 
@@ -373,7 +395,7 @@ export function ImportConfig(name, content) {
  */
 export function ImportQRFromBytes(data, name) {
     return $Call.ByID(3697630092, data, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
     }));
 }
 
@@ -386,7 +408,7 @@ export function ImportQRFromBytes(data, name) {
  */
 export function ImportQRFromPath(path, name) {
     return $Call.ByID(1276410894, path, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
     }));
 }
 
@@ -398,7 +420,7 @@ export function ImportQRFromPath(path, name) {
  */
 export function ImportZip(path) {
     return $Call.ByID(4220907101, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType24($result);
     }));
 }
 
@@ -410,7 +432,7 @@ export function ImportZip(path) {
  */
 export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType24($result);
     }));
 }
 
@@ -428,7 +450,7 @@ export function ImportZipData(data) {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType25($result);
     }));
 }
 
@@ -443,7 +465,20 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType25($result);
+    }));
+}
+
+/**
+ * MigrateLegacyData copies the legacy config/tunnels/logs into the current
+ * locations. Overwrite controls whether existing target files are replaced;
+ * IncludeLogs controls whether the legacy logs directory is migrated.
+ * @param {storage$0.MigrateOptions} opts
+ * @returns {$CancellablePromise<storage$0.MigrateResult | null>}
+ */
+export function MigrateLegacyData(opts) {
+    return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType27($result);
     }));
 }
 
@@ -452,7 +487,7 @@ export function ListTunnelsLocal() {
  * file manager. Only directories the app itself owns are accepted — a
  * compromised frontend cannot point the opener at arbitrary paths.
  * 
- * kind ∈ {"config", "tunnels", "logs"}.
+ * kind ∈ {"config", "tunnels", "logs", "legacy-config", "legacy-logs"}.
  * @param {string} kind
  * @returns {$CancellablePromise<void>}
  */
@@ -542,7 +577,7 @@ export function ReconcileHistoryFromStatus(activeNames, rxByTunnel, txByTunnel, 
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType29($result);
     }));
 }
 
@@ -563,6 +598,15 @@ export function RefreshPublicDNSServers() {
  */
 export function RenameTunnel(oldName, newName) {
     return $Call.ByID(2568861399, oldName, newName);
+}
+
+/**
+ * ResetLegacyMigration clears the persisted migration state so the startup
+ * prompt shows again. Used by the Settings migration entry.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResetLegacyMigration() {
+    return $Call.ByID(3130480547);
 }
 
 /**
@@ -589,14 +633,14 @@ export function ResetPublicDNSServers() {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
+        return $$createType31($result);
     }));
 }
 
 /**
  * RunUpdate performs the update end-to-end:
  * 
- *   - Homebrew installs → `brew update && brew upgrade --cask wireguide`,
+ *   - Homebrew installs → `brew update && brew upgrade --cask wireguideplus`,
  *     letting the cask's postflight handle the killall + relaunch. This
  *     is the "one-click" expectation users have, not "copy this command
  *     into your terminal".
@@ -785,7 +829,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType28($result);
+        return $$createType32($result);
     }));
 }
 
@@ -817,7 +861,7 @@ export function UpdateConfig(name, content) {
  */
 export function ValidateConfig(content) {
     return $Call.ByID(1736590643, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType10($result);
     }));
 }
 
@@ -826,28 +870,32 @@ const $$createType0 = diag$0.ConflictInfo.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = update$0.UpdateInfo.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = wifi$0.SSIDPermissionStatus.createFrom;
-const $$createType5 = storage$0.Session.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.CurrentNetwork.createFrom;
-const $$createType8 = $Create.Array($Create.Any);
-const $$createType9 = $models.KnownSSIDs.createFrom;
-const $$createType10 = $models.RouteEntry.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = storage$0.Settings.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = domain$0.ConnectionStatus.createFrom;
+const $$createType4 = storage$0.LegacyDataReport.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);
+const $$createType6 = wifi$0.SSIDPermissionStatus.createFrom;
+const $$createType7 = storage$0.Session.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $models.CurrentNetwork.createFrom;
+const $$createType10 = $Create.Array($Create.Any);
+const $$createType11 = $models.KnownSSIDs.createFrom;
+const $$createType12 = $models.RouteEntry.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = storage$0.Settings.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = domain$0.WireGuardConfig.createFrom;
+const $$createType16 = domain$0.ConnectionStatus.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = $models.UpdateState.createFrom;
-const $$createType19 = $models.TunnelInfo.createFrom;
-const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = $models.ZipImportResult.createFrom;
-const $$createType22 = $Create.Array($$createType21);
-const $$createType23 = $Create.Array($$createType19);
-const $$createType24 = $models.PublicDNSRefresh.createFrom;
-const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = $models.DNSLeakResult.createFrom;
+const $$createType18 = domain$0.WireGuardConfig.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = $models.UpdateState.createFrom;
+const $$createType21 = $models.TunnelInfo.createFrom;
+const $$createType22 = $Create.Nullable($$createType21);
+const $$createType23 = $models.ZipImportResult.createFrom;
+const $$createType24 = $Create.Array($$createType23);
+const $$createType25 = $Create.Array($$createType21);
+const $$createType26 = storage$0.MigrateResult.createFrom;
 const $$createType27 = $Create.Nullable($$createType26);
-const $$createType28 = $models.TestProxyResult.createFrom;
+const $$createType28 = $models.PublicDNSRefresh.createFrom;
+const $$createType29 = $Create.Nullable($$createType28);
+const $$createType30 = $models.DNSLeakResult.createFrom;
+const $$createType31 = $Create.Nullable($$createType30);
+const $$createType32 = $models.TestProxyResult.createFrom;
