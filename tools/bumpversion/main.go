@@ -87,8 +87,13 @@ func main() {
 		newTarget("build/windows/msix/template.xml", `(\n\s*Version=")\d+\.\d+\.\d+\.\d+(")`, fourPart),
 		newTarget("build/windows/msix/app_manifest.xml", `(\n\s*Version=")\d+\.\d+\.\d+\.\d+(")`, fourPart),
 		newTarget("build/linux/nfpm/nfpm.yaml", `(version: ")\d+\.\d+\.\d+(")`, newVer),
-		newTarget("build/darwin/Info.plist", `(<string>)\d+\.\d+\.\d+(</string>)`, newVer),
-		newTarget("build/darwin/Info.dev.plist", `(<string>)\d+\.\d+\.\d+(</string>)`, newVer),
+		// Match only the version keys — a bare `(<string>)\d+\.\d+\.\d+(</string>)`
+		// pattern also rewrote LSMinimumSystemVersion (the minimum supported
+		// macOS, 10.15.0) into the app version, corrupting the deployed .app.
+		newTarget("build/darwin/Info.plist", `(<key>CFBundleVersion</key>\s+<string>)\d+\.\d+\.\d+(</string>)`, newVer),
+		newTarget("build/darwin/Info.plist", `(<key>CFBundleShortVersionString</key>\s+<string>)\d+\.\d+\.\d+(</string>)`, newVer),
+		newTarget("build/darwin/Info.dev.plist", `(<key>CFBundleVersion</key>\s+<string>)\d+\.\d+\.\d+(</string>)`, newVer),
+		newTarget("build/darwin/Info.dev.plist", `(<key>CFBundleShortVersionString</key>\s+<string>)\d+\.\d+\.\d+(</string>)`, newVer),
 	}
 
 	// Note: versioninfo.json's FixedFileInfo version numbers are intentionally
