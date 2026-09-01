@@ -68,16 +68,6 @@ type Settings struct {
 	// it instead; an offline / corporate-network user might disable to
 	// silence the failed-check log noise.
 	AutoUpdateCheck *bool `json:"auto_update_check,omitempty"`
-	// AutoUpdateSilent controls whether in-app updates install without the
-	// interactive installer UI. When true the updater runs the platform
-	// installer headlessly (Windows NSIS /S); when false (default) it
-	// launches the same interactive installer a manual install uses, so
-	// "Update now" proceeds exactly like a normal installation (the Windows
-	// wizard — whose finish page launches the app —, polkit authorization
-	// on Linux, the macOS in-place swap with its password prompt when
-	// writing to /Applications). The macOS in-place path is inherently
-	// quiet, so this flag effectively drives Windows.
-	AutoUpdateSilent bool `json:"auto_update_silent,omitempty"`
 
 	// WifiRules holds the LEGACY SSID-based auto-connect / auto-disconnect
 	// policy. Retained for migration; superseded by Automation. Once

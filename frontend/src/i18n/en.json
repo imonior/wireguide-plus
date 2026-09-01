@@ -132,8 +132,6 @@
     "section_updates": "Updates",
     "auto_update_check": "Check for updates automatically",
     "auto_update_check_hint": "When on, WireGuide Plus checks GitHub once a day (with jitter and conditional GETs so it never wastes the public API quota).",
-    "auto_update_silent": "Install updates silently",
-    "auto_update_silent_hint": "When on, downloaded updates install headlessly without showing the installer UI, then relaunch the app. When off (default), \"Update now\" opens the regular interactive installer from a manual install; its finish page launches the new version.",
     "section_security": "Security",
     "section_connection": "Connection",
     "section_legacy": "Legacy data",

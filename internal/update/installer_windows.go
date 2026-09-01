@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func installWindows(path string, silent bool) error {
+func installWindows(path string) error {
 	// Copy the downloaded installer to a persistent location before launching
 	// it. The caller removes the temp download as soon as Install returns, but
 	// ShellExecute("runas") returns immediately after requesting elevation —
@@ -24,25 +24,48 @@ func installWindows(path string, silent bool) error {
 		return fmt.Errorf("stage installer: %w", err)
 	}
 
-	// MSI: silent install; msiexec itself needs admin rights.
+	// MSI: silent install; msiexec itself needs admin rights. An MSI upgrade
+	// keeps the original install location (keyed by ProductCode), so no
+	// directory pinning is needed here.
 	if len(path) > 4 && strings.EqualFold(path[len(path)-4:], ".msi") {
 		return runInstallerElevated("msiexec", "/i", persistentPath, "/qn")
 	}
-	// NSIS .exe installer: request elevation (UAC). Interactive by default —
-	// no /S, so the user sees the regular installation wizard and the
-	// finish page's "run now" checkbox launches the app when it completes.
-	// With the "auto silent update" setting enabled, pass /S /AUTOSTART:
-	// headless install, and /AUTOSTART makes the installer relaunch the app
-	// after the swap, because silent mode skips the finish page whose run
-	// checkbox would otherwise be the only way to open it (project.nsi).
-	// A direct exec.Command from a non-elevated process fails with
-	// ERROR_ELEVATION_REQUIRED because the installer's manifest requests
-	// admin rights (it writes to Program Files).
-	args := []string{}
-	if silent {
-		args = append(args, "/S", "/AUTOSTART")
+	// NSIS .exe installer: request elevation (UAC) and run silently so the
+	// user only sees the UAC prompt. A direct exec.Command from a
+	// non-elevated process fails with ERROR_ELEVATION_REQUIRED because the
+	// installer's manifest requests admin rights (it writes to Program
+	// Files). /AUTOSTART makes the installer relaunch the app after the
+	// swap — its silent mode skips the finish page whose "run now" checkbox
+	// would otherwise be the only way to open the app (project.nsi starts
+	// it via explorer.exe so it runs with the user's token).
+	//
+	// /D pins the install directory to the folder the currently running
+	// (pre-update) binary lives in. project.nsi declares a fixed default
+	// InstallDir and does NOT remember a custom location, so without /D a
+	// silent upgrade of a user who picked a custom folder would install a
+	// SECOND copy into Program Files instead of overwriting the original.
+	// NSIS requires /D to be the LAST argument and its value must not be
+	// quoted; paths with spaces are fine (NSIS takes the whole tail).
+	args := []string{"/S", "/AUTOSTART"}
+	if dir := currentInstallDir(); dir != "" {
+		args = append(args, "/D="+dir)
 	}
 	return runInstallerElevated(persistentPath, args...)
+}
+
+// currentInstallDir returns the directory containing the currently running
+// executable — the folder the existing installation lives in. It anchors the
+// /D= flag so an in-app upgrade always overwrites in place. The executable
+// path is normally the installed copy; in the unlikely case it is a portable
+// copy launched from a scratch folder, /D points there and the upgrade
+// mirrors where the app was launched from, which is still "not a second
+// copy in Program Files".
+func currentInstallDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(exe)
 }
 
 // stageInstaller copies the installer from its temp location to

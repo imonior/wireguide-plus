@@ -15,17 +15,6 @@ import (
 	"strings"
 )
 
-// InstallOptions controls how Install runs the platform installer.
-type InstallOptions struct {
-	// Silent installs without the interactive installer UI. Used by the
-	// "auto silent update" setting (Settings → Updates); the default
-	// (false) launches the regular installer the user already knows from a
-	// manual install — on Windows the NSIS wizard, whose finish page offers
-	// to launch the app. macOS in-place updates are inherently quiet, so
-	// the flag mainly drives Windows.
-	Silent bool
-}
-
 // Install runs the OS-specific installer for the downloaded update.
 // The caller must pass the UpdateInfo whose HashVerified field was set by
 // DownloadUpdate. Install refuses to proceed if the hash was not verified,
@@ -33,7 +22,11 @@ type InstallOptions struct {
 // was not verified. The latter re-check matters because Install execs the
 // file: it must enforce the same policy as DownloadUpdate rather than
 // trust that every (future) caller went through it.
-func Install(filePath string, info *UpdateInfo, opts InstallOptions) error {
+//
+// All platforms install headlessly — the only interactive step left is the
+// OS elevation prompt (Windows UAC, Linux polkit) — and relaunch the app
+// when done, so "Update now" feels identical everywhere.
+func Install(filePath string, info *UpdateInfo) error {
 	if info == nil || !info.HashVerified {
 		return fmt.Errorf("refusing to install: checksum was not verified")
 	}
@@ -44,9 +37,9 @@ func Install(filePath string, info *UpdateInfo, opts InstallOptions) error {
 	case "darwin":
 		return installDarwin(filePath)
 	case "linux":
-		return installLinux(filePath, opts.Silent)
+		return installLinux(filePath)
 	case "windows":
-		return installWindows(filePath, opts.Silent)
+		return installWindows(filePath)
 	default:
 		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
@@ -62,7 +55,7 @@ func installDarwin(path string) error {
 	return installDarwinBundle(path)
 }
 
-func installLinux(path string, silent bool) error {
+func installLinux(path string) error {
 	// Copy the downloaded asset to a persistent location first. The caller
 	// removes the temp download as soon as Install returns, and AppImage
 	// launches asynchronously — deleting the file in that window can break
@@ -81,9 +74,9 @@ func installLinux(path string, silent bool) error {
 			return err
 		}
 		// Package-manager updates replace the binary on disk but never
-		// start the GUI, so launch the fresh version ourselves. silent has
-		// no effect here: pkexec's polkit dialog is the interactive step,
-		// identical for both modes.
+		// start the GUI, so launch the fresh version ourselves. pkexec's
+		// polkit dialog is the only interactive step, identical to a
+		// manual install.
 		return relaunchLinuxApp()
 	case ".rpm":
 		if err := runPkexec("rpm", "-U", persistentPath); err != nil {

@@ -4,18 +4,28 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.1] - 2026-09-02
+
+### 🐛 Fixes
+
+- **Windows updates go back to silent installs** — the interactive wizard from 1.5.0 is gone: after the download you only confirm the one UAC prompt, the new version installs headlessly in place, and the app relaunches.
+- **Updates always overwrite the original install location** — the current install directory is passed to the installer, so users who picked a custom folder no longer get a second copy in the default location (Program Files).
+- **The "Install updates silently" setting (from 1.5.0) is removed** — update behavior is now consistent on all platforms: silent install + relaunch on Windows, relaunch after a package-manager install on Linux (only the system polkit prompt), and the in-place bundle swap on macOS (a system authorization prompt appears when writing to /Applications).
+
 ## [1.5.0] - 2026-09-02
 
 ### ✨ New
 
-- **"Install updates silently" setting (Settings → Updates)** — When on, downloaded updates install headlessly without showing the installer UI, then relaunch the app. Off by default.
-- **Windows updates use the interactive installer by default** — "Update now" downloads the asset and then launches the regular installation wizard; you confirm the install in the wizard, and its finish page (run checkbox on by default) launches the new version.
+- **Windows updates switched to the interactive installation wizard** ("Update now" launches the same wizard as a manual install).
+- **Added an "Install updates silently" setting.**
 
 ### 🐛 Fixes
 
-- **Linux relaunches the app after an update** — deb/rpm package-manager updates now restart the app automatically so the new version loads (previously you had to open it manually).
+- **Linux relaunches the app after an update** — deb/rpm package-manager updates now restart the app automatically so the new version loads.
 
-> macOS keeps the in-place app-bundle update introduced in 1.4.0 (a system authorization prompt appears when writing to /Applications; the app relaunches automatically).
+> 1.5.0's interactive installer and silent-update setting were reverted in 1.5.1 in favor of silent updates on all platforms.
+
+## [1.4.1] - 2026-09-02
 
 ## [1.4.1] - 2026-09-02
 

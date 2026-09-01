@@ -132,8 +132,6 @@
     "section_updates": "更新",
     "auto_update_check": "自动检查更新",
     "auto_update_check_hint": "开启后，WireGuide Plus 每天检查一次 GitHub（带抖动和条件 GET，绝不会浪费公共 API 配额）。",
-    "auto_update_silent": "自动静默升级",
-    "auto_update_silent_hint": "开启后，更新下载完成将直接静默安装（不显示安装向导），完成后自动重新打开软件。关闭（默认）时，“立即更新”会启动与普通安装相同的安装向导，安装完成页默认勾选“运行”，同样自动打开新版本。",
     "section_security": "安全",
     "section_connection": "连接",
     "section_legacy": "旧数据",

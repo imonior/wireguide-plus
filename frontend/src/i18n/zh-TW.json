@@ -132,8 +132,6 @@
     "section_updates": "更新",
     "auto_update_check": "自動檢查更新",
     "auto_update_check_hint": "開啟後，WireGuide Plus 每天檢查一次 GitHub（帶抖動和條件 GET，絕不會浪費公共 API 配額）。",
-    "auto_update_silent": "自動靜默升級",
-    "auto_update_silent_hint": "開啟後，更新下載完成將直接靜默安裝（不顯示安裝精靈），完成後自動重新開啟軟體。關閉（預設）時，「立即更新」會啟動與一般安裝相同的安裝精靈，安裝完成頁預設勾選「執行」，同樣自動開啟新版本。",
     "section_security": "安全",
     "section_connection": "連線",
     "section_legacy": "舊資料",

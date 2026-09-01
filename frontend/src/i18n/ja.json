@@ -131,8 +131,6 @@
     "section_updates": "アップデート",
     "auto_update_check": "アップデートを自動で確認",
     "auto_update_check_hint": "オンにすると、WireGuide Plus は GitHub を 1 日 1 回確認します（ジッターと条件付き GET により API クォータを浪費しません）。",
-    "auto_update_silent": "更新をサイレントでインストール",
-    "auto_update_silent_hint": "オンにすると、ダウンロードした更新がインストーラー UI を表示せずに静かにインストールされ、その後アプリが再起動します。オフ（デフォルト）では「今すぐ更新」が通常のインストールと同じ対話型インストーラーを開き、完了ページで新バージョンが起動します。",
     "section_security": "セキュリティ",
     "section_connection": "接続",
     "section_legacy": "旧データ",
