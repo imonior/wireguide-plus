@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.3] - 2026-09-02
+
+### 🐛 修正
+
+- **視窗位置記憶真正生效** — 1.5.2 已保存視窗大小與位置，但位置在重啟後總被重置回螢幕居中：Wails 建立視窗時未明確指定定位模式，各平台預設執行居中而忽略保存的 X/Y 座標。現在僅當存在有效的已保存位置時才套用絕對定位，Windows / macOS / Linux 重啟後都能原樣還原視窗位置。
+- **Linux 位置恢復偏移** — Linux 在視窗顯示後會把保存的座標當作相對於目前顯示器工作區的偏移重新套用，導致視窗跑偏；現改為視窗顯示後以絕對座標重新設定一次位置。
+
+### 🎨 UI 最佳化
+
+- **更小的視窗下限** — 最小視窗尺寸從 920×640 收窄至 720×560，並允許詳細面板隨視窗收縮（min-width: 0），小螢幕 / 低解析度下視窗可縮得更小而不被內容撐開。
+
 ## [1.5.2] - 2026-09-02
 
 ### ✨ 新增

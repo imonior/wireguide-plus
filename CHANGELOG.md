@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.3] - 2026-09-02
+
+### 🐛 修复
+
+- **窗口位置记忆真正生效** — 1.5.2 已保存窗口大小与位置，但位置在重启后总被重置回屏幕居中：Wails 创建窗口时未显式指定定位模式，各平台默认执行居中而忽略保存的 X/Y 坐标。现在仅当存在有效的已保存位置时才应用绝对定位，Windows / macOS / Linux 重启后都能原样还原窗口位置。
+- **Linux 位置恢复偏移** — Linux 在窗口显示后会把保存的坐标当作相对于当前显示器工作区的偏移重新应用，导致窗口跑偏；现改为窗口显示后以绝对坐标重新设置一次位置。
+
+### 🎨 UI 优化
+
+- **更小的窗口下限** — 最小窗口尺寸从 920×640 收窄至 720×560，并允许详情面板随窗口收缩（min-width: 0），小屏幕 / 低分辨率下窗口可缩得更小而不被内容撑开。
+
 ## [1.5.2] - 2026-09-02
 
 ### ✨ 新增

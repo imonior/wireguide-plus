@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.3] - 2026-09-02
+
+### 🐛 Fixes
+
+- **Saved window position is now actually restored** — 1.5.2 already saved the window size and position, but the position always reset to screen-centered after a restart: Wails' window creation did not opt into explicit positioning, so every platform defaulted to centering and ignored the saved X/Y. Absolute positioning is now applied only when a real saved position exists, so Windows / macOS / Linux all restore the window exactly where it was.
+- **Linux position restore offset** — Linux re-applied the saved coordinates as an offset relative to the current monitor's work area after showing the window, shifting it off its saved spot; the position is now re-applied once in absolute coordinates after the window is shown.
+
+### 🎨 UI polish
+
+- **Smaller window floor** — the minimum window size drops from 920×640 to 720×560 and the detail pane is allowed to shrink with the window (min-width: 0), so small screens / low resolutions can use a narrower window without the layout forcing it wider.
+
 ## [1.5.2] - 2026-09-02
 
 ### ✨ New
