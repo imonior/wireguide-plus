@@ -101,10 +101,13 @@ func PhysicalSubnets() []string {
 }
 
 // isTunnelIface reports whether name looks like a VPN/tunnel adapter.
-// The Windows WireGuard adapter is named "WireGuide" (or a wintun alias)
-// which the wg/tun prefixes below don't catch, so match it explicitly.
+// The Windows WireGuard adapter is named "WireGuidePlus-<hash>" (legacy
+// installs: "WireGuide-<hash>") which the wg/tun prefixes below don't
+// catch, so match it explicitly.
 func isTunnelIface(name string) bool {
 	lower := strings.ToLower(name)
+	// Substring match: covers our "WireGuidePlus-" adapter, the legacy
+	// "WireGuide-" name, and third-party "wireguard"-named adapters.
 	if strings.Contains(lower, "wireguide") || strings.Contains(lower, "wireguard") {
 		return true
 	}

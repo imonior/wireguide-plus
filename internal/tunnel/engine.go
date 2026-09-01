@@ -253,7 +253,7 @@ func platformTUNName(goos, tunnelName string) string {
 		return "wg-" + suffix
 	}
 	if goos == "windows" {
-		return "WireGuide-" + suffix
+		return "WireGuidePlus-" + suffix
 	}
 	return "wg-" + suffix
 }

@@ -213,8 +213,11 @@ func isWireGuardLike(name string) bool {
 // and the per-scan Tailscale interface map. tsIfaces maps interface names that
 // actually carry a Tailscale IP — pass nil when tailscaled isn't running.
 func identifyOwner(ifaceName string, tsIfaces map[string]bool) string {
-	// Check WireGuide socket
-	if socketExists("/var/run/wireguide/" + ifaceName + ".sock") {
+	// Check WireGuide socket — the current /var/run/wireguideplus/ path,
+	// plus the pre-plus /var/run/wireguide/ path an older install's
+	// running instance may still be serving.
+	if socketExists("/var/run/wireguideplus/"+ifaceName+".sock") ||
+		socketExists("/var/run/wireguide/"+ifaceName+".sock") {
 		return "WireGuide"
 	}
 

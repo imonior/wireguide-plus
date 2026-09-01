@@ -15,8 +15,8 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 ### 🛠 내부
 
-- **WireGuide Plus 전면 리브랜딩**: macOS 자동 시작 `com.wireguideplus.gui`, LaunchDaemon 및 helper 로그 경로, Linux 데스크톱 아이콘, Windows 자동 시작 레지스트리 값, FWPM 세션/Provider 이름, nftables 테이블 `wireguideplus`/`wireguideplus_dns`, Homebrew cask `wireguideplus` 및 Caskroom 경로, 업데이트 임시 파일 접두사, macOS 인증 프롬프트 문구를 모두 통일했습니다.
-- **업그레이드 정리**: 이전 버전이 남긴 `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon 및 helper, 이전 helper 로그, `wireguide.desktop`, 이전 nft 테이블, 이전 FWPM Provider를 제거합니다.
+- **WireGuide Plus 전면 리브랜딩**: macOS 자동 시작 `com.wireguideplus.gui`, LaunchDaemon 및 helper 로그 경로, pf anchor `com.apple/wireguideplus`, Linux 데스크톱 아이콘, Windows 자동 시작 레지스트리 값, wintun 어댑터 이름 `WireGuidePlus-<hash>`, FWPM 세션/Provider/SubLayer 이름, nftables 테이블 `wireguideplus`/`wireguideplus_dns`, Homebrew cask `wireguideplus` 및 Caskroom 경로, 업데이트 임시 파일과 충돌 감지 소켓 경로, 릴리스 머신 키 디렉터리 `~/.wireguideplus`, 테스트 환경 변수 `WIREGUIDEPLUS_RESOURCE_*`, macOS 인증 프롬프트 문구를 모두 통일했습니다.
+- **업그레이드 정리**: 이전 버전이 남긴 `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon 및 helper, 이전 helper 로그, 이전 pf anchor `com.apple/wireguide`, `wireguide.desktop`, 이전 wintun 어댑터 `WireGuide-<hash>`, 이전 nft 테이블, 이전 FWPM Provider를 제거합니다.
 - **릴리스 산출물 이름 변경**: macOS zip/dmg와 Linux deb를 `WireGuidePlus-*`로 변경. NSIS PATH 힌트와 MSIX 템플릿 실행 파일 이름도 동기화했습니다.
 - **테스트 스크립트 동기화**: systemd unit과 테스트 소켓을 `wireguideplus-*` 접두사로 통일했습니다.
 

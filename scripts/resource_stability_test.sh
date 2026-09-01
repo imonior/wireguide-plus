@@ -19,10 +19,10 @@ test_log="$test_root/test.log"
 socket="$runtime_dir/wireguideplus-${uid_num}.sock"
 split_config="$test_root/resource-split.conf"
 name=resource-audit
-cycle_count=${WIREGUIDE_RESOURCE_CYCLES:-30}
-status_count=${WIREGUIDE_RESOURCE_STATUS_CALLS:-100}
-test_gogc=${WIREGUIDE_RESOURCE_GOGC:-}
-test_godebug=${WIREGUIDE_RESOURCE_GODEBUG:-}
+cycle_count=${WIREGUIDEPLUS_RESOURCE_CYCLES:-30}
+status_count=${WIREGUIDEPLUS_RESOURCE_STATUS_CALLS:-100}
+test_gogc=${WIREGUIDEPLUS_RESOURCE_GOGC:-}
+test_godebug=${WIREGUIDEPLUS_RESOURCE_GODEBUG:-}
 
 mkdir -p "$runtime_dir" "$config_dir" "$data_dir" "$helper_data"
 install -m 0644 /etc/resolv.conf "$backup_resolv"

@@ -126,7 +126,7 @@ at compile time:
   `UPDATE_SIGNING_PUBKEY` — a mismatched pair would ship binaries that
   reject our own releases.
 - **Maintainer backup** — the same seed lives at
-  `~/.wireguide/release-signing.key` (mode 0600) on the release
+  `~/.wireguideplus/release-signing.key` (mode 0600) on the release
   machine. **Back this file up somewhere safe** (password manager /
   offline). If both the secret and the backup are lost, the key cannot
   be recovered — rotate (§3).
@@ -181,9 +181,9 @@ Before the **first** release, do this one-time setup:
 ## 2. One-time setup (already done)
 
 ```bash
-go run ./tools/updatesign gen -out ~/.wireguide/release-signing.key
+go run ./tools/updatesign gen -out ~/.wireguideplus/release-signing.key
 #  → prints the public key; paste into UPDATE_SIGNING_PUBKEY in release.yml
-gh secret set UPDATE_SIGNING_KEY < ~/.wireguide/release-signing.key
+gh secret set UPDATE_SIGNING_KEY < ~/.wireguideplus/release-signing.key
 ```
 
 Older binaries built with `expectedPublicKey == ""` (all releases up

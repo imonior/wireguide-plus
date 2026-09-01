@@ -30,7 +30,7 @@ func runPfctl(args ...string) ([]byte, error) {
 // validIfaceName matches typical macOS interface names like utun4, en0, lo0.
 var validIfaceName = regexp.MustCompile(`^[a-z]+[0-9]+$`)
 
-// anchorName is the pf anchor where WireGuide loads its rules.
+// anchorName is the pf anchor where WireGuide Plus loads its rules.
 //
 // CRITICAL: the path MUST start with "com.apple/" (slash, not dot) so it
 // matches the wildcard `anchor "com.apple/*"` declared in /etc/pf.conf.
@@ -39,7 +39,7 @@ var validIfaceName = regexp.MustCompile(`^[a-z]+[0-9]+$`)
 // does NOT match the "com.apple/*" wildcard, so its rules would load
 // silently and never be evaluated. That's exactly the bug we hit before
 // switching to the slash form.
-const anchorName = "com.apple/wireguide"
+const anchorName = "com.apple/wireguideplus"
 
 // dnsAnchorName is the sub-anchor for DNS protection rules.
 const dnsAnchorName = anchorName + "/dns"
@@ -86,7 +86,7 @@ func NewPlatformFirewall() FirewallManager {
 }
 
 // buildKillSwitchRules renders the pf rule text loaded into the
-// `com.apple.wireguide` main anchor. interfaceName may be "" — when so,
+// `com.apple/wireguideplus` main anchor. interfaceName may be "" — when so,
 // no per-iface permit ("pass quick on utunX all") is emitted, leaving
 // only the base set (loopback + DHCP + endpoint permits if any) + the
 // DNS sub-anchor directive + catch-all block. That's the layout used
@@ -188,7 +188,7 @@ func (f *DarwinFirewall) EnableKillSwitch(interfaceName string, _ []string, endp
 	// If DNS protection was enabled before this call, the previous
 	// invocation wrote rules to the MAIN anchor (in EnableDNSProtection's
 	// no-kill-switch branch). The loadAnchorRules call above just
-	// overwrote those rules — leaving the `com.apple.wireguide/dns`
+	// overwrote those rules — leaving the `com.apple/wireguideplus/dns`
 	// sub-anchor empty even though dnsProtectionEnabled==true. Re-
 	// populate the sub-anchor here so DNS leaks don't silently start.
 	f.reapplyDNSSubAnchorIfActive()
@@ -208,7 +208,7 @@ func (f *DarwinFirewall) EnableKillSwitch(interfaceName string, _ []string, endp
 }
 
 // reapplyDNSSubAnchorIfActive re-loads the DNS sub-anchor under
-// `com.apple.wireguide/dns` if DNS protection is currently active. The
+// `com.apple/wireguideplus/dns` if DNS protection is currently active. The
 // kill-switch main anchor only references the sub-anchor by name; the
 // sub-anchor body lives independently in pf storage. We re-apply
 // defensively after every main-anchor rewrite to keep the two in sync.
@@ -352,8 +352,8 @@ func (f *DarwinFirewall) DisableKillSwitch() error {
 	f.mu.Unlock()
 
 	// Flush the anchor rules — main ruleset is untouched.
-	// flushAllAnchors wipes BOTH com.apple.wireguide (main) and
-	// com.apple.wireguide/dns (sub). If DNS protection was active, those
+	// flushAllAnchors wipes BOTH com.apple/wireguideplus (main) and
+	// com.apple/wireguideplus/dns (sub). If DNS protection was active, those
 	// rules just vanished — re-load them into the MAIN anchor (mirrors
 	// EnableDNSProtection's no-kill-switch branch) so users who toggle
 	// kill switch off don't get a silent DNS leak.
@@ -430,7 +430,7 @@ func (f *DarwinFirewall) EnableDNSProtection(interfaceName string, dnsServers []
 
 	if ksEnabled {
 		// Kill switch is active — its anchor rules already contain
-		// `anchor "com.apple.wireguide/dns"`, so loading into the
+		// `anchor "com.apple/wireguideplus/dns"`, so loading into the
 		// sub-anchor works directly.
 		if err := loadAnchorRules(dnsAnchorName, dnsRules.String()); err != nil {
 			return fmt.Errorf("loading DNS anchor rules: %w", err)
@@ -591,7 +591,7 @@ func isPfEnabled() bool {
 
 // loadDefaultPfRuleset re-loads /etc/pf.conf into pf's main ruleset.
 // macOS' default pf.conf contains `anchor "com.apple/*" all`, which is
-// the *only* reason our `com.apple.wireguide` anchor rules get evaluated
+// the *only* reason our `com.apple/wireguideplus` anchor rules get evaluated
 // at all. On a machine where pf has never been enabled (or where
 // `pfctl -F all` wiped the main ruleset), pf runs with an empty main
 // ruleset and our anchor is loaded but never visited — so traffic flows
@@ -722,6 +722,12 @@ func flushAllAnchors() error {
 	if out, err := runPfctl("-a", anchorName, "-Fa"); err != nil {
 		errs = append(errs, fmt.Sprintf("flush %s: %v (%s)", anchorName, err, strings.TrimSpace(string(out))))
 	}
+
+	// Best-effort sweep of the pre-plus anchor names ("com.apple/wireguide"
+	// and its /dns sub-anchor) an older install may have loaded rules into.
+	// Missing anchors error out — deliberately ignored.
+	_, _ = runPfctl("-a", "com.apple/wireguide/dns", "-F", "rules")
+	_, _ = runPfctl("-a", "com.apple/wireguide", "-Fa")
 
 	if len(errs) > 0 {
 		return fmt.Errorf("flushAllAnchors: %s", strings.Join(errs, "; "))

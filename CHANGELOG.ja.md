@@ -15,8 +15,8 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 ### 🛠 内部
 
-- **WireGuide Plus への全面リブランド**：macOS 自動起動 `com.wireguideplus.gui`、LaunchDaemon と helper ログパス、Linux デスクトップアイコン、Windows 自動起動レジストリ値、FWPM セッション / Provider 名、nftables テーブル `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` と Caskroom パス、更新一時ファイルのプレフィックス、macOS の認証プロンプト文言をすべて統一。
-- **アップグレード時のクリーンアップ**：旧バージョンが残した `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon と helper、旧 helper ログ、`wireguide.desktop`、旧 nft テーブル、旧 FWPM Provider を削除します。
+- **WireGuide Plus への全面リブランド**：macOS 自動起動 `com.wireguideplus.gui`、LaunchDaemon と helper ログパス、pf anchor `com.apple/wireguideplus`、Linux デスクトップアイコン、Windows 自動起動レジストリ値、wintun アダプター名 `WireGuidePlus-<hash>`、FWPM セッション / Provider / SubLayer 名、nftables テーブル `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` と Caskroom パス、更新一時ファイルと競合検出ソケットパス、リリース機の鍵ディレクトリ `~/.wireguideplus`、テスト環境変数 `WIREGUIDEPLUS_RESOURCE_*`、macOS の認証プロンプト文言をすべて統一。
+- **アップグレード時のクリーンアップ**：旧バージョンが残した `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon と helper、旧 helper ログ、旧 pf anchor `com.apple/wireguide`、`wireguide.desktop`、旧 wintun アダプター `WireGuide-<hash>`、旧 nft テーブル、旧 FWPM Provider を削除します。
 - **リリース成果物のリネーム**：macOS zip / dmg と Linux deb を `WireGuidePlus-*` に変更。NSIS の PATH ヒントと MSIX テンプレートの実行ファイル名も同期しました。
 - **テストスクリプト同期**：systemd unit とテスト用 socket を `wireguideplus-*` プレフィックスに統一しました。
 

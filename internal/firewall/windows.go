@@ -213,7 +213,7 @@ func (f *WindowsFirewall) ensureSession() error {
 
 	sublayer := fwpmSubLayer0{
 		subLayerKey: sublayerKey,
-		displayData: fwpmDisplayData0{name: utf16Ptr("WireGuide-SubLayer")},
+		displayData: fwpmDisplayData0{name: utf16Ptr("WireGuidePlus-SubLayer")},
 		providerKey: &providerKey,
 		// MAXUSHORT — same value the official WireGuard-Windows client
 		// uses (`^uint16(0)` in tunnel/firewall/blocker.go). There is no

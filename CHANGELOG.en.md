@@ -15,8 +15,8 @@ This release rebrands the application as **WireGuide Plus** end-to-end: window t
 
 ### 🛠 Internals
 
-- **Rebrand to WireGuide Plus** — macOS autostart `com.wireguideplus.gui`, LaunchDaemon and helper log paths, Linux desktop icon, Windows autostart registry value, FWPM session / provider names, nftables tables `wireguideplus` / `wireguideplus_dns`, Homebrew cask `wireguideplus` and Caskroom paths, update temp file prefix, and the macOS authorization prompt all unified.
-- **Upgrade cleanup** — upgrades/uninstalls remove the legacy `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon and helper, old helper log, `wireguide.desktop`, old nft tables and the old FWPM provider.
+- **Rebrand to WireGuide Plus** — macOS autostart `com.wireguideplus.gui`, LaunchDaemon and helper log paths, pf anchor `com.apple/wireguideplus`, Linux desktop icon, Windows autostart registry value, wintun adapter name `WireGuidePlus-<hash>`, FWPM session / provider / sublayer names, nftables tables `wireguideplus` / `wireguideplus_dns`, Homebrew cask `wireguideplus` and Caskroom paths, update temp file and conflict-scan socket paths, release-machine key dir `~/.wireguideplus`, test env vars `WIREGUIDEPLUS_RESOURCE_*`, and the macOS authorization prompt all unified.
+- **Upgrade cleanup** — upgrades/uninstalls remove the legacy `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon and helper, old helper log, the old pf anchor `com.apple/wireguide`, `wireguide.desktop`, the old wintun adapter `WireGuide-<hash>`, old nft tables and the old FWPM provider.
 - **Release asset renames** — macOS zip/dmg and Linux deb assets are now named `WireGuidePlus-*`; the NSIS PATH hint and MSIX template executable names follow.
 - **Test script sync** — systemd units and test sockets use the `wireguideplus-*` prefix.
 

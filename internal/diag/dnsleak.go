@@ -294,7 +294,7 @@ func RunDNSLeakTestContextWithPublic(ctx context.Context, expectedDNS, publicDNS
 		result.Error = "cannot generate random domain"
 		return result
 	}
-	testDomain := "wireguide-" + hex.EncodeToString(nonce[:]) + ".invalid"
+	testDomain := "wireguideplus-" + hex.EncodeToString(nonce[:]) + ".invalid"
 	result.TestDomain = testDomain
 
 	// Check system resolver configuration

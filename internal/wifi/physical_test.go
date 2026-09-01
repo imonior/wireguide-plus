@@ -3,7 +3,7 @@ package wifi
 import "testing"
 
 func TestIsTunnelIface(t *testing.T) {
-	tunnels := []string{"utun0", "utun7", "wg0", "tun1", "tap0", "WireGuide", "wireguard1", "ppp0", "ipsec0"}
+	tunnels := []string{"utun0", "utun7", "wg0", "tun1", "tap0", "WireGuidePlus", "WireGuide", "wireguard1", "ppp0", "ipsec0"}
 	for _, n := range tunnels {
 		if !isTunnelIface(n) {
 			t.Errorf("%q should be detected as a tunnel interface", n)

@@ -15,8 +15,8 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 ### 🛠 內部
 
-- **全鏈路更名 WireGuide Plus**：macOS 自動啟動 `com.wireguideplus.gui`、LaunchDaemon 與 helper 日誌路徑、Linux 桌面圖示、Windows 自動啟動登錄值、FWPM 工作階段 / Provider 名稱、nftables 表格 `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` 與 Caskroom 路徑、更新暫存檔前綴、macOS 授權彈窗文案全部統一。
-- **升級相容清理**：升級 / 解除安裝時移除舊版殘留的 `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon 與 helper、舊 helper 日誌、`wireguide.desktop` 自動啟動項目、舊 nft 表格與舊 FWPM Provider。
+- **全鏈路更名 WireGuide Plus**：macOS 自動啟動 `com.wireguideplus.gui`、LaunchDaemon 與 helper 日誌路徑、pf anchor `com.apple/wireguideplus`、Linux 桌面圖示、Windows 自動啟動登錄值、wintun 介面卡名稱 `WireGuidePlus-<hash>`、FWPM 工作階段 / Provider / SubLayer 名稱、nftables 表格 `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` 與 Caskroom 路徑、更新暫存檔與衝突檢測 socket 路徑、發佈機金鑰目錄 `~/.wireguideplus`、測試環境變數 `WIREGUIDEPLUS_RESOURCE_*`、macOS 授權彈窗文案全部統一。
+- **升級相容清理**：升級 / 解除安裝時移除舊版殘留的 `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon 與 helper、舊 helper 日誌、舊 pf anchor `com.apple/wireguide`、`wireguide.desktop` 自動啟動項目、舊 wintun 介面卡 `WireGuide-<hash>`、舊 nft 表格與舊 FWPM Provider。
 - **發佈產物改名**：macOS zip / dmg 與 Linux deb 資產名稱改為 `WireGuidePlus-*`；NSIS PATH 提示與 MSIX 模板可執行檔名稱同步。
 - **測試腳本同步**：systemd unit 與測試 socket 統一為 `wireguideplus-*` 前綴。
 

@@ -28,7 +28,7 @@ sudo bash scripts/<测试脚本>.sh <wireguideplus 二进制路径> <VPN 配置�
 | `firewall_integration_test.sh` | 防火墙集成测试：验证 killswitch / DNS 保护的 nftables 规则在 split-tunnel 下是否正确拦截 | 需 root + nftables |
 | `full_tunnel_integration_test.sh` | **破坏性**全隧道测试：`AllowedIPs=0.0.0.0/0,::/0` 接管全部流量，验证公网 IP/DNS 均走隧道；失败时走紧急恢复 | 需 root，**会中断宿主机网络**，建议远程会话防锁死 |
 | `healthcheck_integration_test.sh` | 健康检查集成测试：验证对端不可达时健康检查触发重连，以及 nftables 恢复规则 | 需 root + nftables |
-| `resource_stability_test.sh` | 资源稳定性测试：循环连接/断开（默认 30 轮）并高频调用状态查询（默认 100 次），监控内存泄漏 | 可通过 `WIREGUIDE_RESOURCE_CYCLES`、`WIREGUIDE_RESOURCE_STATUS_CALLS`、`WIREGUIDE_RESOURCE_GOGC` 等环境变量调整 |
+| `resource_stability_test.sh` | 资源稳定性测试：循环连接/断开（默认 30 轮）并高频调用状态查询（默认 100 次），监控内存泄漏 | 可通过 `WIREGUIDEPLUS_RESOURCE_CYCLES`、`WIREGUIDEPLUS_RESOURCE_STATUS_CALLS`、`WIREGUIDEPLUS_RESOURCE_GOGC` 等环境变量调整 |
 | `network_test_recover.sh` | **紧急恢复脚本**（不是独立测试）：被其他测试脚本及独立 systemd 瞬时单元调用，负责杀掉测试 helper、删除残留 wg-* 接口/套接字、清理解析规则、恢复 `/etc/resolv.conf` | 用法：`sudo bash network_test_recover.sh <resolv.conf 备份> <helper pidfile> <恢复日志路径>` |
 
 ## 注意事项
