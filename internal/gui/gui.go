@@ -27,6 +27,27 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
+// Window geometry constants. See the "Main window" section in Run() for
+// the rationale behind the default and minimum sizes.
+const (
+	// Default window size when no saved geometry exists.
+	defaultWindowWidth  = 1200
+	defaultWindowHeight = 740
+
+	// Hard minimum the window can be resized to (MinWidth/MinHeight).
+	minWindowWidth  = 920
+	minWindowHeight = 640
+
+	// Persistence floor for saved/restored window geometry. Anything
+	// below this is treated as invalid (destroyed window reading 0×0,
+	// hand-edited garbage). Deliberately far below minWindow× because on
+	// small screens or high display scaling a perfectly valid window can
+	// be smaller than 920×640 in DIPs — the old >= minWindow check silently
+	// disabled geometry memory for those setups. The real minimum is still
+	// enforced at resize time by MinWidth/MinHeight.
+	persistWindowFloor = 100
+)
+
 // ReconnectEvent mirrors ipc.ReconnectStateDTO for Wails event emission.
 type ReconnectEvent struct {
 	Reconnecting bool `json:"reconnecting"`
@@ -85,6 +106,9 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	tunnelStore := storage.NewTunnelStore(paths.TunnelsDir)
 	settingsStore := storage.NewSettingsStore(paths.ConfigDir)
 	historyStore := storage.NewHistoryStore(paths.ConfigDir)
+	// Main-window geometry (position + size) restored on launch, persisted
+	// on close-to-tray / minimise / quit.
+	windowStore := storage.NewWindowStateStore(paths.ConfigDir)
 	// Sweep up sessions left open by a previous crash before the UI has a
 	// chance to read them. Mark "app_quit" so they aren't shown as still-
 	// active in the timeline.
@@ -206,12 +230,34 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	//
 	// Min size pins the smallest pretty-looking shape (≈1.44 ratio) while
 	// still leaving the detail pane wide enough that nothing wraps weirdly.
+	//
+	// A saved window.json overrides the default geometry so the window
+	// reopens exactly where the user left it (see saveWindowState below).
+	// The acceptance floor is deliberately small (persistWindowFloor) —
+	// not minWindow× — because on small screens / high display scaling a
+	// valid window can be smaller than 920×640 in DIPs, and rejecting it
+	// would silently disable geometry memory for those setups. Window
+	// size/position here are DIPs (Wails' Position()/Size() and options
+	// X/Y/Width/Height are all DIP-based), so this is consistent.
+	// (On Windows an X==0 && Y==0 state means "let the OS place the
+	// window", so saveWindowState nudges a genuine corner position to
+	// (1,1) to make it round-trip.)
+	winWidth, winHeight := defaultWindowWidth, defaultWindowHeight
+	winX, winY := 0, 0
+	if ws, err := windowStore.Load(); err == nil && ws != nil &&
+		ws.Width >= persistWindowFloor && ws.Height >= persistWindowFloor {
+		winWidth, winHeight = ws.Width, ws.Height
+		winX, winY = ws.X, ws.Y
+	}
+
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:          "WireGuide Plus",
-		Width:          1200,
-		Height:         740,
-		MinWidth:       920,
-		MinHeight:      640,
+		Width:          winWidth,
+		Height:         winHeight,
+		X:              winX,
+		Y:              winY,
+		MinWidth:       minWindowWidth,
+		MinHeight:      minWindowHeight,
 		EnableFileDrop: true,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
@@ -236,12 +282,38 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// only the mapped event allows the default Common.WindowClosing listener to
 	// destroy the window before close-to-tray can cancel it. Windows and macOS
 	// expose a cancellable Common.WindowClosing event directly.
+	// Persist the current window geometry so the next launch (or tray
+	// restore) brings the window back where the user left it. Called on
+	// close-to-tray, minimise and quit. Only a clearly degenerate read is
+	// dropped (destroyed window returning 0×0, or anything below
+	// persistWindowFloor) — anything real is kept, even if smaller than
+	// minWindow× (small screens / high display scaling). On Windows an
+	// X==0 && Y==0 state would be treated as "let the OS place the
+	// window" on restore, so a genuine corner position is nudged to (1,1)
+	// to make it round-trip.
+	saveWindowState := func() {
+		x, y := win.Position()
+		w, h := win.Size()
+		if w < persistWindowFloor || h < persistWindowFloor {
+			return
+		}
+		if x == 0 && y == 0 {
+			x, y = 1, 1
+		}
+		if err := windowStore.Save(&storage.WindowState{X: x, Y: y, Width: w, Height: h}); err != nil {
+			slog.Warn("save window state failed", "error", err)
+		}
+	}
+
 	closingEvent := events.Common.WindowClosing
 	if runtime.GOOS == "linux" {
 		closingEvent = events.Linux.WindowDeleteEvent
 	}
 	win.RegisterHook(closingEvent, func(event *application.WindowEvent) {
 		event.Cancel()
+		// Save before hiding: the window is still visible here, so its
+		// geometry is guaranteed to be valid.
+		saveWindowState()
 		// Close = go to background on every platform: hide the window,
 		// keep the tray icon alive, and let the tray's left-click (or the
 		// popup's Open Window) bring the main window back. Minimising
@@ -250,6 +322,13 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		// which users reported as surprising for a tray-first app.
 		win.Hide()
 		hideDock() // no-op outside macOS
+	})
+
+	// Persist geometry when the window is minimised to the taskbar too,
+	// so a session that ends with the app still running (process killed,
+	// machine shut down, etc.) still restores the last position/size.
+	win.OnWindowEvent(events.Common.WindowMinimise, func(_ *application.WindowEvent) {
+		saveWindowState()
 	})
 
 	// Wire the window reference so showDock() can retry showing it.
@@ -319,6 +398,9 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	doShutdown = func() {
 		shutdownOnce.Do(func() {
 			slog.Info("shutting down GUI + helper")
+			// Persist window geometry (covers "Quit" from the tray while
+			// the window is hidden — close-to-tray already saved it).
+			saveWindowState()
 			// Close any in-flight history sessions BEFORE the helper goes
 			// away — snapshotActiveStats needs the helper alive to fetch
 			// last-known rx/tx counters.
