@@ -1,17 +1,18 @@
 package update
 
-// CURRENTLY UNREFERENCED FROM PRODUCTION CODE — see the longer note on
-// DownloadUpdate in checker.go. Kept (and fully tested) so that adding
-// native Linux/Windows update flows later doesn't require re-implementing
-// the install path from scratch.
+// Install / installLinux / installWindows are used by the native
+// auto-update flow (RunUpdate in internal/app/settings_ops.go): the app
+// downloads the release asset with DownloadUpdateProgress, then hands the
+// verified file to Install, which dispatches to the platform installer.
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/imonior/wireguide-plus/internal/sysexec"
 )
 
 // Install runs the OS-specific installer for the downloaded update.
@@ -49,57 +50,109 @@ func installDarwin(path string) error {
 }
 
 func installLinux(path string) error {
-	// Try dpkg for .deb — use pkexec instead of sudo (works with GUI, no TTY needed)
-	if len(path) > 4 && path[len(path)-4:] == ".deb" {
-		return exec.Command("pkexec", "dpkg", "-i", path).Run()
+	// Copy the downloaded asset to a persistent location first. The caller
+	// removes the temp download as soon as Install returns, and AppImage
+	// launches asynchronously — deleting the file in that window can break
+	// the launch, exactly like the Windows installer race fixed in 1.3.7.
+	// dpkg/rpm also read from this path (harmless, just consistent).
+	persistentPath, err := stageLinuxInstaller(path)
+	if err != nil {
+		return fmt.Errorf("stage installer: %w", err)
 	}
-	// Try rpm for .rpm — use pkexec for the same reason
-	if len(path) > 4 && path[len(path)-4:] == ".rpm" {
-		return exec.Command("pkexec", "rpm", "-U", path).Run()
+
+	// Match extensions case-insensitively and via the true extension, not a
+	// slice of the last 4 bytes: .deb / .rpm / .AppImage all differ in length.
+	switch strings.ToLower(filepath.Ext(persistentPath)) {
+	case ".deb":
+		return runPkexec("dpkg", "-i", persistentPath)
+	case ".rpm":
+		return runPkexec("rpm", "-U", persistentPath)
+	case ".appimage":
+		if err := exec.Command("chmod", "+x", persistentPath).Run(); err != nil {
+			return fmt.Errorf("chmod +x: %w", err)
+		}
+		cmd := exec.Command(persistentPath)
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		// Release the process so it doesn't become a zombie when the parent exits.
+		return cmd.Process.Release()
+	default:
+		// Unknown format — fail loudly so the caller falls back to the
+		// release page instead of trying to execute a tar/zip as a program.
+		return fmt.Errorf("unsupported update asset format %q: expected .deb, .rpm or .AppImage", filepath.Ext(path))
 	}
-	// AppImage — make executable and run
-	if err := exec.Command("chmod", "+x", path).Run(); err != nil {
-		return fmt.Errorf("chmod +x: %w", err)
-	}
-	cmd := exec.Command(path)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	// Release the process so it doesn't become a zombie when the parent exits.
-	return cmd.Process.Release()
 }
 
-func installWindows(path string) error {
-	// MSI: silent install; msiexec itself needs admin rights.
-	if len(path) > 4 && strings.EqualFold(path[len(path)-4:], ".msi") {
-		return runInstallerElevated("msiexec", "/i", path, "/qn")
-	}
-	// NSIS .exe installer: request elevation and run silently so the user
-	// only sees the UAC prompt. A direct exec.Command from a non-elevated
-	// process fails with ERROR_ELEVATION_REQUIRED because the installer's
-	// manifest requests admin rights (it writes to Program Files).
-	return runInstallerElevated(path, "/S")
-}
-
-// runInstallerElevated launches the installer via PowerShell's
-// Start-Process -Verb RunAs. This triggers the Windows UAC elevation prompt
-// when the parent process is not already elevated, and is a no-op prompt
-// when it already is. The installer is detached so the parent can exit.
-func runInstallerElevated(path string, args ...string) error {
-	// Pass the target path as $args[0] to avoid PowerShell quoting pitfalls
-	// for paths that may contain single quotes.
-	quoted := make([]string, 0, len(args))
-	for _, a := range args {
-		// Escape single quotes by doubling them; Windows paths cannot contain
-		// double quotes, so single-quoting each argument is safe.
-		quoted = append(quoted, "'"+strings.ReplaceAll(a, "'", "''")+"'")
-	}
-	argList := strings.Join(quoted, ",")
-	script := fmt.Sprintf("Start-Process -Verb RunAs -FilePath $args[0] -ArgumentList %s", argList)
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script, path)
-	sysexec.Hide(cmd)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to start installer with administrator rights: %w", err)
+// runPkexec runs a package-manager command through pkexec (a GUI polkit
+// prompt — works without a TTY, unlike sudo). The combined output is kept so
+// the error message says why elevation failed (e.g. no polkit agent running).
+func runPkexec(prog string, args ...string) error {
+	cmd := exec.Command("pkexec", append([]string{prog}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s via pkexec failed: %w (output: %s)",
+			prog, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
+
+// stageLinuxInstaller copies the update asset to a persistent location
+// ($XDG_DATA_HOME/wireguideplus/updates, falling back to ~/.local/share)
+// so the caller can safely remove the temp download right after Install
+// returns. Stale installers from previous attempts are removed first.
+func stageLinuxInstaller(src string) (string, error) {
+	dir := linuxUpdatesDir()
+	if dir == "" {
+		return "", fmt.Errorf("cannot resolve a persistent updates directory")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create updates dir: %w", err)
+	}
+	stale, _ := filepath.Glob(filepath.Join(dir, "wireguideplus-update-installer.*"))
+	for _, f := range stale {
+		_ = os.Remove(f)
+	}
+	ext := filepath.Ext(src)
+	if ext == "" {
+		ext = ".bin"
+	}
+	dest := filepath.Join(dir, "wireguideplus-update-installer"+ext)
+	if err := copyFile(src, dest); err != nil {
+		return "", fmt.Errorf("copy installer: %w", err)
+	}
+	return dest, nil
+}
+
+func linuxUpdatesDir() string {
+	if dataHome := os.Getenv("XDG_DATA_HOME"); dataHome != "" {
+		return filepath.Join(dataHome, "wireguideplus", "updates")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "share", "wireguideplus", "updates")
+}
+
+// copyFile copies src to dst (mode 0644). Shared by the Windows and Linux
+// staging paths.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
