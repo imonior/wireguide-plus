@@ -4,6 +4,21 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.6] - 2026-09-01
+
+本版本将更名前旧版（"wireguide"）数据的迁移改为**用户可见的交互式引导**：启动时扫描旧版遗留的配置、隧道与日志，由你决定迁移哪些、如何处理重名冲突，并可先对比新旧目录再动手，不再静默覆盖。
+
+### ✨ 新功能
+
+- **旧版数据迁移弹窗** — 启动时自动检测更名前 "wireguide" 目录中的 config.json、history.json、tunnels/*.conf 与日志；弹窗内按类别显示数量与重名冲突，可一键「全部迁移」，迁移成功即清理旧目录并记录状态，之后不再打扰。
+- **新旧目录对比** — 弹窗内可直接打开旧版 / 当前配置目录与日志目录，先核对内容再迁移。
+- **迁移选项** — 重名冲突时可勾选「覆盖现有文件」；日志默认不迁移，可按需开启。
+- **暂缓与不再提醒** — 「下次启动再提醒」仅关闭弹窗不写任何标记，下次启动重新检测；「不再提醒」持久化选择，之后不再弹出，仍可在「设置 → 高级 → 旧数据」重新触发扫描。
+
+### 🛠 内部
+
+- 移除旧版在首次启动时静默自动迁移的逻辑（原在 `GetPaths` 中自动复制），改由显式的 `DetectLegacyData` / `MigrateLegacyData` 交互流程驱动；CLI 命令不再自动迁移，首次 GUI 启动负责引导。
+
 ## [1.3.5] - 2026-09-01
 
 本版本新增 **AmneziaWG（AWG）协议支持**——抗 DPI 识别的混淆版 WireGuard。AWG 配置通过混淆参数（Jc/Jmin/Jmax/S1-S4/H1-H4）自动识别，运行于 amneziawg-go 后端，界面以「AmneziaWG」徽标标注；可在「设置 → 高级」中关闭支持。

@@ -4,6 +4,21 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.6] - 2026-09-01
+
+This release turns migration of pre-rename ("wireguide") data into a **user-visible interactive flow**: on startup the app scans for legacy configs, tunnels and logs, lets you choose what to migrate and how to handle name conflicts, and lets you compare the old and new folders before committing — no more silent overwrites.
+
+### ✨ New Features
+
+- **Legacy data migration dialog** — on startup, automatically detects config.json, history.json, tunnels/*.conf and logs left in the pre-rename "wireguide" directories; the dialog shows counts and name conflicts by category and offers a one-click "Migrate all" that cleans up the old directory and records the state once done.
+- **Compare old vs new folders** — open the legacy / current config and log directories directly from the dialog to verify contents before migrating.
+- **Migration options** — tick "Overwrite existing files" for name conflicts; logs are not migrated by default and can be opted in.
+- **Remind later & never ask again** — "Remind me next launch" just closes the dialog without persisting anything (the next launch re-detects the data); "Don't ask again" persists the choice so the dialog stays hidden, and Settings → Advanced → "legacy data" can re-trigger the scan anytime.
+
+### 🛠 Internal
+
+- Removed the old silent first-launch auto-migration (previously ran inside `GetPaths`), replaced by the explicit `DetectLegacyData` / `MigrateLegacyData` interactive flow; CLI commands no longer auto-migrate — the first GUI launch drives the prompt.
+
 ## [1.3.5] - 2026-09-01
 
 This release adds **AmneziaWG (AWG) protocol support** — the obfuscated WireGuard fork that resists DPI. AWG configs are auto-detected from their obfuscation parameters (Jc/Jmin/Jmax/S1-S4/H1-H4), run on the amneziawg-go backend, and are marked with an "AmneziaWG" badge in the UI. Support can be disabled in Settings → Advanced on machines where the AWG backend misbehaves.
