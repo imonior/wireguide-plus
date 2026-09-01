@@ -204,6 +204,7 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 			"log_level", settings.LogLevel,
 			"log_retention_days", settings.LogRetentionDays,
 			"auto_update_check", settings.AutoUpdateCheckEnabled(),
+			"auto_update_silent", settings.AutoUpdateSilent,
 			"notify_duration_ms", settings.NotifyDurationMs,
 			"enable_wg_scripts", settings.EnableWgScripts,
 			"kill_switch", settings.KillSwitch,
@@ -315,6 +316,9 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	}
 	if prev.AutoUpdateCheckEnabled() != next.AutoUpdateCheckEnabled() {
 		out = append(out, "auto_update_check")
+	}
+	if prev.AutoUpdateSilent != next.AutoUpdateSilent {
+		out = append(out, "auto_update_silent")
 	}
 	if prev.ProxyMode != next.ProxyMode {
 		out = append(out, "proxy_mode")
@@ -731,7 +735,15 @@ func (s *TunnelService) runUpdateNative(info *update.UpdateInfo) error {
 		return s.fallbackOpenRelease(err)
 	}
 	s.emitUpdateProgress("install", 0)
-	if err := update.Install(path, info); err != nil {
+	// Honor the "auto silent update" setting: when enabled the installer
+	// runs headlessly (Windows NSIS /S); otherwise it launches the same
+	// interactive installer a manual install shows. macOS in-place updates
+	// are unaffected (inherently quiet).
+	opts := update.InstallOptions{}
+	if cfg, err := s.settingsStore.Load(); err == nil && cfg != nil {
+		opts.Silent = cfg.AutoUpdateSilent
+	}
+	if err := update.Install(path, info, opts); err != nil {
 		slog.Warn("update: native install failed; opening release page as fallback",
 			"category", "update",
 			"version", info.Version,

@@ -15,6 +15,17 @@ import (
 	"strings"
 )
 
+// InstallOptions controls how Install runs the platform installer.
+type InstallOptions struct {
+	// Silent installs without the interactive installer UI. Used by the
+	// "auto silent update" setting (Settings → Updates); the default
+	// (false) launches the regular installer the user already knows from a
+	// manual install — on Windows the NSIS wizard, whose finish page offers
+	// to launch the app. macOS in-place updates are inherently quiet, so
+	// the flag mainly drives Windows.
+	Silent bool
+}
+
 // Install runs the OS-specific installer for the downloaded update.
 // The caller must pass the UpdateInfo whose HashVerified field was set by
 // DownloadUpdate. Install refuses to proceed if the hash was not verified,
@@ -22,7 +33,7 @@ import (
 // was not verified. The latter re-check matters because Install execs the
 // file: it must enforce the same policy as DownloadUpdate rather than
 // trust that every (future) caller went through it.
-func Install(filePath string, info *UpdateInfo) error {
+func Install(filePath string, info *UpdateInfo, opts InstallOptions) error {
 	if info == nil || !info.HashVerified {
 		return fmt.Errorf("refusing to install: checksum was not verified")
 	}
@@ -33,9 +44,9 @@ func Install(filePath string, info *UpdateInfo) error {
 	case "darwin":
 		return installDarwin(filePath)
 	case "linux":
-		return installLinux(filePath)
+		return installLinux(filePath, opts.Silent)
 	case "windows":
-		return installWindows(filePath)
+		return installWindows(filePath, opts.Silent)
 	default:
 		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
@@ -51,7 +62,7 @@ func installDarwin(path string) error {
 	return installDarwinBundle(path)
 }
 
-func installLinux(path string) error {
+func installLinux(path string, silent bool) error {
 	// Copy the downloaded asset to a persistent location first. The caller
 	// removes the temp download as soon as Install returns, and AppImage
 	// launches asynchronously — deleting the file in that window can break
@@ -66,9 +77,19 @@ func installLinux(path string) error {
 	// slice of the last 4 bytes: .deb / .rpm / .AppImage all differ in length.
 	switch strings.ToLower(filepath.Ext(persistentPath)) {
 	case ".deb":
-		return runPkexec("dpkg", "-i", persistentPath)
+		if err := runPkexec("dpkg", "-i", persistentPath); err != nil {
+			return err
+		}
+		// Package-manager updates replace the binary on disk but never
+		// start the GUI, so launch the fresh version ourselves. silent has
+		// no effect here: pkexec's polkit dialog is the interactive step,
+		// identical for both modes.
+		return relaunchLinuxApp()
 	case ".rpm":
-		return runPkexec("rpm", "-U", persistentPath)
+		if err := runPkexec("rpm", "-U", persistentPath); err != nil {
+			return err
+		}
+		return relaunchLinuxApp()
 	case ".appimage":
 		if err := exec.Command("chmod", "+x", persistentPath).Run(); err != nil {
 			return fmt.Errorf("chmod +x: %w", err)
@@ -84,6 +105,57 @@ func installLinux(path string) error {
 		// release page instead of trying to execute a tar/zip as a program.
 		return fmt.Errorf("unsupported update asset format %q: expected .deb, .rpm or .AppImage", filepath.Ext(path))
 	}
+}
+
+// relaunchLinuxApp starts the freshly installed GUI after a deb/rpm update.
+//
+// The updater's own process is still running the OLD binary — Linux lets
+// dpkg/rpm overwrite a live executable — so the app must be restarted to
+// pick up the new version. We render a tiny shell script and run it
+// detached: the script kills every running instance (this process
+// included, exactly like the macOS install script and the Windows
+// installer's taskkill), then starts the new binary from PATH. Running the
+// launch through a separate shell keeps it alive even though the calling
+// process dies in the pkill. The nfpm package ships the binary as
+// /usr/local/bin/wireguideplus, which is on PATH for most setups.
+func relaunchLinuxApp() error {
+	// The nfpm package ships /usr/local/bin/wireguideplus; check that first
+	// because a desktop session's PATH may not include /usr/local/bin.
+	bin := "/usr/local/bin/wireguideplus"
+	if _, err := os.Stat(bin); err != nil {
+		if resolved, lookErr := exec.LookPath("wireguideplus"); lookErr == nil {
+			bin = resolved
+		} else {
+			// Installed fine but the binary is nowhere findable (unusual).
+			// Not a reason to fail the update — the user can launch it by hand.
+			return nil
+		}
+	}
+	script := "#!/bin/sh\n" +
+		"pkill -x wireguideplus 2>/dev/null || true\n" +
+		"/bin/sleep 1\n" +
+		"nohup " + shellQuote(bin) + " >/dev/null 2>&1 &\n"
+	f, err := os.CreateTemp("", "wireguideplus-relaunch-*.sh")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if _, err := f.WriteString(script); err != nil {
+		f.Close()
+		_ = os.Remove(name)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	_ = os.Chmod(name, 0o755)
+	cmd := exec.Command("/bin/sh", name)
+	if err := cmd.Start(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return cmd.Process.Release()
 }
 
 // runPkexec runs a package-manager command through pkexec (a GUI polkit

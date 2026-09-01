@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func installWindows(path string) error {
+func installWindows(path string, silent bool) error {
 	// Copy the downloaded installer to a persistent location before launching
 	// it. The caller removes the temp download as soon as Install returns, but
 	// ShellExecute("runas") returns immediately after requesting elevation —
@@ -28,14 +28,21 @@ func installWindows(path string) error {
 	if len(path) > 4 && strings.EqualFold(path[len(path)-4:], ".msi") {
 		return runInstallerElevated("msiexec", "/i", persistentPath, "/qn")
 	}
-	// NSIS .exe installer: request elevation and run silently so the user
-	// only sees the UAC prompt. A direct exec.Command from a non-elevated
-	// process fails with ERROR_ELEVATION_REQUIRED because the installer's
-	// manifest requests admin rights (it writes to Program Files).
-	// /AUTOSTART makes the installer relaunch the app after the swap — its
-	// silent mode skips the finish page whose "run now" checkbox would
-	// otherwise be the only way to open the app (see project.nsi).
-	return runInstallerElevated(persistentPath, "/S", "/AUTOSTART")
+	// NSIS .exe installer: request elevation (UAC). Interactive by default —
+	// no /S, so the user sees the regular installation wizard and the
+	// finish page's "run now" checkbox launches the app when it completes.
+	// With the "auto silent update" setting enabled, pass /S /AUTOSTART:
+	// headless install, and /AUTOSTART makes the installer relaunch the app
+	// after the swap, because silent mode skips the finish page whose run
+	// checkbox would otherwise be the only way to open it (project.nsi).
+	// A direct exec.Command from a non-elevated process fails with
+	// ERROR_ELEVATION_REQUIRED because the installer's manifest requests
+	// admin rights (it writes to Program Files).
+	args := []string{}
+	if silent {
+		args = append(args, "/S", "/AUTOSTART")
+	}
+	return runInstallerElevated(persistentPath, args...)
 }
 
 // stageInstaller copies the installer from its temp location to

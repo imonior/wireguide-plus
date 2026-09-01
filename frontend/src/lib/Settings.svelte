@@ -179,6 +179,7 @@
     log_level: 'info',
     tray_icon_style: 'color',
     auto_update_check: true,
+    auto_update_silent: false,
     compact_list: false,
     proxy_mode: 'direct',
     proxy_url: '',
@@ -216,6 +217,8 @@
         // the Go side becomes undefined here; default to true to match
         // Settings.AutoUpdateCheckEnabled() semantics.
         settings.auto_update_check = (s.auto_update_check === false) ? false : true;
+        // Default: interactive installers. Opt-in silent installs.
+        settings.auto_update_silent = s.auto_update_silent ?? false;
         settings.proxy_mode = s.proxy_mode || 'direct';
         // proxy_url is intentionally kept even in direct mode: it is the
         // remembered value restored when switching back to a custom
@@ -270,6 +273,7 @@
         pin_interface: settings.pin_interface,
         log_level: settings.log_level,
         auto_update_check: settings.auto_update_check,
+        auto_update_silent: settings.auto_update_silent,
         compact_list: settings.compact_list,
         proxy_mode: settings.proxy_mode,
         proxy_url: settings.proxy_url,
@@ -698,6 +702,16 @@
                 </div>
                 <label class="toggle">
                   <input id="auto-update" type="checkbox" bind:checked={settings.auto_update_check} on:change={scheduleSave} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="auto-update-silent">{$t('settings.auto_update_silent')}</label>
+                  <p class="setting-desc">{$t('settings.auto_update_silent_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="auto-update-silent" type="checkbox" bind:checked={settings.auto_update_silent} on:change={scheduleSave} />
                   <span class="toggle-track"></span>
                 </label>
               </div>
