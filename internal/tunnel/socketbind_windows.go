@@ -55,7 +55,6 @@ import (
 
 	"github.com/imonior/wireguide-plus/internal/network"
 	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
@@ -258,8 +257,8 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 // and as the implementation of every monitor re‑evaluation.
 // Returns the (v4, v6) ifIndex pair actually bound (0 = blackhole/no
 // underlay for that family).
-func pinSocketToPhysical(bind conn.Bind, tunnelInterfaceName string, tunnelLUID winipcfg.LUID) (uint32, uint32) {
-	binder, ok := bind.(conn.BindSocketToInterface)
+func pinSocketToPhysical(bind any, tunnelInterfaceName string, tunnelLUID winipcfg.LUID) (uint32, uint32) {
+	binder, ok := bind.(bindSocketPinner)
 	if !ok {
 		return 0, 0
 	}
@@ -271,7 +270,7 @@ func pinSocketToPhysical(bind conn.Bind, tunnelInterfaceName string, tunnelLUID 
 // pinFamily resolves one address family's best non‑tunnel default route
 // and binds the corresponding socket. Returns the bound ifIndex (0 if
 // no usable underlay was found and blackhole was applied).
-func pinFamily(binder conn.BindSocketToInterface, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool) uint32 {
+func pinFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool) uint32 {
 	var ifIndex uint32
 	_, ifIndex, err := findDefaultUnderlayByLUID(tunnelLUID, ipv6)
 	if err != nil {
@@ -341,7 +340,7 @@ func familyName(ipv6 bool) string {
 // debounce timer. The callbacks themselves are guarded by sync.WaitGroup
 // so concurrent goroutines spawned by the kernel callback drain before
 // the manager calls engine.Close.
-func startSocketBindMonitor(ctx context.Context, bind conn.Bind, tunnelInterfaceName string, tunnelLUID uint64) {
+func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName string, tunnelLUID uint64) {
 
 	realTunnelLUID := winipcfg.LUID(tunnelLUID)
 
@@ -351,7 +350,7 @@ func startSocketBindMonitor(ctx context.Context, bind conn.Bind, tunnelInterface
 	if bind == nil {
 		return
 	}
-	binder, ok := bind.(conn.BindSocketToInterface)
+	binder, ok := bind.(bindSocketPinner)
 	if !ok {
 		return
 	}
@@ -407,7 +406,7 @@ func startSocketBindMonitor(ctx context.Context, bind conn.Bind, tunnelInterface
 // Lifecycle: created in startSocketBindMonitor, torn down via stop()
 // when ctx is cancelled.
 type socketBindMonitor struct {
-	binder              conn.BindSocketToInterface
+	binder              bindSocketPinner
 	tunnelInterfaceName string
 	tunnelLUID          winipcfg.LUID
 	lastV4              atomic.Uint32
@@ -457,7 +456,7 @@ func (mon *socketBindMonitor) reevaluate() {
 }
 
 // evaluateOneFamily resolves the best non‑tunnel for one address family and (re‑)binds.
-func evaluateOneFamily(binder conn.BindSocketToInterface, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, previous uint32) uint32 {
+func evaluateOneFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, previous uint32) uint32 {
 	var ifIndex uint32
 	_, ifIndex, err := findDefaultUnderlayByLUID(tunnelLUID, ipv6)
 	if err != nil {

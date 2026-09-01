@@ -111,6 +111,15 @@ func Parse(content string) (*WireGuardConfig, error) {
 		return nil, fmt.Errorf("config has no [Interface] section or missing PrivateKey")
 	}
 
+	// Auto-detect the AmneziaWG protocol: the presence of any AWG
+	// obfuscation key (Jc/Jmin/Jmax/S1-S4/H1-H4) marks the config as
+	// AmneziaWG. Deriving the protocol from content (rather than storing a
+	// non-standard key in the .conf) keeps it stable across the
+	// parse → serialize → parse round-trip.
+	if cfg.Interface.IsAmneziaWG() {
+		cfg.Protocol = ProtocolAmneziaWG
+	}
+
 	return cfg, nil
 }
 
@@ -146,6 +155,41 @@ func parseInterfaceKey(iface *InterfaceConfig, key, value string, lineNum int) e
 		iface.PreDown = appendScriptLine(iface.PreDown, value)
 	case "postdown":
 		iface.PostDown = appendScriptLine(iface.PostDown, value)
+	case "jc", "jmin", "jmax", "s1", "s2", "s3", "s4":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("line %d: invalid %s value: %q", lineNum, key, value)
+		}
+		switch strings.ToLower(key) {
+		case "jc":
+			iface.Jc = n
+		case "jmin":
+			iface.Jmin = n
+		case "jmax":
+			iface.Jmax = n
+		case "s1":
+			iface.S1 = n
+		case "s2":
+			iface.S2 = n
+		case "s3":
+			iface.S3 = n
+		case "s4":
+			iface.S4 = n
+		}
+	case "h1", "h2", "h3", "h4":
+		// H values are either a single number or a "min-max" range string,
+		// matching amneziawg-go's UintRange format. Kept as raw strings;
+		// the validator checks their shape.
+		switch strings.ToLower(key) {
+		case "h1":
+			iface.H1 = value
+		case "h2":
+			iface.H2 = value
+		case "h3":
+			iface.H3 = value
+		case "h4":
+			iface.H4 = value
+		}
 	default:
 		slog.Warn("ignoring unknown [Interface] key", "line", lineNum, "key", key)
 		if iface.ExtraKeys == nil {
@@ -218,6 +262,40 @@ func Serialize(cfg *WireGuardConfig) string {
 	writeScriptLines(&b, "PostUp", cfg.Interface.PostUp)
 	writeScriptLines(&b, "PreDown", cfg.Interface.PreDown)
 	writeScriptLines(&b, "PostDown", cfg.Interface.PostDown)
+	// AmneziaWG obfuscation parameters.
+	if cfg.Interface.Jc > 0 {
+		b.WriteString("Jc = " + strconv.Itoa(cfg.Interface.Jc) + "\n")
+	}
+	if cfg.Interface.Jmin > 0 {
+		b.WriteString("Jmin = " + strconv.Itoa(cfg.Interface.Jmin) + "\n")
+	}
+	if cfg.Interface.Jmax > 0 {
+		b.WriteString("Jmax = " + strconv.Itoa(cfg.Interface.Jmax) + "\n")
+	}
+	if cfg.Interface.S1 > 0 {
+		b.WriteString("S1 = " + strconv.Itoa(cfg.Interface.S1) + "\n")
+	}
+	if cfg.Interface.S2 > 0 {
+		b.WriteString("S2 = " + strconv.Itoa(cfg.Interface.S2) + "\n")
+	}
+	if cfg.Interface.S3 > 0 {
+		b.WriteString("S3 = " + strconv.Itoa(cfg.Interface.S3) + "\n")
+	}
+	if cfg.Interface.S4 > 0 {
+		b.WriteString("S4 = " + strconv.Itoa(cfg.Interface.S4) + "\n")
+	}
+	if cfg.Interface.H1 != "" {
+		b.WriteString("H1 = " + cfg.Interface.H1 + "\n")
+	}
+	if cfg.Interface.H2 != "" {
+		b.WriteString("H2 = " + cfg.Interface.H2 + "\n")
+	}
+	if cfg.Interface.H3 != "" {
+		b.WriteString("H3 = " + cfg.Interface.H3 + "\n")
+	}
+	if cfg.Interface.H4 != "" {
+		b.WriteString("H4 = " + cfg.Interface.H4 + "\n")
+	}
 	for k, v := range cfg.Interface.ExtraKeys {
 		b.WriteString(k + " = " + v + "\n")
 	}

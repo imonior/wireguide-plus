@@ -371,3 +371,100 @@ func TestHasScriptsNoScripts(t *testing.T) {
 		t.Error("expected HasScripts() to be false for config without scripts")
 	}
 }
+
+// --- AmneziaWG ---
+
+const validAWGConf = `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Address = 10.0.0.2/24
+DNS = 1.1.1.1
+MTU = 1420
+Jc = 5
+Jmin = 100
+Jmax = 500
+S1 = 10
+S2 = 20
+H1 = 123456-123500
+H2 = 123456-123500
+H3 = 123456-123500
+H4 = 123456-123500
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+Endpoint = 203.0.113.5:51820
+AllowedIPs = 0.0.0.0/0
+`
+
+func TestParseAWGConfig(t *testing.T) {
+	cfg, err := Parse(validAWGConf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Protocol != ProtocolAmneziaWG {
+		t.Errorf("expected protocol %q, got %q", ProtocolAmneziaWG, cfg.Protocol)
+	}
+	iface := cfg.Interface
+	if iface.Jc != 5 || iface.Jmin != 100 || iface.Jmax != 500 {
+		t.Errorf("Jc/Jmin/Jmax mismatch: %d/%d/%d", iface.Jc, iface.Jmin, iface.Jmax)
+	}
+	if iface.S1 != 10 || iface.S2 != 20 || iface.S3 != 0 || iface.S4 != 0 {
+		t.Errorf("S1-S4 mismatch: %d/%d/%d/%d", iface.S1, iface.S2, iface.S3, iface.S4)
+	}
+	if iface.H1 != "123456-123500" || iface.H2 != "123456-123500" ||
+		iface.H3 != "123456-123500" || iface.H4 != "123456-123500" {
+		t.Errorf("H1-H4 mismatch: %q/%q/%q/%q", iface.H1, iface.H2, iface.H3, iface.H4)
+	}
+	// AWG keys must NOT leak into ExtraKeys.
+	if len(iface.ExtraKeys) != 0 {
+		t.Errorf("unexpected ExtraKeys: %v", iface.ExtraKeys)
+	}
+}
+
+func TestAWGSerializeRoundTrip(t *testing.T) {
+	cfg, err := Parse(validAWGConf)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	serialized := Serialize(cfg)
+	for _, want := range []string{
+		"Jc = 5",
+		"Jmin = 100",
+		"Jmax = 500",
+		"S1 = 10",
+		"S2 = 20",
+		"H1 = 123456-123500",
+		"H4 = 123456-123500",
+	} {
+		if !strings.Contains(serialized, want) {
+			t.Errorf("serialized output missing %q:\n%s", want, serialized)
+		}
+	}
+
+	cfg2, err := Parse(serialized)
+	if err != nil {
+		t.Fatalf("re-parse error: %v", err)
+	}
+	if cfg2.Protocol != ProtocolAmneziaWG {
+		t.Errorf("protocol not preserved across round-trip: %q", cfg2.Protocol)
+	}
+	if cfg2.Interface.Jc != 5 || cfg2.Interface.H4 != "123456-123500" {
+		t.Errorf("AWG params not preserved across round-trip: %+v", cfg2.Interface)
+	}
+}
+
+func TestParseAWGInvalidInt(t *testing.T) {
+	conf := `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Jc = not-a-number
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+AllowedIPs = 0.0.0.0/0
+`
+	if _, err := Parse(conf); err == nil {
+		t.Fatal("expected parse error for non-numeric Jc, got nil")
+	}
+}

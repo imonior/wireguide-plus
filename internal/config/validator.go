@@ -6,6 +6,7 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // hostnameRegex matches RFC 1035 hostnames (single-label or FQDN).
@@ -111,6 +112,54 @@ func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 	if iface.ListenPort != 0 && (iface.ListenPort < 1 || iface.ListenPort > 65535) {
 		result.addError("Interface.ListenPort", fmt.Sprintf("ListenPort must be between 1 and 65535, got %d", iface.ListenPort))
 	}
+
+	// AmneziaWG obfuscation parameters. These keys are what mark a config
+	// as AmneziaWG, so they are always legal to present — but their values
+	// must be sane. Numeric bounds follow amneziawg-go's UAPI parsers
+	// (uint32 for Jc/Jmin/Jmax, uint16 for S1-S4).
+	validateAWGKey(result, "Interface.Jc", iface.Jc, 1<<32-1)
+	validateAWGKey(result, "Interface.Jmin", iface.Jmin, 1<<32-1)
+	validateAWGKey(result, "Interface.Jmax", iface.Jmax, 1<<32-1)
+	if iface.Jmin > 0 && iface.Jmax > 0 && iface.Jmin > iface.Jmax {
+		result.addError("Interface.Jmin", fmt.Sprintf("Jmin (%d) cannot be greater than Jmax (%d)", iface.Jmin, iface.Jmax))
+	}
+	validateAWGKey(result, "Interface.S1", iface.S1, 65535)
+	validateAWGKey(result, "Interface.S2", iface.S2, 65535)
+	validateAWGKey(result, "Interface.S3", iface.S3, 65535)
+	validateAWGKey(result, "Interface.S4", iface.S4, 65535)
+	validateHKey(result, "Interface.H1", iface.H1)
+	validateHKey(result, "Interface.H2", iface.H2)
+	validateHKey(result, "Interface.H3", iface.H3)
+	validateHKey(result, "Interface.H4", iface.H4)
+}
+
+// validateAWGKey checks an integer AmneziaWG parameter against a non-negative bound.
+func validateAWGKey(result *ValidationResult, field string, value int, max uint64) {
+	if value < 0 || uint64(value) > max {
+		result.addError(field, fmt.Sprintf("must be between 0 and %d, got %d", max, value))
+	}
+}
+
+// validateHKey checks an H1-H4 value: a single number or a "min-max" range,
+// both parsed as uint32 (matching amneziawg-go's UintRange).
+func validateHKey(result *ValidationResult, field, value string) {
+	if value == "" || isValidHValue(value) {
+		return
+	}
+	result.addError(field, fmt.Sprintf("invalid value %q (expected a number or \"min-max\" range)", value))
+}
+
+func isValidHValue(v string) bool {
+	parts := strings.Split(v, "-")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, p := range parts {
+		if _, err := strconv.ParseUint(p, 10, 32); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func validatePeer(peer *PeerConfig, index int, result *ValidationResult) {

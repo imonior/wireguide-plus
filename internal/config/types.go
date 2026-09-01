@@ -11,3 +11,10 @@ type (
 	PeerConfig      = domain.PeerConfig
 	Script          = domain.Script
 )
+
+// Protocol identifiers, re-exported from domain for callers that still import
+// config instead of domain.
+const (
+	ProtocolWireGuard = domain.ProtocolWireGuard
+	ProtocolAmneziaWG = domain.ProtocolAmneziaWG
+)

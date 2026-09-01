@@ -13,28 +13,35 @@ import (
 	"sync"
 	"time"
 
+	awgconn "github.com/amnezia-vpn/amneziawg-go/v3/conn"
+	awgdevice "github.com/amnezia-vpn/amneziawg-go/v3/device"
+	awgtun "github.com/amnezia-vpn/amneziawg-go/v3/tun"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
 	"github.com/imonior/wireguide-plus/internal/config"
 )
 
-// Engine wraps wireguard-go device and TUN.
+// Engine wraps a protocol device (wireguard-go or amneziawg-go) and its TUN.
 type Engine struct {
-	tunDevice    tun.Device
-	wgDevice     *device.Device
+	tunDevice    tunDevice
+	wgDevice     wgDevice
 	uapiListener net.Listener
 	ifaceName    string
+	// protocol is the backend in use: "" or config.ProtocolWireGuard, or
+	// config.ProtocolAmneziaWG. See Engine.IsAmneziaWG.
+	protocol string
 	closeOnce    sync.Once
 
-	// bind is the wireguard-go conn.Bind we passed to device.NewDevice.
-	// Held so the socket-pinning path (Windows: IP_UNICAST_IF; see
-	// internal/tunnel/socketbind_windows.go) can downcast it to
-	// conn.BindSocketToInterface and pin the WG UDP socket to the
-	// physical underlay's ifIndex after engine.Start has opened the
-	// sockets. The cast may yield nil on platforms whose default bind
-	// doesn't implement that interface — every call site checks.
-	bind conn.Bind
+	// bind is the protocol backend's conn.Bind we passed to device.NewDevice
+	// (either wireguard-go's or amneziawg-go's). Held as any so either
+	// implementation fits. The socket-pinning path (Windows: IP_UNICAST_IF;
+	// see internal/tunnel/socketbind_windows.go) downcasts it to
+	// bindSocketPinner and pins the protocol UDP socket to the physical
+	// underlay's ifIndex after engine.Start has opened the sockets. The
+	// cast may yield nil on platforms whose default bind doesn't implement
+	// that interface — every call site checks.
+	bind any
 
 	// SocketPinV4/V6 record the ifIndex pinSocketToPhysical succeeded
 	// against at connect time. Read by the manager to seed the socket-
@@ -122,7 +129,7 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 	}
 
 	// Platform-specific TUN device name:
-	//  - macOS: "utun" — wireguard-go allocates utun0, utun1, etc.
+	//  - macOS: "utun" — the backend allocates utun0, utun1, etc.
 	//  - Linux/Windows: a stable name derived from the tunnel name. CreateTUN
 	//    treats its argument as an exact name on these platforms; a single
 	//    constant made every second simultaneous tunnel fail with EBUSY.
@@ -134,39 +141,84 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 		cleanupStaleWintunAdapter(tunName)
 	}
 
-	tunDev, err := tun.CreateTUN(tunName, mtu)
-	if err != nil {
+	protocol := cfg.Protocol
+	if protocol == "" {
+		protocol = config.ProtocolWireGuard
+	}
+	isAWG := protocol == config.ProtocolAmneziaWG
+
+	// Create the TUN and the protocol device. wireguard-go and amneziawg-go
+	// have identical API shapes (NewDevice(tun, bind, logger) → IpcSet/
+	// IpcGet/IpcHandle) but are separate packages with unrelated concrete
+	// types, so each protocol branch builds its own device. Everything
+	// downstream uses the wgDevice/tunDevice interfaces.
+	var (
+		tunDev    tunDevice
+		wgDev     wgDevice
+		bind      any
+		buildErr  error
+		ifaceName string
+	)
+	if isAWG {
+		awgTun, err := awgtun.CreateTUN(tunName, mtu)
+		if err != nil {
+			buildErr = err
+		} else {
+			tunDev = awgTun
+			var name string
+			name, err = awgTun.Name()
+			if err != nil {
+				awgTun.Close()
+				buildErr = err
+			} else {
+				ifaceName = name
+				// Local concrete-typed bind: NewDevice demands the backend's
+				// conn.Bind, while Engine.bind stores it as any for the
+				// socket-pinning code (which downcasts to bindSocketPinner).
+				awgBind := awgconn.NewDefaultBind()
+				bind = awgBind
+				wgDev = awgdevice.NewDevice(awgTun, awgBind, newAmneziawgSlogLogger(ifaceName))
+			}
+		}
+	} else {
+		wgTun, err := tun.CreateTUN(tunName, mtu)
+		if err != nil {
+			buildErr = err
+		} else {
+			tunDev = wgTun
+			var name string
+			name, err = wgTun.Name()
+			if err != nil {
+				wgTun.Close()
+				buildErr = err
+			} else {
+				ifaceName = name
+				wgBind := conn.NewDefaultBind()
+				bind = wgBind
+				wgDev = device.NewDevice(wgTun, wgBind, newWireguardSlogLogger(ifaceName))
+			}
+		}
+	}
+	if buildErr != nil {
 		// Surface a more actionable message for the common Windows
 		// failure mode: a previous helper crash left a Wintun adapter
 		// in the kernel that we couldn't clean up (cleanupStaleWintunAdapter
 		// is best-effort and silently no-ops when wintun.dll isn't
 		// loadable from our path).
 		if runtime.GOOS == "windows" {
-			return nil, fmt.Errorf("creating TUN device %q: %w (hint: a stale WireGuide adapter may still be installed — open Device Manager → Network adapters and remove any 'WireGuide' entries, then try again)", tunName, err)
+			return nil, fmt.Errorf("creating TUN device %q: %w (hint: a stale WireGuide adapter may still be installed — open Device Manager → Network adapters and remove any 'WireGuide' entries, then try again)", tunName, buildErr)
 		}
-		return nil, fmt.Errorf("creating TUN device: %w", err)
+		return nil, fmt.Errorf("creating TUN device: %w", buildErr)
 	}
 
-	ifaceName, err := tunDev.Name()
-	if err != nil {
-		tunDev.Close()
-		return nil, fmt.Errorf("getting TUN name: %w", err)
-	}
-
-	slog.Info("TUN device created", "interface", ifaceName)
-
-	// Use a verbose logger routed to slog so handshake failures / peer
-	// rejections / MTU issues aren't invisible. Previously this was
-	// LogLevelSilent which made debugging impossible.
-	logger := newWireguardSlogLogger(ifaceName)
-	bind := conn.NewDefaultBind()
-	wgDev := device.NewDevice(tunDev, bind, logger)
+	slog.Info("TUN device created", "interface", ifaceName, "protocol", protocol)
 
 	engine := &Engine{
 		tunDevice:           tunDev,
 		wgDevice:            wgDev,
 		bind:                bind,
 		ifaceName:           ifaceName,
+		protocol:            protocol,
 		resolvedEndpointIPs: resolvedEndpointIPs,
 		resolvedEndpoints:   resolvedEndpoints,
 	}
@@ -194,6 +246,10 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 
 	// Start UAPI listener for status queries.
 	//
+	// AmneziaWG tunnels skip the external UAPI socket entirely: the `wg`
+	// CLI cannot talk to an AWG device anyway, and status is always served
+	// in-process (Engine.IpcGet) so no socket is needed.
+	//
 	// On Windows this listener almost always fails to bind: wireguard-go's
 	// pipe target is \\.\pipe\ProtectedPrefix\Administrators\WireGuard\<name>,
 	// which requires the BUILTIN\Administrators group SID as the pipe's
@@ -208,35 +264,44 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 	// for a state that's expected and not user-actionable. Downgrade to
 	// DEBUG on Windows; keep WARN on other platforms where this listener
 	// failing IS unexpected.
-	uapi, err := createUAPIListener(ifaceName)
-	if err != nil {
-		if runtime.GOOS == "windows" {
-			slog.Debug("UAPI listener unavailable on Windows elevated helper (status served by in-process IpcGet)", "error", err)
-		} else {
-			slog.Warn("UAPI listener failed, status queries may not work", "error", err)
-		}
-	} else {
-		engine.uapiListener = uapi
-		go func() {
-			for {
-				c, err := uapi.Accept()
-				if err != nil {
-					return
-				}
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							slog.Warn("UAPI IpcHandle panic (recovered)", "panic", r)
-						}
-					}()
-					wgDev.IpcHandle(c)
-				}()
+	if !isAWG {
+		uapi, err := createUAPIListener(ifaceName)
+		if err != nil {
+			if runtime.GOOS == "windows" {
+				slog.Debug("UAPI listener unavailable on Windows elevated helper (status served by in-process IpcGet)", "error", err)
+			} else {
+				slog.Warn("UAPI listener failed, status queries may not work", "error", err)
 			}
-		}()
+		} else {
+			engine.uapiListener = uapi
+			go func() {
+				for {
+					c, err := uapi.Accept()
+					if err != nil {
+						return
+					}
+					go func() {
+						defer func() {
+							if r := recover(); r != nil {
+								slog.Warn("UAPI IpcHandle panic (recovered)", "panic", r)
+							}
+						}()
+						wgDev.IpcHandle(c)
+					}()
+				}
+			}()
+		}
 	}
 
-	slog.Info("WireGuard device created (not yet up)", "interface", ifaceName)
+	slog.Info("WireGuard device created (not yet up)", "interface", ifaceName, "protocol", protocol)
 	return engine, nil
+}
+
+// IsAmneziaWG reports whether this engine is running the AmneziaWG backend.
+// Consumers use it to pick protocol-appropriate paths (e.g. status queries
+// for AWG tunnels always go through the in-process IpcGet, never wgctrl).
+func (e *Engine) IsAmneziaWG() bool {
+	return e.protocol == config.ProtocolAmneziaWG
 }
 
 // platformTUNName returns a deterministic, collision-resistant adapter name.
@@ -359,6 +424,47 @@ func buildIpcConfig(cfg *config.WireGuardConfig) (string, error) {
 	// full-tunnel where the platform installs fwmark-aware routing rules.
 	b.WriteString("replace_peers=true\n")
 
+	// AmneziaWG obfuscation parameters (device-level UAPI keys). These are
+	// only sent to the amneziawg-go backend — wireguard-go rejects unknown
+	// keys in IpcSet, so they must never leak into a standard WG config.
+	// Values have been validated by config.Validate before this point.
+	if cfg.Protocol == config.ProtocolAmneziaWG {
+		if v := cfg.Interface.Jc; v > 0 {
+			b.WriteString(fmt.Sprintf("jc=%d\n", v))
+		}
+		if v := cfg.Interface.Jmin; v > 0 {
+			b.WriteString(fmt.Sprintf("jmin=%d\n", v))
+		}
+		if v := cfg.Interface.Jmax; v > 0 {
+			b.WriteString(fmt.Sprintf("jmax=%d\n", v))
+		}
+		if v := cfg.Interface.S1; v > 0 {
+			b.WriteString(fmt.Sprintf("s1=%d\n", v))
+		}
+		if v := cfg.Interface.S2; v > 0 {
+			b.WriteString(fmt.Sprintf("s2=%d\n", v))
+		}
+		if v := cfg.Interface.S3; v > 0 {
+			b.WriteString(fmt.Sprintf("s3=%d\n", v))
+		}
+		if v := cfg.Interface.S4; v > 0 {
+			b.WriteString(fmt.Sprintf("s4=%d\n", v))
+		}
+		for _, h := range []struct {
+			key string
+			val string
+		}{
+			{"h1", cfg.Interface.H1},
+			{"h2", cfg.Interface.H2},
+			{"h3", cfg.Interface.H3},
+			{"h4", cfg.Interface.H4},
+		} {
+			if h.val != "" {
+				b.WriteString(h.key + "=" + h.val + "\n")
+			}
+		}
+	}
+
 	for i, peer := range cfg.Peers {
 		pk, err := keyToHex(peer.PublicKey)
 		if err != nil {
@@ -435,6 +541,21 @@ func keyToHex(b64Key string) (string, error) {
 func newWireguardSlogLogger(ifaceName string) *device.Logger {
 	prefix := "[wg:" + ifaceName + "] "
 	return &device.Logger{
+		Verbosef: func(format string, args ...any) {
+			slog.Debug(prefix + fmt.Sprintf(format, args...))
+		},
+		Errorf: func(format string, args ...any) {
+			slog.Warn(prefix + fmt.Sprintf(format, args...))
+		},
+	}
+}
+
+// newAmneziawgSlogLogger is the amneziawg-go twin of newWireguardSlogLogger.
+// amneziawg-go's device.Logger has the same shape as wireguard-go's, but is a
+// distinct type from a distinct package, so it needs its own constructor.
+func newAmneziawgSlogLogger(ifaceName string) *awgdevice.Logger {
+	prefix := "[awg:" + ifaceName + "] "
+	return &awgdevice.Logger{
 		Verbosef: func(format string, args ...any) {
 			slog.Debug(prefix + fmt.Sprintf(format, args...))
 		},

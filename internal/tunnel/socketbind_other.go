@@ -2,11 +2,7 @@
 
 package tunnel
 
-import (
-	"context"
-
-	"golang.zx2c4.com/wireguard/conn"
-)
+import "context"
 
 // pinSocketToPhysical is a no-op on non-Windows platforms.
 //
@@ -18,7 +14,7 @@ import (
 // safety net we ship there — the equivalent socket-binding work
 // would need a fresh implementation (likely IP_BOUND_IF via setsockopt
 // on the underlying *net.UDPConn fd), tracked as future work.
-func pinSocketToPhysical(_ conn.Bind, _ string) (uint32, uint32) {
+func pinSocketToPhysical(_ any, _ string) (uint32, uint32) {
 	return 0, 0
 }
 
@@ -26,5 +22,5 @@ func pinSocketToPhysical(_ conn.Bind, _ string) (uint32, uint32) {
 // must match socketbind_windows.go (manager.go calls it unconditionally via
 // a runtime.GOOS-free code path); on Linux/macOS there is no IP_UNICAST_IF
 // pinning and the kernel handles loop protection differently.
-func startSocketBindMonitor(_ context.Context, _ conn.Bind, _ string, _ uint64) {
+func startSocketBindMonitor(_ context.Context, _ any, _ string, _ uint64) {
 }

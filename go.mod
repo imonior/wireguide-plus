@@ -4,6 +4,7 @@ go 1.25.12
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260828
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.74
