@@ -223,6 +223,23 @@ func (h *Helper) handleRename(params json.RawMessage) (interface{}, error) {
 // monitor sees the config during Connect), then rolls back on failure.
 // Caller MUST hold h.connectMu.
 func (h *Helper) doConnectHeld(cfg *domain.WireGuardConfig) error {
+	// Authoritative AmneziaWG gate: refuse AWG tunnels while the user has
+	// disabled AWG support (Settings → Advanced). Done here — before any
+	// state is mutated — so every connect path (RPC from the GUI or CLI,
+	// and the automation engine's automationConnect) hits it. AWG configs
+	// cannot be downgraded to plain WireGuard (the server requires the
+	// obfuscated handshake), so "disabled" means "refuse to connect", not
+	// "connect without obfuscation".
+	if cfg.Protocol == domain.ProtocolAmneziaWG {
+		settings, err := h.loadUserSettings()
+		// A settings read failure (e.g. no user dir derived) is NOT a
+		// reason to block a connect the user explicitly requested — the
+		// gate only fires on a definitive "disabled" from disk.
+		if err == nil && settings != nil && !settings.EnableAWG {
+			return fmt.Errorf("%s — enable it in Settings → Advanced to connect this tunnel", domain.ErrAWGDisabled)
+		}
+	}
+
 	// A firewall cannot permit a not-yet-created tunnel interface, and a
 	// pre-enabled base kill switch deliberately blocks DNS and WireGuard UDP.
 	// This applies equally to nftables, PF, and WFP (and is fatal before Engine

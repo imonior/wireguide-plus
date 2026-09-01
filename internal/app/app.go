@@ -146,6 +146,11 @@ type TunnelInfo struct {
 	Endpoint           string `json:"endpoint"`
 	Notes              string `json:"notes,omitempty"`
 	LatencyProbeTarget string `json:"latency_probe_target,omitempty"`
+	// Protocol is "" or "wireguard" for standard WireGuard tunnels and
+	// "amneziawg" for AmneziaWG tunnels. The frontend shows an AWG badge
+	// when it is set, so users can tell at a glance why an AWG tunnel's
+	// status path behaves differently (e.g. no `wg` CLI access).
+	Protocol string `json:"protocol,omitempty"`
 	// CreatedAtUnix is the .conf file's mtime; LastUsedUnix is the most
 	// recent connection start from history (0 if never connected). Both
 	// feed the tunnel-list "date added" / "last used" sort (issue #17).

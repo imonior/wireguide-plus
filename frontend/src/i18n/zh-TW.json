@@ -66,7 +66,8 @@
     "notes_placeholder": "自由備註——端點位置、憑證提示等。",
     "sort_last_used": "最近使用",
     "sort_added_new": "最新新增",
-    "sort_added_old": "最早新增"
+    "sort_added_old": "最早新增",
+    "awg_badge": "AmneziaWG"
   },
   "import": {
     "zip_result_title": "匯入結果",
@@ -166,7 +167,10 @@
     "wg_scripts_hint": "執行隧道設定中的 PreUp/PostUp/PreDown/PostDown 指令，類似 wg-quick。預設關閉——指令稿在特權輔助程序中執行。",
     "wg_scripts_warn": "開啟後，隧道設定中的任意指令將以系統管理員（root）身分執行。請僅對完全信任的設定開啟——惡意的設定可以修改或刪除這台電腦上的任何內容。",
     "wg_scripts_enable": "我了解風險，仍要開啟",
-    "wg_scripts_cancel": "取消"
+    "wg_scripts_cancel": "取消",
+    "section_awg": "AmneziaWG",
+    "enable_awg": "啟用 AmneziaWG 支援",
+    "enable_awg_hint": "允許使用 AmneziaWG (AWG) 混淆協定的隧道連線。AWG 是 WireGuard 的分支，具流量混淆功能。僅在 AWG 後端於此機器上出現問題時才關閉——關閉期間 AWG 隧道將無法連線。"
   },
   "confirm": {
     "delete_title": "刪除隧道",

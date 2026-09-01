@@ -444,6 +444,10 @@
             <span class="hero-sep">·</span>
             <span class="hero-endpoint">{$selectedTunnel.endpoint}</span>
           {/if}
+          {#if $selectedTunnel.protocol === 'amneziawg'}
+            <span class="hero-sep">·</span>
+            <span class="awg-badge" title="{$t('settings.section_awg')}">{$t('tunnel.awg_badge')}</span>
+          {/if}
         </div>
       </div>
     </div>
@@ -853,6 +857,17 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+  .awg-badge {
+    padding: 0 6px;
+    border-radius: 999px;
+    font: 600 9px/16px var(--font-sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: color-mix(in srgb, var(--accent) 82%, #b16ce8);
+    background: color-mix(in srgb, #a855f7 13%, transparent);
+    border: 1px solid color-mix(in srgb, #a855f7 32%, transparent);
   }
 
   /* ========== PRIMARY ACTION ==========

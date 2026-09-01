@@ -42,6 +42,16 @@ type Settings struct {
 	// prominent warning in Settings.
 	EnableWgScripts bool `json:"enable_wg_scripts"`
 
+	// EnableAWG controls whether AmneziaWG (AWG) tunnel configs are allowed
+	// to connect. ON by default. It is an escape hatch: AWG runs on a fork
+	// of WireGuard (amneziawg-go) with obfuscation, and if that backend
+	// misbehaves on a given machine the user can disable it and get a clear
+	// "AmneziaWG is disabled" error instead of a broken connect. Disabling
+	// does NOT downgrade AWG configs to plain WireGuard — the server side
+	// requires the obfuscated handshake, so AWG tunnels simply refuse to
+	// connect until this is re-enabled.
+	EnableAWG bool `json:"enable_awg"`
+
 	// ListSort controls tunnel-list ordering: "name_asc" (default),
 	// "name_desc". ListActiveOnTop floats connected tunnels above the
 	// sort. Both are pure view state managed from the list header.
@@ -218,6 +228,7 @@ func DefaultSettings() *Settings {
 		DNSProtection:   false,
 		HealthCheck:     false,
 		PinInterface:    false, // off by default — enable for dual-network setups
+		EnableAWG:       true,  // AWG support is on by default
 		LogLevel:            "info",
 		LogRetentionDays:     logging.DefaultRetentionDays,
 		HistoryRetentionDays: DefaultHistoryRetentionDays,

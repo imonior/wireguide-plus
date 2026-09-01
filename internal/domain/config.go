@@ -13,6 +13,13 @@ const (
 	ProtocolAmneziaWG = "amneziawg"
 )
 
+// ErrAWGDisabled is the error returned when an AmneziaWG tunnel is refused
+// because the user has disabled AmneziaWG support in Settings → Advanced
+// (Settings.EnableAWG == false). Shared by the GUI (fast-fail before the
+// IPC round-trip) and the helper (authoritative check covering CLI and
+// automation connects). Both append the "how to re-enable" hint.
+const ErrAWGDisabled = "AmneziaWG support is disabled in Settings"
+
 // WireGuardConfig represents a complete WireGuard configuration file.
 type WireGuardConfig struct {
 	Name      string          `json:"name"`      // Tunnel name (derived from filename)

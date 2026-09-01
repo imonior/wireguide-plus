@@ -128,6 +128,9 @@
             class:warning={activeSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
           <div class="tunnel-text">
             <span class="tunnel-name">{tun.name}</span>
+            {#if tun.protocol === 'amneziawg'}
+              <span class="awg-badge" title="{$t('settings.section_awg')}">{$t('tunnel.awg_badge')}</span>
+            {/if}
             {#if tun.endpoint}
               <span class="tunnel-meta">{tun.endpoint}</span>
             {/if}
@@ -396,6 +399,18 @@
     font: 500 13px/18px var(--font-sans);
     color: var(--text-primary);
     letter-spacing: -0.005em;
+  }
+  .awg-badge {
+    align-self: flex-start;
+    margin-top: 3px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font: 600 9px/16px var(--font-sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--accent) 82%, #b16ce8);
+    background: color-mix(in srgb, #a855f7 13%, transparent);
+    border: 1px solid color-mix(in srgb, #a855f7 32%, transparent);
   }
   .tunnel-meta {
     overflow: hidden;

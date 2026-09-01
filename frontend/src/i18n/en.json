@@ -66,7 +66,8 @@
     "notes_placeholder": "Freeform notes — endpoint location, credentials hint, etc.",
     "sort_last_used": "Last used",
     "sort_added_new": "Newest first",
-    "sort_added_old": "Oldest first"
+    "sort_added_old": "Oldest first",
+    "awg_badge": "AmneziaWG"
   },
   "import": {
     "zip_result_title": "Import Results",
@@ -166,7 +167,10 @@
     "wg_scripts_hint": "Execute PreUp/PostUp/PreDown/PostDown commands from your tunnel configs, like wg-quick. Off by default — scripts run inside the privileged helper.",
     "wg_scripts_warn": "Enabling this runs arbitrary commands from your tunnel configs as the system administrator (root). Only enable it for configs you fully trust — a malicious config could change or delete anything on this computer.",
     "wg_scripts_enable": "I understand — enable",
-    "wg_scripts_cancel": "Cancel"
+    "wg_scripts_cancel": "Cancel",
+    "section_awg": "AmneziaWG",
+    "enable_awg": "Enable AmneziaWG support",
+    "enable_awg_hint": "Allows tunnels that use AmneziaWG (AWG) obfuscation to connect. AWG is a WireGuard fork with traffic obfuscation. Turn this off only if the AWG backend misbehaves on this machine — AWG tunnels won't connect while it is off."
   },
   "confirm": {
     "delete_title": "Delete Tunnel",

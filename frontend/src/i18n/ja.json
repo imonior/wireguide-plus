@@ -66,7 +66,8 @@
     "notes_placeholder": "エンドポイントの場所、認証情報のヒントなど自由メモ",
     "sort_last_used": "最終使用順",
     "sort_added_new": "新しい順",
-    "sort_added_old": "古い順"
+    "sort_added_old": "古い順",
+    "awg_badge": "AmneziaWG"
   },
   "import": {
     "zip_result_title": "インポート結果",
@@ -166,7 +167,10 @@
     "wg_scripts_hint": "トンネル設定の PreUp/PostUp/PreDown/PostDown コマンドを wg-quick のように実行します。デフォルトでは無効（スクリプトは特権ヘルパー内で実行されます）。",
     "wg_scripts_warn": "有効にすると、トンネル設定内の任意のコマンドがシステム管理者（root）として実行されます。完全に信頼できる設定でのみ有効にしてください。悪意のある設定はこのコンピュータ上のすべてを変更・削除できます。",
     "wg_scripts_enable": "リスクを理解して有効化",
-    "wg_scripts_cancel": "キャンセル"
+    "wg_scripts_cancel": "キャンセル",
+    "section_awg": "AmneziaWG",
+    "enable_awg": "AmneziaWG サポートを有効化",
+    "enable_awg_hint": "AmneziaWG (AWG) 難読化を使用するトンネルの接続を許可します。AWG はトラフィック難読化を備えた WireGuard フォークです。このマシンで AWG バックエンドに問題がある場合のみ無効化してください——無効化中は AWG トンネルは接続できません。"
   },
   "confirm": {
     "delete_title": "トンネルを削除",

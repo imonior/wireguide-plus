@@ -164,6 +164,7 @@
     log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
     history_retention_days: DEFAULT_HISTORY_RETENTION_DAYS,
     enable_wg_scripts: false,
+    enable_awg: true,
   };
   let loaded = false;
   let appVersion = '';
@@ -208,6 +209,7 @@
           ? histRetention
           : DEFAULT_HISTORY_RETENTION_DAYS;
         settings.enable_wg_scripts = s.enable_wg_scripts ?? false;
+        settings.enable_awg = s.enable_awg ?? true;
       }
     } catch (e) {
       console.error('load settings:', e);
@@ -253,6 +255,7 @@
         log_retention_days: settings.log_retention_days,
         history_retention_days: settings.history_retention_days,
         enable_wg_scripts: settings.enable_wg_scripts,
+        enable_awg: settings.enable_awg,
         // List-ordering prefs are owned by the tunnel-list header, not
         // this screen — carry them from the fresh fetch so saving any
         // Settings toggle doesn't wipe them back to defaults.
@@ -353,6 +356,11 @@
   function onWgScriptsWarnCancel() {
     wgScriptsWarn = false;
     settings.enable_wg_scripts = false;
+  }
+
+  function onAwgChange(e) {
+    settings.enable_awg = e.target.checked;
+    scheduleSave();
   }
 
   let openingFolder = false;
@@ -873,6 +881,22 @@
                   </div>
                 </div>
               {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_awg')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="awg-support">{$t('settings.enable_awg')}</label>
+                  <p class="setting-desc">{$t('settings.enable_awg_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="awg-support" type="checkbox" checked={settings.enable_awg} on:change={onAwgChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
             </div>
           </div>
 

@@ -210,7 +210,8 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 			"dns_protection", settings.DNSProtection,
 			"health_check", settings.HealthCheck,
 			"pin_interface", settings.PinInterface,
-		)
+			"enable_awg", settings.EnableAWG,
+			)
 	}
 
 	// Retention changed → sweep old log files immediately instead of
@@ -326,6 +327,9 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	}
 	if prev.EnableWgScripts != next.EnableWgScripts {
 		out = append(out, "enable_wg_scripts")
+	}
+	if prev.EnableAWG != next.EnableAWG {
+		out = append(out, "enable_awg")
 	}
 	return out
 }

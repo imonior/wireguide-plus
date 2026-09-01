@@ -59,6 +59,7 @@ func (s *TunnelService) ListTunnelsLocal() ([]TunnelInfo, error) {
 			Endpoint:           endpoint,
 			Notes:              notes,
 			LatencyProbeTarget: latencyProbeTarget,
+			Protocol:           cfg.Protocol,
 			CreatedAtUnix:      created,
 			LastUsedUnix:       lastUsed[name],
 		})
@@ -171,6 +172,7 @@ func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 			Endpoint:           endpoint,
 			Notes:              notes,
 			LatencyProbeTarget: latencyProbeTarget,
+			Protocol:           cfg.Protocol,
 			CreatedAtUnix:      created,
 			LastUsedUnix:       lastUsed[name],
 		})
@@ -220,6 +222,13 @@ func (s *TunnelService) Connect(name string) error {
 	// (Settings shows a prominent warning when enabling).
 	if st, err := s.settingsStore.Load(); err == nil && st != nil {
 		cfg.EnableScripts = st.EnableWgScripts
+		// Fast-fail AWG tunnels when the user has disabled AmneziaWG
+		// support (Settings → Advanced). The helper re-checks this
+		// authoritatively in doConnectHeld, so CLI and automation
+		// connects are covered even if this gate is ever bypassed.
+		if cfg.Protocol == domain.ProtocolAmneziaWG && !st.EnableAWG {
+			return fmt.Errorf("%s — enable it in Settings → Advanced to connect this tunnel", domain.ErrAWGDisabled)
+		}
 	}
 
 	// A manual reconnect releases the manual-off latch: the user has
