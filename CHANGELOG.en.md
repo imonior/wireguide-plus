@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.0] - 2026-09-02
+
+In-app updates on macOS (non-Homebrew) now behave exactly like Windows / Linux: the new version is downloaded and installed right inside the app — no browser detour.
+
+### ✨ Features
+
+- **macOS in-place updates** — Non-Homebrew macOS users who click "Update" get the installer (.dmg, with .zip as fallback) downloaded in-app via the mirror / proxy configured under Settings → Updates, verified against SHA256 and the Ed25519 signature, then code-signature-verified (`codesign --verify`) before the bundle is replaced and the app relaunches. The upgrade is applied in place wherever the app runs from — `/Applications`, `~/Applications`, or a scratch folder — preserving the Dock icon and Finder placement. System locations prompt for the macOS password dialog (the same UX as Windows UAC and Linux polkit), and the quarantine xattr is stripped so Gatekeeper doesn't block the fresh copy. Homebrew-installed macOS users still upgrade via `brew upgrade`.
+- **Mirror / proxy now covers every platform** — macOS in-app update downloads go through the same mirror (GitHub acceleration) or local proxy configured under Settings → Updates as Windows / Linux. No browser involvement anywhere in the flow.
+
+### 🐛 Bug Fixes
+
+- **macOS menu bar cleanup** — Wails' default menu bar's Help → Learn More navigated the WebView itself to wails.io, leaving no way back to the GUI; it now opens the GitHub project page in the system default browser and the WebView is never touched. The useless File, Edit, View and Window menus are removed (zoom, fullscreen and minimise are already available in the app's UI and on the title bar) — only App and the custom Help remain. Windows / Linux don't show that menu bar and are unaffected.
+
+### 🛠 Internal
+
+- Added `internal/update/installer_darwin.go`: an in-place app-bundle installer for macOS (dmg mount / zip extract → code-signature verification → elevated script doing killall + swap + de-quarantine + relaunch), sharing the download, verification and progress pipeline with the Windows / Linux installers.
+
 ## [1.3.7] - 2026-09-01
 
 ### 🐛 Bug Fixes

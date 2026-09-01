@@ -4,6 +4,23 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.4.0] - 2026-09-02
+
+macOS(Homebrew 제외) 앱 내 업데이트가 이제 Windows / Linux와 완전히 동일합니다. 브라우저로 이동하지 않고 앱 안에서 새 버전을 다운로드해 덮어쓰기 설치할 수 있습니다.
+
+### ✨ 새로운 기능
+
+- **macOS 앱 내 덮어쓰기 설치** — Homebrew 외 방식으로 설치한 macOS 사용자가 '업데이트'를 누르면 앱 안에서 설치 패키지(.dmg, 대비용 .zip)를 '설정 → 업데이트'에서 구성한 미러/프록시로 다운로드하고, SHA256 및 Ed25519 서명을 검증한 뒤 코드 서명(`codesign --verify`)까지 확인한 다음 자동으로 교체·재시작합니다. 앱이 어디서 실행 중이든(`/Applications`, `~/Applications`, 사용자 폴더 등) 그 위치에서 그대로 덮어써 Dock 아이콘과 Finder 위치가 유지됩니다. 시스템 디렉터리에 설치된 경우 macOS 비밀번호 대화상자가 표시되며(Windows UAC, Linux polkit과 동일한 경험), quarantine 속성도 자동 제거되어 Gatekeeper에 막히지 않습니다. Homebrew로 설치한 macOS 사용자는 계속 `brew upgrade`를 사용합니다.
+- **미러/프록시가 모든 플랫폼 적용** — macOS 앱 내 업데이트 다운로드는 Windows / Linux와 마찬가지로 '설정 → 업데이트'에서 구성한 미러(GitHub 가속) 또는 로컬 프록시를 경유하며 브라우저에 전혀 의존하지 않습니다.
+
+### 🐛 수정
+
+- **macOS 메뉴바 정리** — Wails 기본 메뉴바의 Help → Learn More가 WebView 자체를 wails.io로 이동시켜 GUI로 돌아갈 방법이 없어지는 문제를 수정했습니다. Learn More는 이제 시스템 기본 브라우저에서 GitHub 프로젝트 페이지를 열며 WebView가 더 이상 점유되지 않습니다. 실용성이 없는 File / Edit / View / Window 메뉴도 제거하고(확대·축소·전체 화면·최소화는 앱 화면과 제목 표시줄에서 가능) App과 사용자 정의 Help만 남겼습니다. Windows / Linux는 이 메뉴바를 표시하지 않으므로 영향이 없습니다.
+
+### 🛠 내부
+
+- `internal/update/installer_darwin.go` 추가: macOS 앱 번들 제자리 교체 설치기(dmg 마운트 / zip 압축 해제 → 코드 서명 검증 → 권한 상승 스크립트로 killall + 교체 + quarantine 제거 + 재시작). Windows / Linux 설치기와 동일한 다운로드·검증·진행 파이프라인을 공유합니다.
+
 ## [1.3.7] - 2026-09-01
 
 ### 🐛 수정

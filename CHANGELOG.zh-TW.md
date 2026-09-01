@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.0] - 2026-09-02
+
+macOS（非 Homebrew）的應用內更新現與 Windows / Linux 完全一致：可直接在軟體內下載新版本並覆蓋安裝，無需再跳轉瀏覽器手動下載。
+
+### ✨ 新功能
+
+- **macOS 應用內覆蓋安裝** — 非 Homebrew 安裝的 macOS 使用者點擊「更新」後，應用會在軟體內下載安裝包（.dmg，含 .zip 備用），經「設定 → 更新」中配置的鏡像 / 代理下載，驗證 SHA256 與 Ed25519 簽章後，再驗證程式碼簽章（`codesign --verify`），隨後自動替換安裝並重新啟動。App 從任何位置（`/Applications`、`~/Applications` 或自訂目錄）執行時都會原位覆蓋，Dock 圖示與 Finder 位置保持不變；安裝在系統目錄時彈出 macOS 系統授權提示（與 Windows UAC、Linux polkit 一致的體驗），並自動移除 quarantine 屬性避免 Gatekeeper 攔截。Homebrew 安裝的 macOS 使用者仍走 `brew upgrade`。
+- **鏡像 / 代理涵蓋全部平台** — macOS 應用內更新的下載與 Windows / Linux 一致，全部經由「設定 → 更新」中配置的鏡像（GitHub 加速）或本機代理，全程不依賴瀏覽器。
+
+### 🐛 修復
+
+- **macOS 選單列整理** — 修復 Wails 預設選單列 Help → Learn More 會把 WebView 導向 wails.io、導致無法返回主介面的問題：Learn More 現改為在系統預設瀏覽器中開啟 GitHub 專案頁面，WebView 不再被劫持；同時移除無實際用途的 File / Edit / View / Window 選單（縮放、全螢幕、最小化均可在應用程式介面與視窗標題列完成），僅保留 App 與自訂 Help。Windows / Linux 不顯示該選單列，不受影響。
+
+### 🛠 內部
+
+- 新增 `internal/update/installer_darwin.go`：macOS 應用包原位替換安裝器（dmg 掛載 / zip 解壓 → 程式碼簽章驗證 → 提權指令碼執行 killall + 替換 + 去 quarantine + 重新啟動），與 Windows / Linux 安裝器共用同一套下載、驗證與進度管線。
+
 ## [1.3.7] - 2026-09-01
 
 ### 🐛 修復

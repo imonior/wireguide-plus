@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.0] - 2026-09-02
+
+macOS（Homebrew 以外）のアプリ内アップデートは Windows / Linux と完全に同等になりました。ブラウザに飛ばず、アプリ内で新バージョンをダウンロードして上書きインストールできます。
+
+### ✨ 新機能
+
+- **macOS アプリ内上書きインストール** — Homebrew 以外でインストールされた macOS ユーザーが「更新」を押すと、アプリ内でインストーラー（.dmg、予備として .zip）を「設定 → 更新」で構成したミラー / プロキシ経由でダウンロードし、SHA256 と Ed25519 署名を検証したうえで、コード署名（`codesign --verify`）も確認してから自動で置き換え・再起動します。アプリはどこから起動していても（`/Applications`、`~/Applications`、任意のフォルダ）その場で上書きされ、Dock アイコンや Finder 上の位置は保持されます。システムディレクトリへのインストールでは macOS のパスワードダイアログが出ます（Windows の UAC や Linux の polkit と同じ体験）。quarantine 属性も自動で除去し、Gatekeeper にブロックされません。Homebrew でインストールした macOS ユーザーは引き続き `brew upgrade` を使います。
+- **ミラー / プロキシが全プラットフォームをカバー** — macOS のアプリ内アップデートのダウンロードは、Windows / Linux と同じく「設定 → 更新」で構成したミラー（GitHub 高速化）またはローカルプロキシを経由し、ブラウザに一切依存しません。
+
+### 🐛 修正
+
+- **macOS メニューバーの整理** — Wails デフォルトメニューバーの Help → Learn More が WebView 自体を wails.io に遷移させ、GUI に戻る手段がなくなる問題を修正：Learn More はシステムの既定ブラウザで GitHub プロジェクトページを開くようになり、WebView は一切遷移しません。実用性のない File / Edit / View / Window メニューも削除し（ズーム・フルスクリーン・最小化はアプリ画面とタイトルバーで操作可能）、App とカスタム Help のみを残します。Windows / Linux はこのメニューバーを表示しないため影響を受けません。
+
+### 🛠 内部
+
+- `internal/update/installer_darwin.go` を追加：macOS アプリバンドルのその場置き換えインストーラー（dmg マウント / zip 展開 → コード署名検証 → 特権スクリプトで killall + 置き換え + quarantine 除去 + 再起動）。Windows / Linux インストーラーと同じダウンロード・検証・進捗パイプラインを共有します。
+
 ## [1.3.7] - 2026-09-01
 
 ### 🐛 修正
