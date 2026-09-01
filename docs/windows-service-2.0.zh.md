@@ -46,7 +46,7 @@
 │  elevated helper 进程 (管理员)           │
 │    隧道管理 / WFP 防火墙 / 重连 / WiFi 自动化│
 └─────────────────────────────────────────┘
-   IPC: 命名管道 `\\.\pipe\wireguide…`
+   IPC: 命名管道 `\\.\pipe\wireguideplus`
    安全: SDDL = SY+BA 全权, 拉起用户 GRGW; 客户端校验管道所有者 ∈ {SY, BA}
 ```
 
@@ -89,7 +89,7 @@
 
 ```
 ┌─ SCM ────────────────────────────────────────────┐
-│  wireguidesvc  (Windows 服务, LocalSystem)        │
+│  wireguideplussvc (Windows 服务, LocalSystem)      │
 │   ── 就是现有 helper 内核, 常驻, 无 GUI 依赖       │
 │   隧道管理 / WFP 防火墙 / 重连 / WiFi 自动化        │
 └──────┬────────────────────────────────────────────┘
@@ -146,7 +146,7 @@
 **验收**
 - 服务启动后 GUI 全程不开，隧道/WiFi 自动化照常工作。
 - GUI 打开 → 连接 → 关闭，服务保持运行。
-- `sc stop wireguidesvc` 能干净停止。
+- `sc stop wireguideplussvc` 能干净停止。
 
 ### 阶段 2 — 多用户与会话 0
 
@@ -154,7 +154,7 @@
 
 **决策点（建议 v2.0 取舍）**
 - **方案 A（推荐，范围小）**：配置根统一到系统级 `%PROGRAMDATA%\wireguideplus\`（含 `tunnels/`、`config.json`），服务直接读写；`storage.TunnelStore` 增加可配置根目录构造（现为 `App Support/tunnels`，加一个参数即可）。单配置即可，后续再演进。
-- **方案 B（多用户完整）**：每用户一套配置目录，管道名带用户 SID（`\\.\pipe\wireguide-<SID>`），服务按活动会话切换上下文。复杂度高，建议 2.1。
+- **方案 B（多用户完整）**：每用户一套配置目录，管道名带用户 SID（`\\.\pipe\wireguideplus-<SID>`），服务按活动会话切换上下文。复杂度高，建议 2.1。
 - **GUI 行为**：GUI 检测配置位置并兼容迁移（1.x 已有配置 → 复制到新位置）。
 
 **改动**

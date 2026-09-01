@@ -57,7 +57,7 @@ with or without the GUI.
 │    tunnel mgmt / WFP firewall / reconnect│
 │    / WiFi automation                     │
 └──────────────────────────────────────────┘
-   IPC: named pipe `\\.\pipe\wireguide…`
+   IPC: named pipe `\\.\pipe\wireguideplus`
    Security: SDDL = SY+BA full access, spawning user GRGW;
              client verifies pipe owner ∈ {SY, BA}
 ```
@@ -112,7 +112,7 @@ with or without the GUI.
 
 ```
 ┌─ SCM ────────────────────────────────────────────┐
-│  wireguidesvc  (Windows service, LocalSystem)     │
+│  wireguideplussvc (Windows service, LocalSystem)  │
 │   ── the existing helper core, persistent,        │
 │      no GUI dependency                            │
 │   tunnel mgmt / WFP firewall / reconnect /        │
@@ -199,7 +199,7 @@ what a service must not do.
 **Acceptance**
 - Service runs with the GUI never opened; tunnels/WiFi automation work.
 - GUI open → connect → close: the service stays up.
-- `sc stop wireguidesvc` stops cleanly.
+- `sc stop wireguideplussvc` stops cleanly.
 
 ### Phase 2 — Multi-user & Session 0
 
@@ -216,7 +216,7 @@ paths must be explicit.
   gains a configurable root parameter (today it is `App Support/tunnels`).
   Single-config is fine for v2.0; evolve later.
 - **Option B (full multi-user)**: per-user config dirs + per-user pipe names
-  (`\\.\pipe\wireguide-<SID>`) + active-session context switching. High
+  (`\\.\pipe\wireguideplus-<SID>`) + active-session context switching. High
   complexity — defer to 2.1.
 - **GUI behavior**: detect the config location and migrate 1.x configs
   (copy to the new location).
