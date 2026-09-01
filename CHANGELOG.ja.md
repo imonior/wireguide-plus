@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.1] - 2026-09-02
+
+### 🐛 修正
+
+- **Windows：アプリ内アップデート後にアプリを自動起動** — 更新完了後にアプリが自動的に再起動されるようになりました。従来はサイレントインストーラーが完了ページ（「今すぐ実行」チェックボックスがある唯一の場所）をスキップするため、アップグレード完了後にウィンドウが表示されませんでした。アップデータ専用フラグ `/AUTOSTART` を検出したインストーラーが、UAC の管理者トークンではなくユーザートークンで新バージョンを起動します。
+
 ## [1.4.0] - 2026-09-02
 
 macOS（Homebrew 以外）のアプリ内アップデートは Windows / Linux と完全に同等になりました。ブラウザに飛ばず、アプリ内で新バージョンをダウンロードして上書きインストールできます。

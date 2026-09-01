@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.4.1] - 2026-09-02
+
+### 🐛 수정
+
+- **Windows: 앱 내 업데이트 후 앱 자동 실행** — 업데이트 완료 후 앱이 자동으로 다시 열립니다. 이전에는 무음 설치 프로그램이 완료 페이지("지금 실행" 체크박스가 있는 유일한 곳)를 건너뛰어 업그레이드가 끝나도 창이 나타나지 않았습니다. 업데이터 전용 플래그 `/AUTOSTART`를 감지한 설치 프로그램이 UAC 관리자 토큰이 아닌 사용자 토큰으로 새 버전을 실행합니다.
+
 ## [1.4.0] - 2026-09-02
 
 macOS(Homebrew 제외) 앱 내 업데이트가 이제 Windows / Linux와 완전히 동일합니다. 브라우저로 이동하지 않고 앱 안에서 새 버전을 다운로드해 덮어쓰기 설치할 수 있습니다.

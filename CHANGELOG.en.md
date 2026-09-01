@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.1] - 2026-09-02
+
+### 🐛 Fixes
+
+- **Windows relaunches the app after an in-app update** — The app now reopens automatically when the update finishes. Previously the silent installer skipped its finish page (the only place the "run now" checkbox lived), so an upgrade would complete with no window; the installer now detects the updater's `/AUTOSTART` flag and launches the new version with the user's token (not the UAC admin token).
+
 ## [1.4.0] - 2026-09-02
 
 In-app updates on macOS (non-Homebrew) now behave exactly like Windows / Linux: the new version is downloaded and installed right inside the app — no browser detour.

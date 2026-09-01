@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.4.1] - 2026-09-02
+
+### 🐛 修正
+
+- **Windows 應用內更新後自動啟動軟體** — 更新安裝完成後自動重新開啟軟體。此前安裝器以靜默模式執行，會跳過完成頁（「執行」核取方塊只在完成頁上，靜默模式下不生效），導致升級成功卻沒有任何視窗出現；現安裝器偵測到更新專用參數（`/AUTOSTART`）後，於安裝完成時以一般使用者權限（而非 UAC 管理員權杖）啟動新版本。
+
 ## [1.4.0] - 2026-09-02
 
 macOS（非 Homebrew）的應用內更新現與 Windows / Linux 完全一致：可直接在軟體內下載新版本並覆蓋安裝，無需再跳轉瀏覽器手動下載。
