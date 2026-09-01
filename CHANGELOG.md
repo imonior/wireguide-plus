@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.5] - 2026-09-01
+
+本版本新增 **AmneziaWG（AWG）协议支持**——抗 DPI 识别的混淆版 WireGuard。AWG 配置通过混淆参数（Jc/Jmin/Jmax/S1-S4/H1-H4）自动识别，运行于 amneziawg-go 后端，界面以「AmneziaWG」徽标标注；可在「设置 → 高级」中关闭支持。
+
+### ✨ 新功能
+
+- **AmneziaWG（AWG）协议支持** — 导入并连接 AmneziaWG 配置；由 Jc/Jmin/Jmax/S1-S4/H1-H4 键自动识别，列表与详情页显示「AmneziaWG」徽标，握手 / 流量等状态与 WireGuard 隧道一致。
+- **启用 AmneziaWG 设置** — 「设置 → 高级」新增「启用 AmneziaWG 支持」开关（默认开启）；关闭后连接 AWG 隧道会直接给出明确错误，而不是连接中途失败。
+
+### 🛠 内部
+
+- 基于 amneziawg-go 的新协议后端接入引擎抽象层 — 两种协议共用同一条连接流水线；AWG 隧道状态始终走进程内 UAPI；Windows socket 固定对两种后端同样生效。
+
+## [1.3.1] - 2026-09-01
+
+本版本修复 Windows 应用内更新启动安装器前未请求 UAC 提权的问题，并正式记录 macOS 已在 Apple Silicon 真机验证。
+
+### 🐛 修复
+
+- **Windows 安装器 UAC 提权** — 应用内更新启动安装器前先请求提权，与手动双击安装包的行为一致。
+
+### 🛠 内部
+
+- **macOS 实机验证** — 平台支持说明更新：macOS（Apple Silicon）已在真机验证。
+
 ## [1.3.0] - 2026-09-01
 
 本版本将应用更名为 **WireGuide Plus**：窗口标题、托盘、自启动项、helper 日志、Homebrew cask、更新临时文件与 nftables 表名等全链路统一为 plus 命名，并在升级时自动清理旧版残留的启动项、守护进程与防火墙表。同时改进 macOS 托盘图标（改用应用图标红色变体）与路由诊断显示。

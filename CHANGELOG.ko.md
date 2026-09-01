@@ -4,6 +4,31 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.3.5] - 2026-09-01
+
+이번 버전에서는 **AmneziaWG(AWG) 프로토콜 지원**을 추가했습니다 — DPI 탐지를 회피하는 난독화 WireGuard 포크입니다. AWG 설정은 난독화 매개변수(Jc/Jmin/Jmax/S1-S4/H1-H4)에서 자동 감지되며, amneziawg-go 백엔드로 실행되고 UI에는 「AmneziaWG」 배지가 표시됩니다. AWG 백엔드가 불안정한 머신에서는 설정 → 고급에서 지원을 끌 수 있습니다.
+
+### ✨ 새 기능
+
+- **AmneziaWG(AWG) 프로토콜 지원** — AmneziaWG 설정 가져오기 및 연결 지원. Jc/Jmin/Jmax/S1-S4/H1-H4 키로 자동 감지되며, 목록·상세 화면에 「AmneziaWG」 배지를 표시합니다. 핸드셰이크 / 트래픽 등 상태 표시는 WireGuard 터널과 동일합니다.
+- **AmneziaWG 활성화 설정** — 설정 → 고급에 「AmneziaWG 지원 활성화」 스위치를 추가(기본 켜짐). 끄면 AWG 터널 연결이 명확한 오류로 거부되며, 연결 중간에 실패하지 않습니다.
+
+### 🛠 내부
+
+- amneziawg-go 기반 새 프로토콜 백엔드를 엔진 추상화 계층에 통합 — 두 프로토콜이 동일한 연결 파이프라인을 공유. AWG 상태는 항상 프로세스 내 UAPI로 제공. Windows 소켓 고정은 두 백엔드 모두에서 동작.
+
+## [1.3.1] - 2026-09-01
+
+이번 버전에서는 Windows 앱 내 업데이트가 인스톨러 실행 시 UAC 승격을 요청하지 않던 문제를 수정하고, macOS가 Apple Silicon 실기기에서 검증되었음을 공식적으로 기록했습니다.
+
+### 🐛 수정
+
+- **Windows 인스톨러 UAC 승격** — 앱 내 업데이트가 인스톨러를 실행하기 전에 승격 컨텍스트를 요청하도록 하여, 수동 더블클릭 동작과 일치시켰습니다.
+
+### 🛠 내부
+
+- **macOS 실기기 검증** — 플랫폼 지원에 macOS(Apple Silicon)가 실기기에서 검증되었음을 명시.
+
 ## [1.3.0] - 2026-09-01
 
 이번 버전에서는 앱을 **WireGuide Plus**로 전면 리브랜딩했습니다: 창 제목, 트레이, 자동 시작 항목, helper 로그, Homebrew cask, 업데이트 임시 파일, nftables 테이블 이름 등 전체 경로가 plus 명칭으로 통일되었고, 업그레이드 시 이전 버전이 남긴 자동 시작 항목·데몬·방화벽 테이블도 자동으로 정리됩니다. 또한 macOS 메뉴바 아이콘과 라우팅 진단 표시도 개선했습니다.

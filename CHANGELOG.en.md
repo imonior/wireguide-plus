@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.5] - 2026-09-01
+
+This release adds **AmneziaWG (AWG) protocol support** — the obfuscated WireGuard fork that resists DPI. AWG configs are auto-detected from their obfuscation parameters (Jc/Jmin/Jmax/S1-S4/H1-H4), run on the amneziawg-go backend, and are marked with an "AmneziaWG" badge in the UI. Support can be disabled in Settings → Advanced on machines where the AWG backend misbehaves.
+
+### ✨ New Features
+
+- **AmneziaWG (AWG) protocol support** — import and connect AmneziaWG configs; auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 keys, tunnels show an "AmneziaWG" badge in the list and detail views, and status (handshake / traffic) works exactly like WireGuard tunnels.
+- **Enable AmneziaWG setting** — Settings → Advanced gains an "Enable AmneziaWG support" switch (on by default); turning it off refuses AWG connects with a clear error instead of failing mid-connect.
+
+### 🛠 Internal
+
+- New amneziawg-go backend wired through the engine abstraction — both protocols share one connect pipeline; AWG status is always served in-process; Windows socket pinning works for both backends.
+
+## [1.3.1] - 2026-09-01
+
+This release fixes Windows in-app updates launching the installer without requesting UAC elevation, and formally records that macOS is verified on real Apple Silicon hardware.
+
+### 🐛 Fixes
+
+- **UAC elevation for the Windows installer** — in-app updates now request an elevated context before launching the installer, matching manual double-click behaviour.
+
+### 🛠 Internal
+
+- **macOS verified on real hardware** — platform support now states that macOS (Apple Silicon) has been verified on real machines.
+
 ## [1.3.0] - 2026-09-01
 
 This release rebrands the application as **WireGuide Plus** end-to-end: window title, tray, autostart items, helper log, Homebrew cask, update temp files and nftables table names all use the plus naming, and upgrades now clean up the legacy items left behind by older installs (launch agents, daemon, firewall tables). It also improves the macOS menu-bar icon and route diagnostics.

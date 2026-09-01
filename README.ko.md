@@ -37,6 +37,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
   연결 끊기)가 있고, 수동으로 닫거나 설정한 시간(기본 10초, 설정에서 조절 가능) 후
   자동으로 닫힙니다.
 - **터널 관리** — `.conf` 가져오기 / 내보내기, 연결 기록, 빠른 켜기/끄기.
+- **AmneziaWG(AWG) 터널** — AmneziaWG(난독화 WireGuard) 설정 가져오기 및 연결 지원. AWG는 설정의 Jc/Jmin/Jmax/S1-S4/H1-H4 난독화 매개변수로 자동 감지되며, 해당 터널에는 「AmneziaWG」 배지가 표시됩니다. 설정 → 고급에서 지원을 끌 수 있습니다.
 
 ## 업스트림 wireguide 대비 수정·개선 사항
 
@@ -62,12 +63,13 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 4. **시스템 통합** — 로그인 시 자동 시작, 트레이 최소화 시작, 트레이 연결 상태 알림
    (시작 후 10초 / 네트워크 변화 후 10초 지연 표시, 기본 10초, 조절 가능).
 5. **창 제목 및 상호작용 개선** 등.
+6. **AmneziaWG(AWG) 프로토콜 지원** — DPI 탐지를 회피하는 난독화 터널 AmneziaWG용 amneziawg-go 기반 프로토콜 백엔드 추가. 구성 자동 감지, UI 배지 표시, 설정 → 고급에서 지원 끄기 가능.
 
 ## 플랫폼 지원
 
 | 플랫폼 | 상태 |
 | --- | --- |
-| Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결) |
+| Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결, AmneziaWG 포함) |
 | macOS(Apple Silicon / arm64) | 🚧 실험적 — Apple Silicon 실기기에서 검증됨; 다른 WireGuard 앱 [WireTunnels](https://github.com/FMDigitech/WireTunnels)도 사용해 볼 수 있습니다 |
 | Linux(x64, arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음 |
 | Android / iOS | ❌ **지원 안 함** (터널 동시 실행 불가, Wi-Fi SSID 자동 전환 불가) |

@@ -41,6 +41,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   disconnect), can be dismissed manually, or auto-closes after a configurable dwell time
   (default 10 s, adjustable in Settings).
 - **Tunnel management** — import / export `.conf`, connection history, quick toggles.
+- **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
 
 ## Fixes & enhancements over upstream wireguide
 
@@ -67,12 +68,13 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
    macOS & Linux), tray connection notifications (shown 10 s after startup / after network
    changes alter connection state, default dwell 10 s, adjustable).
 5. **Window title & interaction polish** and more.
+6. **AmneziaWG (AWG) protocol support** — a new protocol backend (amneziawg-go) for AmneziaWG tunnels, the obfuscated WireGuard fork that resists DPI. Configs are auto-detected, tunnels are badged in the UI, and an opt-out switch lives in Settings → Advanced.
 
 ## Platform support
 
 | Platform | Status |
 | --- | --- |
-| Windows 10 / 11 (x64, x86 32-bit, ARM64) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect) |
+| Windows 10 / 11 (x64, x86 32-bit, ARM64) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect, incl. AmneziaWG) |
 | macOS (Apple Silicon / arm64) | 🚧 Experimental — verified on real Apple Silicon hardware; you may also try [WireTunnels](https://github.com/FMDigitech/WireTunnels), another WireGuard app |
 | Linux (x64, arm64) | 🚧 Experimental — CI-built but not yet tested on real hardware |
 | Android / iOS | ❌ **Not supported** (cannot run tunnels concurrently, nor auto-connect different tunnels by Wi-Fi SSID) |

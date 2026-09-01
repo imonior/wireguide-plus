@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.3.5] - 2026-09-01
+
+このバージョンでは **AmneziaWG（AWG）プロトコル対応**を追加しました — DPI による識別を回避する難読化 WireGuard フォークです。AWG 設定は難読化パラメータ（Jc/Jmin/Jmax/S1-S4/H1-H4）から自動検出され、amneziawg-go バックエンドで動作し、UI 上は「AmneziaWG」バッジで表示されます。AWG バックエンドが不安定なマシン向けに、設定 → 詳細でサポートを無効化できます。
+
+### ✨ 新機能
+
+- **AmneziaWG（AWG）プロトコル対応** — AmneziaWG 設定のインポート・接続に対応。Jc/Jmin/Jmax/S1-S4/H1-H4 キーから自動検出し、一覧・詳細画面に「AmneziaWG」バッジを表示。ハンドシェイク / トラフィックなどの状態表示は WireGuard トンネルと同様です。
+- **AmneziaWG 有効化設定** — 設定 → 詳細に「AmneziaWG サポートを有効化」スイッチを追加（既定オン）。オフにすると AWG トンネルの接続は明確なエラーで拒否され、接続途中の失敗になりません。
+
+### 🛠 内部
+
+- amneziawg-go ベースの新プロトコルバックエンドをエンジン抽象層に統合 — 両プロトコルが同一の接続パイプラインを共有。AWG の状態は常にプロセス内 UAPI で提供。Windows のソケット固定は両バックエンドで有効。
+
+## [1.3.1] - 2026-09-01
+
+このバージョンでは、Windows のアプリ内アップデートでインストーラー起動時に UAC 昇格を要求しなかった問題を修正し、macOS が Apple Silicon 実機で検証済みであることを正式に記載しました。
+
+### 🐛 修正
+
+- **Windows インストーラーの UAC 昇格** — アプリ内アップデートでインストーラーを起動する前に昇格コンテキストを要求するようにし、手動ダブルクリックの動作と一致させました。
+
+### 🛠 内部
+
+- **macOS 実機検証** — プラットフォームサポートに macOS（Apple Silicon）が実機で検証済みであることを明記。
+
 ## [1.3.0] - 2026-09-01
 
 このバージョンでは、アプリを **WireGuide Plus** に全面リブランドしました：ウィンドウタイトル、トレイ、自動起動項目、helper ログ、Homebrew cask、更新一時ファイル、nftables テーブル名など、全経路が plus 命名に統一され、アップグレード時に旧バージョンが残した起動項目・デーモン・ファイアウォールテーブルも自動的に掃除されます。さらに macOS のメニューバーアイコンとルーティング診断表示も改善しました。

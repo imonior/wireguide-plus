@@ -31,6 +31,7 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
   最新状态气泡。气泡带操作菜单（打开主窗口 / 断开），可手动关闭，也可按可调时长
   自动关闭（默认 10 秒，可在设置中调整）。
 - **隧道管理** — 导入 / 导出 `.conf`、连接历史、快速开关。
+- **AmneziaWG（AWG）隧道** — 支持导入并连接 AmneziaWG（混淆版 WireGuard）配置。AWG 由配置中的 Jc/Jmin/Jmax/S1-S4/H1-H4 混淆参数自动识别，对应隧道会显示「AmneziaWG」徽标；可在「设置 → 高级」中关闭支持。
 
 ## 针对原 wireguide 的修复与增强
 
@@ -56,12 +57,13 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
    最小化到托盘）、托盘连接状态通知（启动后 10 秒、网络变化后延时 10 秒提示，
    默认停留 10 秒，可调）。
 5. **窗口标题与交互细节** 等更多改进。
+6. **AmneziaWG（AWG）协议支持** — 新增基于 amneziawg-go 的 AmneziaWG 协议后端，支持 DPI 抗识别混淆隧道。配置自动识别、界面显示徽标，并可在「设置 → 高级」中一键关闭。
 
 ## 平台支持
 
 | 平台 | 状态 |
 | --- | --- |
-| Windows 10 / 11（x64、x86 32 位、ARM64） | ✅ 完全支持（多隧道并发 + SSID 自动连接） |
+| Windows 10 / 11（x64、x86 32 位、ARM64） | ✅ 完全支持（多隧道并发 + SSID 自动连接，含 AmneziaWG） |
 | macOS（Apple Silicon / arm64） | 🚧 实验性 — 已在 Apple Silicon 真机验证；你同样可以尝试另外一款名叫 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
 | Linux（x64、arm64） | 🚧 实验性 — 经 CI 构建，尚未在真机测试 |
 | Android / iOS | ❌ **不支持**（无法并发运行隧道，也无法按 Wi-Fi SSID 自动切换隧道） |
