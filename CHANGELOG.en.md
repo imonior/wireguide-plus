@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.2] - 2026-09-02
+
+### ✨ New
+
+- **Main window position and size are remembered** — the window's geometry is saved when it is closed to the tray, minimised, or the app quits, and restored on the next launch (including a tray restore), so it reopens exactly where you left it.
+
+### 🛠 Internal
+
+- **GitHub Actions upgraded to latest majors** — checkout@v5, setup-go@v6, setup-node@v5, upload/download-artifact@v7, action-gh-release@v3.
+
 ## [1.5.1] - 2026-09-02
 
 ### 🐛 Fixes
@@ -24,8 +34,6 @@ All notable changes to WireGuide Plus will be documented in this file.
 - **Linux relaunches the app after an update** — deb/rpm package-manager updates now restart the app automatically so the new version loads.
 
 > 1.5.0's interactive installer and silent-update setting were reverted in 1.5.1 in favor of silent updates on all platforms.
-
-## [1.4.1] - 2026-09-02
 
 ## [1.4.1] - 2026-09-02
 

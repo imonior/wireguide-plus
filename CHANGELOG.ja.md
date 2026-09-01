@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.2] - 2026-09-02
+
+### ✨ 新機能
+
+- **メインウィンドウの位置とサイズを記憶** — ウィンドウをトレイに閉じる、最小化する、またはアプリを終了するときに現在のウィンドウ形状を保存し、次回起動時（トレイからの復元を含む）に元どおり復元されます。
+
+### 🛠 内部
+
+- **GitHub Actions を最新メジャー版へアップグレード** — checkout@v5、setup-go@v6、setup-node@v5、upload/download-artifact@v7、action-gh-release@v3。
+
 ## [1.5.1] - 2026-09-02
 
 ### 🐛 修正
@@ -24,8 +34,6 @@ All notable changes to WireGuide Plus will be documented in this file.
 - **Linux：更新完了後にアプリを自動起動** — deb/rpm パッケージマネージャーによる更新後、アプリが自動的に再起動され新しいバージョンが読み込まれます。
 
 > 1.5.0 の対話型インストーラーとサイレント更新設定は、全プラットフォームでのサイレント更新を採用するため 1.5.1 で撤回されました。
-
-## [1.4.1] - 2026-09-02
 
 ## [1.4.1] - 2026-09-02
 

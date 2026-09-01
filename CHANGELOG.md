@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.5.2] - 2026-09-02
+
+### ✨ 新增
+
+- **记住主窗口的位置和大小** — 窗口关闭到托盘、最小化或退出时保存当前几何状态，下次启动（含从托盘恢复）原样还原，无需每次重新拖动调整。
+
+### 🛠 内部
+
+- **GitHub Actions 升级到最新主版本** — checkout@v5、setup-go@v6、setup-node@v5、upload/download-artifact@v7、action-gh-release@v3。
+
 ## [1.5.1] - 2026-09-02
 
 ### 🐛 修复
@@ -24,8 +34,6 @@ All notable changes to WireGuide Plus will be documented in this file.
 - **Linux 更新完成后自动打开软件** — deb/rpm 包管理器更新完成后会自动重启应用以加载新版本。
 
 > 1.5.0 的交互式安装与静默设置项已在 1.5.1 回退为三端一致的静默更新。
-
-## [1.4.1] - 2026-09-02
 
 ## [1.4.1] - 2026-09-02
 
