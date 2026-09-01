@@ -211,6 +211,21 @@ Section
     !insertmacro wails.associateCustomProtocols
     
     !insertmacro wails.writeUninstaller
+
+    # Launch the app after an in-app auto-update. The updater invokes us with
+    # /S /AUTOSTART: silent installs skip the finish page entirely, so its
+    # MUI_FINISHPAGE_RUN would never fire and an update would complete with
+    # nothing running. The installer runs elevated (UAC), so launch through
+    # the already-running non-elevated shell process — explorer.exe hands the
+    # path to it, and the app starts with the user's token, not the
+    # installer's admin token. Plain `installer.exe /S` (headless deployment)
+    # stays silent because /AUTOSTART is absent.
+    ${GetParameters} $R0
+    ${GetOptions} $R0 "/AUTOSTART" $R1
+    ${IfNot} ${Errors}
+        Sleep 300
+        nsExec::Exec `"$WINDIR\explorer.exe" "$INSTDIR\${PRODUCT_EXECUTABLE}"`
+    ${EndIf}
 SectionEnd
 
 Section "uninstall"

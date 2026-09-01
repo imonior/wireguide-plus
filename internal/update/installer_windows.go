@@ -32,7 +32,10 @@ func installWindows(path string) error {
 	// only sees the UAC prompt. A direct exec.Command from a non-elevated
 	// process fails with ERROR_ELEVATION_REQUIRED because the installer's
 	// manifest requests admin rights (it writes to Program Files).
-	return runInstallerElevated(persistentPath, "/S")
+	// /AUTOSTART makes the installer relaunch the app after the swap — its
+	// silent mode skips the finish page whose "run now" checkbox would
+	// otherwise be the only way to open the app (see project.nsi).
+	return runInstallerElevated(persistentPath, "/S", "/AUTOSTART")
 }
 
 // stageInstaller copies the installer from its temp location to
