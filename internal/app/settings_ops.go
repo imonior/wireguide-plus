@@ -593,19 +593,16 @@ func (s *TunnelService) DismissUpdate(version string) error {
 //     letting the cask's postflight handle the killall + relaunch. This
 //     is the "one-click" expectation users have, not "copy this command
 //     into your terminal".
-//   - Windows/Linux → native in-process update: download the release
-//     asset through the user's configured mirror/proxy, verify its
-//     SHA256 + Ed25519 signature, then launch the platform installer.
+//   - Windows/Linux/macOS (non-brew) → native in-process update: download
+//     the release asset (.exe/.msi/.deb/.rpm/.dmg/.zip) through the user's
+//     configured mirror/proxy, verify its SHA256 + Ed25519 signature, then
+//     install it — the platform installer for Windows/Linux, and an
+//     in-place app-bundle replacement (elevated when needed) for macOS.
 //     No browser round-trip, so it works even where github.com is
 //     unreachable (the reason the Settings mirror/proxy exists). If the
 //     download or verification fails, this method falls back to opening
 //     the GitHub Releases page — the safe manual path — so the user is
 //     never stranded.
-//   - Non-brew macOS → open the GitHub Releases page in the browser.
-//     Auto-replacing an un-notarised `.app` bundle needs sudo and races
-//     with Gatekeeper quarantining of the new binary; redirecting the
-//     user to the download page is the honest path for an indie macOS
-//     app without an Apple Developer account.
 func (s *TunnelService) RunUpdate(info *update.UpdateInfo) error {
 	if info == nil || !info.Available {
 		return fmt.Errorf("no update available")
@@ -616,7 +613,7 @@ func (s *TunnelService) RunUpdate(info *update.UpdateInfo) error {
 		if update.IsBrewInstall() {
 			return s.runUpdateBrew(info)
 		}
-		return s.openReleasePage()
+		return s.runUpdateNative(info)
 	case "windows", "linux":
 		return s.runUpdateNative(info)
 	default:
@@ -711,8 +708,9 @@ func (s *TunnelService) runUpdateBrew(info *update.UpdateInfo) error {
 }
 
 // runUpdateNative downloads the release asset in-process (honouring the
-// user's mirror/proxy setting from Settings → Updates) and launches the
-// platform installer. Any failure — network, checksum mismatch,
+// user's mirror/proxy setting from Settings → Updates) and installs it —
+// the platform installer on Windows/Linux, an in-place app-bundle
+// replacement on macOS. Any failure — network, checksum mismatch,
 // signature verification — falls back to opening the release page in the
 // browser, so the user always has a working path to the new version.
 func (s *TunnelService) runUpdateNative(info *update.UpdateInfo) error {

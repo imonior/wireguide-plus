@@ -31,6 +31,9 @@ const (
 	// GitHubReleasesURL is the human-facing releases page.
 	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"
 
+	// GitHubRepoURL is the project's home page on GitHub.
+	GitHubRepoURL = "https://github.com/" + githubRepo
+
 	// minAssetSize is the minimum acceptable size for a release asset.
 	// A macOS .dmg/.zip containing wireguideplus.app is always well over 1 MB;
 	// anything smaller is almost certainly corrupted or a placeholder file

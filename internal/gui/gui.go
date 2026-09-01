@@ -174,6 +174,10 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	})
 	tunnelService.SetApp(app)
 	bindAppToLogHandler(app)
+	// Replace the menu bar Wails synthesizes on macOS: its default Help →
+	// Learn More navigates the WebView itself to wails.io (no way back to
+	// the GUI). Ours opens the GitHub project page in the system browser.
+	installCustomMenuBar(app)
 
 	// Trigger CLLocationManager authorization so this .app bundle appears in
 	// System Settings → Location Services. Must run in the GUI process (not
