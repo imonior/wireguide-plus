@@ -15,6 +15,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 - **迁移选项** — 重名冲突时可勾选「覆盖现有文件」；日志默认不迁移，可按需开启。
 - **暂缓与不再提醒** — 「下次启动再提醒」仅关闭弹窗不写任何标记，下次启动重新检测；「不再提醒」持久化选择，之后不再弹出，仍可在「设置 → 高级 → 旧数据」重新触发扫描。
 
+### 🎨 UI 优化
+
+- **主题化滚动条** — 全局滚动条改用主题 token 绘制（细滚动条 + 圆角滑块），长列表（隧道、日志、历史）在 Windows WebView 下不再回退到系统默认样式。
+- **弹窗样式 token 化** — 更新提示等弹窗的背景、卡片、阴影改用主题变量（`--overlay-bg` / `--bg-card` / `--shadow-md`），移除手写暗色模式 media query，亮/暗主题表现统一。
+- **AWG 徽章主题一致** — 隧道列表与详情中的 AmneziaWG 标识改用主题色 token（`var(--purple)`），替代硬编码颜色，暗色主题下不再突兀。
+
 ### 🛠 内部
 
 - 移除旧版在首次启动时静默自动迁移的逻辑（原在 `GetPaths` 中自动复制），改由显式的 `DetectLegacyData` / `MigrateLegacyData` 交互流程驱动；CLI 命令不再自动迁移，首次 GUI 启动负责引导。

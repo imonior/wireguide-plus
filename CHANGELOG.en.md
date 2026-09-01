@@ -15,6 +15,12 @@ This release turns migration of pre-rename ("wireguide") data into a **user-visi
 - **Migration options** — tick "Overwrite existing files" for name conflicts; logs are not migrated by default and can be opted in.
 - **Remind later & never ask again** — "Remind me next launch" just closes the dialog without persisting anything (the next launch re-detects the data); "Don't ask again" persists the choice so the dialog stays hidden, and Settings → Advanced → "legacy data" can re-trigger the scan anytime.
 
+### 🎨 UI Polish
+
+- **Themed scrollbars** — global scrollbars are painted with theme tokens (thin track, rounded thumb), so long lists (tunnels, logs, history) no longer fall back to the stock WebView chrome on Windows.
+- **Dialog styles tokenized** — popups (e.g. update notice) use theme variables (`--overlay-bg`, `--bg-card`, `--shadow-md`) instead of hard-coded colors and the hand-written dark-mode media query; consistent across light/dark themes.
+- **AWG badge theme consistency** — the AmneziaWG badge in the tunnel list and details uses the `var(--purple)` token instead of hard-coded colors, fitting both themes.
+
 ### 🛠 Internal
 
 - Removed the old silent first-launch auto-migration (previously ran inside `GetPaths`), replaced by the explicit `DetectLegacyData` / `MigrateLegacyData` interactive flow; CLI commands no longer auto-migrate — the first GUI launch drives the prompt.
