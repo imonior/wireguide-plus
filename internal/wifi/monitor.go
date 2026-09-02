@@ -13,7 +13,7 @@ type SSIDChangedFunc func(oldSSID, newSSID string)
 // Monitor watches for WiFi SSID changes and triggers actions.
 //
 // Note: rule evaluation lives entirely in the helper (see
-// internal/helper/wifi_rules.go) — Monitor only fires the onChanged
+// internal/helper/automation_rules.go) — Monitor only fires the onChanged
 // callback. The previous design embedded a *Rules pointer + UpdateRules
 // setter here, but no caller ever read m.rules; it was set once with
 // nil and never used. Removed to simplify the API.

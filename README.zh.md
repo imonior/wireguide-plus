@@ -11,9 +11,9 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 
 [English](README.md) | **简体中文** | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-> **Windows 10 / 11（x64、x86 32 位与 ARM64）完全支持**。macOS（Apple Silicon）与
-> Linux（x64、arm64）提供**实验性预览版** — macOS 已在 Apple Silicon 真机验证，
-> Linux 经 CI 构建、尚未在真机测试（见 [平台支持](#平台支持)）。**不支持 Android / iOS。**
+> **Windows 10 / 11（x64、x86 32 位与 ARM64）以及 macOS（Apple Silicon / arm64）完全支持** —
+> macOS 已在 Apple Silicon 真机充分验证。Linux（x64、arm64）提供**实验性预览版** —
+> 经 CI 构建、尚未在真机测试（见 [平台支持](#平台支持)）。**不支持 Android / iOS。**
 
 ## 主要功能
 
@@ -64,7 +64,7 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 | 平台 | 状态 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32 位、ARM64） | ✅ 完全支持（多隧道并发 + SSID 自动连接，含 AmneziaWG） |
-| macOS（Apple Silicon / arm64） | 🚧 实验性 — 已在 Apple Silicon 真机验证；你同样可以尝试另外一款名叫 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
+| macOS（Apple Silicon / arm64） | ✅ 完全支持 — 已在 Apple Silicon 真机充分验证；你同样可以尝试另外一款名叫 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
 | Linux（x64、arm64） | 🚧 实验性 — 经 CI 构建，尚未在真机测试 |
 | Android / iOS | ❌ **不支持**（无法并发运行隧道，也无法按 Wi-Fi SSID 自动切换隧道） |
 

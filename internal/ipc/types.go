@@ -1,6 +1,9 @@
 package ipc
 
-import "github.com/imonior/wireguide-plus/internal/domain"
+import (
+	"github.com/imonior/wireguide-plus/internal/domain"
+	"github.com/imonior/wireguide-plus/internal/wifi"
+)
 
 // Empty is used for requests/responses with no payload.
 type Empty struct{}
@@ -155,6 +158,8 @@ type AutomationPreviewResponse struct {
 	SSID        string                     `json:"ssid"`
 	PhysicalIPs []string                   `json:"physical_ips"`
 	GatewayMAC  string                     `json:"gateway_mac"`
+	GatewayIP   string                     `json:"gateway_ip"`
+	Interfaces  []wifi.InterfaceInfo       `json:"interfaces"`
 	Tunnels     []AutomationTunnelDecision `json:"tunnels"`
 }
 

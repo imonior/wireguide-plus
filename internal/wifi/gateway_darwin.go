@@ -55,6 +55,12 @@ func defaultGatewayIP() string {
 	return ""
 }
 
+// GatewayIP returns the IPv4 address of the default gateway ("" if
+// unknown). Same `route -n get default` lookup GatewayMAC uses.
+func GatewayIP() string {
+	return defaultGatewayIP()
+}
+
 // macRegex matches a colon-separated MAC with 1- or 2-hex-digit octets
 // (BSD `arp` prints "b0:38:6c:54:8b:ab" but drops leading zeros, e.g.
 // "0:1e:...").

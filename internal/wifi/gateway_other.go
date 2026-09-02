@@ -6,3 +6,7 @@ package wifi
 // platforms return "" (the "network" Automation condition never matches
 // there, but subnet/SSID conditions still work).
 func GatewayMAC() string { return "" }
+
+// GatewayIP is only implemented on darwin/linux/windows; other platforms
+// return "" (the "gateway_ip" Automation condition never matches there).
+func GatewayIP() string { return "" }

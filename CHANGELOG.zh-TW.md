@@ -4,6 +4,29 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.6.0] - 2026-09-02
+
+### ✨ 新增
+
+- **自動化規則新增四類條件** — 每隧道的 connect/disconnect 規則現在支援：閘道 IP（gateway_ip）、網路介面（interface，候選清單包含目前未連線的實體網卡）、在有線網路（ethernet）、時間段（time，起止時刻 + 星期幾）。規則內條件為 AND、規則間為 OR，按落盤順序首條命中生效；disconnect 組先於 connect 組評估，connect 命中會被降權不執行。
+- **自動化編輯器即時判讀** — 編輯規則時逐條件顯示是否命中（match）並高亮目前實際生效的規則（in use），頂部裁決指示條同步顯示最終將執行的動作；判讀與 helper 實際控制共用同一引擎，標記與真實行為一致。
+- **CLI 新增 `automation` 命令** — 終端查看每條規則的即時命中詳情與裁決結果，新條件類型均有可讀格式。
+
+### 🐛 修正
+
+- **SSID 改為全名精確匹配**（行為變更）— SSID 按位元組全名比較：區分大小寫，中間空格與特殊字元均參與匹配（符合 802.11 對 SSID 的定義）。此前不區分大小寫；規則中填寫的 SSID 必須與實際廣播完全一致，編輯器即時判讀會直接顯示是否匹配。
+- **「在有線網路」條件無法保存** — ethernet 條件此前不會被持久化，保存後靜默消失，即時判讀的規則映射也隨之錯位。
+- **編輯器指示器多處修正** — 未完成的草稿規則導致其後規則高亮錯位；手動關閉（manual-off）時不再把被抑制的 connect 規則標記為「生效中」；打開編輯器立即重新整理判讀，不再有最長 3 秒的過期資料視窗。
+- **Windows 路由衝突檢測修正** — 衝突診斷的路由衝突此前在 Windows 上恆為空（`route print` 輸出解析不可靠），全隧道（0.0.0.0/0）情境下的路由重疊警告因此失效；現改用 iphlpapi `GetIpForwardTable2` 路由表，與「診斷 → 路由」檢視資料一致。
+
+### 🛠 內部
+
+- helper 中規則評估相關檔案按實際職責改名：`wifi_rules.go` → `automation_rules.go`，平台檔案 `wifi_rules_{windows,darwin,linux}.go` → `userdir_{windows,darwin,linux}.go`；實體網卡列舉拆分為 `iface_*.go` 平台實作。
+
+### 📝 文件
+
+- README（5 種語言）：macOS（Apple Silicon）支援狀態由「實驗性」升級為「完全支援」。
+
 ## [1.5.3] - 2026-09-02
 
 ### 🐛 修正

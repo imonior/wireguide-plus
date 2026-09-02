@@ -99,6 +99,99 @@ func (s *TunnelService) GetCurrentNetwork() CurrentNetwork {
 	}
 }
 
+// AutomationPreviewResponse is the GUI-computed read-only evaluation of
+// every tunnel's Automation rules against the current network context. It
+// carries per-rule and per-condition match detail so the editor can render
+// live "this condition matches now" indicators without re-implementing the
+// engine's matching in JS. Computed locally (no helper round-trip) and
+// identical in spirit to the helper's ipc.AutomationPreviewResponse.
+type AutomationPreviewResponse struct {
+	OnWiFi      bool                       `json:"on_wifi"`
+	SSID        string                     `json:"ssid"`
+	PhysicalIPs []string                   `json:"physical_ips"`
+	GatewayMAC  string                     `json:"gateway_mac"`
+	GatewayIP   string                     `json:"gateway_ip"`
+	Interfaces  []wifi.InterfaceInfo       `json:"interfaces"`
+	Tunnels     []AutomationTunnelPreview  `json:"tunnels"`
+}
+
+// AutomationTunnelPreview is one tunnel's evaluated rules plus the overall
+// decision Evaluate would reach (accounting for the manual-off latch).
+type AutomationTunnelPreview struct {
+	Name     string             `json:"name"`
+	Rules    []wifi.RuleDetail  `json:"rules"`
+	Decision string             `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off"
+}
+
+// AutomationPreview evaluates every tunnel's Automation rules against the
+// CURRENT network context, read-only. The GUI process runs this directly so
+// the editor's live indicators stay in lockstep with what the helper's
+// engine would do (same rules, same wifi package evaluator) without an IPC
+// round-trip. ManualOffTunnels is honoured the same way the helper honours
+// it: a matching connect on a manually-off tunnel reports "manual-off".
+func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
+	ssid := wifi.CurrentSSID()
+	gw := wifi.GatewayMAC()
+	gwIP := wifi.GatewayIP()
+	phys := wifi.PhysicalInterfaceIPs()
+	ifaces := wifi.PhysicalInterfaces()
+	ipStrs := make([]string, 0, len(phys))
+	for _, ip := range phys {
+		ipStrs = append(ipStrs, ip.String())
+	}
+	ctx := wifi.NetworkContext{
+		SSID:        ssid,
+		PhysicalIPs: phys,
+		GatewayMAC:  gw,
+		GatewayIP:   gwIP,
+		Interfaces:  ifaces,
+	}
+
+	resp := AutomationPreviewResponse{
+		OnWiFi:      ssid != "",
+		SSID:        ssid,
+		PhysicalIPs: ipStrs,
+		GatewayMAC:  gw,
+		GatewayIP:   gwIP,
+		Interfaces:  wifi.AllPhysicalInterfaces(),
+	}
+
+	st, err := s.settingsStore.Load()
+	if err != nil {
+		return resp
+	}
+	st.EnsureAutomation()
+	if st.Automation == nil || len(st.Automation.PerTunnel) == 0 {
+		return resp
+	}
+	manualOff := make(map[string]bool, len(st.ManualOffTunnels))
+	for _, n := range st.ManualOffTunnels {
+		manualOff[n] = true
+	}
+
+	for _, name := range st.Automation.TunnelNames() {
+		rules := st.Automation.PerTunnel[name]
+		state, details := wifi.EvaluateDetail(rules, ctx)
+		decision := "unmanaged"
+		switch state {
+		case wifi.StateConnect:
+			if manualOff[name] {
+				decision = "manual-off" // suppressed by the manual-off latch
+			} else {
+				decision = "connect"
+			}
+		case wifi.StateDisconnect:
+			decision = "disconnect"
+		}
+		resp.Tunnels = append(resp.Tunnels, AutomationTunnelPreview{
+			Name:     name,
+			Rules:    details,
+			Decision: decision,
+		})
+	}
+	return resp
+}
+
 // CheckSSIDPermission reports whether the process can read the current SSID.
 // Used by the frontend to prompt the user for Location Services access before
 // Wi-Fi auto-connect rules can fire.

@@ -7,7 +7,7 @@ through each one.
 
 ## Phase 4 — Automation rules (helper-side, issue #12)
 
-Rule evaluation lives in `internal/helper/wifi_rules.go`
+Rule evaluation lives in `internal/helper/automation_rules.go`
 (`reevaluateAutomation`); the rule model + engine live in
 `internal/wifi/automation.go` (`Evaluate`); rule data lives in
 `Settings.Automation` (`internal/storage/settings.go`). Legacy

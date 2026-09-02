@@ -55,6 +55,65 @@ func PhysicalInterfaceIPs() []net.IP {
 	return out
 }
 
+// PhysicalInterfaces returns the physical (up, non-tunnel, non-loopback)
+// interfaces that currently carry a routable address, with a best-effort
+// Wi-Fi flag per platform. Used by the interface and ethernet Automation
+// conditions at evaluation time, so it only reflects currently-active uplinks.
+// The Wi-Fi flag is heuristic on Windows (FriendlyName match) and exact on
+// Linux (sysfs) / macOS (CoreWLAN-discovered interface).
+func PhysicalInterfaces() []InterfaceInfo { return listPhysicalInterfaces(true) }
+
+// AllPhysicalInterfaces returns every physical (non-tunnel, non-loopback)
+// adapter found on the machine, including ones that are currently down or
+// have no address. Used by the Automation editor to populate the interface
+// suggestion list so users can target a fixed wired/Wi-Fi egress even when
+// it is not connected right now.
+func AllPhysicalInterfaces() []InterfaceInfo { return listPhysicalInterfaces(false) }
+
+func listPhysicalInterfaces(requireUp bool) []InterfaceInfo {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []InterfaceInfo
+	for _, ifi := range ifaces {
+		if ifi.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if requireUp && ifi.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if isTunnelIface(ifi.Name) || isVirtualIface(ifi.Name) {
+			continue
+		}
+		if requireUp {
+			addrs, err := ifi.Addrs()
+			if err != nil {
+				continue
+			}
+			hasRoutable := false
+			for _, a := range addrs {
+				var ip net.IP
+				switch v := a.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() {
+					hasRoutable = true
+					break
+				}
+			}
+			if !hasRoutable {
+				continue
+			}
+		}
+		out = append(out, InterfaceInfo{Name: ifi.Name, IsWiFi: ifaceIsWiFi(ifi.Name)})
+	}
+	return out
+}
+
 // PhysicalSubnets returns the network CIDRs of the physical
 // (non-tunnel, up) interfaces the machine is currently on — e.g.
 // "192.168.0.0/24" for an interface holding 192.168.0.127/24. Used to

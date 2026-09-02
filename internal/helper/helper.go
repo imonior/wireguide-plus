@@ -194,7 +194,7 @@ type Helper struct {
 
 	// startedAt is when the helper process started. It bounds the
 	// post-connect rule re-check to the startup window (see
-	// scheduleRuleCheck in wifi_rules.go): a tunnel that a GUI restore or
+	// scheduleRuleCheck in automation_rules.go): a tunnel that a GUI restore or
 	// crash-recovery path brings up shortly after launch is corrected by
 	// the rules within seconds, instead of staying up until the 30s poll.
 	startedAt time.Time

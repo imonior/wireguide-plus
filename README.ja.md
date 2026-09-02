@@ -14,10 +14,9 @@ WireGuide Plus はオープンソースプロジェクト
 
 [English](README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | **日本語**
 
-> **Windows 10 / 11（x64、x86 32ビットおよび ARM64）を完全サポート**しています。
-> macOS（Apple Silicon）と Linux（x64、arm64）は**実験的プレビュー**として提供 —
-> macOS は Apple Silicon 実機で検証済み、Linux は CI でビルドされますが実機での
-> テストは未実施です（[プラットフォームサポート](#プラットフォームサポート) を参照）。
+> **Windows 10 / 11（x64、x86 32ビットおよび ARM64）と macOS（Apple Silicon / arm64）を完全サポート**しています —
+> macOS は Apple Silicon 実機で十分に検証済みです。Linux（x64、arm64）は**実験的プレビュー**として提供 —
+> CI でビルドされますが実機でのテストは未実施です（[プラットフォームサポート](#プラットフォームサポート) を参照）。
 > **Android / iOS は非対応です。**
 
 ## 機能
@@ -74,7 +73,7 @@ WireGuide Plus はオープンソースプロジェクト
 | プラットフォーム | 状態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32ビット、ARM64） | ✅ 完全サポート（マルチトンネル同時接続 + SSID 自動接続、AmneziaWG 含む） |
-| macOS（Apple Silicon / arm64） | 🚧 実験的 — Apple Silicon 実機で検証済み; 別の WireGuard アプリ [WireTunnels](https://github.com/FMDigitech/WireTunnels) も試せます |
+| macOS（Apple Silicon / arm64） | ✅ 完全サポート — Apple Silicon 実機で十分に検証済み; 別の WireGuard アプリ [WireTunnels](https://github.com/FMDigitech/WireTunnels) も試せます |
 | Linux（x64、arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施 |
 | Android / iOS | ❌ **非対応**（トンネルを同時に実行できず、Wi-Fi SSID による自動切替も不可） |
 

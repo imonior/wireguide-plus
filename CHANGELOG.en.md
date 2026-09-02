@@ -4,6 +4,29 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.6.0] - 2026-09-02
+
+### ✨ New
+
+- **Four new automation condition types** — per-tunnel connect/disconnect rules now support: gateway IP (`gateway_ip`), network interface (`interface`, the suggestion list includes currently-disconnected physical adapters), wired network (`ethernet`), and time window (`time`, start/end plus weekdays). Conditions inside one rule are AND; rules are OR'd with first-match-wins priority, disconnect rules evaluated before connect rules — a matching connect rule behind a matched disconnect rule is deprioritized and never executed.
+- **Live match indicators in the automation editor** — while editing, each condition shows whether it matches (match) and the currently effective rule is highlighted (in use); a decision strip at the top shows the action that would run. The indicators use the same engine the helper enforces, so the markers always agree with actual behavior.
+- **New `automation` CLI command** — inspect per-rule live match details and the resulting decision from the terminal, with readable formatting for all new condition types.
+
+### 🐛 Fixes
+
+- **SSIDs now match exactly** (behavior change) — SSIDs are compared byte-for-byte as full names: case-sensitive, with middle spaces and special characters significant (per the 802.11 definition of an SSID). Previously matching was case-insensitive; the SSID in a rule must now equal the broadcast name exactly, and the editor's live indicators show any mismatch immediately.
+- **"On wired network" condition was never saved** — ethernet conditions were silently dropped on save, and the live indicator mapping shifted as a result.
+- **Multiple editor indicator fixes** — incomplete draft rules shifted the winning highlight onto the wrong card; a connect rule suppressed by the manual-off latch is no longer marked as "in use"; indicators refresh immediately when the editor opens instead of showing up to 3 seconds of stale data.
+- **Windows routing-conflict detection fixed** — route-conflict warnings in the conflict diagnostics were always empty on Windows (`route print` parsing was unreliable), silently disabling overlap warnings in the full-tunnel (0.0.0.0/0) scenario where they matter most; detection now uses the iphlpapi `GetIpForwardTable2` table, consistent with the Diagnostics → Routes view.
+
+### 🛠 Internal
+
+- helper rule-evaluation files renamed to match their actual roles: `wifi_rules.go` → `automation_rules.go`, platform files `wifi_rules_{windows,darwin,linux}.go` → `userdir_{windows,darwin,linux}.go`; physical-interface enumeration split into per-platform `iface_*.go` files.
+
+### 📝 Docs
+
+- README (5 languages): macOS (Apple Silicon) support status upgraded from "experimental" to "fully supported".
+
 ## [1.5.3] - 2026-09-02
 
 ### 🐛 Fixes

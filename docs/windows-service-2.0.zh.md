@@ -55,7 +55,7 @@
   - `tunnel.Manager`：wireguard-go + wintun，连接/断开/状态
   - `firewall`：WFP kill switch / DNS 保护 / 端点保护（`internal/firewall/wfp_windows.go`）
   - `reconnect.Monitor`：断线重连 + 防火墙挂起/恢复
-  - `wifi.Monitor` + 规则评估：SSID/子网触发自动连接（`internal/helper/wifi_rules.go`）
+  - `wifi.Monitor` + 规则评估：SSID/子网触发自动连接（`internal/helper/automation_rules.go`）
   - 崩溃恢复：`tunnel.RecoverFromCrash` + `fw.RecoverFromCrash`
   - 事件广播：`ipc.Server.Broadcast`（状态 diff、WiFi 变化、重连状态）
   - 启动时恢复持久化设置（健康检查、PinInterface、日志级别）
@@ -69,7 +69,7 @@
   - 服务端 `verifyPeer`：要求连接进程属主用户 = ownerSID
   - 连接数上限 32（防同 UID 进程耗尽资源）
 - **数据目录**：`systemDataDir()` = `%PROGRAMDATA%\wireguideplus`（helper 状态）
-- **用户配置**：`storage.TunnelStore` 在用户 home。⚠️ Windows 上 `deriveUserAppSupport`（`internal/helper/wifi_rules_windows.go`）靠 UAC 透传的 `APPDATA` 环境变量定位用户目录——**SCM 启动的服务不带用户环境**，此路径在服务模式下会失效，阶段 2 必须处理
+- **用户配置**：`storage.TunnelStore` 在用户 home。⚠️ Windows 上 `deriveUserAppSupport`（`internal/helper/userdir_windows.go`）靠 UAC 透传的 `APPDATA` 环境变量定位用户目录——**SCM 启动的服务不带用户环境**，此路径在服务模式下会失效，阶段 2 必须处理
 - **CLI**：`wireguideplus ctl …` 已是独立 IPC 客户端（Tailscale 模式）
 - **安装**：NSIS（`build/windows/nsis/project.nsi`）+ `internal/autostart`（Windows 用 HKCU Run key）
 

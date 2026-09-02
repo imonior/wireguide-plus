@@ -45,6 +45,9 @@
   // last-checked timestamp. Loaded once at startup; refreshed by the
   // Settings → About "Check now" flow.
   let updateState = null;
+  // App version, shown under the brand tagline (best-effort — the label
+  // simply stays hidden if the version can't be fetched).
+  let appVersion = '';
   // Legacy ("wireguide") data migration prompt. Set from the startup scan in
   // onMount; see LegacyMigration.svelte.
   let legacyReport = null;
@@ -157,6 +160,9 @@
     try {
       updateState = await TunnelService.GetUpdateState();
     } catch (_) { /* GetUpdateState is best-effort UI hint */ }
+    try {
+      appVersion = await TunnelService.GetVersion();
+    } catch (_) { /* version label is best-effort */ }
 
     // Wails v3 native file drop — HTML5 dragdrop doesn't work in WebKit.
     // Event payload: { files: string[], details: {...} }
@@ -206,7 +212,7 @@
 
     // Wi-Fi SSID change events are still broadcast by the helper for
     // observability, but rule evaluation now lives in the helper
-    // itself (internal/helper/wifi_rules_darwin.go). That keeps
+    // itself (internal/helper/automation_rules.go). That keeps
     // auto-connect / auto-disconnect working when the GUI is fully
     // quit — the helper has KeepAlive=true and runs the rules
     // independently. We just show a brief toast here so the user
@@ -769,6 +775,9 @@
         <div class="brand-text">
           <span class="brand-name">WireGuide Plus</span>
           <span class="brand-tagline">WireGuard VPN</span>
+          {#if appVersion}
+            <span class="brand-version">v{appVersion}</span>
+          {/if}
         </div>
       </div>
 
@@ -1086,6 +1095,11 @@
     color: var(--text-muted);
     letter-spacing: 0.02em;
     text-transform: uppercase;
+  }
+  .brand-version {
+    font: 400 10px/13px var(--font-mono);
+    color: var(--text-muted);
+    opacity: 0.8;
   }
 
   /* ===== Nav groups =====

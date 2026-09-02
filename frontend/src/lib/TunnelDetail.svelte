@@ -508,6 +508,13 @@
         </span>
         <span class="meta-sep">·</span>
         <span class="meta-item">{$t('tunnel.duration')}: {status.duration || '—'}</span>
+        {#if status.interface_name}
+          <span class="meta-sep">·</span>
+          <span class="meta-item">
+            <Icon name="network" size={11} strokeWidth={2} />
+            {$t('tunnel.interface')}: <span class="mono">{status.interface_name}</span>
+          </span>
+        {/if}
       </div>
     {/if}
 

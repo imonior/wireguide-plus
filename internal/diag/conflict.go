@@ -204,15 +204,45 @@ func tailscaleLocalIPs() []string {
 }
 
 func isWireGuardLike(name string) bool {
-	return strings.HasPrefix(name, "utun") ||
+	// Unix: utun (macOS / wireguard-go), wg/tun (Linux / wireguard-go,
+	// and the `wg-quick` convention of "wg0", "tun0" etc.).
+	if strings.HasPrefix(name, "utun") ||
 		strings.HasPrefix(name, "wg") ||
-		strings.HasPrefix(name, "tun")
+		strings.HasPrefix(name, "tun") {
+		return true
+	}
+	// Windows: wintun adapters are named after the owning app. This app
+	// creates "WireGuidePlus-<hash>" (legacy "WireGuide-<hash>" from
+	// before the rebrand), the official WireGuard client uses "WireGuard".
+	// net.Interfaces() reports the adapter FriendlyName, so without these
+	// prefixes scanWireGuardInterfaces skipped every tunnel on Windows
+	// and routing-conflict warnings never fired there.
+	if runtime.GOOS == "windows" &&
+		(strings.HasPrefix(name, "WireGuidePlus-") ||
+			strings.HasPrefix(name, "WireGuide-") ||
+			strings.HasPrefix(name, "WireGuard")) {
+		return true
+	}
+	return false
 }
 
 // identifyOwner determines who created this interface by checking UAPI sockets
 // and the per-scan Tailscale interface map. tsIfaces maps interface names that
 // actually carry a Tailscale IP — pass nil when tailscaled isn't running.
 func identifyOwner(ifaceName string, tsIfaces map[string]bool) string {
+	// Windows: there is no /var/run socket — wintun adapter names carry
+	// the owner. Our adapters are "WireGuidePlus-<hash>" (legacy
+	// "WireGuide-<hash>"), the official WireGuard client's are "WireGuard".
+	if runtime.GOOS == "windows" {
+		if strings.HasPrefix(ifaceName, "WireGuidePlus-") ||
+			strings.HasPrefix(ifaceName, "WireGuide-") {
+			return "WireGuide"
+		}
+		if strings.HasPrefix(ifaceName, "WireGuard") {
+			return "WireGuard"
+		}
+	}
+
 	// Check WireGuide socket — the current /var/run/wireguideplus/ path,
 	// plus the pre-plus /var/run/wireguide/ path an older install's
 	// running instance may still be serving.
@@ -279,9 +309,9 @@ func getInterfaceRoutes(ifaceName string) []string {
 		return getRoutesDarwin(ifaceName)
 	case "linux":
 		return getRoutesLinux(ifaceName)
+	case "windows":
+		return getRoutesWindows(ifaceName)
 	default:
-		// TODO: Implement Windows route enumeration via `route print` or
-		// netsh to detect conflicts on Windows interfaces.
 		return nil
 	}
 }

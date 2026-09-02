@@ -8,6 +8,8 @@ export {
 };
 
 export {
+    AutomationPreviewResponse,
+    AutomationTunnelPreview,
     ConnectionStatus,
     CurrentNetwork,
     DNSLeakResult,

@@ -1,13 +1,19 @@
 <script>
-  // Per-tunnel Automation rule editor (issue #12). Each rule is an
-  // ordered condition→action: on a matching network the tunnel is
-  // connected or disconnected. Connect and disconnect conditions are set
-  // independently (just add rules with the action you want). Persisted to
-  // Settings.automation.per_tunnel_rules[tunnelName]; the whole settings
-  // object is re-fetched and spread on save so other screens' edits (and
-  // other tunnels' rules) are never clobbered.
+  // Per-tunnel Automation rule editor (issue #12), WireTunnels-style
+  // Connect/Disconnect groups. Under each action you can add MULTIPLE
+  // independent rules — any one matching rule triggers the action (rules
+  // under the same action are OR'd). Within a rule, conditions are always
+  // combined with AND: every condition in the rule must match for the rule
+  // to fire. This covers all practical cases while keeping the UI simple.
+  // "on any Wi-Fi" is a condition that needs no value.
+  // Persisted to Settings.automation.per_tunnel_rules[tunnelName] as one
+  // {when: [...], do} entry per rule, disconnect rules FIRST so that when
+  // both actions match the tunnel disconnects (safe default). The whole
+  // settings object is re-fetched and spread on save so other screens' edits
+  // (and other tunnels' rules) are never clobbered.
   import { afterUpdate, onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
+  import { AutomationPreview } from '../../bindings/github.com/imonior/wireguide-plus/internal/app/tunnelservice.js';
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
@@ -15,70 +21,49 @@
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
-  let rules = [];
-  // Local-only row identity for the {#each} key; never persisted
-  // (persistSet() rebuilds plain objects). Monotonic and never reset, so
-  // keys stay unique across loads. Note this does NOT preserve DOM across
-  // a genuine reload (load() mints fresh ids) — focus survival comes from
-  // diskDiffers suppressing self-write reloads, not from the keying.
+  // groups[do] = [ rule, ... ]; rule = { _gid, match: 'all', conds: [ {_id, type, ssid, subnet, gateway_mac, label} ] }
+  let groups = { connect: [], disconnect: [] };
+  // Local-only identity for {#each} keys; never persisted.
+  let condId = 0;
   let ruleId = 0;
   let loadedFor = '';
   let knownSSIDs = [];
   let currentSSID = '';
   let currentSubnets = [];      // autocomplete suggestions for the subnet field
   let currentGatewayMAC = '';   // autocomplete suggestion for the MAC field
+  // Live network context + per-rule decision from AutomationPreview().
+  let preview = null;           // AutomationPreviewResponse
+  let previewTimer = null;
   // Combobox suggestions for the SSID field: every WiFi profile the OS has
-  // saved (pre-filled), plus the current network in case it isn't saved
-  // yet. The input stays free-form, so a name missing from the list can
-  // still be typed manually.
+  // saved (pre-filled), plus the current network in case it isn't saved yet.
   $: ssidSuggestions = [...new Set([...(knownSSIDs || []), ...(currentSSID ? [currentSSID] : [])])];
+  // Physical interface names from the live AutomationPreview — used as
+  // autocomplete suggestions for the interface condition.
+  $: interfaceSuggestions = [...new Set((preview?.interfaces || []).map(x => x.name))];
   let saveError = '';
   // loadGen tags each async load so a slow in-flight load(A) can't clobber
-  // the rules after the user has already switched to load(B) (issue #12).
+  // the rules after the user has already switched to load(B).
   let loadGen = 0;
   // Reload whenever the modal opens for a (possibly different) tunnel.
   $: if (open && tunnelName && loadedFor !== tunnelName) {
     load(tunnelName);
   }
   async function load(name) {
-    // Claim the load BEFORE the first await: the reactive statement keys
-    // on loadedFor, and awaiting first would leave a window where any
-    // state change re-runs it and double-invokes load for the same name.
     loadedFor = name;
     const gen = ++loadGen;
-    // Persist any pending edit for the tunnel we're leaving BEFORE we
-    // overwrite `rules`, so switching tunnels never drops the last change.
     await flush();
     saveError = '';
+    // Fresh live markers immediately on open: the 3s poll pauses while the
+    // modal is closed (refreshPreview early-returns), so without this the
+    // indicators would show stale/no data for up to 3s after opening.
+    refreshPreview();
     try {
       const s = await TunnelService.GetSettings();
-      if (gen !== loadGen) return; // a newer load superseded this one
+      if (gen !== loadGen) return;
       const per = s?.automation?.per_tunnel_rules || {};
-      // Deep-copy so edits don't mutate the fetched object before save.
-      rules = (per[name] || []).map(r => {
-        const row = {
-          _id: ++ruleId,
-          when: {
-            type: r.when?.type || inferType(r.when),
-            ssid: r.when?.ssid || '',
-            subnet: r.when?.subnet || '',
-            gateway_mac: r.when?.gateway_mac || '',
-            // Not editable here; carried through the round-trip so a GUI
-            // save never strips a label another writer attached.
-            label: r.when?.label || '',
-          },
-          do: r.do || 'connect',
-        };
-        // Seed the last-committed form so an existing rule that turns
-        // incomplete mid-edit keeps its on-disk value (see persistSet).
-        // Fall back to the raw disk rule when the form can't represent it
-        // (cleanedRule returns null) — the on-disk rule must never be
-        // dropped just because the editor opened and saved.
-        row._committed = cleanedRule(row) || { when: row.when, do: row.do };
-        return row;
-      });
+      groups = toGroups(per[name] || []);
     } catch (e) {
-      if (gen === loadGen) rules = [];
+      if (gen === loadGen) groups = { connect: [], disconnect: [] };
       console.error('automation load:', e);
     }
     try {
@@ -98,52 +83,120 @@
       currentGatewayMAC = mac;
     } catch (_) { if (gen === loadGen) currentGatewayMAC = ''; }
   }
+  // Convert the persisted rule array into the editor model. Conditions inside
+  // a rule are always AND; rules under the same action are OR. Legacy configs
+  // that used OR within a rule (match !== 'all' or missing with multiple
+  // conditions) are migrated by splitting each condition into its own rule,
+  // preserving the original semantics under the new model.
+  function toGroups(rules) {
+    const g = { connect: [], disconnect: [] };
+    for (const r of rules || []) {
+      const d = r.do === 'disconnect' ? 'disconnect' : 'connect';
+      const whens = Array.isArray(r.when) ? r.when : (r.when ? [r.when] : []);
+      if (!whens.length) continue;
+      const isLegacyOR = r.match !== 'all' && whens.length > 1;
+      const makeRule = (w) => ({
+        _gid: ++ruleId,
+        match: 'all',
+        conds: [{
+          _id: ++condId,
+          type: w?.type || inferType(w),
+          ssid: w?.ssid || '',
+          subnet: w?.subnet || '',
+          gateway_mac: w?.gateway_mac || '',
+          gateway_ip: w?.gateway_ip || '',
+          interface_name: w?.interface_name || '',
+          start: w?.start || '',
+          end: w?.end || '',
+          days: Array.isArray(w?.days) ? w.days.slice() : [],
+          label: w?.label || '',
+        }],
+      });
+      if (isLegacyOR) {
+        for (const w of whens) g[d].push(makeRule(w));
+      } else {
+        const rule = { _gid: ++ruleId, match: 'all', conds: [] };
+        for (const w of whens) rule.conds.push(makeRule(w).conds[0]);
+        g[d].push(rule);
+      }
+    }
+    return g;
+  }
   // Infer the condition type of a rule that somehow lacks one (e.g. written
-  // by an older tool or hand-edited). Falling back to 'network' here was a
-  // data-loss bug: an "otherwise" rule (which has no ssid/subnet/MAC) would
-  // be reloaded as an incomplete 'network' rule, cleanedRule() returned
-  // null, and the next save silently dropped the rule (issue: "otherwise
-  // rules get lost"). Inferring from whichever condition field is present
-  // keeps such rules intact.
+  // by an older tool or hand-edited). Keeps such rules intact on reload.
   function inferType(w) {
     if (w?.type) return w.type;
     if (w?.ssid) return 'ssid';
     if (w?.subnet) return 'subnet';
     if (w?.gateway_mac) return 'network';
+    if (w?.gateway_ip) return 'gateway_ip';
+    if (w?.interface_name) return 'interface';
+    if (w?.start || w?.end || (w?.days && w.days.length)) return 'time';
     return 'none_match';
   }
-  const MAX_RULES = 50;
-  function addRule() {
-    if (rules.length >= MAX_RULES) return;
-    // No save() here: a blank draft is not a configuration change — it
-    // becomes persistable on the first input that completes it. Saving
-    // now would also manufacture a self-write config_changed echo.
-    rules = [...rules, { _id: ++ruleId, when: { type: 'network', ssid: '', subnet: '', gateway_mac: '', label: '' }, do: 'connect' }];
+  const MAX_CONDS = 50;
+  // A fresh, blank condition row. Nothing is persisted until cleanedCond()
+  // returns a complete object.
+  function newCond() {
+    return {
+      _id: ++condId, type: 'network', ssid: '', subnet: '', gateway_mac: '',
+      gateway_ip: '', interface_name: '', start: '', end: '', days: [], label: '',
+    };
   }
-  function removeRule(i) {
-    rules = rules.filter((_, idx) => idx !== i);
+  // A new rule card carries one blank condition so the user can start
+  // editing immediately. No save() here: a blank draft is not a config
+  // change — it becomes persistable on the first input that completes it.
+  function addRule(d) {
+    const rule = { _gid: ++ruleId, match: 'all', conds: [newCond()] };
+    groups = { ...groups, [d]: [...groups[d], rule] };
+  }
+  function removeRule(d, ruleIdx) {
+    groups = { ...groups, [d]: groups[d].filter((_, i) => i !== ruleIdx) };
     save();
   }
-  // Lightweight format validation for user feedback. The engine is
-  // already safe against garbage (a bad CIDR / MAC simply never matches,
-  // never panics, never reaches a shell), but without this a malformed
-  // value would save and silently never fire — so mark it invalid so the
-  // user can fix it. Empty is "incomplete", not "invalid".
-  // A MAC is valid in any common style — colon, dash, or no separator —
-  // as long as it reduces to exactly 12 hex digits. The engine compares
-  // canonically (separator/case-insensitive), and we normalise on commit.
+  function addCond(d, ruleIdx) {
+    const rule = groups[d][ruleIdx];
+    if (rule.conds.length >= MAX_CONDS) return;
+    const nextRules = groups[d].map((r, i) => i === ruleIdx
+      ? { ...r, conds: [...r.conds, newCond()] }
+      : r);
+    groups = { ...groups, [d]: nextRules };
+  }
+  function removeCond(d, ruleIdx, i) {
+    const nextRules = groups[d].map((r, idx) => idx === ruleIdx
+      ? { ...r, conds: r.conds.filter((_, j) => j !== i) }
+      : r);
+    groups = { ...groups, [d]: nextRules };
+    save();
+  }
+  // Lightweight format validation for user feedback (see engine-safe
+  // comment in the original editor).
   function macHex(v) { return (v || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase(); }
   function macInvalid(v) { const s = (v || '').trim(); return s !== '' && macHex(s).length !== 12; }
-  // Canonical form: lower-case, colon-separated (b0:38:6c:54:8b:ab).
   function macCanon(v) {
     const h = macHex(v);
-    if (h.length !== 12) return (v || '').trim(); // leave as-is so the user can keep fixing
+    if (h.length !== 12) return (v || '').trim();
     return h.match(/.{2}/g).join(':');
   }
-  function onMacChange(rule) {
-    rule.when.gateway_mac = macCanon(rule.when.gateway_mac);
-    rules = rules;
+  function onMacChange(c) {
+    c.gateway_mac = macCanon(c.gateway_mac);
+    groups = groups;
     save();
+  }
+  // Toggle one weekday (0=Sunday … 6=Saturday) on a time condition row.
+  function toggleDay(c, d) {
+    const days = Array.isArray(c.days) ? c.days : [];
+    c.days = days.includes(d) ? days.filter(x => x !== d) : [...days, d];
+    groups = groups;
+    save();
+  }
+  // Lightweight IPv4 check for user feedback; "" is allowed (incomplete).
+  function gatewayIPInvalid(v) {
+    const s = (v || '').trim();
+    if (s === '') return false;
+    const m = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return true;
+    return m.slice(1).some(o => Number(o) > 255);
   }
   function cidrInvalid(v) {
     const s = (v || '').trim();
@@ -152,45 +205,43 @@
     if (!m) return true;
     const prefix = Number(m[2]);
     const ip = m[1];
-    if (ip.includes(':')) return prefix < 0 || prefix > 128; // IPv6 — trust the notation
+    if (ip.includes(':')) return prefix < 0 || prefix > 128;
     const octets = ip.split('.');
     if (octets.length !== 4) return true;
     if (octets.some(o => o === '' || !/^\d+$/.test(o) || Number(o) > 255)) return true;
     return prefix < 0 || prefix > 32;
   }
-  // Drag-to-reorder with LIVE reordering: as the cursor passes over
-  // another row the list re-sorts in real time (the standard sortable-
-  // list feel), the dragged row is dimmed, and the browser's drag image
-  // is the whole row. Rule order IS priority — the engine applies the
-  // first matching rule (top wins) — so this both reorders and re-prioritises.
+  // Drag-to-reorder WITHIN a rule card (live reordering feel).
   let dragIndex = null;
-  function onDragStart(e, i) {
+  let dragGroup = null;
+  let dragRule = null;
+  function onDragStart(e, d, ruleIdx, i) {
     dragIndex = i;
+    dragGroup = d;
+    dragRule = ruleIdx;
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {}
-    // Ghost = the full row (drag starts from the handle, so inputs stay usable).
-    const row = e.currentTarget.closest('.am-rule');
+    const row = e.currentTarget.closest('.am-cond');
     if (row) {
       try { e.dataTransfer.setDragImage(row, 24, row.offsetHeight / 2); } catch (_) {}
     }
   }
-  function onRowDragOver(e, i) {
+  function onCondDragOver(e, d, ruleIdx, i) {
+    if (dragIndex === null || dragGroup !== d || dragRule !== ruleIdx) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragIndex === null || dragIndex === i) return;
-    // Move the dragged item to this row's position, live.
-    const arr = [...rules];
+    if (dragIndex === i) return;
+    const arr = [...groups[d][ruleIdx].conds];
     const [moved] = arr.splice(dragIndex, 1);
     arr.splice(i, 0, moved);
-    rules = arr;
+    const nextRules = groups[d].map((r, idx) => idx === ruleIdx ? { ...r, conds: arr } : r);
+    groups = { ...groups, [d]: nextRules };
     dragIndex = i;
   }
   function onDragEnd() {
-    if (dragIndex !== null) { dragIndex = null; save(); }
+    if (dragIndex !== null) { dragIndex = null; dragGroup = null; dragRule = null; save(); }
   }
-  // Scroll affordance: show a fade at the top/bottom of the rule list
-  // only when there's hidden content in that direction, so it's obvious
-  // the list scrolls. Recomputed after every render and on scroll.
+  // Scroll affordance for the rules area.
   let rulesEl;
   let canScrollUp = false;
   let canScrollDown = false;
@@ -200,44 +251,48 @@
     canScrollDown = rulesEl.scrollTop + rulesEl.clientHeight < rulesEl.scrollHeight - 2;
   }
   afterUpdate(updateScroll);
-  // cleanedRule returns the normalized persisted form of a row, or null
-  // while the row's condition is incomplete. persistSet() is what goes to
-  // disk: the latest complete form of every row (cached on r._committed).
-  // A row that turns incomplete mid-edit therefore keeps its last on-disk
-  // value instead of being transiently deleted (and lost on a crash); a
-  // never-completed draft contributes nothing. Rows leave the persisted
-  // set only via removeRule() or by abandoning a draft.
-  function cleanedRule(r) {
-    const t = r.when.type;
-    let when = null;
-    if (t === 'none_match') when = { type: 'none_match' };
-    else if (t === 'ssid' && r.when.ssid.trim() !== '') when = { type: 'ssid', ssid: r.when.ssid.trim() };
-    else if (t === 'subnet' && r.when.subnet.trim() !== '') when = { type: 'subnet', subnet: r.when.subnet.trim() };
-    else if (t === 'network' && r.when.gateway_mac.trim() !== '') when = { type: 'network', gateway_mac: macCanon(r.when.gateway_mac) };
-    if (!when) return null;
-    if (r.when.label) when.label = r.when.label;
-    return { when, do: r.do };
+  // cleanedCond returns the normalized persisted form of a condition row,
+  // or null while incomplete. wifi / ethernet / none_match need no value.
+  function cleanedCond(c) {
+    const t = c.type;
+    if (t === 'none_match') return { type: 'none_match', label: c.label || '' };
+    if (t === 'wifi') return { type: 'wifi', label: c.label || '' };
+    if (t === 'ethernet') return { type: 'ethernet', label: c.label || '' };
+    if (t === 'ssid') return c.ssid.trim() !== '' ? { type: 'ssid', ssid: c.ssid.trim(), label: c.label || '' } : null;
+    if (t === 'subnet') return c.subnet.trim() !== '' ? { type: 'subnet', subnet: c.subnet.trim(), label: c.label || '' } : null;
+    if (t === 'network') return c.gateway_mac.trim() !== '' ? { type: 'network', gateway_mac: macCanon(c.gateway_mac), label: c.label || '' } : null;
+    if (t === 'gateway_ip') return c.gateway_ip.trim() !== '' ? { type: 'gateway_ip', gateway_ip: c.gateway_ip.trim(), label: c.label || '' } : null;
+    if (t === 'interface') return c.interface_name.trim() !== '' ? { type: 'interface', interface_name: c.interface_name.trim(), label: c.label || '' } : null;
+    if (t === 'time') {
+      const has = (c.start || '').trim() !== '' || (c.end || '').trim() !== '' || (c.days || []).length > 0;
+      return has ? { type: 'time', start: (c.start || '').trim(), end: (c.end || '').trim(), days: (c.days || []).slice(), label: c.label || '' } : null;
+    }
+    return null;
   }
-  function persistSet() {
+  // buildRules assembles the persisted rule array — one entry per editor
+  // rule card. Disconnect is emitted BEFORE connect so that when both
+  // actions match the tunnel disconnects (safe default — avoids connecting
+  // on a network the user asked to avoid). A rule with no complete
+  // conditions contributes no entry.
+  function buildRules() {
     const out = [];
-    for (const r of rules) {
-      const c = cleanedRule(r);
-      if (c) r._committed = c;
-      if (r._committed) out.push(r._committed);
+    for (const d of ['disconnect', 'connect']) {
+      for (const rule of groups[d]) {
+        const conds = rule.conds.map(cleanedCond).filter(Boolean);
+        if (!conds.length) continue;
+        const r = { when: conds, do: d };
+        if (rule.match === 'all') r.match = 'all';
+        out.push(r);
+      }
     }
     return out;
   }
-  // Debounced, snapshot-based save. The pending snapshot binds the rules
-  // to the tunnel they were edited for AT SCHEDULE TIME — the old code read
-  // `tunnelName` and the live `rules` when the 300ms timer fired, so closing
-  // one tunnel and opening another within the debounce window could persist
-  // the wrong tunnel's rules under the new name (issue #12). saveChain
-  // serialises overlapping saves so a fast burst can't interleave writes.
+  // Debounced, snapshot-based save (same design as before).
   let saveTimer = null;
-  let pending = null;             // { name, rules } snapshot to persist
+  let pending = null;
   let saveChain = Promise.resolve();
   function save() {
-    pending = { name: tunnelName, rules: persistSet() };
+    pending = { name: tunnelName, rules: buildRules() };
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(runSave, 300);
   }
@@ -251,20 +306,16 @@
   async function persist(snap) {
     saveError = '';
     try {
-      // Scoped, cross-process-atomic update of just this tunnel's rules.
-      // The old GetSettings → whole-object SaveSettings pair had a lost-
-      // update race: a CLI SettingsStore.Update landing between the two
-      // IPC calls was clobbered by our stale snapshot of every setting.
-      // An empty set removes the tunnel's entry (same semantics as before).
       await TunnelService.SaveAutomationRules(snap.name, snap.rules);
+      // Refresh the live indicators right away: the 3s poll would otherwise
+      // leave the rule frames judged against the PRE-save disk state, briefly
+      // highlighting the wrong card after every edit.
+      if (open && snap.name === tunnelName) refreshPreview();
     } catch (e) {
       saveError = errText(e);
       console.error('automation save:', e);
     }
   }
-  // flush persists any debounced edit immediately and waits for all
-  // in-flight/queued saves — used before switching tunnels and on close so
-  // the last edit is never lost.
   async function flush() {
     if (saveTimer) { clearTimeout(saveTimer); runSave(); }
     await saveChain;
@@ -273,81 +324,183 @@
     await flush();
     open = false;
     loadedFor = '';
+    if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
   }
-  // Live-reflect an external edit to config.json (e.g. `wireguideplus ctl
-  // automation ...`, or another window) while the editor is open — the
-  // file is the single source of truth for COMPLETE rules, so a genuine
-  // external change reloads rather than sitting on a stale in-memory copy
-  // that our next save would write back over.
-  //
-  // But the watcher also fires for this editor's OWN persist(): draft rows
-  // (incomplete condition) exist only in the UI — persistSet() keeps them
-  // off disk — so a blind reload here erased the row the user was about to
-  // fill in, ~1 s after adding it (issue #27). The saveTimer guard alone
-  // can't prevent that: the 300 ms debounce has long cleared by the time
-  // the ≤1 s mtime poll delivers the event. So reload only when disk
-  // actually disagrees with what we'd persist right now — a self-write
-  // compares equal and is ignored; a real external edit differs and reloads.
-  //
-  // normRule puts a disk rule and a persistSet() rule through the SAME
-  // normalization (load()'s type fallback, MAC canonicalization), so e.g.
-  // a dash-separated MAC written by `wireguideplus ctl` never reads as a
-  // difference from our colon form and forces a spurious reload.
-  function normRule(d) {
-    return {
-      do: d?.do || 'connect',
-      // Same fallback as load(): a disk rule that lacks a type (e.g. an old
-      // "otherwise" written as {when:{}}) must read back as none_match, not
-      // as an incomplete 'network' — otherwise diskDiffers() sees the
-      // reloaded none_match vs persisted none_match as different and
-      // triggers a spurious reload on every config_changed.
-      type: inferType(d?.when),
-      ssid: (d?.when?.ssid || '').trim(),
-      subnet: (d?.when?.subnet || '').trim(),
-      mac: macCanon(d?.when?.gateway_mac || ''),
-      label: d?.when?.label || '',
-    };
+  // ---- Live match indicators -------------------------------------------
+  // Marker semantics (same engine the helper enforces):
+  //   - conditions inside one rule are AND; rules are OR'd with
+  //     first-match-wins priority, disconnect rules before connect rules;
+  //   - per-condition "match" badge = that condition's own result, judged
+  //     individually — a rule only fires when ALL its conditions match;
+  //   - "in use" badge + winning frame = the FIRST matching rule overall
+  //     only, and only when its action actually executes; rules that also
+  //     match but rank behind it (all connect rules behind a matched
+  //     disconnect rule, later rules of the same action) stay match-only;
+  //   - none_match ("otherwise") matches exactly when no rule above it
+  //     matched.
+  // The GUI evaluates every tunnel's rules against the current network
+  // context (AutomationPreview, same wifi engine the helper uses) and
+  // reports, per rule, whether each condition matched. We poll while the
+  // editor is open so the indicators follow network changes in real time.
+  async function refreshPreview() {
+    if (!open || !tunnelName) return;
+    try {
+      const pv = await AutomationPreview();
+      const t = (pv?.tunnels || []).find(x => x.name === tunnelName);
+      if (!t) return;
+      preview = { on_wifi: pv.on_wifi, ssid: pv.ssid, decision: t.decision, rules: t.rules, interfaces: pv.interfaces };
+    } catch (e) {
+      // Network enumeration can be temporarily unavailable; keep last state.
+    }
   }
-  function diskDiffers(disk) {
-    const local = persistSet();
-    if (disk.length !== local.length) return true;
-    // Positional compare is intentional: order is rule priority.
-    return disk.some((d, i) => {
-      const a = normRule(d), b = normRule(local[i]);
-      return a.do !== b.do || a.type !== b.type || a.ssid !== b.ssid ||
-        a.subnet !== b.subnet || a.mac !== b.mac || a.label !== b.label;
-    });
+  // Rules are evaluated top-to-bottom (disconnect before connect). The first
+  // matching rule decides the outcome. We expose this so the UI can highlight
+  // the winning rule and dim/shadow lower-priority rules that also match.
+  $: winningRuleIndex = (() => {
+    const rules = preview?.rules || [];
+    for (let i = 0; i < rules.length; i++) {
+      if (rules[i].matched) return i;
+    }
+    return -1;
+  })();
+  // The decision is actually executed only for connect/disconnect. Under
+  // the manual-off latch the winning connect rule is suppressed — nothing
+  // runs, so nothing may be marked "in use" (match markers stay truthful).
+  function actionExecuted() {
+    const k = decisionKey();
+    return k === 'connect' || k === 'disconnect';
   }
-  let cfgChangedUnsub = null;
+  // A group "wins" only when the final decision belongs to that action.
+  function groupWon(d) {
+    if (!actionExecuted()) return false;
+    const win = winningRuleIndex >= 0 ? preview.rules[winningRuleIndex] : null;
+    return win && win.do === d;
+  }
+  // Rule matching is order-based: rules are OR'd with first-match-wins
+  // priority (all disconnect rules before all connect rules). A rule is
+  // the winner iff it is the first matching rule of the whole list.
+  function isWinningRule(rd) {
+    if (!rd || !rd.matched || winningRuleIndex < 0) return false;
+    const globalIdx = (preview?.rules || []).findIndex(r => r === rd);
+    return globalIdx === winningRuleIndex;
+  }
+  // "In use" = this rule's action is what the engine executes right now:
+  // it must be the first matching rule AND that action must actually run.
+  // Later rules that also match — including every connect rule behind a
+  // matched disconnect rule — are deprioritized: match-only, never used.
+  function ruleWon(d, ruleIdx) {
+    return actionExecuted() && isWinningRule(ruleDetailFor(d, ruleIdx));
+  }
+  // "Otherwise" (none_match) judgment is independent of execution: it
+  // matches exactly when no rule ABOVE it matched, i.e. its rule is the
+  // first match — even if a manual-off latch then suppresses the action.
+  function otherwiseHit(d, ruleIdx) {
+    return isWinningRule(ruleDetailFor(d, ruleIdx));
+  }
+  // Preview rules keep the persisted order (disconnect first), so the k-th
+  // PERSISTED editor rule card under an action maps to the k-th preview
+  // RuleDetail of that action. Draft rules — cards whose conditions are
+  // incomplete and therefore not persisted — have no detail and must be
+  // SKIPPED when counting; mapping naively by card index would shift every
+  // card after a draft onto the wrong detail and light up the wrong rule
+  // frame even though the engine's decision is correct.
+  function ruleDetailsFor(d) {
+    return (preview?.rules || []).filter(r => r.do === d);
+  }
+  function isPersistedRule(rule) {
+    return rule.conds.map(cleanedCond).filter(Boolean).length > 0;
+  }
+  function ruleDetailFor(d, ruleIdx) {
+    const details = ruleDetailsFor(d);
+    const grp = groups[d] || [];
+    let k = 0; // index among this action's persisted rules
+    for (let i = 0; i < grp.length; i++) {
+      if (!isPersistedRule(grp[i])) continue;
+      if (i === ruleIdx) return details[k] || null;
+      k++;
+    }
+    return null;
+  }
+  // Index of a condition row within the PERSISTED rule's conditions array
+  // (incomplete rows are filtered out, so the live indicator must skip them).
+  function condIndexInRule(rule, i) {
+    let idx = 0;
+    for (let j = 0; j <= i; j++) {
+      if (!cleanedCond(rule.conds[j])) continue;
+      if (j === i) return idx;
+      idx++;
+    }
+    return -1;
+  }
+  // Whether this condition row actually matches the current network. For
+  // concrete conditions we use the backend per-condition result (each row
+  // is judged individually even when the AND rule as a whole does not
+  // match); for the "otherwise" fallback the match judgment is "no rule
+  // above mine matched", independent of whether the action then executes.
+  function condNetworkMatched(d, ruleIdx, i) {
+    const c = groups[d][ruleIdx].conds[i];
+    if (c.type === 'none_match') return otherwiseHit(d, ruleIdx);
+    const rd = ruleDetailFor(d, ruleIdx);
+    if (!rd) return false;
+    const idx = condIndexInRule(groups[d][ruleIdx], i);
+    if (idx < 0) return false;
+    return !!rd.conditions?.[idx]?.matched;
+  }
   onMount(() => {
+    refreshPreview();
+    previewTimer = setInterval(refreshPreview, 3000);
     cfgChangedUnsub = Events.On('config_changed', async () => {
-      // Capture the tunnel so a switch mid-await can't compare or load
-      // across tunnels; busy() bundles every reason to leave the user's
-      // local state alone (closed, switched, typing, save queued, or a
-      // live drag reorder that hasn't been saved yet).
       const name = tunnelName;
       const busy = () =>
         !open || tunnelName !== name || saveTimer !== null || pending || dragIndex !== null;
       if (!name || busy()) return;
       try {
-        await saveChain; // let an in-flight persist settle before comparing
+        await saveChain;
         const s = await TunnelService.GetSettings();
-        if (busy()) return; // state moved while we awaited
+        if (busy()) return;
         const disk = (s?.automation?.per_tunnel_rules || {})[name] || [];
         if (!diskDiffers(disk)) return;
       } catch (e) {
-        // Can't tell what's on disk — keep the user's in-progress state
-        // rather than risk wiping it with a reload that would also fail.
         console.error('automation config_changed check:', e);
         return;
       }
       load(name);
     });
   });
+  let cfgChangedUnsub = null;
   onDestroy(() => {
+    if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
     if (cfgChangedUnsub) cfgChangedUnsub();
   });
+  // Disk comparison: normalize a disk rule array and the local editor state
+  // into the same shape and compare, so an external edit triggers a reload.
+  function normRules(rules) {
+    return (rules || []).map(r => ({
+      do: r.do,
+      match: r.match === 'all' ? 'all' : '',
+      when: (Array.isArray(r.when) ? r.when : (r.when ? [r.when] : [])).map(w => ({
+        type: w?.type || inferType(w),
+        ssid: (w?.ssid || '').trim(),
+        subnet: (w?.subnet || '').trim(),
+        mac: w?.gateway_mac ? macCanon(w?.gateway_mac) : '',
+        gateway_ip: (w?.gateway_ip || '').trim(),
+        interface_name: (w?.interface_name || '').trim(),
+        start: (w?.start || '').trim(),
+        end: (w?.end || '').trim(),
+        days: Array.isArray(w?.days) ? w.days.slice() : [],
+        label: w?.label || '',
+      })),
+    }));
+  }
+  function diskDiffers(disk) {
+    return JSON.stringify(normRules(disk)) !== JSON.stringify(normRules(buildRules()));
+  }
+  function decisionKey() {
+    if (!preview || !preview.decision) return 'unmanaged';
+    return preview.decision; // 'connect' | 'disconnect' | 'unmanaged' | 'manual-off'
+  }
 </script>
+
 <svelte:window on:keydown={(e) => e.key === 'Escape' && open && close()} />
 {#if open}
   <div class="am-backdrop" on:click={close}>
@@ -362,64 +515,142 @@
       </div>
       <p class="am-hint">{$t('automation.hint')}</p>
       <SSIDPermissionBanner {TunnelService} />
+      <!-- Live decision strip -->
+      <div class="am-live">
+        <span class="am-live-dot am-live-dot-{decisionKey()}"></span>
+        <span class="am-live-label">{$t('automation.live_matching')}</span>
+        <span class="am-live-network">{preview?.ssid || '—'}</span>
+        <span class="am-live-decision">{decisionKey() === 'unmanaged' ? $t('automation.decision_unmanaged') : $t('automation.decision_' + decisionKey())}</span>
+      </div>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
           <span class="am-chevron am-chevron-up"><Icon name="chevron-down" size={15} strokeWidth={2.5} /></span>
         </div>
         <div class="am-rules" bind:this={rulesEl} on:scroll={updateScroll}>
-        {#if rules.length === 0}
-          <div class="am-empty">{$t('automation.empty')}</div>
-        {:else}
-          {#each rules as rule, i (rule._id)}
-            <div class="am-rule" class:am-dragging={dragIndex === i}
-              on:dragover={(e) => onRowDragOver(e, i)}
-              on:dragend={onDragEnd}>
-              <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
-                on:dragstart={(e) => onDragStart(e, i)}>⋮⋮</span>
-              <span class="am-priority">{i + 1}</span>
-              <select class="am-do" bind:value={rule.do} on:change={save} aria-label={$t('automation.action')}>
-                <option value="connect">{$t('automation.connect')}</option>
-                <option value="disconnect">{$t('automation.disconnect')}</option>
-              </select>
-              <span class="am-when">{$t('automation.when')}</span>
-              <select class="am-type" bind:value={rule.when.type} on:change={save} aria-label={$t('automation.condition')}>
-                <option value="network">{$t('automation.cond_network')}</option>
-                <option value="subnet">{$t('automation.cond_subnet')}</option>
-                <option value="ssid">{$t('automation.cond_ssid')}</option>
-                <option value="none_match">{$t('automation.cond_none')}</option>
-              </select>
-              {#if rule.when.type === 'network'}
-                <input
-                  class="am-val" class:am-invalid={macInvalid(rule.when.gateway_mac)}
-                  list="am-mac-list"
-                  placeholder={currentGatewayMAC || $t('automation.mac_placeholder')}
-                  title={macInvalid(rule.when.gateway_mac) ? $t('automation.mac_invalid') : ''}
-                  bind:value={rule.when.gateway_mac}
-                  on:input={save} on:change={() => onMacChange(rule)} />
-              {:else if rule.when.type === 'subnet'}
-                <input
-                  class="am-val" class:am-invalid={cidrInvalid(rule.when.subnet)}
-                  list="am-subnet-list"
-                  placeholder={currentSubnets[0] || '192.168.0.0/24'}
-                  title={cidrInvalid(rule.when.subnet) ? $t('automation.subnet_invalid') : ''}
-                  bind:value={rule.when.subnet}
-                  on:input={save} on:change={save} />
-              {:else if rule.when.type === 'ssid'}
-                <input
-                  class="am-val"
-                  list="am-ssid-list"
-                  placeholder={$t('automation.ssid_select_hint')}
-                  bind:value={rule.when.ssid}
-                  on:input={save}
-                  on:change={save}
-                />
+          {#each ['disconnect', 'connect'] as d}
+            {@const grpRules = groups[d]}
+            <div class="am-group">
+              <div class="am-group-header">
+                <span class="am-group-dot am-group-dot-{d}" class:am-group-matched={groupWon(d)}></span>
+                <span class="am-group-title">{$t(d === 'connect' ? 'automation.section_connect' : 'automation.section_disconnect')}</span>
+                <button class="am-add-rule" on:click={() => addRule(d)}>
+                  <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_rule')}
+                </button>
+              </div>
+              {#if grpRules.length === 0}
+                <div class="am-empty am-group-empty">{$t(d === 'connect' ? 'automation.empty_connect' : 'automation.empty_disconnect')}</div>
               {:else}
-                <span class="am-val am-val-none">{$t('automation.cond_none_desc')}</span>
+                {#each grpRules as rule, ruleIdx (rule._gid)}
+                  {#if ruleIdx > 0}
+                    <div class="am-rule-or">{$t('automation.rule_or')}</div>
+                  {/if}
+                  <div class="am-rule" class:am-rule-won={ruleWon(d, ruleIdx)}>
+                    <div class="am-rule-head">
+                      <span class="am-rule-num">{$t('automation.rule')} {ruleIdx + 1}</span>
+                      <span class="am-match-badge" title={$t('automation.group_all_hint')}>{$t('automation.match_all')}</span>
+                      <button class="am-remove-rule" on:click={() => removeRule(d, ruleIdx)} title={$t('automation.remove_rule')} aria-label="remove rule"><Icon name="x" size={13} strokeWidth={2} /></button>
+                    </div>
+                    {#if rule.conds.length === 0}
+                      <div class="am-empty am-rule-empty">{$t('automation.rule_empty')}</div>
+                    {:else}
+                      {#each rule.conds as c, i (c._id)}
+                        {@const net = condNetworkMatched(d, ruleIdx, i)}
+                        {@const use = ruleWon(d, ruleIdx)}
+                        <div class="am-cond" class:am-dragging={dragIndex === i && dragGroup === d && dragRule === ruleIdx}
+                          on:dragover={(e) => onCondDragOver(e, d, ruleIdx, i)}
+                          on:dragend={onDragEnd}>
+                          <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
+                            on:dragstart={(e) => onDragStart(e, d, ruleIdx, i)}>⋮⋮</span>
+                          <select class="am-type" bind:value={c.type} on:change={save} aria-label={$t('automation.condition')}>
+                            <option value="network">{$t('automation.cond_network')}</option>
+                            <option value="subnet">{$t('automation.cond_subnet')}</option>
+                            <option value="ssid">{$t('automation.cond_ssid')}</option>
+                            <option value="wifi">{$t('automation.cond_wifi')}</option>
+                            <option value="gateway_ip">{$t('automation.cond_gateway_ip')}</option>
+                            <option value="interface">{$t('automation.cond_interface')}</option>
+                            <option value="ethernet">{$t('automation.cond_ethernet')}</option>
+                            <option value="time">{$t('automation.cond_time')}</option>
+                            <option value="none_match">{$t('automation.cond_none')}</option>
+                          </select>
+                          {#if c.type === 'network'}
+                            <input
+                              class="am-val" class:am-invalid={macInvalid(c.gateway_mac)}
+                              list="am-mac-list"
+                              placeholder={currentGatewayMAC || $t('automation.mac_placeholder')}
+                              title={macInvalid(c.gateway_mac) ? $t('automation.mac_invalid') : ''}
+                              bind:value={c.gateway_mac}
+                              on:input={save} on:change={() => onMacChange(c)} />
+                          {:else if c.type === 'subnet'}
+                            <input
+                              class="am-val" class:am-invalid={cidrInvalid(c.subnet)}
+                              list="am-subnet-list"
+                              placeholder={currentSubnets[0] || '192.168.0.0/24'}
+                              title={cidrInvalid(c.subnet) ? $t('automation.subnet_invalid') : ''}
+                              bind:value={c.subnet}
+                              on:input={save} on:change={save} />
+                          {:else if c.type === 'ssid'}
+                            <input
+                              class="am-val"
+                              list="am-ssid-list"
+                              placeholder={$t('automation.ssid_select_hint')}
+                              bind:value={c.ssid}
+                              on:input={save}
+                              on:change={save}
+                            />
+                          {:else if c.type === 'gateway_ip'}
+                            <input
+                              class="am-val" class:am-invalid={gatewayIPInvalid(c.gateway_ip)}
+                              list="am-gwip-list"
+                              placeholder={preview?.gateway_ip || '192.168.0.1'}
+                              title={gatewayIPInvalid(c.gateway_ip) ? $t('automation.ip_invalid') : ''}
+                              bind:value={c.gateway_ip}
+                              on:input={save}
+                              on:change={save}
+                            />
+                          {:else if c.type === 'interface'}
+                            <input
+                              class="am-val"
+                              list="am-iface-list"
+                              placeholder={$t('automation.interface_placeholder')}
+                              bind:value={c.interface_name}
+                              on:input={save}
+                              on:change={save}
+                            />
+                          {:else if c.type === 'ethernet'}
+                            <span class="am-val am-val-none">{$t('automation.cond_ethernet_desc')}</span>
+                          {:else if c.type === 'time'}
+                            <div class="am-time">
+                              <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={save} />
+                              <span class="am-time-dash">–</span>
+                              <input type="time" class="am-clock" aria-label={$t('automation.time_end')} bind:value={c.end} on:change={save} />
+                              <div class="am-days" role="group" aria-label={$t('automation.days_label')}>
+                                {#each [0, 1, 2, 3, 4, 5, 6] as d}
+                                  <button type="button" class="am-day" class:on={(c.days || []).includes(d)} on:click={() => toggleDay(c, d)}>{$t('automation.day_' + d)}</button>
+                                {/each}
+                              </div>
+                            </div>
+                          {:else}
+                            <span class="am-val am-val-none">{c.type === 'wifi' ? $t('automation.cond_wifi_desc') : $t('automation.cond_none_desc')}</span>
+                          {/if}
+                          <span
+                            class="am-live-cond"
+                            title={net ? (use ? $t('automation.status_active') : $t('automation.status_shadowed')) : $t('automation.status_nomatch')}>
+                            <span class="am-badge am-badge-match" class:am-yes={net} class:am-no={!net}>{$t(net ? 'automation.label_match' : 'automation.label_no_match')}</span>
+                            <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_active' : 'automation.label_inactive')}</span>
+                          </span>
+                          <button class="am-remove" on:click={() => removeCond(d, ruleIdx, i)} aria-label="remove condition"><Icon name="x" size={12} strokeWidth={2} /></button>
+                        </div>
+                      {/each}
+                    {/if}
+                    <button class="am-add-cond" on:click={() => addCond(d, ruleIdx)} disabled={rule.conds.length >= MAX_CONDS}>
+                      <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_condition')}
+                    </button>
+                  </div>
+                {/each}
               {/if}
-              <button class="am-remove" on:click={() => removeRule(i)} aria-label="remove rule"><Icon name="x" size={12} strokeWidth={2} /></button>
             </div>
           {/each}
-        {/if}
+          <p class="am-priority-note">{$t('automation.disconnect_priority_hint')}</p>
         </div>
         <div class="am-fade am-fade-bottom" class:show={canScrollDown}>
           <span class="am-chevron"><Icon name="chevron-down" size={15} strokeWidth={2.5} /></span>
@@ -434,10 +665,13 @@
       <datalist id="am-ssid-list">
         {#each ssidSuggestions as ssid}<option value={ssid}></option>{/each}
       </datalist>
+      <datalist id="am-gwip-list">
+        {#if preview?.gateway_ip}<option value={preview.gateway_ip}></option>{/if}
+      </datalist>
+      <datalist id="am-iface-list">
+        {#each interfaceSuggestions as name}<option value={name}></option>{/each}
+      </datalist>
       {#if saveError}<div class="am-error">{saveError}</div>{/if}
-      <button class="am-add" on:click={addRule} disabled={rules.length >= MAX_RULES}>
-        <Icon name="plus" size={13} strokeWidth={2.25} /> {$t('automation.add_rule')}
-      </button>
     </div>
   </div>
 {/if}
@@ -449,9 +683,7 @@
     padding: 24px;
   }
   .am-dialog {
-    /* Fixed size — the dialog never grows/shrinks with the rule count.
-       Rules scroll inside .am-rules; a few rules just leave empty space. */
-    width: 100%; max-width: 560px; height: 540px; max-height: 88vh;
+    width: 100%; max-width: 580px; height: 600px; max-height: 92vh;
     display: flex; flex-direction: column;
     background: var(--bg-elevated, var(--bg-secondary));
     border: 1px solid var(--border);
@@ -470,12 +702,23 @@
   .am-sub { margin: 2px 0 0; font: 400 12px/1.2 var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .am-close { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; }
   .am-close:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .am-hint { margin: 12px 0; font: 400 12px/1.5 var(--font-sans); color: var(--text-secondary); flex-shrink: 0; }
-  /* The one scrolling region: fills the space between the fixed header
-     and the fixed add-button, so the dialog stays a constant size. The
-     wrap hosts the top/bottom scroll-affordance fades. */
+  .am-hint { margin: 12px 0 0; font: 400 12px/1.5 var(--font-sans); color: var(--text-secondary); flex-shrink: 0; }
+  .am-live {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    margin: 10px 0 4px; padding: 7px 10px;
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border); border-radius: 8px;
+    font: 400 11px/1.3 var(--font-sans); color: var(--text-secondary);
+  }
+  .am-live-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
+  .am-live-dot-connect { background: var(--green, #34c759); }
+  .am-live-dot-disconnect { background: var(--orange, #ff9f0a); }
+  .am-live-dot-manual-off { background: var(--orange, #ff9f0a); }
+  .am-live-dot-unmanaged { background: var(--text-muted); }
+  .am-live-network { font-family: var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-live-decision { margin-left: auto; color: var(--text-muted); white-space: nowrap; }
   .am-rules-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
-  .am-rules { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 4px 0; padding-right: 4px; }
+  .am-rules { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; margin: 4px 0; padding-right: 4px; }
   .am-fade {
     position: absolute; left: 0; right: 4px; height: 52px; pointer-events: none;
     opacity: 0; z-index: 2;
@@ -486,8 +729,6 @@
     .am-chevron { animation: am-bob 1.4s ease-in-out infinite; }
   }
   .am-fade.show { opacity: 1; }
-  /* Stronger, taller gradient — stays near-solid at the edge so hidden
-     rows are clearly cut off, not just barely tinted. */
   .am-fade-top {
     top: 0; align-items: flex-start; padding-top: 2px;
     background: linear-gradient(to bottom,
@@ -513,49 +754,118 @@
     0%, 100% { transform: rotate(180deg) translateY(0); }
     50% { transform: rotate(180deg) translateY(3px); }
   }
-  .am-empty { padding: 16px; text-align: center; font: 400 12px var(--font-sans); color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px; }
+  .am-group { display: flex; flex-direction: column; gap: 6px; }
+  .am-group-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 0 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .am-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
+  .am-group-dot-connect.am-group-matched { background: var(--green, #34c759); }
+  .am-group-dot-disconnect.am-group-matched { background: var(--orange, #ff9f0a); }
+  .am-group-title { font: 600 12px/1.2 var(--font-sans); color: var(--text-primary); }
+  .am-add-rule {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+    font: 500 11px var(--font-sans); color: var(--accent);
+    background: transparent; border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 7px; padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+  }
+  .am-add-rule:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .am-rule {
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 8px 8px 6px;
+    background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
+    border: 1px solid var(--border); border-radius: 10px;
+    transition: box-shadow 120ms ease, border-color 120ms ease;
+  }
+  .am-rule-won {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .am-rule-head { display: flex; align-items: center; gap: 8px; }
+  .am-rule-num {
+    font: 600 10px/1 var(--font-sans); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+  }
+  .am-match-badge {
+    margin-left: auto;
+    display: inline-flex; align-items: center; flex-shrink: 0;
+    font: 500 10px/1 var(--font-sans); color: var(--text-muted);
+    padding: 4px 9px;
+    background: color-mix(in srgb, var(--bg-primary) 65%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .am-remove-rule { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0; }
+  .am-remove-rule:hover { background: color-mix(in srgb, var(--red, #ff3b30) 18%, transparent); color: var(--red, #ff3b30); }
+  .am-rule-or {
+    text-align: center; font: 600 10px/1 var(--font-sans); color: var(--text-muted);
+    letter-spacing: 0.08em; margin: 0; flex-shrink: 0;
+  }
+  .am-rule-empty { margin: 2px 0 4px; }
+  .am-rule .am-add-cond { align-self: flex-start; margin-top: 2px; }
+  .am-group-empty { margin: 2px 0; }
+  .am-empty { padding: 12px; text-align: center; font: 400 11px var(--font-sans); color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px; }
+  .am-cond {
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     padding: 6px; border: 1px solid transparent; border-radius: 9px;
   }
-  .am-rule.am-dragging { opacity: 0.35; }
+  .am-cond.am-dragging { opacity: 0.35; }
   @media (prefers-reduced-motion: no-preference) {
-    .am-rule { transition: opacity 120ms ease; }
+    .am-cond { transition: opacity 120ms ease; }
   }
   .am-handle {
     cursor: grab; color: var(--text-muted); font: 700 12px/1 var(--font-sans);
     letter-spacing: -2px; padding: 0 2px; user-select: none; flex-shrink: 0;
   }
   .am-handle:active { cursor: grabbing; }
-  .am-priority {
-    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
-    display: inline-flex; align-items: center; justify-content: center;
-    font: 600 10px var(--font-sans); color: var(--text-secondary);
-    background: color-mix(in srgb, var(--text-muted) 18%, transparent);
-  }
-  .am-rule select, .am-rule input {
+  .am-cond select, .am-cond input {
     font: 400 12px var(--font-sans); color: var(--text-primary);
     background: var(--bg-primary); border: 1px solid var(--border);
     border-radius: 7px; padding: 5px 7px;
   }
-  .am-do { font-weight: 600; }
-  .am-when { font: 400 11px var(--font-sans); color: var(--text-muted); }
   .am-val { flex: 1; min-width: 120px; }
   .am-val-none { color: var(--text-muted); border: 0 !important; background: transparent !important; }
-  .am-rule input.am-invalid {
+  .am-time {
+    flex: 1; min-width: 120px;
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  }
+  .am-clock {
+    font: 400 12px var(--font-sans); color: var(--text-primary);
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: 7px; padding: 4px 5px;
+  }
+  .am-clock::-webkit-calendar-picker-indicator { opacity: 0.6; }
+  .am-time-dash { color: var(--text-muted); font-size: 12px; }
+  .am-days { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+  .am-day {
+    appearance: none; -webkit-appearance: none;
+    min-width: 22px; height: 22px; border-radius: 5px;
+    font: 600 10px/1 var(--font-sans); color: var(--text-muted);
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border); cursor: pointer; padding: 0 4px;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .am-day:hover { color: var(--text-primary); }
+  .am-day.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .am-cond input.am-invalid {
     border-color: var(--error-text, #ff453a);
     background: color-mix(in srgb, var(--error-text, #ff453a) 8%, var(--bg-primary));
   }
+  .am-live-cond {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 3px;
+  }
+  .am-badge {
+    font: 500 9px/1 var(--font-sans);
+    padding: 2px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .am-badge.am-yes { color: #fff; background: var(--green, #34c759); }
+  .am-badge.am-no { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
+  .am-badge-match.am-no { color: #fff; background: color-mix(in srgb, var(--red, #ff3b30) 72%, transparent); }
   .am-remove { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0; }
   .am-remove:hover { background: color-mix(in srgb, var(--red, #ff3b30) 18%, transparent); color: var(--red, #ff3b30); }
-  .am-add {
-    display: inline-flex; align-self: flex-start; align-items: center; gap: 6px;
-    margin-top: 12px; flex-shrink: 0;
-    font: 500 12px var(--font-sans); color: var(--accent);
-    background: transparent; border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
-    border-radius: 8px; padding: 7px 12px; cursor: pointer;
-  }
-  .am-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-  .am-add:disabled { opacity: 0.45; cursor: not-allowed; }
+  .am-priority-note { margin: 0; font: 400 10px/1.4 var(--font-sans); color: var(--text-muted); text-align: center; flex-shrink: 0; }
   .am-error { margin-top: 8px; font: 400 12px var(--font-sans); color: var(--error-text, #ff453a); flex-shrink: 0; }
 </style>

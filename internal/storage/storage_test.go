@@ -353,7 +353,7 @@ func TestRenameAndDeleteTunnelRules(t *testing.T) {
 	if err := st.Update(func(s *Settings) error {
 		s.EnsureAutomation()
 		s.Automation.PerTunnel["old"] = []wifi.Rule{
-			{When: wifi.Condition{Type: wifi.CondNoneMatch}, Do: wifi.ActionConnect},
+			{When: []wifi.Condition{{Type: wifi.CondNoneMatch}}, Do: wifi.ActionConnect},
 		}
 		return nil
 	}); err != nil {

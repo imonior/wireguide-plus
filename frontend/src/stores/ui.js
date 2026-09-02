@@ -22,7 +22,7 @@ let saveTimer = null;
 
 // saveListPrefs persists the list-ordering prefs. It re-fetches the
 // freshest settings and overlays only its own fields (the same
-// spread-fresh pattern TunnelDetail uses for wifi_rules) so it never
+// spread-fresh pattern TunnelDetail uses for automation rules) so it never
 // clobbers edits another screen made to settings.json. Debounced.
 export function saveListPrefs() {
   if (saveTimer) clearTimeout(saveTimer);

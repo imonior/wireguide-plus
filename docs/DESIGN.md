@@ -234,7 +234,7 @@ migrated once into this model by `Settings.EnsureAutomation`.
 ### Evaluation triggers (helper-side)
 
 Rules are evaluated **entirely inside the helper** (`reevaluateAutomation`
-in `internal/helper/wifi_rules.go`), so they fire whether or not a GUI is
+in `internal/helper/automation_rules.go`), so they fire whether or not a GUI is
 alive. `reevalMu` serialises evaluations. Triggers:
 
 ```

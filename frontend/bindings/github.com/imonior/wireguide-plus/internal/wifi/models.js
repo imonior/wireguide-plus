@@ -133,7 +133,55 @@ export class Condition {
 }
 
 /**
- * Rule is one condition→action pair.
+ * ConditionDetail reports one condition's match outcome, for the editor's
+ * live match indicators. Value is the condition's human-readable target
+ * (SSID / CIDR / MAC), empty for wifi and none_match.
+ */
+export class ConditionDetail {
+    /**
+     * Creates a new ConditionDetail instance.
+     * @param {Partial<ConditionDetail>} [$$source = {}] - The source object to create the ConditionDetail.
+     */
+    constructor($$source = {}) {
+        if (!("type" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["type"] = "";
+        }
+        if (!("value" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["value"] = "";
+        }
+        if (!("matched" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["matched"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ConditionDetail instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ConditionDetail}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ConditionDetail(/** @type {Partial<ConditionDetail>} */($$parsedSource));
+    }
+}
+
+/**
+ * Rule is one condition→action pair. A rule carries one or more
+ * conditions; Match says how they combine.
  */
 export class Rule {
     /**
@@ -143,10 +191,27 @@ export class Rule {
     constructor($$source = {}) {
         if (!("when" in $$source)) {
             /**
+             * When lists the conditions that must hold for the rule to fire.
              * @member
-             * @type {Condition}
+             * @type {Condition[]}
              */
-            this["when"] = (new Condition());
+            this["when"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Match says how the conditions combine:
+             * 
+             *   "" (or "any", the default) — OR: any single matching condition
+             *       fires the rule.
+             *   "all" — AND: every condition must match for the rule to fire.
+             * 
+             * A none_match condition is unconditional at its position, so under
+             * "any" it makes the whole rule fire immediately and under "all" it
+             * contributes nothing (a rule of only none_match always fires).
+             * @member
+             * @type {string | undefined}
+             */
+            this["match"] = undefined;
         }
         if (!("do" in $$source)) {
             /**
@@ -165,12 +230,70 @@ export class Rule {
      * @returns {Rule}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType3;
+        const $$createField0_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("when" in $$parsedSource) {
             $$parsedSource["when"] = $$createField0_0($$parsedSource["when"]);
         }
         return new Rule(/** @type {Partial<Rule>} */($$parsedSource));
+    }
+}
+
+/**
+ * RuleDetail reports how one rule (and each of its conditions) fared
+ * against the current network context. Matched is the overall rule
+ * outcome after applying Match (AND/OR).
+ */
+export class RuleDetail {
+    /**
+     * Creates a new RuleDetail instance.
+     * @param {Partial<RuleDetail>} [$$source = {}] - The source object to create the RuleDetail.
+     */
+    constructor($$source = {}) {
+        if (!("do" in $$source)) {
+            /**
+             * @member
+             * @type {Action}
+             */
+            this["do"] = Action.$zero;
+        }
+        if (!("match_all" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["match_all"] = false;
+        }
+        if (!("matched" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["matched"] = false;
+        }
+        if (!("conditions" in $$source)) {
+            /**
+             * @member
+             * @type {ConditionDetail[]}
+             */
+            this["conditions"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RuleDetail instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RuleDetail}
+     */
+    static createFrom($$source = {}) {
+        const $$createField3_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("conditions" in $$parsedSource) {
+            $$parsedSource["conditions"] = $$createField3_0($$parsedSource["conditions"]);
+        }
+        return new RuleDetail(/** @type {Partial<RuleDetail>} */($$parsedSource));
     }
 }
 
@@ -212,8 +335,8 @@ export class Rules {
      * @returns {Rules}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType6;
+        const $$createField0_0 = $$createType7;
+        const $$createField1_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("trusted_ssids" in $$parsedSource) {
             $$parsedSource["trusted_ssids"] = $$createField0_0($$parsedSource["trusted_ssids"]);
@@ -293,7 +416,7 @@ export class TunnelSSIDs {
      * @returns {TunnelSSIDs}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType4;
+        const $$createField0_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("auto_connect_ssids" in $$parsedSource) {
             $$parsedSource["auto_connect_ssids"] = $$createField0_0($$parsedSource["auto_connect_ssids"]);
@@ -307,6 +430,9 @@ const $$createType0 = Rule.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Map($Create.Any, $$createType1);
 const $$createType3 = Condition.createFrom;
-const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = TunnelSSIDs.createFrom;
-const $$createType6 = $Create.Map($Create.Any, $$createType5);
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = ConditionDetail.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = $Create.Array($Create.Any);
+const $$createType8 = TunnelSSIDs.createFrom;
+const $$createType9 = $Create.Map($Create.Any, $$createType8);

@@ -70,6 +70,8 @@ func (h *Helper) currentNetworkContext() wifi.NetworkContext {
 		SSID:        ssid,
 		PhysicalIPs: wifi.PhysicalInterfaceIPs(),
 		GatewayMAC:  gw,
+		GatewayIP:   wifi.GatewayIP(),
+		Interfaces:  wifi.PhysicalInterfaces(),
 	}
 }
 
@@ -204,7 +206,13 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 		manualOff[n] = true
 	}
 
-	resp := ipc.AutomationPreviewResponse{SSID: ctx.SSID, PhysicalIPs: ipStrs, GatewayMAC: ctx.GatewayMAC}
+	resp := ipc.AutomationPreviewResponse{
+		SSID:        ctx.SSID,
+		PhysicalIPs: ipStrs,
+		GatewayMAC:  ctx.GatewayMAC,
+		GatewayIP:   ctx.GatewayIP,
+		Interfaces:  ctx.Interfaces,
+	}
 	if auto != nil {
 		for _, name := range auto.TunnelNames() {
 			rules := auto.PerTunnel[name]

@@ -70,7 +70,7 @@ with or without the GUI.
     (`internal/firewall/wfp_windows.go`)
   - `reconnect.Monitor`: reconnect with firewall suspend/resume
   - `wifi.Monitor` + rule evaluation: SSID/subnet-triggered auto-connect
-    (`internal/helper/wifi_rules.go`)
+    (`internal/helper/automation_rules.go`)
   - Crash recovery: `tunnel.RecoverFromCrash` + `fw.RecoverFromCrash`
   - Event broadcast: `ipc.Server.Broadcast` (status diff, WiFi change, reconnect state)
   - Restores persisted settings on start (health check, pin-interface, log level)
@@ -87,7 +87,7 @@ with or without the GUI.
   - Connection cap 32 (protects against same-UID resource exhaustion)
 - **Data dir**: `systemDataDir()` = `%PROGRAMDATA%\wireguideplus` (helper state)
 - **User config**: `storage.TunnelStore` in the user's home. ⚠️ On Windows,
-  `deriveUserAppSupport` (`internal/helper/wifi_rules_windows.go`) locates the
+  `deriveUserAppSupport` (`internal/helper/userdir_windows.go`) locates the
   user dir via the `APPDATA` env var passed through UAC — **an SCM-started
   service has no user environment**, so this path breaks under the service;
   Phase 2 must address it

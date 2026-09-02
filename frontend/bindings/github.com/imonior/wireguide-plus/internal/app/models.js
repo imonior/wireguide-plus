@@ -9,6 +9,132 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as domain$0 from "../domain/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as wifi$0 from "../wifi/models.js";
+
+/**
+ * AutomationPreviewResponse is the GUI-computed read-only evaluation of
+ * every tunnel's Automation rules against the current network context. It
+ * carries per-rule and per-condition match detail so the editor can render
+ * live "this condition matches now" indicators without re-implementing the
+ * engine's matching in JS. Computed locally (no helper round-trip) and
+ * identical in spirit to the helper's ipc.AutomationPreviewResponse.
+ */
+export class AutomationPreviewResponse {
+    /**
+     * Creates a new AutomationPreviewResponse instance.
+     * @param {Partial<AutomationPreviewResponse>} [$$source = {}] - The source object to create the AutomationPreviewResponse.
+     */
+    constructor($$source = {}) {
+        if (!("on_wifi" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["on_wifi"] = false;
+        }
+        if (!("ssid" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["ssid"] = "";
+        }
+        if (!("physical_ips" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["physical_ips"] = [];
+        }
+        if (!("gateway_mac" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["gateway_mac"] = "";
+        }
+        if (!("tunnels" in $$source)) {
+            /**
+             * @member
+             * @type {AutomationTunnelPreview[]}
+             */
+            this["tunnels"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AutomationPreviewResponse instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AutomationPreviewResponse}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        const $$createField4_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("physical_ips" in $$parsedSource) {
+            $$parsedSource["physical_ips"] = $$createField2_0($$parsedSource["physical_ips"]);
+        }
+        if ("tunnels" in $$parsedSource) {
+            $$parsedSource["tunnels"] = $$createField4_0($$parsedSource["tunnels"]);
+        }
+        return new AutomationPreviewResponse(/** @type {Partial<AutomationPreviewResponse>} */($$parsedSource));
+    }
+}
+
+/**
+ * AutomationTunnelPreview is one tunnel's evaluated rules plus the overall
+ * decision Evaluate would reach (accounting for the manual-off latch).
+ */
+export class AutomationTunnelPreview {
+    /**
+     * Creates a new AutomationTunnelPreview instance.
+     * @param {Partial<AutomationTunnelPreview>} [$$source = {}] - The source object to create the AutomationTunnelPreview.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("rules" in $$source)) {
+            /**
+             * @member
+             * @type {wifi$0.RuleDetail[]}
+             */
+            this["rules"] = [];
+        }
+        if (!("decision" in $$source)) {
+            /**
+             * "connect" | "disconnect" | "unmanaged" | "manual-off"
+             * @member
+             * @type {string}
+             */
+            this["decision"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AutomationTunnelPreview instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AutomationTunnelPreview}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("rules" in $$parsedSource) {
+            $$parsedSource["rules"] = $$createField1_0($$parsedSource["rules"]);
+        }
+        return new AutomationTunnelPreview(/** @type {Partial<AutomationTunnelPreview>} */($$parsedSource));
+    }
+}
 
 /**
  * ConnectionStatus is re-exported from the domain package so Wails bindings
@@ -112,7 +238,7 @@ export class DNSLeakResult {
      * @returns {DNSLeakResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType1;
+        const $$createField1_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("dns_servers" in $$parsedSource) {
             $$parsedSource["dns_servers"] = $$createField1_0($$parsedSource["dns_servers"]);
@@ -245,7 +371,7 @@ export class KnownSSIDs {
      * @returns {KnownSSIDs}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType2;
+        const $$createField1_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("known" in $$parsedSource) {
             $$parsedSource["known"] = $$createField1_0($$parsedSource["known"]);
@@ -304,8 +430,8 @@ export class PublicDNSRefresh {
      * @returns {PublicDNSRefresh}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType2;
-        const $$createField1_0 = $$createType2;
+        const $$createField0_0 = $$createType0;
+        const $$createField1_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("fetched" in $$parsedSource) {
             $$parsedSource["fetched"] = $$createField0_0($$parsedSource["fetched"]);
@@ -582,7 +708,7 @@ export class UpdateState {
      * @returns {UpdateState}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("dismissed_versions" in $$parsedSource) {
             $$parsedSource["dismissed_versions"] = $$createField3_0($$parsedSource["dismissed_versions"]);
@@ -630,6 +756,10 @@ export class ZipImportResult {
 }
 
 // Private type creation functions
-const $$createType0 = DNSServer.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Array($Create.Any);
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = AutomationTunnelPreview.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = wifi$0.RuleDetail.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = DNSServer.createFrom;
+const $$createType6 = $Create.Array($$createType5);

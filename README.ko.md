@@ -12,10 +12,10 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 
 [English](README.md) | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | **한국어** | [日本語](README.ja.md)
 
-> **Windows 10 / 11(x64, x86 32비트 및 ARM64)을 완전히 지원**합니다. macOS(Apple
-> Silicon)와 Linux(x64, arm64)는 **실험적 프리뷰**로 제공됩니다 — macOS는 Apple
-> Silicon 실기기에서 검증되었고, Linux는 CI에서 빌드되지만 아직 실기기에서
-> 테스트되지 않았습니다 ([플랫폼 지원](#플랫폼-지원) 참조).
+> **Windows 10 / 11(x64, x86 32비트 및 ARM64)과 macOS(Apple Silicon / arm64)를 완전히 지원**합니다 —
+> macOS는 Apple Silicon 실기기에서 충분히 검증되었습니다. Linux(x64, arm64)는 **실험적
+> 프리뷰**로 제공됩니다 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않았습니다
+> ([플랫폼 지원](#플랫폼-지원) 참조).
 > **Android / iOS는 지원하지 않습니다.**
 
 ## 주요 기능
@@ -70,7 +70,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 | 플랫폼 | 상태 |
 | --- | --- |
 | Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결, AmneziaWG 포함) |
-| macOS(Apple Silicon / arm64) | 🚧 실험적 — Apple Silicon 실기기에서 검증됨; 다른 WireGuard 앱 [WireTunnels](https://github.com/FMDigitech/WireTunnels)도 사용해 볼 수 있습니다 |
+| macOS(Apple Silicon / arm64) | ✅ 완전 지원 — Apple Silicon 실기기에서 충분히 검증됨; 다른 WireGuard 앱 [WireTunnels](https://github.com/FMDigitech/WireTunnels)도 사용해 볼 수 있습니다 |
 | Linux(x64, arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음 |
 | Android / iOS | ❌ **지원 안 함** (터널 동시 실행 불가, Wi-Fi SSID 자동 전환 불가) |
 

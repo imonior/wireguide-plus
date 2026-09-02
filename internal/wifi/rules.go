@@ -2,7 +2,6 @@ package wifi
 
 import (
 	"sort"
-	"strings"
 )
 
 // Rules defines WiFi auto-connect behavior. The model is per-tunnel:
@@ -35,13 +34,12 @@ func (r *Rules) Action(ssid string) (action string, tunnelName string) {
 	if ssid == "" {
 		return "none", ""
 	}
-	// SSID matching uses case-insensitive comparison. The 802.11 standard
-	// is case-sensitive, but different OS Wi-Fi stacks normalize SSIDs
-	// inconsistently (some upper-case the first letter, some preserve
-	// vendor-broadcast capitalization). Users who type "MyWifi" into the
-	// rule list expect it to match a SSID broadcast as "mywifi" — the
-	// rare case where two real networks differ only in case is not worth
-	// the surprise factor of strict matching.
+	// SSID matching is EXACT: full name, case-sensitive (issue: "ssid比较
+	// 应该做全名匹配"). The 802.11 standard defines an SSID as a byte
+	// string, so "MyWifi" and "mywifi" are genuinely different networks,
+	// and a middle space or special character must count. The editor's
+	// live match indicators make any mismatch visible immediately, so
+	// strict matching no longer surprises users who mistype.
 	for _, trusted := range r.TrustedSSIDs {
 		if ssidEqual(trusted, ssid) {
 			return "disconnect", ""
@@ -62,9 +60,11 @@ func (r *Rules) Action(ssid string) (action string, tunnelName string) {
 	return "none", ""
 }
 
-// ssidEqual compares two SSIDs case-insensitively. EqualFold handles
-// Unicode-aware case folding (Turkish dotted I, German ß, etc.) which
-// matters when SSIDs contain non-ASCII characters.
+// ssidEqual compares two SSIDs EXACTLY (full name, case-sensitive).
+// An SSID is a byte string per 802.11: case, middle spaces and special
+// characters are all significant. The editor's live preview shows the
+// mismatch immediately when the typed name differs from the broadcast
+// one, so strict comparison is safe.
 func ssidEqual(a, b string) bool {
-	return strings.EqualFold(a, b)
+	return a == b
 }

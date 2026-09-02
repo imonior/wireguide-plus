@@ -6,7 +6,9 @@ export {
     Action,
     Automation,
     Condition,
+    ConditionDetail,
     Rule,
+    RuleDetail,
     Rules,
     SSIDPermissionStatus,
     TunnelSSIDs

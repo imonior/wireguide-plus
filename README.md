@@ -13,10 +13,10 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 
 **English** | [简体中文](README.zh.md) | [繁體中文](README.zh-TW.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-> **Fully supported on Windows 10 / 11 (x64, x86 32-bit and ARM64)**. macOS (Apple
-> Silicon) and Linux (x64, arm64) builds are available as **experimental previews** —
-> macOS has been verified on real Apple Silicon hardware; Linux is built by CI but not
-> yet tested on real hardware (see
+> **Fully supported on Windows 10 / 11 (x64, x86 32-bit and ARM64) and macOS
+> (Apple Silicon / arm64)** — macOS has been thoroughly verified on real Apple
+> Silicon hardware. Linux (x64, arm64) builds are available as **experimental
+> previews** — CI-built but not yet tested on real hardware (see
 > [Platform support](#platform-support)). **Android / iOS are not supported.**
 
 ## Features
@@ -75,7 +75,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 | Platform | Status |
 | --- | --- |
 | Windows 10 / 11 (x64, x86 32-bit, ARM64) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect, incl. AmneziaWG) |
-| macOS (Apple Silicon / arm64) | 🚧 Experimental — verified on real Apple Silicon hardware; you may also try [WireTunnels](https://github.com/FMDigitech/WireTunnels), another WireGuard app |
+| macOS (Apple Silicon / arm64) | ✅ Fully supported — thoroughly verified on real Apple Silicon hardware; you may also try [WireTunnels](https://github.com/FMDigitech/WireTunnels), another WireGuard app |
 | Linux (x64, arm64) | 🚧 Experimental — CI-built but not yet tested on real hardware |
 | Android / iOS | ❌ **Not supported** (cannot run tunnels concurrently, nor auto-connect different tunnels by Wi-Fi SSID) |
 

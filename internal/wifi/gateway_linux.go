@@ -30,6 +30,20 @@ func GatewayMAC() string {
 	return arpMACForIPOnIface(arpTable, gw, iface)
 }
 
+// GatewayIP returns the IPv4 address of the default gateway, read from
+// /proc/net/route with the same tunnel/virtual-interface filtering as
+// GatewayMAC. "" when unavailable.
+func GatewayIP() string {
+	routeTable, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	gw, _ := bestDefaultRoute(routeTable, func(name string) bool {
+		return isTunnelIface(name) || isVirtualIface(name)
+	})
+	return gw
+}
+
 // isVirtualIface reports whether the named interface has no backing
 // hardware device. /sys/class/net/<if>/device is a symlink to the
 // PCI/USB/SDIO device and is absent for every bridge, veth, tun/tap,

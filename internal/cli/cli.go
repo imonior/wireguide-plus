@@ -486,14 +486,56 @@ func formatCondition(c wifi.Condition) string {
 	switch c.Type {
 	case wifi.CondSSID:
 		return "ssid=" + c.SSID
+	case wifi.CondWiFi:
+		return "wifi=any"
 	case wifi.CondSubnet:
 		return "subnet=" + c.Subnet
 	case wifi.CondNetwork:
 		return "network(mac)=" + c.GatewayMAC
+	case wifi.CondGatewayIP:
+		return "gateway_ip=" + c.GatewayIP
+	case wifi.CondInterface:
+		return "interface=" + c.InterfaceName
+	case wifi.CondEthernet:
+		return "ethernet=wired"
+	case wifi.CondTime:
+		s := "time="
+		if c.Start != "" || c.End != "" {
+			s += c.Start + "-" + c.End
+		}
+		if len(c.Days) > 0 {
+			names := []string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}
+			ds := make([]string, 0, len(c.Days))
+			for _, d := range c.Days {
+				if d >= 0 && d < 7 {
+					ds = append(ds, names[d])
+				}
+			}
+			if s == "time=" {
+				s += strings.Join(ds, ",")
+			} else {
+				s += " [" + strings.Join(ds, ",") + "]"
+			}
+		}
+		return s
 	case wifi.CondNoneMatch:
 		return "otherwise"
 	}
 	return c.Type
+}
+
+// formatConditions renders a rule's conditions, joined by the rule's
+// combiner ("and" for AND rules, "or" otherwise).
+func formatConditions(conds []wifi.Condition, match string) string {
+	sep := " or "
+	if match == "all" {
+		sep = " and "
+	}
+	parts := make([]string, 0, len(conds))
+	for _, c := range conds {
+		parts = append(parts, formatCondition(c))
+	}
+	return strings.Join(parts, sep)
 }
 
 func automationRules(args []string) int {
@@ -514,7 +556,7 @@ func automationRules(args []string) int {
 	}
 	fmt.Printf("%s (top rule wins on conflict):\n", name)
 	for i, r := range rules {
-		fmt.Printf("  %d. %-10s when %s\n", i+1, r.Do, formatCondition(r.When))
+		fmt.Printf("  %d. %-10s when %s\n", i+1, r.Do, formatConditions(r.When, r.Match))
 	}
 	return 0
 }
@@ -583,7 +625,7 @@ func automationAdd(args []string) int {
 		if s.Automation.PerTunnel == nil {
 			s.Automation.PerTunnel = map[string][]wifi.Rule{}
 		}
-		s.Automation.PerTunnel[name] = append(s.Automation.PerTunnel[name], wifi.Rule{When: cond, Do: wifi.Action(action)})
+		s.Automation.PerTunnel[name] = append(s.Automation.PerTunnel[name], wifi.Rule{When: []wifi.Condition{cond}, Do: wifi.Action(action)})
 		ruleNum = len(s.Automation.PerTunnel[name])
 		return nil
 	})
@@ -635,7 +677,7 @@ func automationRm(args []string) int {
 		fmt.Fprintln(os.Stderr, "automation: save failed:", err)
 		return 1
 	}
-	fmt.Printf("removed rule %d for %s: %s when %s\n", idx, name, removed.Do, formatCondition(removed.When))
+	fmt.Printf("removed rule %d for %s: %s when %s\n", idx, name, removed.Do, formatConditions(removed.When, removed.Match))
 	return 0
 }
 
