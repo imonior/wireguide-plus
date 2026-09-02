@@ -70,6 +70,47 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 5. **Window title & interaction polish** and more.
 6. **AmneziaWG (AWG) protocol support** — a new protocol backend (amneziawg-go) for AmneziaWG tunnels, the obfuscated WireGuard fork that resists DPI. Configs are auto-detected, tunnels are badged in the UI, and an opt-out switch lives in Settings → Advanced.
 
+## Automation rules
+
+Automation is configured **per tunnel** (open any tunnel's `…` menu → `Automation…`). Every tunnel has its own independent set of rules, so "connect A on the office Wi-Fi, disconnect B at the office, connect B at home" all coexist without conflict.
+
+### Rule logic
+
+- **Rules inside one tunnel** are evaluated top-to-bottom in two ordered groups:
+  **disconnect rules first, then connect rules**. Within a group the order is your
+  drag-sorted priority.
+- **AND inside one rule, OR across rules, first-match-wins**: every condition on a
+  single rule must hold for the rule to fire, but only the **first** rule (across
+  both groups) that matches executes. Matching disconnect rules always beat
+  matching connect rules because the disconnect group is evaluated first — a
+  matching connect rule that ranks behind a matched disconnect rule is
+  "deprioritised" and does not execute, so you never both "disconnect on X SSID"
+  AND "connect on X SSID" for the same tunnel.
+- **Otherwise / none-match rule** (the last fallback card under each action
+  group): fires exactly when **no earlier rule in the same action group** matched.
+- Rule editing shows **live match indicators**: while the Automation editor is
+  open, every condition shows whether it currently matches the live network, the
+  first effective rule is highlighted as "in use", and a top bar shows the
+  resulting decision for the tunnel. Indicator changes are refreshed immediately
+  on every edit (≈ 250 ms debounced IPC to the evaluation engine that actually
+  enforces the rules in the background helper, so UI and real behaviour are
+  always identical). The same engine is reachable from the command line via
+  `wireguideplus automation` — useful for headless checks.
+
+### Condition types
+
+| Condition | What it matches | Use case |
+| --- | --- | --- |
+| **SSID** | Case-sensitive, byte-exact full match against the Wi-Fi network's SSID name (spaces and special characters all count — per the 802.11 definition). | "On `Office 5 GHz` connect Work-VPN." |
+| **Subnet** | Whether the current local IP falls inside a given CIDR (e.g. `192.168.178.0/24`). | Home routers that use a predictable LAN range, not tied to SSID. |
+| **Network / BSSID** | The gateway's MAC address (BSSID). A specific physical access point, not just its SSID. | "Never auto-connect on the public café router." |
+| **Gateway IP** | The default gateway IP address of the current physical network. | Detect a specific home / office router when SSIDs are too generic. |
+| **Interface** | The name of the physical network adapter the system is routing through. The dropdown lists every physical adapter on the machine, including currently-disconnected ones, so you can pre-write rules for a laptop dock / USB dongle that isn't plugged in yet. | "Only connect the work VPN when I'm on the docked Ethernet adapter." |
+| **On wired network (Ethernet)** | True whenever the system's upstream routing is through a wired (non-wireless) adapter. No SSID needed — pure wired vs wireless decision. | "At the desk (cable) always connect; on Wi-Fi don't." |
+| **Time window** | A day-of-week set + a start/end time range (local clock). | "From Monday to Friday 09:00–18:00 the office tunnel stays up." |
+
+A single rule can combine any of the above: e.g. **SSID = Office AND Time = Mo–Fr 09–18** is one rule with two AND conditions. Each tunnel supports any number of AND rules under both the disconnect and connect groups.
+
 ## Platform support
 
 | Platform | Status |

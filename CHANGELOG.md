@@ -4,6 +4,25 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.6.5] - 2026-09-02
+
+### ✨ 新增
+
+- **自动化编辑器：草稿变更即时重判读** — 每次编辑规则、条件、拖拽排序都会在约 250ms 防抖后立即通过 IPC 调用后台评估引擎，match / in use / 顶部裁决条 不等 3 秒轮询就能更新；仍然与 helper 实际控制共用同一引擎，UI 与真实行为始终一致。
+- **自动化编辑器 UI 紧凑化** — 规则卡片内上下间距缩小，条件行内输入控件、星期按钮更紧凑，同一可视高度可容纳约 20% 更多的规则。
+
+### 🐛 修复
+
+- **高级设置四项开关与日志级别 统一落盘策略** — Kill Switch / DNS 保护 / 固定接口 / 健康检查 / 日志级别 从「先乐观写盘再回滚」改为统一的「先 IPC 调用 helper 实时应用 → 成功才写内存+落盘」：失败时 settings.json 不再落脏值、UI 复选框自动回弹并显示失败原因 toast；日志级别 select 同样应用该流程。
+- **Wg Scripts 开关「取消」不回写盘** — 启用时的安全确认对话框，如果用户点取消，之前确认前的 scheduleSave() 已把 `enable_wg_scripts=true` 写入磁盘，取消只回滚内存，造成下次打开显示"已启用"却实际没生效；现在仅在确认/取消按键按下后才写盘。
+- **Pin Interface 开关「点击轨道不触发」** — `.toggle input` 缺少显式 inset，导致 0x0 透明 input 命中区偏离到 track 可视区外，点击轨道/滑块时偶尔无响应（尤其尾部设置卡）。现在 input 铺满整个 `.toggle` 容器，任意位置都可点击。
+- **Automation live matching 指示不稳定** — 同一网络环境下每次打开编辑器 match / active / 顶部决策标签显示内容均不相同：原因是多个异步刷新入口（onMount、load、轮询、关闭暂停）间没有会话边界，再加上关闭时清空了定时器但再次打开时不会重建；现在使用 `previewEpoch + AbortController` 建立会话幂等键，`open && !previewTimer` 响应式守卫自动重启轮询，关闭/销毁时彻底清理三件套，杜绝任何过期在途请求污染当前会话。
+- **DNS 泄漏测试 public-dns.info 频繁超时** — 原 HTTP client 超时 10s 与 UI 层 ctx 超时同量级，拥塞链路上下载 4-8MB 的 nameservers.json 常在 body 读到一半时触发"parse JSON: context deadline exceeded"（看起来像解析失败，实际是传输超时）；客户端超时放宽至 30s，LimitReader 由 16MB 收紧到 4MB（前几百条高可靠条目就足够，更多条目无意义），UI 的 10s ctx 仍可优先取消。
+
+### 📝 文档
+
+- **README（5 种语言）新增「自动化规则」独立章节**：包含规则逻辑（规则内 AND、规则间 OR 首条命中、disconnect 先于 connect、otherwise 兜底）、7 种条件类型说明与典型场景、编辑中实时判读指示器与 CLI `automation` 命令说明。
+
 ## [1.6.0] - 2026-09-02
 
 ### ✨ 新增

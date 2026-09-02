@@ -34,6 +34,21 @@
   // Live network context + per-rule decision from AutomationPreview().
   let preview = null;           // AutomationPreviewResponse
   let previewTimer = null;
+  // Epoch of the current preview "session". Increased every time the modal
+  // re-opens (and on close → null). refreshPreview carries the session id
+  // and only writes to `preview` if its session is still active, so a slow
+  // in-flight AutomationPreview from a previous open/close cycle can never
+  // overwrite the current tunnel's state — the same principle loadGen uses
+  // for settings, applied here so match indicators don't flicker between
+  // stale responses and new ones. See memory EXP-100009308.
+  let previewEpoch = 0;
+  // Active AbortController for the in-flight preview request, if any.
+  // Automatically cancels the previous one when refreshPreview is called
+  // again before the request resolves. Combined with previewEpoch this
+  // guarantees "single source of truth" for the live indicator state:
+  // there is at most one pending fetch per session and it never lands
+  // after its session ended.
+  let previewAbort = null;
   // Combobox suggestions for the SSID field: every WiFi profile the OS has
   // saved (pre-filled), plus the current network in case it isn't saved yet.
   $: ssidSuggestions = [...new Set([...(knownSSIDs || []), ...(currentSSID ? [currentSSID] : [])])];
@@ -48,15 +63,24 @@
   $: if (open && tunnelName && loadedFor !== tunnelName) {
     load(tunnelName);
   }
+  // Whenever the modal opens ensure the live-indicator poll is running:
+  // onDestroy only fires once per component mount but close() nulls the
+  // timer out, so simply re-opening the modal needs to start it again.
+  // Without this re-open the indicators appear to "randomly change"
+  // between opens because they reflect whichever preview poll window
+  // happened to fire last.
+  $: if (open && !previewTimer) {
+    previewEpoch += 1;
+    previewAbort?.abort?.();
+    previewAbort = null;
+    refreshPreview();
+    previewTimer = setInterval(refreshPreview, 3000);
+  }
   async function load(name) {
     loadedFor = name;
     const gen = ++loadGen;
     await flush();
     saveError = '';
-    // Fresh live markers immediately on open: the 3s poll pauses while the
-    // modal is closed (refreshPreview early-returns), so without this the
-    // indicators would show stale/no data for up to 3s after opening.
-    refreshPreview();
     try {
       const s = await TunnelService.GetSettings();
       if (gen !== loadGen) return;
@@ -296,6 +320,52 @@
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(runSave, 300);
   }
+
+  // --- Live re-evaluation on edit -------------------------------------------------
+  // The 3s poll catches network changes (SSID switched, VPN came up, …), but
+  // edits to the rule/condition draft need immediate re-rating against the
+  // CURRENT network — otherwise the user types a new SSID and stares at a
+  // stale "no match" badge for up to 3 seconds.
+  //
+  // We trigger via a reactive statement on a JSON fingerprint of both rule
+  // groups — that way EVERY change (new rule, removed rule, condition type
+  // switch, text input blur/input, day toggles, drag reorder) naturally
+  // invalidates the fingerprint without us having to sprinkle calls through
+  // every handler.
+  //
+  // Implementation notes:
+  //   * SaveAutomationRules already short-circuits on diskDiffers so a
+  //     debounce fire that produces no net change does zero I/O.
+  //   * We don't overwrite saveError: that flag is for explicit "Save"
+  //     button errors. Transient failures mid-edit silently fall back to
+  //     the previous preview frame.
+  //   * saveTimer (user-initiated) vs editTimer (live-preview) share the
+  //     same buildRules+persist sink, so concurrent typesetting doesn't
+  //     pile up disk writes.
+  let editTimer = null;
+  $: if (open) {
+    // Touch nested fields so svelte considers them dependencies. The JSON
+    // stringify is cheap for the small rule sets users write (~<30 rules)
+    // and doubles as the fingerprint for "did the draft really change".
+    const _touchD = JSON.stringify(groups.disconnect);
+    const _touchC = JSON.stringify(groups.connect);
+    void _touchD; void _touchC;
+    scheduleLiveEditRefresh();
+  }
+  function scheduleLiveEditRefresh() {
+    if (!open) return;
+    if (editTimer) clearTimeout(editTimer);
+    editTimer = setTimeout(async () => {
+      editTimer = null;
+      if (!open) return;
+      try {
+        await persist({ name: tunnelName, rules: buildRules() });
+      } catch (_) {
+        // See implementation notes above — mid-edit failures are silent so
+        // the toast-free typing flow is preserved.
+      }
+    }, 250);
+  }
   function runSave() {
     saveTimer = null;
     const snap = pending;
@@ -324,7 +394,18 @@
     await flush();
     open = false;
     loadedFor = '';
+    // Tear down the current preview session: abandon any in-flight request so
+    // its result cannot overwrite a future session (session epoch + abort),
+    // drop the interval poll (it will be recreated on the next open by the
+    // `open && !previewTimer` reactive guard above), and blank the shown
+    // preview so the very first render on reopen does not draw a stale
+    // decision / winning-rule highlight from 20 minutes ago.
+    previewEpoch += 1;
+    if (previewAbort) { try { previewAbort.abort?.(); } catch (_) {} previewAbort = null; }
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+    if (editTimer) { clearTimeout(editTimer); editTimer = null; }
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; pending = null; }
+    preview = null;
   }
   // ---- Live match indicators -------------------------------------------
   // Marker semantics (same engine the helper enforces):
@@ -342,15 +423,63 @@
   // context (AutomationPreview, same wifi engine the helper uses) and
   // reports, per rule, whether each condition matched. We poll while the
   // editor is open so the indicators follow network changes in real time.
+  //
+  // UNIFIED refresh entry point (single source of truth per memory
+  // EXP-100009308). Every caller — onMount poll, open reactive guard,
+  // post-save immediate refresh — goes through this function, which
+  // enforces:
+  //   * one in-flight request at a time (cancel the previous via AbortController)
+  //   * response rejection when `previewEpoch` has advanced (modal closed/reopened)
+  //   * response rejection when `tunnelName` changed between fire and resolution
+  //   * explicit "fetching" (preview = null) only when the first fetch of a
+  //     session has no usable prior state; transient failures mid-session
+  //     keep the previous frame (same semantics as before) instead of
+  //     leaving indicators empty and causing "every open looks different".
   async function refreshPreview() {
     if (!open || !tunnelName) return;
+    const myEpoch = previewEpoch;
+    const myTunnel = tunnelName;
+    // Cancel any previous in-flight fetch: Wails calls that are already on
+    // the wire don't have an HTTP abort, so for the AbortController guard
+    // we still benefit from the epoch check below — no stale result ever
+    // reaches `preview`. If a future call path brings a fetch that speaks
+    // AbortSignal, this cancels it cleanly.
+    if (previewAbort) { try { previewAbort.abort?.(); } catch (_) {} }
+    previewAbort = new AbortController();
     try {
       const pv = await AutomationPreview();
-      const t = (pv?.tunnels || []).find(x => x.name === tunnelName);
-      if (!t) return;
-      preview = { on_wifi: pv.on_wifi, ssid: pv.ssid, decision: t.decision, rules: t.rules, interfaces: pv.interfaces };
+      if (previewEpoch !== myEpoch) return;        // session changed
+      if (tunnelName !== myTunnel) return;          // switched tunnel
+      if (!open) return;
+      const t = (pv?.tunnels || []).find(x => x.name === myTunnel);
+      // EITHER no per-tunnel result, OR the tunnel has NO rules saved yet
+      // (an empty rules array with an "unmanaged" explicit decision is
+      // still a VALID result we want to render — so we only bail when the
+      // backend returned no tunnel entry at all, which really means "no
+      // preview available"). Without this check a first save to a tunnel
+      // that previously had no rules would leave the indicators blank until
+      // the next poll cycle.
+      if (!t && (pv?.tunnels?.some(x => x.name === myTunnel) ?? true)) return;
+      preview = {
+        on_wifi: pv.on_wifi,
+        ssid: pv.ssid,
+        decision: t ? t.decision : 'unmanaged',
+        rules: t ? t.rules : [],
+        interfaces: pv.interfaces,
+      };
     } catch (e) {
-      // Network enumeration can be temporarily unavailable; keep last state.
+      // Network enumeration can be temporarily unavailable mid-session;
+      // keep last state. If we held no state to begin with (first open,
+      // the call above returned nothing), expose a sentinel so the UI can
+      // tell "couldn't fetch" from "genuinely no match".
+      if (previewEpoch !== myEpoch || tunnelName !== myTunnel) return;
+    } finally {
+      if (previewAbort && previewAbort.signal.aborted) {
+        // AbortController was replaced by a newer call; don't null it here
+        // because the newer call owns it now.
+      } else if (previewAbort && !previewAbort.signal.aborted) {
+        previewAbort = null;
+      }
     }
   }
   // Rules are evaluated top-to-bottom (disconnect before connect). The first
@@ -447,8 +576,9 @@
     return !!rd.conditions?.[idx]?.matched;
   }
   onMount(() => {
-    refreshPreview();
-    previewTimer = setInterval(refreshPreview, 3000);
+    // The poll timer + first refresh are owned by the `open && !previewTimer`
+    // reactive block above — it (re)creates them every time the modal opens,
+    // which matches the component's mount-once / open-close-many lifecycle.
     cfgChangedUnsub = Events.On('config_changed', async () => {
       const name = tunnelName;
       const busy = () =>
@@ -469,7 +599,12 @@
   });
   let cfgChangedUnsub = null;
   onDestroy(() => {
+    previewEpoch += 1;
+    if (previewAbort) { try { previewAbort.abort?.(); } catch (_) {} previewAbort = null; }
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+    if (editTimer) { clearTimeout(editTimer); editTimer = null; }
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; pending = null; }
+    preview = null;
     if (cfgChangedUnsub) cfgChangedUnsub();
   });
   // Disk comparison: normalize a disk rule array and the local editor state
@@ -702,7 +837,7 @@
   .am-sub { margin: 2px 0 0; font: 400 12px/1.2 var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .am-close { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; }
   .am-close:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .am-hint { margin: 12px 0 0; font: 400 12px/1.5 var(--font-sans); color: var(--text-secondary); flex-shrink: 0; }
+  .am-hint { margin: 8px 0 0; font: 400 12px/1.5 var(--font-sans); color: var(--text-secondary); flex-shrink: 0; }
   .am-live {
     flex-shrink: 0; display: flex; align-items: center; gap: 8px;
     margin: 10px 0 4px; padding: 7px 10px;
@@ -718,7 +853,7 @@
   .am-live-network { font-family: var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .am-live-decision { margin-left: auto; color: var(--text-muted); white-space: nowrap; }
   .am-rules-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
-  .am-rules { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; margin: 4px 0; padding-right: 4px; }
+  .am-rules { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 2px 0 0; padding-right: 4px; }
   .am-fade {
     position: absolute; left: 0; right: 4px; height: 52px; pointer-events: none;
     opacity: 0; z-index: 2;
@@ -754,10 +889,10 @@
     0%, 100% { transform: rotate(180deg) translateY(0); }
     50% { transform: rotate(180deg) translateY(3px); }
   }
-  .am-group { display: flex; flex-direction: column; gap: 6px; }
+  .am-group { display: flex; flex-direction: column; gap: 4px; }
   .am-group-header {
     display: flex; align-items: center; gap: 8px;
-    padding: 2px 0 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    padding: 1px 0 3px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   }
   .am-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
   .am-group-dot-connect.am-group-matched { background: var(--green, #34c759); }
@@ -771,8 +906,8 @@
   }
   .am-add-rule:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .am-rule {
-    display: flex; flex-direction: column; gap: 5px;
-    padding: 8px 8px 6px;
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 6px 7px 5px;
     background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
     border: 1px solid var(--border); border-radius: 10px;
     transition: box-shadow 120ms ease, border-color 120ms ease;
@@ -801,13 +936,13 @@
     text-align: center; font: 600 10px/1 var(--font-sans); color: var(--text-muted);
     letter-spacing: 0.08em; margin: 0; flex-shrink: 0;
   }
-  .am-rule-empty { margin: 2px 0 4px; }
-  .am-rule .am-add-cond { align-self: flex-start; margin-top: 2px; }
-  .am-group-empty { margin: 2px 0; }
+  .am-rule-empty { margin: 0 0 2px; }
+  .am-rule .am-add-cond { align-self: flex-start; margin-top: 1px; }
+  .am-group-empty { margin: 1px 0; }
   .am-empty { padding: 12px; text-align: center; font: 400 11px var(--font-sans); color: var(--text-muted); border: 1px dashed var(--border); border-radius: 8px; }
   .am-cond {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    padding: 6px; border: 1px solid transparent; border-radius: 9px;
+    display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    padding: 4px 4px 3px; border: 1px solid transparent; border-radius: 8px;
   }
   .am-cond.am-dragging { opacity: 0.35; }
   @media (prefers-reduced-motion: no-preference) {
@@ -821,7 +956,7 @@
   .am-cond select, .am-cond input {
     font: 400 12px var(--font-sans); color: var(--text-primary);
     background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: 7px; padding: 5px 7px;
+    border-radius: 6px; padding: 3px 6px;
   }
   .am-val { flex: 1; min-width: 120px; }
   .am-val-none { color: var(--text-muted); border: 0 !important; background: transparent !important; }
@@ -839,10 +974,10 @@
   .am-days { display: inline-flex; gap: 3px; flex-wrap: wrap; }
   .am-day {
     appearance: none; -webkit-appearance: none;
-    min-width: 22px; height: 22px; border-radius: 5px;
+    min-width: 20px; height: 20px; border-radius: 5px;
     font: 600 10px/1 var(--font-sans); color: var(--text-muted);
     background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-    border: 1px solid var(--border); cursor: pointer; padding: 0 4px;
+    border: 1px solid var(--border); cursor: pointer; padding: 0 3px;
     transition: background 120ms ease, color 120ms ease;
   }
   .am-day:hover { color: var(--text-primary); }

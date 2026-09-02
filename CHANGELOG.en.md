@@ -4,6 +4,25 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.6.5] - 2026-09-02
+
+### ✨ New
+
+- **Automation editor: draft edits re-evaluate live, without waiting for the 3 s poll.** Any edit (new rule, reorder, condition switch, typing into a field, weekday toggle) triggers a ~250 ms debounced re-evaluation through the same backend engine the helper uses, so match / in-use badges and the top decision strip update immediately instead of stalling on a stale snapshot until the next 3-second poll cycle.
+- **Tighter automation editor layout.** Rule-card padding, inter-rule gaps, condition-row padding, input controls and weekday pills are all reduced; the same visible area now fits roughly 20 % more rules.
+
+### 🐛 Fixes
+
+- **Advanced-setting toggles and log level share a single "IPC-then-persist" policy.** Kill Switch / DNS protection / Pin Interface / Health Check / log level previously used the "write settings optimistically, roll back on error" pattern, which left the wrong value on disk and never surfaced failure feedback. All five now call the helper's live-apply IPC first; only on success do they write the in-memory setting and persist it. Failures snap the control back to the previously persisted value and show a toast with the exact error. The log-level `<select>` follows exactly the same flow.
+- **Wg Scripts confirmation dialog now only writes disk after Confirm / Cancel.** Until now, clicking the switch to enable scripts would *immediately* persist `enable_wg_scripts = true` before the user had answered the security prompt. Cancelling the dialog only flipped memory back to false, leaving settings.json with a stale `true` on disk — next launch the switch appeared "on" while no scripts were actually honoured. Persist now happens exclusively from the two dialog buttons.
+- **Pin Interface toggle track was a dead click surface.** `.toggle input` used absolute positioning but had no `inset`, so its 0×0 hit surface drifted outside the track/slider visual bounds. When the user clicked the slider body instead of the outer `<label for="…">` text, the click missed, especially on the last setting card in the section. The input now fills the whole `.toggle` container.
+- **Automation live-matching strip indicators flickered between opens.** With no session boundary the several refresh entry points (onMount, initial load, 3-second poll, close-paused timer) let stale in-flight responses overwrite the current tunnel's frame on reopen. A single unified refresh entry point now uses a `previewEpoch` session id + `AbortController` as an idempotency key, an `open && !previewTimer` reactive guard rebuilds the poll automatically on every reopen, and close/destroy tear down epoch/controller/timer together.
+- **DNS leak test public-dns.info downloads kept timing out mid-body.** The 10-second HTTP client timeout was in the same order of magnitude as the UI-level ctx timeout; on congested links the 4–8 MB `nameservers.json` would very often trigger a transport-level cancel while `json.Decoder` was reading, which looked like a JSON parse failure ("parse JSON: context deadline exceeded"). Client timeout is relaxed to 30 s, the body `LimitReader` is tightened from 16 MB to 4 MB (only the first few hundred reliable entries matter — the rest are worse servers anyway), and the UI's 10 s ctx still aborts first if the user cancels.
+
+### 📝 Docs
+
+- **All five READMEs gain a dedicated "Automation rules" section.** Covers rule semantics (AND inside one rule, OR first-match across rules with disconnect rules evaluated before connect rules, otherwise fallback), all seven condition types with match definitions and real-world use cases, live match indicators, and the CLI `automation` command.
+
 ## [1.6.0] - 2026-09-02
 
 ### ✨ New

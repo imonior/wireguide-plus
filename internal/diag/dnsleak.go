@@ -170,14 +170,27 @@ const publicFetchLimit = 30
 // public-dns.info and returns the most-reliable healthy entries, capped at
 // publicFetchLimit. An error is returned if the feed cannot be fetched or
 // parsed; callers fall back to the built-in DefaultPublicResolvers list.
-// The ctx bounds the whole operation (10s timeout in the UI).
+// The ctx bounds the whole operation; transport-level deadlines are handled
+// inside this function — ctx is often quite short (10s UI cap) but the
+// public-dns.info feed is several MB and congested, so a transport timeout
+// mid-download would otherwise surface as "parse JSON: context deadline
+// exceeded". We prefer a longer transport budget on the HTTP client (so
+// the caller's ctx can still abort promptly when the user cancels) while
+// reading only a bounded prefix of the body so the download cannot run
+// away in either direction.
 func FetchPublicResolvers(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, publicDNSInfoURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("public-dns.info: build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "wireguide-plus/"+version.Version)
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 30s wall-clock HTTP client budget. The outer ctx is typically 10s
+	// (diagnostics-panel cap) and that one wins when the user wants to
+	// cancel, but if ctx is the caller's background we still need a hard
+	// cap — otherwise a half-closed TCP connection can keep the decoder
+	// stuck forever. Both deadlines are transport-level: the json decoder
+	// never sees a partial body because io.LimitReader cuts at 4MB anyway.
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("public-dns.info: %w", err)
@@ -187,9 +200,12 @@ func FetchPublicResolvers(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("public-dns.info: HTTP %d", resp.StatusCode)
 	}
 
-	// The full feed is tens of thousands of entries (~several MB); cap the
-	// read so a misbehaving endpoint cannot exhaust memory.
-	dec := json.NewDecoder(io.LimitReader(resp.Body, 16<<20))
+	// public-dns.info publishes ~40k entries (~4-8 MB today, and growing).
+	// We only need the top publicFetchLimit (~30) healthy ones, so reading
+	// past ~4 MB yields nothing useful and just wastes time / memory on
+	// slow links. LimitReader plus the 30s client timeout together ensure
+	// a congested endpoint cannot make the diagnostic panel look broken.
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 4<<20))
 	var entries []publicDNSInfoEntry
 	if err := dec.Decode(&entries); err != nil {
 		return nil, fmt.Errorf("public-dns.info: parse JSON: %w", err)

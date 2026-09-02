@@ -15,6 +15,11 @@
   // Re-triggers the legacy ("wireguide") data migration dialog from
   // App.svelte after clearing the persisted "don't prompt again" state.
   export let onLegacyRescan = null;
+  // Optional toast helper forwarded by App.svelte so Settings can surface
+  // synchronous failures (toggle toggles that were rolled back by the
+  // helper's live-apply step, unsupported platform features, …) without
+  // having to depend on App's local state directly.
+  export let showToast = null;
 
   let legacyRescanBusy = false;
 
@@ -358,13 +363,26 @@
   }
 
   function onWgScriptsChange(e) {
-    settings.enable_wg_scripts = e.target.checked;
-    // Require an explicit confirmation: enabling runs arbitrary config
-    // commands inside the privileged helper.
+    // enable_wg_scripts has no live-apply IPC: the setting only takes
+    // effect on the NEXT connect. So we do NOT need applyLiveChange —
+    // BUT the confirmation flow must not write a stale value either.
+    //
+    // OLD BUG: the code below wrote settings.enable_wg_scripts = true
+    // before the user had clicked Confirm — the checkbox was visually on
+    // AND persisted on disk, while the confirmation modal was still up.
+    // If the user cancelled, settings went back to false in memory but
+    // scheduleSave() had already fired so disk stayed true — the classic
+    // "write + optimistic + never persist the rollback" bug.
     if (e.target.checked && !wgScriptsWarn) {
       wgScriptsWarn = true;
-      e.target.checked = true;
+      // Do NOT mutate settings or call scheduleSave() here: the user
+      // either confirms (→ onWgScriptsWarnConfirm writes + saves) or
+      // cancels (→ onWgScriptsWarnCancel writes + reactive binding
+      // resets the native checkbox). settings.enable_wg_scripts stays at
+      // its persisted value for the whole dialog lifetime.
+      return;
     }
+    settings.enable_wg_scripts = e.target.checked;
     scheduleSave();
   }
 
@@ -377,6 +395,7 @@
   function onWgScriptsWarnCancel() {
     wgScriptsWarn = false;
     settings.enable_wg_scripts = false;
+    scheduleSave();
   }
 
   function onAwgChange(e) {
@@ -398,11 +417,55 @@
   }
 
   function onLogLevelChange(e) {
-    settings.log_level = e.target.value;
-    TunnelService.SetLogLevel(settings.log_level).catch((err) => {
-      console.error('SetLogLevel failed:', err);
+    // Live-apply first — the helper needs to see the new slog level before
+    // we record it on disk, so a "DEBUG selected but helper rejected it"
+    // failure leaves the settings.json untouched and the <select> snaps
+    // back. See applyLiveChange.
+    applyLiveChange({
+      stateKey: 'log_level',
+      domValue: e.target.value,
+      friendlyName: '日志级别',
+      call: (v) => TunnelService.SetLogLevel(v),
     });
+  }
+
+  // applyLiveChange runs the canonical "helper → persist → write" cycle
+  // used by Kill Switch / DNS Protection / Pin Interface / Health Check
+  // (booleans) and Log Level (select / string values).
+  //
+  // OLD (buggy) pattern:   write settings → scheduleSave() → IPC → catch rollback
+  //   Problems: (1) a failed IPC leaves the wrong value on disk because
+  //   scheduleSave already persisted before the rejection, (2) the catch
+  //   rollback only flips in-memory state, (3) no failure feedback to the
+  //   user so the toggle appeared to do nothing (EXP-100014872 — first
+  //   click only "corrects" stale state instead of executing an action).
+  //
+  // NEW (safe) pattern:     IPC → success → write settings → scheduleSave
+  //   The native control keeps the user's desired value momentarily via
+  //   normal DOM behaviour, then once the helper acknowledges, we write
+  //   the single source of truth into `settings` and persist. On failure
+  //   the reactively-bound checked={…}/value={…} props automatically snap
+  //   the control back to the previously persisted value; a toast tells
+  //   the user exactly why. settings.json never contains a value the
+  //   helper hasn't actually accepted.
+  async function applyLiveChange({ stateKey, domValue, friendlyName, call, valueMatches = (a, b) => a === b }) {
+    if (valueMatches(settings[stateKey], domValue)) return; // no-op
+    try {
+      await call(domValue);
+    } catch (err) {
+      console.error(`${friendlyName} change failed:`, err);
+      showToast?.(`${friendlyName} 切换失败: ${err?.message || err}`);
+      if (err?.message?.includes?.('not supported')) {
+        showToast?.(friendlyName + ' 当前平台暂不支持');
+      }
+      return;
+    }
+    settings[stateKey] = domValue;
     scheduleSave();
+  }
+  // Legacy alias kept so every existing call site doesn't need a rename.
+  async function applyLiveToggle({ stateKey, domChecked, friendlyName, call }) {
+    return applyLiveChange({ stateKey, domValue: domChecked, friendlyName, call });
   }
 
   function onKillSwitchChange(e) {
@@ -412,42 +475,42 @@
     // left the WFP filters in place — internet stayed blocked until
     // a reboot. The helper itself decides what to do based on its
     // current tunnel set.
-    settings.kill_switch = e.target.checked;
-    TunnelService.SetKillSwitch(settings.kill_switch).catch((err) => {
-      console.error('SetKillSwitch failed:', err);
-      settings.kill_switch = !settings.kill_switch;
+    applyLiveToggle({
+      stateKey: 'kill_switch',
+      domChecked: e.target.checked,
+      friendlyName: 'Kill Switch',
+      call: (v) => TunnelService.SetKillSwitch(v),
     });
-    scheduleSave();
   }
 
   function onDnsProtectionChange(e) {
     // Same rationale as the kill-switch toggle: always send the IPC so
     // that a "disable while disconnected" doesn't leave stale WFP
     // DNS block filters in place.
-    settings.dns_protection = e.target.checked;
-    TunnelService.SetDNSProtection(settings.dns_protection).catch((err) => {
-      console.error('SetDNSProtection failed:', err);
-      settings.dns_protection = !settings.dns_protection;
+    applyLiveToggle({
+      stateKey: 'dns_protection',
+      domChecked: e.target.checked,
+      friendlyName: 'DNS 保护',
+      call: (v) => TunnelService.SetDNSProtection(v),
     });
-    scheduleSave();
   }
 
   function onPinInterfaceChange(e) {
-    settings.pin_interface = e.target.checked;
-    TunnelService.SetPinInterface(settings.pin_interface).catch((err) => {
-      console.error('SetPinInterface failed:', err);
-      settings.pin_interface = !settings.pin_interface;
+    applyLiveToggle({
+      stateKey: 'pin_interface',
+      domChecked: e.target.checked,
+      friendlyName: '固定接口',
+      call: (v) => TunnelService.SetPinInterface(v),
     });
-    scheduleSave();
   }
 
   function onHealthCheckChange(e) {
-    settings.health_check = e.target.checked;
-    TunnelService.SetHealthCheck(settings.health_check).catch((err) => {
-      console.error('SetHealthCheck failed:', err);
-      settings.health_check = !settings.health_check;
+    applyLiveToggle({
+      stateKey: 'health_check',
+      domChecked: e.target.checked,
+      friendlyName: '健康检查',
+      call: (v) => TunnelService.SetHealthCheck(v),
     });
-    scheduleSave();
   }
 
   // --- Proxy (for update checks) ---
@@ -1214,9 +1277,19 @@
   }
   .toggle input {
     opacity: 0;
-    width: 0;
-    height: 0;
+    /* Pin the hidden native checkbox to the full .toggle area so any click
+       on the track / slider lands on the checkbox element — otherwise an
+       absolutely-positioned element with width:0 / height:0 and no inset
+       sits at the label's normal-flow end, which means the visual toggle
+       surface and the actual event surface can diverge (especially at the
+       tail of a setting-card when there is no outer <label for="…"> that
+       could forward the click by ID). The track/slider are decoration. */
+    inset: 0;
+    width: 100%;
+    height: 100%;
     position: absolute;
+    cursor: inherit;
+    margin: 0;
   }
   .toggle-track {
     position: absolute;

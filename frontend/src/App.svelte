@@ -924,7 +924,7 @@
   {/if}
 
   {#if showSettings}
-    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} onLegacyRescan={rescanLegacyMigration} />
+    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} onLegacyRescan={rescanLegacyMigration} {showToast} />
   {/if}
 
   {#if showConflictWarning}
