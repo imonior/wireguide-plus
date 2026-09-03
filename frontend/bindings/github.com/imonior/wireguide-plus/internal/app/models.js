@@ -48,12 +48,33 @@ export class AutomationPreviewResponse {
              */
             this["physical_ips"] = [];
         }
+        if (!("subnets" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["subnets"] = [];
+        }
         if (!("gateway_mac" in $$source)) {
             /**
              * @member
              * @type {string}
              */
             this["gateway_mac"] = "";
+        }
+        if (!("gateway_ip" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["gateway_ip"] = "";
+        }
+        if (!("interfaces" in $$source)) {
+            /**
+             * @member
+             * @type {wifi$0.InterfaceInfo[]}
+             */
+            this["interfaces"] = [];
         }
         if (!("tunnels" in $$source)) {
             /**
@@ -73,13 +94,21 @@ export class AutomationPreviewResponse {
      */
     static createFrom($$source = {}) {
         const $$createField2_0 = $$createType0;
-        const $$createField4_0 = $$createType2;
+        const $$createField3_0 = $$createType0;
+        const $$createField6_0 = $$createType2;
+        const $$createField7_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("physical_ips" in $$parsedSource) {
             $$parsedSource["physical_ips"] = $$createField2_0($$parsedSource["physical_ips"]);
         }
+        if ("subnets" in $$parsedSource) {
+            $$parsedSource["subnets"] = $$createField3_0($$parsedSource["subnets"]);
+        }
+        if ("interfaces" in $$parsedSource) {
+            $$parsedSource["interfaces"] = $$createField6_0($$parsedSource["interfaces"]);
+        }
         if ("tunnels" in $$parsedSource) {
-            $$parsedSource["tunnels"] = $$createField4_0($$parsedSource["tunnels"]);
+            $$parsedSource["tunnels"] = $$createField7_0($$parsedSource["tunnels"]);
         }
         return new AutomationPreviewResponse(/** @type {Partial<AutomationPreviewResponse>} */($$parsedSource));
     }
@@ -117,6 +146,14 @@ export class AutomationTunnelPreview {
              */
             this["decision"] = "";
         }
+        if (!("active" in $$source)) {
+            /**
+             * tunnel is actually up in the helper
+             * @member
+             * @type {boolean}
+             */
+            this["active"] = false;
+        }
 
         Object.assign(this, $$source);
     }
@@ -127,7 +164,7 @@ export class AutomationTunnelPreview {
      * @returns {AutomationTunnelPreview}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType4;
+        const $$createField1_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("rules" in $$parsedSource) {
             $$parsedSource["rules"] = $$createField1_0($$parsedSource["rules"]);
@@ -238,7 +275,7 @@ export class DNSLeakResult {
      * @returns {DNSLeakResult}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType6;
+        const $$createField1_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("dns_servers" in $$parsedSource) {
             $$parsedSource["dns_servers"] = $$createField1_0($$parsedSource["dns_servers"]);
@@ -757,9 +794,11 @@ export class ZipImportResult {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = AutomationTunnelPreview.createFrom;
+const $$createType1 = wifi$0.InterfaceInfo.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = wifi$0.RuleDetail.createFrom;
+const $$createType3 = AutomationTunnelPreview.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = DNSServer.createFrom;
+const $$createType5 = wifi$0.RuleDetail.createFrom;
 const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = DNSServer.createFrom;
+const $$createType8 = $Create.Array($$createType7);

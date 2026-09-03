@@ -26,19 +26,12 @@ type Automation struct {
 }
 
 // Rule is one condition→action pair. A rule carries one or more
-// conditions; Match says how they combine.
+// conditions, which are always combined with AND.
 type Rule struct {
 	// When lists the conditions that must hold for the rule to fire.
 	When []Condition `json:"when"`
-	// Match says how the conditions combine:
-	//
-	//   "" (or "any", the default) — OR: any single matching condition
-	//       fires the rule.
-	//   "all" — AND: every condition must match for the rule to fire.
-	//
-	// A none_match condition is unconditional at its position, so under
-	// "any" it makes the whole rule fire immediately and under "all" it
-	// contributes nothing (a rule of only none_match always fires).
+	// Match is retained for config compatibility. Conditions are always ANDed;
+	// new configs use "all" and legacy configs with no value are equivalent.
 	Match string `json:"match,omitempty"`
 	Do    Action `json:"do"`
 }
@@ -47,8 +40,7 @@ type Rule struct {
 // ({"when": {"type": "ssid", ...}}) and the multi-condition array form
 // ({"when": [{"type": "ssid", ...}, ...]}), so config.json files written
 // before the multi-condition upgrade keep loading unchanged. The "match"
-// field is new; its absence defaults to OR, which is exactly the legacy
-// behaviour (any single matching rule fires).
+// field is retained for compatibility, but all conditions are ANDed.
 func (r *Rule) UnmarshalJSON(data []byte) error {
 	type plain struct {
 		When  json.RawMessage `json:"when"`
@@ -64,7 +56,7 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 	case "all", "and":
 		r.Match = "all"
 	default:
-		r.Match = "" // "" or "any" → OR (legacy behaviour)
+		r.Match = ""
 	}
 	t := bytes.TrimSpace(p.When)
 	if len(t) == 0 || bytes.Equal(t, []byte("null")) {
@@ -92,15 +84,15 @@ const (
 
 // Condition types.
 const (
-	CondSSID      = "ssid"        // current Wi-Fi SSID equals SSID
-	CondWiFi      = "wifi"        // current network is Wi-Fi (any SSID)
-	CondSubnet    = "subnet"      // a physical-interface address is inside Subnet (CIDR)
-	CondNetwork   = "network"     // the default gateway's MAC equals GatewayMAC
-	CondGatewayIP = "gateway_ip"  // the default gateway's IPv4 equals GatewayIP
-	CondInterface = "interface"   // a physical (non-tunnel) interface name matches InterfaceName
-	CondEthernet  = "ethernet"    // the machine is on a wired network (a non-Wi-Fi physical interface is up)
-	CondTime      = "time"        // local time is inside [Start, End) on one of Days (empty = every day)
-	CondNoneMatch = "none_match"  // none of this tunnel's concrete conditions matched
+	CondSSID      = "ssid"       // current Wi-Fi SSID equals SSID
+	CondWiFi      = "wifi"       // current network is Wi-Fi (any SSID)
+	CondSubnet    = "subnet"     // a physical-interface address is inside Subnet (CIDR)
+	CondNetwork   = "network"    // the default gateway's MAC equals GatewayMAC
+	CondGatewayIP = "gateway_ip" // the default gateway's IPv4 equals GatewayIP
+	CondInterface = "interface"  // a physical (non-tunnel) interface name matches InterfaceName
+	CondEthernet  = "ethernet"   // the machine is on a wired network (a non-Wi-Fi physical interface is up)
+	CondTime      = "time"       // local time is inside [Start, End) on one of Days (empty = every day)
+	CondNoneMatch = "none_match" // none of this tunnel's concrete conditions matched
 )
 
 // Condition is a single match predicate. Only the field relevant to Type
@@ -141,6 +133,7 @@ type Condition struct {
 type InterfaceInfo struct {
 	Name   string `json:"name"`
 	IsWiFi bool   `json:"is_wifi"`
+	Active bool   `json:"active"`
 }
 
 // NetworkContext is the current network state a rule set is evaluated
@@ -188,8 +181,8 @@ const (
 //   - Rules are examined in order and the FIRST matching, well-formed
 //     rule wins — uniformly, priority == position (issue #12). This is
 //     what the editor's "top rule wins, drag to reorder" promises.
-//   - Within one rule, Match == "all" requires every condition to match
-//     (AND); any other value fires on the first matching condition (OR).
+//   - Every condition within one rule must match (AND). Rules themselves are
+//     alternatives (OR), with only the first matching rule selecting action.
 //   - none_match ("else") is an unconditional match at its own position,
 //     so it acts as a fallback when placed last and as an unconditional
 //     override if dragged to the top — no special end-of-list handling.
@@ -206,24 +199,23 @@ const (
 //	{when: [subnet=10/8], do: disconnect}
 //	{when: [none_match],  do: connect}
 // CONTROL path only: picks the ONE action the helper should enforce.
-// The first matching rule (in list order) decides the outcome, so this
-// walk stops there — an early return is fine because control produces a
-// single state. Rule MARKING must NOT use this function: the editor's
-// live indicators come from EvaluateDetail, which keeps judging EVERY
-// rule (match + in-use markers for shadowed and deprioritized rules)
-// and only ends after the whole list is processed.
+// The first matching rule (in list order) decides the outcome, but this walk
+// continues through every rule. Rule MARKING uses EvaluateDetail to retain
+// the per-rule results for shadowed and deprioritized rules.
 func Evaluate(rules []Rule, ctx NetworkContext) DesiredState {
+	state := StateUnmanaged
+	selected := false
 	for i := range rules {
 		r := rules[i]
 		if r.Validate() != nil {
 			continue // malformed rule → can't fire
 		}
-		if r.matches(ctx) {
-			state, _ := actionState(r.Do)
-			return state
+		if !selected && r.matches(ctx) {
+			state, _ = actionState(r.Do)
+			selected = true
 		}
 	}
-	return StateUnmanaged
+	return state
 }
 
 // ConditionDetail reports one condition's match outcome, for the editor's
@@ -239,10 +231,10 @@ type ConditionDetail struct {
 // against the current network context. Matched is the overall rule
 // outcome after applying Match (AND/OR).
 type RuleDetail struct {
-	Do         Action             `json:"do"`
-	MatchAll   bool               `json:"match_all"`
-	Matched    bool               `json:"matched"`
-	Conditions []ConditionDetail  `json:"conditions"`
+	Do         Action            `json:"do"`
+	MatchAll   bool              `json:"match_all"`
+	Matched    bool              `json:"matched"`
+	Conditions []ConditionDetail `json:"conditions"`
 }
 
 // EvaluateDetail is the MARKING path for the editor's live indicators,
@@ -259,7 +251,7 @@ func EvaluateDetail(rules []Rule, ctx NetworkContext) (DesiredState, []RuleDetai
 	state := StateUnmanaged
 	for i := range rules {
 		r := rules[i]
-		detail := RuleDetail{Do: r.Do, MatchAll: r.Match == "all"}
+		detail := RuleDetail{Do: r.Do, MatchAll: true}
 		if r.Validate() == nil {
 			for _, c := range r.When {
 				detail.Conditions = append(detail.Conditions, ConditionDetail{
@@ -316,20 +308,12 @@ func (r Rule) matches(ctx NetworkContext) bool {
 	if len(r.When) == 0 {
 		return false
 	}
-	if r.Match == "all" {
-		for i := range r.When {
-			if !ruleMatchesCond(r.When[i], ctx) {
-				return false
-			}
-		}
-		return true
-	}
 	for i := range r.When {
-		if ruleMatchesCond(r.When[i], ctx) {
-			return true
+		if !ruleMatchesCond(r.When[i], ctx) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // actionState maps an action to its desired state, reporting ok=false for

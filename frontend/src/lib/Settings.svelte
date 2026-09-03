@@ -424,7 +424,7 @@
     applyLiveChange({
       stateKey: 'log_level',
       domValue: e.target.value,
-      friendlyName: '日志级别',
+      friendlyName: $t('settings.log_level'),
       call: (v) => TunnelService.SetLogLevel(v),
     });
   }
@@ -454,9 +454,9 @@
       await call(domValue);
     } catch (err) {
       console.error(`${friendlyName} change failed:`, err);
-      showToast?.(`${friendlyName} 切换失败: ${err?.message || err}`);
+      showToast?.($t('settings.toggle_failed', { name: friendlyName, error: err?.message || err }));
       if (err?.message?.includes?.('not supported')) {
-        showToast?.(friendlyName + ' 当前平台暂不支持');
+        showToast?.($t('settings.feature_not_supported', { name: friendlyName }));
       }
       return;
     }
@@ -478,7 +478,7 @@
     applyLiveToggle({
       stateKey: 'kill_switch',
       domChecked: e.target.checked,
-      friendlyName: 'Kill Switch',
+      friendlyName: $t('settings.kill_switch'),
       call: (v) => TunnelService.SetKillSwitch(v),
     });
   }
@@ -490,7 +490,7 @@
     applyLiveToggle({
       stateKey: 'dns_protection',
       domChecked: e.target.checked,
-      friendlyName: 'DNS 保护',
+      friendlyName: $t('settings.dns_protection'),
       call: (v) => TunnelService.SetDNSProtection(v),
     });
   }
@@ -499,7 +499,7 @@
     applyLiveToggle({
       stateKey: 'pin_interface',
       domChecked: e.target.checked,
-      friendlyName: '固定接口',
+      friendlyName: $t('settings.pin_interface'),
       call: (v) => TunnelService.SetPinInterface(v),
     });
   }
@@ -508,7 +508,7 @@
     applyLiveToggle({
       stateKey: 'health_check',
       domChecked: e.target.checked,
-      friendlyName: '健康检查',
+      friendlyName: $t('settings.health_check'),
       call: (v) => TunnelService.SetHealthCheck(v),
     });
   }

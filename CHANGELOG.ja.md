@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.0] - 2026-09-04
+
+### ✨ 新機能
+
+- **Automation ライブネットワークパネル** — 現在のトンネルの物理ハードウェアインターフェース、Wi-Fi SSID、ゲートウェイ MAC、ゲートウェイ IP、サブネットを表示し、ルールの一致状況も示します。仮想アダプタを除外し、使用中と未使用のハードウェアを区別します。
+- **Automation エディタの操作改善** — 説明とネットワークパネルを個別に折りたため、エディタ全体をスクロールできます。条件のドラッグ並べ替えも維持しています。
+
+### 🐛 修正
+
+- **Automation の状態セマンティクスを統一** — `match` は条件一致、`in use` は最初に一致したルールの選択、`active` はトンネルの実際の稼働状態を表します。優先度で負けた otherwise 条件も一致として表示します。
+- **設定エラー表示を多言語化** — Pin Interface、ログレベル、Kill Switch、DNS 保護、ヘルスチェックの失敗・未対応メッセージから中国語のハードコードを除去しました。
+
+### 📝 ドキュメント
+
+- **5 言語の README と CHANGELOG を同期更新** — ライブネットワークパネル、インターフェース状態、エディタ操作、Pin Interface の対応プラットフォーム範囲を追記しました。
+
 ## [1.6.5] - 2026-09-02
 
 ### ✨ 新機能

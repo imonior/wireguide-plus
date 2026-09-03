@@ -13,7 +13,7 @@
   // (and other tunnels' rules) are never clobbered.
   import { afterUpdate, onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
-  import { AutomationPreview } from '../../bindings/github.com/imonior/wireguide-plus/internal/app/tunnelservice.js';
+  import { AutomationEvaluate } from '../../bindings/github.com/imonior/wireguide-plus/internal/app/tunnelservice.js';
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
@@ -31,7 +31,7 @@
   let currentSSID = '';
   let currentSubnets = [];      // autocomplete suggestions for the subnet field
   let currentGatewayMAC = '';   // autocomplete suggestion for the MAC field
-  // Live network context + per-rule decision from AutomationPreview().
+  // Live network context + per-rule decision from AutomationEvaluate().
   let preview = null;           // AutomationPreviewResponse
   let previewTimer = null;
   // Epoch of the current preview "session". Increased every time the modal
@@ -77,7 +77,6 @@
     previewTimer = setInterval(refreshPreview, 3000);
   }
   async function load(name) {
-    loadedFor = name;
     const gen = ++loadGen;
     await flush();
     saveError = '';
@@ -86,10 +85,25 @@
       if (gen !== loadGen) return;
       const per = s?.automation?.per_tunnel_rules || {};
       groups = toGroups(per[name] || []);
+      // Only mark "loaded" AFTER groups are actually populated. Setting
+      // loadedFor earlier caused refreshPreview()'s guard to pass while
+      // groups were still empty/stale, evaluating a wrong draft and
+      // showing all badges as no-match/inactive until the load finished
+      // — this was the direct cause of "every open looks different".
+      loadedFor = name;
     } catch (e) {
-      if (gen === loadGen) groups = { connect: [], disconnect: [] };
+      if (gen === loadGen) {
+        groups = { connect: [], disconnect: [] };
+        loadedFor = name;
+      }
       console.error('automation load:', e);
     }
+    // The draft for THIS tunnel is now loaded (groups populated). Rate it
+    // against the live network immediately so reopening the editor draws
+    // the correct match / in-use badges on the first frame instead of
+    // waiting for the 3 s poll; refreshPreview no-ops unless this load is
+    // still the current tunnel/session.
+    if (gen === loadGen) refreshPreview();
     try {
       const r = await TunnelService.GetKnownSSIDs();
       if (gen !== loadGen) return;
@@ -343,28 +357,29 @@
   //     same buildRules+persist sink, so concurrent typesetting doesn't
   //     pile up disk writes.
   let editTimer = null;
-  $: if (open) {
+  $: if (open && loadedFor === tunnelName) {
     // Touch nested fields so svelte considers them dependencies. The JSON
     // stringify is cheap for the small rule sets users write (~<30 rules)
     // and doubles as the fingerprint for "did the draft really change".
+    // We only react once the draft for the CURRENT tunnel is loaded, so a
+    // reopen never rates the previous tunnel's leftover cards.
     const _touchD = JSON.stringify(groups.disconnect);
     const _touchC = JSON.stringify(groups.connect);
     void _touchD; void _touchC;
-    scheduleLiveEditRefresh();
+    schedulePreviewRefresh();
   }
-  function scheduleLiveEditRefresh() {
+  // Re-rate the DRAFT (not the disk state) shortly after the user stops
+  // typing. Persistence is handled separately by save()'s debounce; the
+  // live indicators must follow the draft even before/independently of a
+  // write landing, which is what removes the old "edit then wait for the
+  // save round-trip before badges update" lag.
+  function schedulePreviewRefresh() {
     if (!open) return;
     if (editTimer) clearTimeout(editTimer);
-    editTimer = setTimeout(async () => {
+    editTimer = setTimeout(() => {
       editTimer = null;
-      if (!open) return;
-      try {
-        await persist({ name: tunnelName, rules: buildRules() });
-      } catch (_) {
-        // See implementation notes above — mid-edit failures are silent so
-        // the toast-free typing flow is preserved.
-      }
-    }, 250);
+      if (open) refreshPreview();
+    }, 0);
   }
   function runSave() {
     saveTimer = null;
@@ -373,14 +388,20 @@
     if (!snap) return;
     saveChain = saveChain.then(() => persist(snap));
   }
+  // Normalized fingerprint of the rules WE last wrote to disk. The
+  // config_changed watcher fires for our own writes too (it polls mtime);
+  // when the on-disk content equals what we just saved, it must NOT reload
+  // and rebuild the cards (that would blur focus and re-trigger a rating
+  // loop). Only a genuinely external edit differs and warrants a reload.
+  let lastSavedFingerprint = '';
   async function persist(snap) {
     saveError = '';
     try {
       await TunnelService.SaveAutomationRules(snap.name, snap.rules);
-      // Refresh the live indicators right away: the 3s poll would otherwise
-      // leave the rule frames judged against the PRE-save disk state, briefly
-      // highlighting the wrong card after every edit.
-      if (open && snap.name === tunnelName) refreshPreview();
+      lastSavedFingerprint = JSON.stringify(normRules(snap.rules));
+      // No refreshPreview() here: the live indicators rate the in-memory
+      // DRAFT (via AutomationEvaluate), which a disk write does not change.
+      // Re-rating after the save would just repeat the same evaluation.
     } catch (e) {
       saveError = errText(e);
       console.error('automation save:', e);
@@ -409,7 +430,7 @@
   }
   // ---- Live match indicators -------------------------------------------
   // Marker semantics (same engine the helper enforces):
-  //   - conditions inside one rule are AND; rules are OR'd with
+  //   - conditions inside one rule are AND; rules are alternatives with
   //     first-match-wins priority, disconnect rules before connect rules;
   //   - per-condition "match" badge = that condition's own result, judged
   //     individually — a rule only fires when ALL its conditions match;
@@ -419,26 +440,49 @@
   //     disconnect rule, later rules of the same action) stay match-only;
   //   - none_match ("otherwise") matches exactly when no rule above it
   //     matched.
-  // The GUI evaluates every tunnel's rules against the current network
-  // context (AutomationPreview, same wifi engine the helper uses) and
-  // reports, per rule, whether each condition matched. We poll while the
-  // editor is open so the indicators follow network changes in real time.
+  // The GUI sends the editor's CURRENT DRAFT rules to AutomationEvaluate,
+  // which rates them against the live network context with the same wifi
+  // engine the helper enforces and returns per-rule / per-condition match
+  // detail. Rating the DRAFT (not the last-saved disk state) means the
+  // returned RuleDetails line up 1:1 with the cards by construction —
+  // there is no longer a second, asynchronously-loaded "disk rules" array
+  // to misalign with, which was the root cause of the badges/frame
+  // lighting up the wrong rule or differing on every reopen. A 3 s poll
+  // re-rates the same draft so network changes (SSID switch, VPN up/down)
+  // are reflected in real time.
   //
   // UNIFIED refresh entry point (single source of truth per memory
-  // EXP-100009308). Every caller — onMount poll, open reactive guard,
-  // post-save immediate refresh — goes through this function, which
-  // enforces:
-  //   * one in-flight request at a time (cancel the previous via AbortController)
-  //   * response rejection when `previewEpoch` has advanced (modal closed/reopened)
-  //   * response rejection when `tunnelName` changed between fire and resolution
-  //   * explicit "fetching" (preview = null) only when the first fetch of a
-  //     session has no usable prior state; transient failures mid-session
-  //     keep the previous frame (same semantics as before) instead of
-  //     leaving indicators empty and causing "every open looks different".
+  // EXP-100009308). Every caller — the open poll guard, load() completion,
+  // the draft-fingerprint reactive, and the 3 s network poll — goes
+  // through this function, which enforces:
+  //   * no rating until the draft for the current tunnel is loaded
+  //     (loadedFor === tunnelName) so a reopen never rates stale cards;
+  //   * one in-flight request at a time (cancel the previous via AbortController);
+  //   * response rejection when `previewEpoch` has advanced (closed/reopened);
+  //   * response rejection when `tunnelName` changed between fire and resolution;
+  //   * response rejection when the draft changed in flight (fingerprint mismatch);
+  //   * transient failures keep the previous frame instead of blanking the
+  //     indicators, so mid-session network hiccups don't cause "every open
+  //     looks different".
   async function refreshPreview() {
     if (!open || !tunnelName) return;
+    // Only rate once the DRAFT for this tunnel is loaded. Right after a
+    // reopen (or tunnel switch) `groups` still holds the previous tunnel's
+    // cards; rating those and mapping the details back onto the new cards
+    // is exactly what lit up the wrong frame / showed stale badges. The
+    // load() completion and the draft-fingerprint reactive both call us
+    // again as soon as the real draft is in place.
+    if (loadedFor !== tunnelName) return;
     const myEpoch = previewEpoch;
     const myTunnel = tunnelName;
+    // Snapshot the draft we are about to rate, plus its fingerprint. The
+    // returned RuleDetails line up 1:1 with THIS snapshot's rules (same
+    // engine, caller-supplied rules); if the draft changes while the call
+    // is in flight we discard the result and let the draft-fingerprint
+    // reactive fire a fresh rating — cards and details can never land from
+    // two different drafts.
+    const draft = buildRules();
+    const fingerprint = JSON.stringify(draft);
     // Cancel any previous in-flight fetch: Wails calls that are already on
     // the wire don't have an HTTP abort, so for the AbortController guard
     // we still benefit from the epoch check below — no stale result ever
@@ -447,37 +491,42 @@
     if (previewAbort) { try { previewAbort.abort?.(); } catch (_) {} }
     previewAbort = new AbortController();
     try {
-      const pv = await AutomationPreview();
+      const pv = await AutomationEvaluate(myTunnel, draft);
       if (previewEpoch !== myEpoch) return;        // session changed
       if (tunnelName !== myTunnel) return;          // switched tunnel
       if (!open) return;
+      // The draft was edited while this call was in flight: its details
+      // describe an older draft, so drop it. The groups reactive statement
+      // will re-rate the current draft on its own debounce.
+      if (JSON.stringify(buildRules()) !== fingerprint) return;
+      // AutomationEvaluate always returns exactly one tunnel entry for the
+      // requested tunnel (even an empty rule set yields an explicit
+      // "unmanaged" decision), so a missing entry means the call predates
+      // this tunnel — treat as no result and keep the previous frame.
       const t = (pv?.tunnels || []).find(x => x.name === myTunnel);
-      // EITHER no per-tunnel result, OR the tunnel has NO rules saved yet
-      // (an empty rules array with an "unmanaged" explicit decision is
-      // still a VALID result we want to render — so we only bail when the
-      // backend returned no tunnel entry at all, which really means "no
-      // preview available"). Without this check a first save to a tunnel
-      // that previously had no rules would leave the indicators blank until
-      // the next poll cycle.
-      if (!t && (pv?.tunnels?.some(x => x.name === myTunnel) ?? true)) return;
       preview = {
-        on_wifi: pv.on_wifi,
-        ssid: pv.ssid,
+        on_wifi: pv?.on_wifi ?? false,
+        ssid: pv?.ssid || '',
+        gateway_mac: pv?.gateway_mac || '',
+        gateway_ip: pv?.gateway_ip || '',
+        physical_ips: pv?.physical_ips || [],
+        subnets: pv?.subnets || [],
         decision: t ? t.decision : 'unmanaged',
         rules: t ? t.rules : [],
-        interfaces: pv.interfaces,
+        active: !!t?.active,
+        interfaces: pv?.interfaces || [],
       };
     } catch (e) {
+      // Log the error so a missing method (old binary) or a network
+      // enumeration failure is visible in the dev console instead of
+      // silently leaving badges blank.
+      console.error('[automation] refreshPreview failed:', e);
       // Network enumeration can be temporarily unavailable mid-session;
-      // keep last state. If we held no state to begin with (first open,
-      // the call above returned nothing), expose a sentinel so the UI can
-      // tell "couldn't fetch" from "genuinely no match".
+      // keep the last frame so indicators don't flicker to empty/neutral
+      // on a transient failure.
       if (previewEpoch !== myEpoch || tunnelName !== myTunnel) return;
     } finally {
-      if (previewAbort && previewAbort.signal.aborted) {
-        // AbortController was replaced by a newer call; don't null it here
-        // because the newer call owns it now.
-      } else if (previewAbort && !previewAbort.signal.aborted) {
+      if (previewAbort && !previewAbort.signal.aborted) {
         previewAbort = null;
       }
     }
@@ -492,6 +541,39 @@
     }
     return -1;
   })();
+  // Build one marker snapshot from the same ordered draft/details pair used
+  // by the backend. Keying condition markers by the editor row id avoids
+  // stale deep lookups when Svelte updates nested bind:value fields.
+  $: markerSnapshot = (() => {
+  const result = { rules: {}, conditions: {} };
+    const details = preview?.rules || [];
+    let detailIndex = 0;
+    let firstMatch = -1;
+    let globalIndex = 0;
+    for (const d of ['disconnect', 'connect']) {
+      for (let ruleIdx = 0; ruleIdx < (groups[d] || []).length; ruleIdx++) {
+        const rule = groups[d][ruleIdx];
+        const persisted = isPersistedRule(rule);
+        const rd = persisted ? details[detailIndex++] : null;
+        const ruleMatched = !!rd?.matched;
+        if (ruleMatched && firstMatch < 0) firstMatch = globalIndex;
+        const winning = ruleMatched && firstMatch === globalIndex;
+        result.rules[rule._gid] = winning && actionExecuted();
+        for (let i = 0; i < rule.conds.length; i++) {
+          const c = rule.conds[i];
+          const idx = condIndexInRule(rule, i);
+          const conditionMatched = !!rd?.conditions?.[idx]?.matched;
+          result.conditions[c._id] = {
+            match: conditionMatched,
+            active: conditionMatched && winning && actionExecuted(),
+            tunnelActive: conditionMatched && !!preview?.active,
+          };
+        }
+        if (persisted) globalIndex++;
+      }
+    }
+    return result;
+  })();
   // The decision is actually executed only for connect/disconnect. Under
   // the manual-off latch the winning connect rule is suppressed — nothing
   // runs, so nothing may be marked "in use" (match markers stay truthful).
@@ -505,8 +587,8 @@
     const win = winningRuleIndex >= 0 ? preview.rules[winningRuleIndex] : null;
     return win && win.do === d;
   }
-  // Rule matching is order-based: rules are OR'd with first-match-wins
-  // priority (all disconnect rules before all connect rules). A rule is
+  // Rule matching is order-based: rules are alternatives with first-match-
+  // wins priority (all disconnect rules before all connect rules). A rule is
   // the winner iff it is the first matching rule of the whole list.
   function isWinningRule(rd) {
     if (!rd || !rd.matched || winningRuleIndex < 0) return false;
@@ -589,6 +671,9 @@
         const s = await TunnelService.GetSettings();
         if (busy()) return;
         const disk = (s?.automation?.per_tunnel_rules || {})[name] || [];
+        // Echo of our own save (the watcher fires on mtime, including writes
+        // this editor made): cards already match disk, so don't reload.
+        if (lastSavedFingerprint && JSON.stringify(normRules(disk)) === lastSavedFingerprint) return;
         if (!diskDiffers(disk)) return;
       } catch (e) {
         console.error('automation config_changed check:', e);
@@ -634,6 +719,25 @@
     if (!preview || !preview.decision) return 'unmanaged';
     return preview.decision; // 'connect' | 'disconnect' | 'unmanaged' | 'manual-off'
   }
+  function conditionMatchCount(type) {
+    let count = 0;
+    for (const d of ['disconnect', 'connect']) {
+      for (let ruleIdx = 0; ruleIdx < (groups[d] || []).length; ruleIdx++) {
+        const rule = groups[d][ruleIdx];
+        for (let i = 0; i < rule.conds.length; i++) {
+          if (rule.conds[i].type === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
+        }
+      }
+    }
+    return count;
+  }
+  $: networkFacts = [
+    { key: 'interface', label: $t('automation.network_interface'), value: (preview?.interfaces || []).map(x => `${x.name} (${x.active ? $t('automation.interface_in_use') : $t('automation.interface_not_in_use')})`).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('interface') },
+    { key: 'ssid', label: $t('automation.network_ssid'), value: preview?.on_wifi && preview?.ssid ? preview.ssid : $t('automation.wifi_not_connected'), count: conditionMatchCount('ssid') },
+    { key: 'gateway_mac', label: $t('automation.network_gateway_mac'), value: preview?.gateway_mac || $t('automation.network_unavailable'), count: conditionMatchCount('network') },
+    { key: 'gateway_ip', label: $t('automation.network_gateway_ip'), value: preview?.gateway_ip || $t('automation.network_unavailable'), count: conditionMatchCount('gateway_ip') },
+    { key: 'subnet', label: $t('automation.network_subnet'), value: (preview?.subnets || []).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('subnet') },
+  ];
 </script>
 
 <svelte:window on:keydown={(e) => e.key === 'Escape' && open && close()} />
@@ -648,15 +752,30 @@
         </div>
         <button class="am-close" on:click={close} aria-label="Close"><Icon name="x" size={16} strokeWidth={2} /></button>
       </div>
-      <p class="am-hint">{$t('automation.hint')}</p>
-      <SSIDPermissionBanner {TunnelService} />
-      <!-- Live decision strip -->
-      <div class="am-live">
-        <span class="am-live-dot am-live-dot-{decisionKey()}"></span>
-        <span class="am-live-label">{$t('automation.live_matching')}</span>
-        <span class="am-live-network">{preview?.ssid || '—'}</span>
-        <span class="am-live-decision">{decisionKey() === 'unmanaged' ? $t('automation.decision_unmanaged') : $t('automation.decision_' + decisionKey())}</span>
-      </div>
+      <details class="am-help">
+        <summary>{$t('automation.help_summary')}</summary>
+        <p class="am-hint">{$t('automation.hint')}</p>
+      </details>
+      <details class="am-info" open>
+        <summary>{$t('automation.live_matching')}</summary>
+        <SSIDPermissionBanner {TunnelService} />
+        <!-- Live decision strip -->
+        <div class="am-live">
+          <span class="am-live-dot am-live-dot-{preview?.on_wifi ? 'wifi' : 'wired'}"></span>
+          <span class="am-live-label">{$t('automation.live_matching')}</span>
+          <span class="am-live-decision">{preview?.active ? $t('automation.tunnel_active') : $t('automation.tunnel_inactive')}</span>
+        </div>
+        <div class="am-network-facts">
+          {#each networkFacts as fact}
+            <div class="am-network-fact">
+              <span class="am-network-fact-label">{fact.label}</span>
+              <span class="am-network-fact-value" title={fact.value}>{fact.value}</span>
+              <span class="am-network-fact-separator">|</span>
+              <span class:am-fact-match={fact.count > 0} class="am-network-fact-status">{fact.count > 0 ? $t('automation.network_rule_matches', { count: fact.count }) : $t('automation.network_no_rule')}</span>
+            </div>
+          {/each}
+        </div>
+      </details>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
           <span class="am-chevron am-chevron-up"><Icon name="chevron-down" size={15} strokeWidth={2.5} /></span>
@@ -679,7 +798,7 @@
                   {#if ruleIdx > 0}
                     <div class="am-rule-or">{$t('automation.rule_or')}</div>
                   {/if}
-                  <div class="am-rule" class:am-rule-won={ruleWon(d, ruleIdx)}>
+                  <div class="am-rule" class:am-rule-won={markerSnapshot.rules[rule._gid] === true}>
                     <div class="am-rule-head">
                       <span class="am-rule-num">{$t('automation.rule')} {ruleIdx + 1}</span>
                       <span class="am-match-badge" title={$t('automation.group_all_hint')}>{$t('automation.match_all')}</span>
@@ -689,14 +808,16 @@
                       <div class="am-empty am-rule-empty">{$t('automation.rule_empty')}</div>
                     {:else}
                       {#each rule.conds as c, i (c._id)}
-                        {@const net = condNetworkMatched(d, ruleIdx, i)}
-                        {@const use = ruleWon(d, ruleIdx)}
+                        {@const marker = markerSnapshot.conditions[c._id] || { match: false, active: false }}
+                        {@const net = marker.match}
+                        {@const use = marker.active}
+                        {@const tunnelActive = marker.tunnelActive}
                         <div class="am-cond" class:am-dragging={dragIndex === i && dragGroup === d && dragRule === ruleIdx}
                           on:dragover={(e) => onCondDragOver(e, d, ruleIdx, i)}
                           on:dragend={onDragEnd}>
                           <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
                             on:dragstart={(e) => onDragStart(e, d, ruleIdx, i)}>⋮⋮</span>
-                          <select class="am-type" bind:value={c.type} on:change={save} aria-label={$t('automation.condition')}>
+                            <select class="am-type" bind:value={c.type} on:change={() => { save(); schedulePreviewRefresh(); }} aria-label={$t('automation.condition')}>
                             <option value="network">{$t('automation.cond_network')}</option>
                             <option value="subnet">{$t('automation.cond_subnet')}</option>
                             <option value="ssid">{$t('automation.cond_ssid')}</option>
@@ -714,7 +835,7 @@
                               placeholder={currentGatewayMAC || $t('automation.mac_placeholder')}
                               title={macInvalid(c.gateway_mac) ? $t('automation.mac_invalid') : ''}
                               bind:value={c.gateway_mac}
-                              on:input={save} on:change={() => onMacChange(c)} />
+                              on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { onMacChange(c); schedulePreviewRefresh(); }} />
                           {:else if c.type === 'subnet'}
                             <input
                               class="am-val" class:am-invalid={cidrInvalid(c.subnet)}
@@ -722,15 +843,15 @@
                               placeholder={currentSubnets[0] || '192.168.0.0/24'}
                               title={cidrInvalid(c.subnet) ? $t('automation.subnet_invalid') : ''}
                               bind:value={c.subnet}
-                              on:input={save} on:change={save} />
+                              on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { save(); schedulePreviewRefresh(); }} />
                           {:else if c.type === 'ssid'}
                             <input
                               class="am-val"
                               list="am-ssid-list"
                               placeholder={$t('automation.ssid_select_hint')}
                               bind:value={c.ssid}
-                              on:input={save}
-                              on:change={save}
+                              on:input={() => { save(); schedulePreviewRefresh(); }}
+                              on:change={() => { save(); schedulePreviewRefresh(); }}
                             />
                           {:else if c.type === 'gateway_ip'}
                             <input
@@ -739,8 +860,8 @@
                               placeholder={preview?.gateway_ip || '192.168.0.1'}
                               title={gatewayIPInvalid(c.gateway_ip) ? $t('automation.ip_invalid') : ''}
                               bind:value={c.gateway_ip}
-                              on:input={save}
-                              on:change={save}
+                              on:input={() => { save(); schedulePreviewRefresh(); }}
+                              on:change={() => { save(); schedulePreviewRefresh(); }}
                             />
                           {:else if c.type === 'interface'}
                             <input
@@ -748,16 +869,16 @@
                               list="am-iface-list"
                               placeholder={$t('automation.interface_placeholder')}
                               bind:value={c.interface_name}
-                              on:input={save}
-                              on:change={save}
+                              on:input={() => { save(); schedulePreviewRefresh(); }}
+                              on:change={() => { save(); schedulePreviewRefresh(); }}
                             />
                           {:else if c.type === 'ethernet'}
                             <span class="am-val am-val-none">{$t('automation.cond_ethernet_desc')}</span>
                           {:else if c.type === 'time'}
                             <div class="am-time">
-                              <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={save} />
+                              <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={() => { save(); schedulePreviewRefresh(); }} />
                               <span class="am-time-dash">–</span>
-                              <input type="time" class="am-clock" aria-label={$t('automation.time_end')} bind:value={c.end} on:change={save} />
+                              <input type="time" class="am-clock" aria-label={$t('automation.time_end')} bind:value={c.end} on:change={() => { save(); schedulePreviewRefresh(); }} />
                               <div class="am-days" role="group" aria-label={$t('automation.days_label')}>
                                 {#each [0, 1, 2, 3, 4, 5, 6] as d}
                                   <button type="button" class="am-day" class:on={(c.days || []).includes(d)} on:click={() => toggleDay(c, d)}>{$t('automation.day_' + d)}</button>
@@ -771,7 +892,8 @@
                             class="am-live-cond"
                             title={net ? (use ? $t('automation.status_active') : $t('automation.status_shadowed')) : $t('automation.status_nomatch')}>
                             <span class="am-badge am-badge-match" class:am-yes={net} class:am-no={!net}>{$t(net ? 'automation.label_match' : 'automation.label_no_match')}</span>
-                            <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_active' : 'automation.label_inactive')}</span>
+                            <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_in_use' : 'automation.label_not_in_use')}</span>
+                            <span class="am-badge am-badge-active" class:am-yes={tunnelActive} class:am-no={!tunnelActive}>{$t(tunnelActive ? 'automation.label_active' : 'automation.label_inactive')}</span>
                           </span>
                           <button class="am-remove" on:click={() => removeCond(d, ruleIdx, i)} aria-label="remove condition"><Icon name="x" size={12} strokeWidth={2} /></button>
                         </div>
@@ -820,11 +942,20 @@
   .am-dialog {
     width: 100%; max-width: 580px; height: 600px; max-height: 92vh;
     display: flex; flex-direction: column;
+    overflow-y: auto;
     background: var(--bg-elevated, var(--bg-secondary));
     border: 1px solid var(--border);
     border-radius: 14px; padding: 20px;
     box-shadow: 0 16px 48px rgba(0,0,0,0.35);
   }
+  .am-help, .am-info { flex-shrink: 0; }
+  .am-help > summary, .am-info > summary {
+    cursor: pointer; list-style: none; color: var(--text-primary);
+    font: 600 12px/1.3 var(--font-sans); padding: 2px 0;
+  }
+  .am-help > summary::-webkit-details-marker, .am-info > summary::-webkit-details-marker { display: none; }
+  .am-help > summary::after, .am-info > summary::after { content: '+'; float: right; color: var(--text-muted); font-size: 14px; }
+  .am-help[open] > summary::after, .am-info[open] > summary::after { content: '−'; }
   .am-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .am-icon {
     width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
@@ -850,10 +981,24 @@
   .am-live-dot-disconnect { background: var(--orange, #ff9f0a); }
   .am-live-dot-manual-off { background: var(--orange, #ff9f0a); }
   .am-live-dot-unmanaged { background: var(--text-muted); }
+  .am-live-dot-wifi { background: var(--green, #34c759); }
+  .am-live-dot-wired { background: var(--accent); }
   .am-live-network { font-family: var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .am-live-decision { margin-left: auto; color: var(--text-muted); white-space: nowrap; }
-  .am-rules-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
-  .am-rules { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 2px 0 0; padding-right: 4px; }
+  .am-network-facts {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px;
+    margin: 0 0 6px; padding: 6px 8px;
+    background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
+    border: 1px solid var(--border); border-radius: 7px;
+  }
+  .am-network-fact { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+  .am-network-fact-label { color: var(--text-muted); font: 500 10px/1.2 var(--font-sans); }
+  .am-network-fact-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font: 500 10px/1.2 var(--font-mono); }
+  .am-network-fact-separator { color: var(--border); flex-shrink: 0; }
+  .am-network-fact-status { color: var(--text-muted); font: 400 9px/1.2 var(--font-sans); white-space: nowrap; }
+  .am-network-fact-status.am-fact-match { color: var(--green, #34c759); }
+  .am-rules-wrap { flex: none; position: relative; display: flex; }
+  .am-rules { flex: 1; display: flex; flex-direction: column; gap: 10px; margin: 2px 0 0; padding-right: 4px; }
   .am-fade {
     position: absolute; left: 0; right: 4px; height: 52px; pointer-events: none;
     opacity: 0; z-index: 2;

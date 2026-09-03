@@ -110,6 +110,53 @@ export class Condition {
         }
         if (/** @type {any} */(false)) {
             /**
+             * GatewayIP is the current default gateway's IPv4 address (e.g.
+             * "192.168.0.1"). Medium-agnostic like GatewayMAC, but stable across
+             * router hardware swaps on the same network.
+             * @member
+             * @type {string | undefined}
+             */
+            this["gateway_ip"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * InterfaceName is a physical interface name (e.g. "en0", "Ethernet").
+             * Matched case-insensitively against the up, non-tunnel interfaces
+             * that currently carry a routable address.
+             * @member
+             * @type {string | undefined}
+             */
+            this["interface_name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Start and End bound a local-time window in 24-hour "HH:MM" form.
+             * End exclusive; an End before Start wraps past midnight (22:00–06:00
+             * is "overnight"). Either may be empty (empty Start = 00:00, empty
+             * End = 24:00), so a rule can be day-of-week only.
+             * @member
+             * @type {string | undefined}
+             */
+            this["start"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["end"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Days filters the window by weekday, 0=Sunday … 6=Saturday. Empty
+             * means every day.
+             * @member
+             * @type {number[] | undefined}
+             */
+            this["days"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * Label is a human-readable hint shown in the editor for a network
              * condition (e.g. "Office · 192.168.0.0/24"). Not used for matching.
              * @member
@@ -127,7 +174,11 @@ export class Condition {
      * @returns {Condition}
      */
     static createFrom($$source = {}) {
+        const $$createField8_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("days" in $$parsedSource) {
+            $$parsedSource["days"] = $$createField8_0($$parsedSource["days"]);
+        }
         return new Condition(/** @type {Partial<Condition>} */($$parsedSource));
     }
 }
@@ -180,8 +231,54 @@ export class ConditionDetail {
 }
 
 /**
+ * InterfaceInfo describes one active physical interface. Used by the
+ * interface and ethernet conditions.
+ */
+export class InterfaceInfo {
+    /**
+     * Creates a new InterfaceInfo instance.
+     * @param {Partial<InterfaceInfo>} [$$source = {}] - The source object to create the InterfaceInfo.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("is_wifi" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_wifi"] = false;
+        }
+        if (!("active" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["active"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InterfaceInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InterfaceInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InterfaceInfo(/** @type {Partial<InterfaceInfo>} */($$parsedSource));
+    }
+}
+
+/**
  * Rule is one condition→action pair. A rule carries one or more
- * conditions; Match says how they combine.
+ * conditions, which are always combined with AND.
  */
 export class Rule {
     /**
@@ -199,15 +296,8 @@ export class Rule {
         }
         if (/** @type {any} */(false)) {
             /**
-             * Match says how the conditions combine:
-             * 
-             *   "" (or "any", the default) — OR: any single matching condition
-             *       fires the rule.
-             *   "all" — AND: every condition must match for the rule to fire.
-             * 
-             * A none_match condition is unconditional at its position, so under
-             * "any" it makes the whole rule fire immediately and under "all" it
-             * contributes nothing (a rule of only none_match always fires).
+             * Match is retained for config compatibility. Conditions are always ANDed;
+             * new configs use "all" and legacy configs with no value are equivalent.
              * @member
              * @type {string | undefined}
              */
@@ -230,7 +320,7 @@ export class Rule {
      * @returns {Rule}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType4;
+        const $$createField0_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("when" in $$parsedSource) {
             $$parsedSource["when"] = $$createField0_0($$parsedSource["when"]);
@@ -288,7 +378,7 @@ export class RuleDetail {
      * @returns {RuleDetail}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType6;
+        const $$createField3_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("conditions" in $$parsedSource) {
             $$parsedSource["conditions"] = $$createField3_0($$parsedSource["conditions"]);
@@ -335,8 +425,8 @@ export class Rules {
      * @returns {Rules}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType7;
-        const $$createField1_0 = $$createType9;
+        const $$createField0_0 = $$createType8;
+        const $$createField1_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("trusted_ssids" in $$parsedSource) {
             $$parsedSource["trusted_ssids"] = $$createField0_0($$parsedSource["trusted_ssids"]);
@@ -416,7 +506,7 @@ export class TunnelSSIDs {
      * @returns {TunnelSSIDs}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType7;
+        const $$createField0_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("auto_connect_ssids" in $$parsedSource) {
             $$parsedSource["auto_connect_ssids"] = $$createField0_0($$parsedSource["auto_connect_ssids"]);
@@ -429,10 +519,11 @@ export class TunnelSSIDs {
 const $$createType0 = Rule.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Map($Create.Any, $$createType1);
-const $$createType3 = Condition.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = ConditionDetail.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $Create.Array($Create.Any);
-const $$createType8 = TunnelSSIDs.createFrom;
-const $$createType9 = $Create.Map($Create.Any, $$createType8);
+const $$createType3 = $Create.Array($Create.Any);
+const $$createType4 = Condition.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = ConditionDetail.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $Create.Array($Create.Any);
+const $$createType9 = TunnelSSIDs.createFrom;
+const $$createType10 = $Create.Map($Create.Any, $$createType9);

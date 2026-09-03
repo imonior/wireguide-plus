@@ -4,6 +4,22 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.7.0] - 2026-09-04
+
+### ✨ 추가
+
+- **Automation 실시간 네트워크 패널** — 현재 터널의 실제 하드웨어 인터페이스, Wi-Fi SSID, 게이트웨이 MAC, 게이트웨이 IP, 서브넷을 표시하고 규칙 매치 상태도 보여줍니다. 가상 어댑터는 제외하며 하드웨어 인터페이스를 사용 중/미사용으로 구분합니다.
+- **Automation 편집기 상호작용 개선** — 안내와 네트워크 패널을 각각 접을 수 있고 편집기 전체를 스크롤할 수 있습니다. 조건 드래그 정렬도 유지됩니다.
+
+### 🐛 수정
+
+- **Automation 상태 의미 통일** — `match`는 조건 일치, `in use`는 첫 번째 일치 규칙 선택, `active`는 터널의 실제 실행 상태를 의미합니다. 우선순위에서 밀린 otherwise 조건도 일치로 표시됩니다.
+- **설정 오류 메시지 다국어화** — Pin Interface, 로그 수준, Kill Switch, DNS 보호, 헬스 체크의 실패 및 미지원 플랫폼 메시지에서 중국어 하드코딩을 제거했습니다.
+
+### 📝 문서
+
+- **5개 언어 README와 CHANGELOG 동기화** — 실시간 네트워크 패널, 인터페이스 상태, 편집기 상호작용, Pin Interface 지원 플랫폼 범위를 문서화했습니다.
+
 ## [1.6.5] - 2026-09-02
 
 ### ✨ 追加

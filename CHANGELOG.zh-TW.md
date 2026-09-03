@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.0] - 2026-09-04
+
+### ✨ 新增
+
+- **Automation 即時網路看板** — 顯示目前隧道的實體硬體介面、Wi-Fi SSID、閘道 MAC、閘道 IP 與子網路，並標示規則比對情況；排除虛擬網卡，區分使用中與未使用的硬體介面。
+- **Automation 編輯器互動最佳化** — 說明與看板可分別收合，整個編輯器支援捲動，保留條件拖曳排序。
+
+### 🐛 修復
+
+- **Automation 狀態語義統一** — `match` 表示條件比對，`in use` 表示首條命中規則被選取，`active` 表示隧道實際運行；otherwise 條件即使被降權仍顯示為比對成功。
+- **設定錯誤提示多語言化** — Pin Interface、日誌級別、Kill Switch、DNS 保護與健康檢查的失敗及平台不支援提示不再硬編碼中文。
+
+### 📝 文件
+
+- **同步更新 5 種語言 README 與 CHANGELOG** — 補充即時網路看板、介面狀態、編輯器互動及 Pin Interface 的平台支援範圍。
+
 ## [1.6.5] - 2026-09-02
 
 ### ✨ 新增

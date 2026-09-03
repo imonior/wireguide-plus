@@ -217,23 +217,22 @@ func TestEvaluate_WiFiAny(t *testing.T) {
 // New (issue: AND/OR) — a rule with multiple conditions combines them per
 // its Match field: "all" requires every condition (AND), ""/any fires on
 // the first match (OR).
-func TestEvaluate_MultiConditionOR(t *testing.T) {
-	// OR: connect if on either office SSID or the office subnet.
-	or := Rule{
+func TestEvaluate_MultiConditionAlwaysAND(t *testing.T) {
+	rule := Rule{
 		When: []Condition{
 			{Type: CondSSID, SSID: "office-wifi"},
 			{Type: CondSubnet, Subnet: "10.2.0.0/16"},
 		},
 		Do: ActionConnect,
 	}
-	if got := Evaluate([]Rule{or}, NetworkContext{SSID: "office-wifi"}); got != StateConnect {
-		t.Errorf("OR via ssid: got %v, want connect", got)
+	if got := Evaluate([]Rule{rule}, NetworkContext{SSID: "office-wifi"}); got != StateUnmanaged {
+		t.Errorf("missing subnet must not match: got %v, want unmanaged", got)
 	}
-	if got := Evaluate([]Rule{or}, NetworkContext{PhysicalIPs: ips("10.2.33.7")}); got != StateConnect {
-		t.Errorf("OR via subnet: got %v, want connect", got)
+	if got := Evaluate([]Rule{rule}, NetworkContext{PhysicalIPs: ips("10.2.33.7")}); got != StateUnmanaged {
+		t.Errorf("missing SSID must not match: got %v, want unmanaged", got)
 	}
-	if got := Evaluate([]Rule{or}, NetworkContext{SSID: "cafe", PhysicalIPs: ips("192.168.1.5")}); got != StateUnmanaged {
-		t.Errorf("OR neither matches: got %v, want unmanaged", got)
+	if got := Evaluate([]Rule{rule}, NetworkContext{SSID: "office-wifi", PhysicalIPs: ips("10.2.33.7")}); got != StateConnect {
+		t.Errorf("both conditions must match: got %v, want connect", got)
 	}
 }
 

@@ -74,6 +74,17 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 
 Automation is configured **per tunnel** (open any tunnel's `…` menu → `Automation…`). Every tunnel has its own independent set of rules, so "connect A on the office Wi-Fi, disconnect B at the office, connect B at home" all coexist without conflict.
 
+The editor's live network panel describes the **currently selected tunnel's** environment,
+one row per category: all detected physical hardware interfaces (with `in use` / `not in use`),
+Wi-Fi SSID, gateway MAC, gateway IP, and subnet. It also reports which conditions in this
+tunnel match those values. Virtual adapters are excluded. When Wi-Fi is not connected, the
+SSID row says `Wi-Fi not connected`. The panel and rule guidance can be collapsed, and the
+whole editor scrolls so large rule sets remain usable.
+
+`Pin Interface` is currently implemented on macOS using `-ifscope` for VPN bypass routes.
+Windows and Linux do not expose this setting as supported yet; selecting a WireGuard
+interface is an operating-system routing policy feature, not a WireGuard protocol setting.
+
 ### Rule logic
 
 - **Rules inside one tunnel** are evaluated top-to-bottom in two ordered groups:

@@ -106,21 +106,23 @@ func (s *TunnelService) GetCurrentNetwork() CurrentNetwork {
 // engine's matching in JS. Computed locally (no helper round-trip) and
 // identical in spirit to the helper's ipc.AutomationPreviewResponse.
 type AutomationPreviewResponse struct {
-	OnWiFi      bool                       `json:"on_wifi"`
-	SSID        string                     `json:"ssid"`
-	PhysicalIPs []string                   `json:"physical_ips"`
-	GatewayMAC  string                     `json:"gateway_mac"`
-	GatewayIP   string                     `json:"gateway_ip"`
-	Interfaces  []wifi.InterfaceInfo       `json:"interfaces"`
-	Tunnels     []AutomationTunnelPreview  `json:"tunnels"`
+	OnWiFi      bool                      `json:"on_wifi"`
+	SSID        string                    `json:"ssid"`
+	PhysicalIPs []string                  `json:"physical_ips"`
+	Subnets     []string                  `json:"subnets"`
+	GatewayMAC  string                    `json:"gateway_mac"`
+	GatewayIP   string                    `json:"gateway_ip"`
+	Interfaces  []wifi.InterfaceInfo      `json:"interfaces"`
+	Tunnels     []AutomationTunnelPreview `json:"tunnels"`
 }
 
 // AutomationTunnelPreview is one tunnel's evaluated rules plus the overall
 // decision Evaluate would reach (accounting for the manual-off latch).
 type AutomationTunnelPreview struct {
-	Name     string             `json:"name"`
-	Rules    []wifi.RuleDetail  `json:"rules"`
-	Decision string             `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off"
+	Name     string            `json:"name"`
+	Rules    []wifi.RuleDetail `json:"rules"`
+	Decision string            `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off"
+	Active   bool              `json:"active"`   // tunnel is actually up in the helper
 }
 
 // AutomationPreview evaluates every tunnel's Automation rules against the
@@ -130,10 +132,84 @@ type AutomationTunnelPreview struct {
 // round-trip. ManualOffTunnels is honoured the same way the helper honours
 // it: a matching connect on a manually-off tunnel reports "manual-off".
 func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
+	ctx, resp := currentNetworkPreview()
+
+	st, err := s.settingsStore.Load()
+	if err != nil {
+		return resp
+	}
+	st.EnsureAutomation()
+	if st.Automation == nil || len(st.Automation.PerTunnel) == 0 {
+		return resp
+	}
+	manualOff := manualOffSet(st)
+	active := activeTunnelSet(s)
+
+	for _, name := range st.Automation.TunnelNames() {
+		rules := st.Automation.PerTunnel[name]
+		state, details := wifi.EvaluateDetail(rules, ctx)
+		resp.Tunnels = append(resp.Tunnels, AutomationTunnelPreview{
+			Name:     name,
+			Rules:    details,
+			Decision: decisionFor(state, name, manualOff),
+			Active:   active[name],
+		})
+	}
+	return resp
+}
+
+// AutomationEvaluate evaluates a CALLER-SUPPLIED rule set — the automation
+// editor's current DRAFT — against the live network context, read-only and
+// without touching disk. The editor sends the rules the user is editing
+// right now (not whatever was last persisted), so the returned per-rule /
+// per-condition details line up 1:1 with the editor's cards by
+// construction. This removes the class of races where the editor's draft
+// cards and the disk-based AutomationPreview RuleDetails arrive on
+// independent async paths (open / close / tunnel switch / 3 s poll /
+// post-save refresh) and land misaligned, lighting up the wrong card or
+// leaving indicators stale until the next poll. The actual control
+// decision is still made by the helper from the persisted rules; this
+// endpoint only powers the "what would happen if I saved this" markers.
+//
+// The response shape matches AutomationPreview so the frontend consumes
+// both identically; the Tunnels slice always contains exactly one entry
+// for the requested tunnel (even when it has no rules yet).
+func (s *TunnelService) AutomationEvaluate(tunnel string, rules []wifi.Rule) AutomationPreviewResponse {
+	ctx, resp := currentNetworkPreview()
+	if tunnel == "" {
+		return resp
+	}
+
+	// The manual-off latch lives on disk only — it reflects whether the
+	// user disconnected a tunnel by hand, which is independent of the
+	// draft being edited. Read just that bit; a load failure degrades to
+	// "no manual-off", still a valid evaluation for the markers.
+	manualOff := map[string]bool{}
+	if st, err := s.settingsStore.Load(); err == nil {
+		manualOff = manualOffSet(st)
+	}
+
+	// EvaluateDetail internally skips rules that fail Validate, so a
+	// half-typed draft condition simply yields fewer RuleDetail entries
+	// than cards — the frontend already maps by persisted-rule order.
+	state, details := wifi.EvaluateDetail(rules, ctx)
+	resp.Tunnels = []AutomationTunnelPreview{{
+		Name:     tunnel,
+		Rules:    details,
+		Decision: decisionFor(state, tunnel, manualOff),
+		Active:   activeTunnel(s, tunnel),
+	}}
+	return resp
+}
+
+// currentNetworkPreview snapshots the live network context and pre-fills
+// the shared response fields (context + interface suggestion list).
+func currentNetworkPreview() (wifi.NetworkContext, AutomationPreviewResponse) {
 	ssid := wifi.CurrentSSID()
 	gw := wifi.GatewayMAC()
 	gwIP := wifi.GatewayIP()
 	phys := wifi.PhysicalInterfaceIPs()
+	subnets := wifi.PhysicalSubnets()
 	ifaces := wifi.PhysicalInterfaces()
 	ipStrs := make([]string, 0, len(phys))
 	for _, ip := range phys {
@@ -144,52 +220,60 @@ func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
 		PhysicalIPs: phys,
 		GatewayMAC:  gw,
 		GatewayIP:   gwIP,
-		Interfaces:  ifaces,
+		Interfaces:  wifi.AllPhysicalInterfaces(),
 	}
-
 	resp := AutomationPreviewResponse{
 		OnWiFi:      ssid != "",
 		SSID:        ssid,
 		PhysicalIPs: ipStrs,
+		Subnets:     subnets,
 		GatewayMAC:  gw,
 		GatewayIP:   gwIP,
-		Interfaces:  wifi.AllPhysicalInterfaces(),
+		Interfaces:  ifaces,
 	}
+	return ctx, resp
+}
 
-	st, err := s.settingsStore.Load()
-	if err != nil {
-		return resp
+func activeTunnel(s *TunnelService, name string) bool {
+	active, err := s.isActiveTunnel(name)
+	return err == nil && active
+}
+
+func activeTunnelSet(s *TunnelService) map[string]bool {
+	result := make(map[string]bool)
+	var resp ipc.ActiveTunnelsResponse
+	if err := s.call(ipc.MethodActiveTunnels, nil, &resp); err != nil {
+		return result
 	}
-	st.EnsureAutomation()
-	if st.Automation == nil || len(st.Automation.PerTunnel) == 0 {
-		return resp
+	for _, name := range resp.Names {
+		result[name] = true
 	}
+	return result
+}
+
+// manualOffSet indexes the tunnels latched off by a manual disconnect.
+func manualOffSet(st *storage.Settings) map[string]bool {
 	manualOff := make(map[string]bool, len(st.ManualOffTunnels))
 	for _, n := range st.ManualOffTunnels {
 		manualOff[n] = true
 	}
+	return manualOff
+}
 
-	for _, name := range st.Automation.TunnelNames() {
-		rules := st.Automation.PerTunnel[name]
-		state, details := wifi.EvaluateDetail(rules, ctx)
-		decision := "unmanaged"
-		switch state {
-		case wifi.StateConnect:
-			if manualOff[name] {
-				decision = "manual-off" // suppressed by the manual-off latch
-			} else {
-				decision = "connect"
-			}
-		case wifi.StateDisconnect:
-			decision = "disconnect"
+// decisionFor maps an evaluated state to the decision string the editor
+// shows, honouring the manual-off latch the same way the helper does.
+func decisionFor(state wifi.DesiredState, name string, manualOff map[string]bool) string {
+	switch state {
+	case wifi.StateConnect:
+		if manualOff[name] {
+			return "manual-off" // suppressed by the manual-off latch
 		}
-		resp.Tunnels = append(resp.Tunnels, AutomationTunnelPreview{
-			Name:     name,
-			Rules:    details,
-			Decision: decision,
-		})
+		return "connect"
+	case wifi.StateDisconnect:
+		return "disconnect"
+	default:
+		return "unmanaged"
 	}
-	return resp
 }
 
 // CheckSSIDPermission reports whether the process can read the current SSID.
@@ -304,7 +388,7 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 			"health_check", settings.HealthCheck,
 			"pin_interface", settings.PinInterface,
 			"enable_awg", settings.EnableAWG,
-			)
+		)
 	}
 
 	// Retention changed → sweep old log files immediately instead of

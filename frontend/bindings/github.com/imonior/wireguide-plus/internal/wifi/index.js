@@ -7,6 +7,7 @@ export {
     Automation,
     Condition,
     ConditionDetail,
+    InterfaceInfo,
     Rule,
     RuleDetail,
     Rules,

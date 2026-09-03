@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.0] - 2026-09-04
+
+### ✨ New
+
+- **Automation live network panel** — shows the current tunnel's hardware interfaces, Wi-Fi SSID, gateway MAC, gateway IP, and subnets, with rule-match counts; virtual adapters are excluded and hardware interfaces are marked in use or not in use.
+- **Automation editor interaction improvements** — help and network panels can collapse independently, the whole editor scrolls, and condition drag sorting remains available.
+
+### 🐛 Fixes
+
+- **Unified Automation status semantics** — `match` means a condition matches, `in use` means the first matching rule was selected, and `active` means the tunnel is actually running; otherwise conditions still show as matched when shadowed.
+- **Localized settings error feedback** — failures and unsupported-platform messages for Pin Interface, log level, Kill Switch, DNS Protection, and Health Check no longer contain hardcoded Chinese.
+
+### 📝 Documentation
+
+- **Synchronized all five README and CHANGELOG languages** with the live network panel, interface status, editor interaction, and Pin Interface platform support scope.
+
 ## [1.6.5] - 2026-09-02
 
 ### ✨ New

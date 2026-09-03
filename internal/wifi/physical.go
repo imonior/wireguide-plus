@@ -86,32 +86,33 @@ func listPhysicalInterfaces(requireUp bool) []InterfaceInfo {
 		if isTunnelIface(ifi.Name) || isVirtualIface(ifi.Name) {
 			continue
 		}
-		if requireUp {
-			addrs, err := ifi.Addrs()
-			if err != nil {
-				continue
-			}
-			hasRoutable := false
-			for _, a := range addrs {
-				var ip net.IP
-				switch v := a.(type) {
-				case *net.IPNet:
-					ip = v.IP
-				case *net.IPAddr:
-					ip = v.IP
-				}
-				if ip != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() {
-					hasRoutable = true
-					break
-				}
-			}
-			if !hasRoutable {
-				continue
-			}
+		active := interfaceHasRoutableAddress(ifi)
+		if requireUp && !active {
+			continue
 		}
-		out = append(out, InterfaceInfo{Name: ifi.Name, IsWiFi: ifaceIsWiFi(ifi.Name)})
+		out = append(out, InterfaceInfo{Name: ifi.Name, IsWiFi: ifaceIsWiFi(ifi.Name), Active: active})
 	}
 	return out
+}
+
+func interfaceHasRoutableAddress(ifi net.Interface) bool {
+	addrs, err := ifi.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() {
+			return true
+		}
+	}
+	return false
 }
 
 // PhysicalSubnets returns the network CIDRs of the physical
@@ -169,6 +170,21 @@ func isTunnelIface(name string) bool {
 	// "WireGuide-" name, and third-party "wireguard"-named adapters.
 	if strings.Contains(lower, "wireguide") || strings.Contains(lower, "wireguard") {
 		return true
+	}
+	// Third-party proxy / VPN TUN adapters that carry a default route and
+	// routable IPs (e.g. FlClash, Clash/mihomo, sing-box, nekoray, v2ray/
+	// xray, hiddify). Left in, their fake-ip ranges (198.18.0.0/15) and
+	// gateway make subnet / ethernet / interface conditions judge a
+	// Wi-Fi machine as "on a wired uplink". These names never appear on a
+	// physical NIC.
+	for _, frag := range []string{
+		"flclash", "clash", "mihomo", "sing-box", "singbox",
+		"nekoray", "nekobox", "v2ray", "xray", "hiddify", "tun2socks",
+		"surge", "shadowrocket", "quantumult",
+	} {
+		if strings.Contains(lower, frag) {
+			return true
+		}
 	}
 	for _, p := range tunnelIfacePrefixes {
 		if strings.HasPrefix(lower, p) {

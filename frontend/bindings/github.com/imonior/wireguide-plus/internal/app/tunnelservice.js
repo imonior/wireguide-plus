@@ -39,6 +39,33 @@ import * as application$0 from "../../../../wailsapp/wails/v3/pkg/application/mo
 import * as $models from "./models.js";
 
 /**
+ * AutomationEvaluate evaluates a CALLER-SUPPLIED rule set — the automation
+ * editor's current DRAFT — against the live network context, read-only and
+ * without touching disk. The editor sends the rules the user is editing
+ * right now (not whatever was last persisted), so the returned per-rule /
+ * per-condition details line up 1:1 with the editor's cards by
+ * construction. This removes the class of races where the editor's draft
+ * cards and the disk-based AutomationPreview RuleDetails arrive on
+ * independent async paths (open / close / tunnel switch / 3 s poll /
+ * post-save refresh) and land misaligned, lighting up the wrong card or
+ * leaving indicators stale until the next poll. The actual control
+ * decision is still made by the helper from the persisted rules; this
+ * endpoint only powers the "what would happen if I saved this" markers.
+ *
+ * The response shape matches AutomationPreview so the frontend consumes
+ * both identically; the Tunnels slice always contains exactly one entry
+ * for the requested tunnel (even when it has no rules yet).
+ * @param {string} tunnel
+ * @param {wifi$0.Rule[]} rules
+ * @returns {$CancellablePromise<$models.AutomationPreviewResponse>}
+ */
+export function AutomationEvaluate(tunnel, rules) {
+    return $Call.ByID(1613909483, tunnel, rules).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
  * AutomationPreview evaluates every tunnel's Automation rules against the
  * CURRENT network context, read-only. The GUI process runs this directly so
  * the editor's live indicators stay in lockstep with what the helper's
