@@ -286,7 +286,7 @@ func TestValidateRule(t *testing.T) {
 		singleCond(Condition{Type: CondNetwork, GatewayMAC: "zz:zz"}, ActionConnect),
 		singleCond(Condition{Type: CondSSID, SSID: "ok"}, Action("nope")),
 		singleCond(Condition{Type: "weird"}, ActionConnect),
-		{When: nil, Do: ActionConnect},                                   // no conditions
+		{When: nil, Do: ActionConnect},                                                     // no conditions
 		{When: []Condition{{Type: CondSSID, SSID: "ok"}}, Match: "xor", Do: ActionConnect}, // bad combiner
 	}
 	for i, r := range bad {
@@ -448,7 +448,7 @@ func TestMigrateFromLegacy(t *testing.T) {
 	legacy := &Rules{
 		TrustedSSIDs: []string{"corp-wifi"},
 		PerTunnel: map[string]TunnelSSIDs{
-			"company": {AutoConnectSSIDs: []string{"home", "cafe"}},
+			"company":  {AutoConnectSSIDs: []string{"home", "cafe"}},
 			"nolegacy": {},
 		},
 	}
@@ -640,8 +640,8 @@ func TestValidateRule_NewConditions(t *testing.T) {
 	bad := []Rule{
 		singleCond(Condition{Type: CondGatewayIP, GatewayIP: "not-an-ip"}, ActionConnect),
 		singleCond(Condition{Type: CondInterface, InterfaceName: ""}, ActionConnect),
-		singleCond(Condition{Type: CondTime}, ActionConnect),                          // nothing set
-		singleCond(Condition{Type: CondTime, Start: "25:99"}, ActionConnect),          // bad clock
+		singleCond(Condition{Type: CondTime}, ActionConnect),                                 // nothing set
+		singleCond(Condition{Type: CondTime, Start: "25:99"}, ActionConnect),                 // bad clock
 		singleCond(Condition{Type: CondTime, Start: "09:00", Days: []int{9}}, ActionConnect), // bad weekday
 	}
 	for i, r := range bad {
@@ -655,8 +655,8 @@ func TestValidateRule_NewConditions(t *testing.T) {
 		singleCond(Condition{Type: CondEthernet}, ActionConnect),
 		singleCond(Condition{Type: CondTime, Start: "09:00", End: "17:00"}, ActionConnect),
 		singleCond(Condition{Type: CondTime, Start: "22:00", End: "06:00", Days: []int{0, 6}}, ActionConnect), // weekend overnight
-		singleCond(Condition{Type: CondTime, Days: []int{3}}, ActionConnect), // wednesday only
-		singleCond(Condition{Type: CondTime, End: "12:00"}, ActionConnect),   // until noon
+		singleCond(Condition{Type: CondTime, Days: []int{3}}, ActionConnect),                                  // wednesday only
+		singleCond(Condition{Type: CondTime, End: "12:00"}, ActionConnect),                                    // until noon
 	}
 	for i, r := range good {
 		if err := ValidateRule(r); err != nil {

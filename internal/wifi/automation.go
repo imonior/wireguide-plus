@@ -198,6 +198,7 @@ const (
 //	{when: [ssid=corp],  do: disconnect}
 //	{when: [subnet=10/8], do: disconnect}
 //	{when: [none_match],  do: connect}
+//
 // CONTROL path only: picks the ONE action the helper should enforce.
 // The first matching rule (in list order) decides the outcome, but this walk
 // continues through every rule. Rule MARKING uses EvaluateDetail to retain

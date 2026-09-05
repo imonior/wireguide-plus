@@ -643,15 +643,6 @@ export function RenameTunnel(oldName, newName) {
 }
 
 /**
- * ResetLegacyMigration clears the persisted migration state so the startup
- * prompt shows again. Used by the Settings migration entry.
- * @returns {$CancellablePromise<void>}
- */
-export function ResetLegacyMigration() {
-    return $Call.ByID(3130480547);
-}
-
-/**
  * ResetPublicDNSServers clears the user's customized public-resolver list so
  * the DNS leak test falls back to the network-fetched list (if available)
  * or the built-in defaults.

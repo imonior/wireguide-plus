@@ -233,7 +233,7 @@ func TestMigrateLegacyDataNothingToMigrate(t *testing.T) {
 	}
 }
 
-func TestLegacyStateDismissAndReset(t *testing.T) {
+func TestLegacyStateDismissAndMigrate(t *testing.T) {
 	current, legacyConfig, legacyLogs := testMigrationPaths(t)
 	seedLegacyFile(t, filepath.Join(legacyConfig, "config.json"), `{}`)
 
@@ -244,15 +244,6 @@ func TestLegacyStateDismissAndReset(t *testing.T) {
 	report, _ := detectLegacyData(current, legacyConfig, legacyLogs)
 	if !report.Dismissed || report.Migrated {
 		t.Fatalf("expected dismissed=true migrated=false, got %+v", report)
-	}
-
-	// Reset → prompt shows again.
-	if err := ResetLegacyState(current); err != nil {
-		t.Fatalf("reset: %v", err)
-	}
-	report, _ = detectLegacyData(current, legacyConfig, legacyLogs)
-	if report.Dismissed || report.Migrated {
-		t.Fatalf("expected clean state after reset, got %+v", report)
 	}
 
 	// Migrate → migrated=true, dismissed=false.

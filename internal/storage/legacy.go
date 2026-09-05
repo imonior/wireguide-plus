@@ -261,18 +261,26 @@ func migrateLegacyData(current *Paths, legacyConfig, legacyLogs string, opts Mig
 		}
 	}
 
-	// Drop the legacy folders once they are empty. os.Remove only succeeds
-	// on empty directories, so any non-migrated or unrelated file keeps the
-	// folder intact.
-	if legacyConfig != "" {
-		_ = os.Remove(filepath.Join(legacyConfig, "tunnels"))
-		_ = os.Remove(legacyConfig)
-	}
-	if opts.IncludeLogs && legacyLogs != "" {
-		_ = os.Remove(legacyLogs)
+	// Only drop the legacy folders when nothing was left behind. If any item
+	// was skipped (a name clash the user chose not to overwrite) or failed to
+	// copy, the legacy data is still partially pending and must be preserved so
+	// it can be retried on the next launch. os.Remove only succeeds on empty
+	// directories anyway, but gating here keeps the intent explicit and stops
+	// a "skip everything" run from destroying data the user hasn't decided on.
+	if len(res.Skipped) == 0 {
+		if legacyConfig != "" {
+			_ = os.Remove(filepath.Join(legacyConfig, "tunnels"))
+			_ = os.Remove(legacyConfig)
+		}
+		if opts.IncludeLogs && legacyLogs != "" {
+			_ = os.Remove(legacyLogs)
+		}
 	}
 
-	if len(res.Migrated) > 0 {
+	// Record the migration only when everything was actually moved. If any
+	// file was skipped the user still has pending data and must be reminded
+	// again on the next launch.
+	if len(res.Migrated) > 0 && len(res.Skipped) == 0 {
 		if err := MarkLegacyMigrated(current); err != nil {
 			slog.Warn("legacy migration succeeded but marking failed", "error", err)
 		}
@@ -295,13 +303,6 @@ func MarkLegacyDismissed(current *Paths) error {
 	state := readLegacyState(current)
 	state.Dismissed = true
 	return writeLegacyState(current, state)
-}
-
-// ResetLegacyState clears the persisted migration state so the prompt shows
-// again (used by the Settings migration entry to re-trigger the flow).
-func ResetLegacyState(current *Paths) error {
-	_ = os.Remove(legacyStatePath(current))
-	return nil
 }
 
 type legacyMigrationState struct {

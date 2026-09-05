@@ -685,14 +685,6 @@
     } catch (_) { /* legacy scan is best-effort */ }
   }
 
-  // Settings → Advanced "legacy data" entry: clear the persisted state and
-  // re-run the scan so the migration modal shows again (e.g. after the user
-  // chose "Later").
-  async function rescanLegacyMigration() {
-    try { await TunnelService.ResetLegacyMigration(); } catch (_) {}
-    await checkLegacyMigration();
-  }
-
   async function handleConnect(e) {
     const { name } = e.detail;
     await doConnect(name);
@@ -924,7 +916,7 @@
   {/if}
 
   {#if showSettings}
-    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} onLegacyRescan={rescanLegacyMigration} {showToast} />
+    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} {showToast} />
   {/if}
 
   {#if showConflictWarning}

@@ -42,8 +42,7 @@ func (s *TunnelService) MigrateLegacyData(opts storage.MigrateOptions) (*storage
 }
 
 // DismissLegacyMigration records the user's "don't remind me again" choice so
-// the startup prompt stays hidden. The migration entry in Settings can
-// re-trigger the flow later.
+// the startup prompt stays hidden.
 func (s *TunnelService) DismissLegacyMigration() error {
 	paths, err := storage.GetPaths()
 	if err != nil {
@@ -51,19 +50,6 @@ func (s *TunnelService) DismissLegacyMigration() error {
 	}
 	if err := storage.MarkLegacyDismissed(paths); err != nil {
 		return fmt.Errorf("dismiss legacy migration: %w", err)
-	}
-	return nil
-}
-
-// ResetLegacyMigration clears the persisted migration state so the startup
-// prompt shows again. Used by the Settings migration entry.
-func (s *TunnelService) ResetLegacyMigration() error {
-	paths, err := storage.GetPaths()
-	if err != nil {
-		return fmt.Errorf("resolve app paths: %w", err)
-	}
-	if err := storage.ResetLegacyState(paths); err != nil {
-		return fmt.Errorf("reset legacy migration state: %w", err)
 	}
 	return nil
 }

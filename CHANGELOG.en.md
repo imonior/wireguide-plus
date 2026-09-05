@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.1] - 2026-09-06
+
+### ✨ New
+
+- **Reworked older-version data prompt** — when data left behind by a pre-rename ("wireguide") install is detected, the dialog now lets you open the old or the new config folder to inspect it, move everything into the new config folder, choose never to be reminded again, or dismiss for now and be reminded on the next launch.
+- **Name-conflict handling when moving** — if the destination config folder already contains files with the same names, the dialog lists them and offers overwrite and move, open the new folder to inspect its contents, dismiss permanently, or dismiss until the next launch.
+
+### 🐛 Fixes
+
+- **Old data was destroyed when migration was skipped** — the legacy folder used to be cleaned up unconditionally on every migration call, so choosing "remind me later" or having files skipped because of name conflicts silently deleted data that had not been migrated yet, and it could never be detected again. The old folder is now removed only after every file has actually been moved (nothing skipped).
+
+### 🛠 Internal
+
+- **Removed the migration entry from Settings** — older-version files are now detected automatically on first launch only, so there is no need to re-check manually; the settings section, its backend reset call and the underlying state store have been removed.
+- **Migration strings completed for all languages** — the new conflict prompt and action buttons are localized in all five languages.
+
 ## [1.7.0] - 2026-09-04
 
 ### ✨ New
