@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [1.7.6] - 2026-09-07
+
+### 🐛 수정
+
+- **새 터널에서 출구 바인딩 패널 즉시 표시** — 「인터페이스 고정」 활성화 시 새 터널 편집 대화상자의 바인딩 옵션이 터널 이름을 입력한 후에야 나타나는 문제를 수정했습니다(패널 표시 조건이 이름에 잘못 의존). 이제 대화상자를 열면 바로 표시되며, 선택한 NIC는 저장 성공 후 기록되고 실패해도 터널 생성에는 영향을 주지 않습니다.
+
 ## [1.7.5] - 2026-09-07
 
 ### ✨ 추가

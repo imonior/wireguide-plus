@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.6] - 2026-09-07
+
+### 🐛 Fixes
+
+- **Egress binding panel shows immediately for new tunnels** — with Pin Interface enabled, the binding option in the new-tunnel editor used to appear only after typing a tunnel name (the panel was wrongly gated on the name); it now shows as soon as the dialog opens, and the picked NIC is written after a successful save without affecting tunnel creation.
+
 ## [1.7.5] - 2026-09-07
 
 ### ✨ New

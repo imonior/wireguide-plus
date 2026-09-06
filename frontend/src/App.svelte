@@ -44,6 +44,10 @@
   let editorContent = '';
   let editorOriginalName = ''; // preserved across bind updates for rename detection
   let editorErrors = [];
+  // Pending egress binding for a NEW tunnel: EgressBinding defers the
+  // persistence (no meta sidecar exists before the first save), hands the
+  // choice here, and persistEditorSave applies it with the final name.
+  let pendingBinding = null;
   // 'conf' = raw conf text editor, 'fields' = per-field form editor.
   let editorTab = 'conf';
   // Bumped every time the fields tab becomes visible: FieldsEditor reparses
@@ -593,6 +597,7 @@
     editorErrors = [];
     editorIsNew = true;
     editorTab = 'conf';
+    pendingBinding = null;
     showEditor = true;
     refreshScriptsEnabled();
   }
@@ -617,6 +622,7 @@
       editorErrors = [];
       editorIsNew = false;
       editorTab = 'conf';
+      pendingBinding = null;
       showEditor = true;
       refreshScriptsEnabled();
     } catch (err) {
@@ -697,6 +703,17 @@
     try {
       if (wasNew) {
         await TunnelService.ImportConfig(saveName, saveContent);
+        // A NEW tunnel's egress binding was only staged in the editor
+        // (no meta sidecar existed before the save). Apply it now with
+        // the final tunnel name. Best-effort: the tunnel itself saved.
+        if (pendingBinding && pendingBinding.index > 0) {
+          try {
+            await TunnelService.SetTunnelBinding(saveName, pendingBinding.index, pendingBinding.ifName);
+          } catch (bindErr) {
+            showToast(`Egress binding save failed: ${errText(bindErr)}`);
+          }
+        }
+        pendingBinding = null;
       } else {
         const renamed = saveName !== originalName;
         if (renamed) {
@@ -1084,7 +1101,8 @@
                conf/fields tabs so it is visible (and editable) from either
                one. Keyed by the SAVED name — the meta sidecar key — so a
                rename-in-progress cannot orphan the binding. -->
-          <EgressBinding name={editorOriginalName || editName} isNew={editorIsNew} />
+          <EgressBinding name={editorOriginalName || editName} isNew={editorIsNew}
+            on:bindchange={(e) => { pendingBinding = e.detail; }} />
           <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} />
         </div>
       </div>

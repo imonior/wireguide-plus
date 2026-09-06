@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.6] - 2026-09-07
+
+### 🐛 修复
+
+- **新建隧道时立即显示出口绑定面板** — 开启「固定接口」后，新建隧道的编辑弹窗此前要等输入隧道名称后才出现绑定选项（面板显示条件被隧道名误拦截）；现在打开弹窗即显示，所选出口在保存成功后写入，失败不影响隧道本身的创建。
+
 ## [1.7.5] - 2026-09-07
 
 ### ✨ 新增

@@ -11,6 +11,7 @@
   //   Linux   → `ip route add <endpoint> dev <iface>` (BindIfName)
   //   macOS   → `route add ... -ifscope <iface>`     (BindIfName)
   // Changes take effect on the NEXT connect/reconnect of this tunnel.
+  import { createEventDispatcher } from 'svelte';
   import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
   import { appSettings } from '../stores/settings.js';
   import { t } from '../i18n/index.js';
@@ -23,15 +24,26 @@
   let bindIfName = '';
   let bindErr = '';
   let lastLoadedName = '';
+  let newIfacesLoaded = false;
 
-  // Gated by the pre-existing pin_interface master switch; a brand-new
-  // tunnel has no meta sidecar to persist a binding into yet.
-  $: available = !!$appSettings.pin_interface && !isNew && !!name;
+  // Gated by the pre-existing pin_interface master switch ONLY. No name
+  // requirement: a new tunnel has an empty name while being typed, and the
+  // panel must be visible from the start — the selection is kept in
+  // component state (dispatched to the parent as a pending binding) and is
+  // persisted by the parent AFTER the tunnel has been saved, because the
+  // meta sidecar only exists once the tunnel does.
+  $: available = !!$appSettings.pin_interface;
 
-  // Reload whenever the panel becomes available or the tunnel name changes
-  // (edit → rename → save keeps the binding keyed by the ORIGINAL name).
-  $: if (available && name !== lastLoadedName) {
+  // Existing tunnel: reload whenever the tunnel name changes (edit → rename
+  // → save keeps the binding keyed by the ORIGINAL name).
+  $: if (available && !isNew && name !== lastLoadedName) {
     lastLoadedName = name;
+    load();
+  }
+  // New tunnel: load the interface list once; the typed name may still be
+  // changing, so nothing is keyed on it and nothing is read from disk.
+  $: if (available && isNew && !newIfacesLoaded) {
+    newIfacesLoaded = true;
     load();
   }
 
@@ -39,9 +51,14 @@
     if (!TunnelService) return;
     try {
       ifaces = (await TunnelService.ListPhysicalInterfaces()) || [];
-      const b = await TunnelService.GetTunnelBinding(name);
-      bindIfIndex = b?.bind_if_index || 0;
-      bindIfName = b?.bind_if_name || '';
+      if (isNew) {
+        bindIfIndex = 0;
+        bindIfName = '';
+      } else {
+        const b = await TunnelService.GetTunnelBinding(name);
+        bindIfIndex = b?.bind_if_index || 0;
+        bindIfName = b?.bind_if_name || '';
+      }
       bindErr = '';
     } catch (e) {
       bindErr = e?.message || String(e);
@@ -56,12 +73,20 @@
     return `${generic}${hw}${idx}${state}`;
   }
 
+  const dispatch = createEventDispatcher();
+
   async function onBindChange() {
     const idx = Number(bindIfIndex) || 0;
     bindIfIndex = idx;
     const sel = ifaces.find((i) => i.index === idx);
     bindIfName = sel?.name || '';
     bindErr = '';
+    if (isNew) {
+      // No sidecar to persist into yet — hand the choice to the parent,
+      // which applies it with the FINAL tunnel name after a successful save.
+      dispatch('bindchange', { index: idx, ifName: bindIfName });
+      return;
+    }
     try {
       await TunnelService.SetTunnelBinding(name, idx, bindIfName);
     } catch (err) {

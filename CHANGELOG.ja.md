@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.6] - 2026-09-07
+
+### 🐛 修正
+
+- **新規トンネルで出口バインディングパネルが即時表示されるように** — 「インターフェース固定」有効時、新規トンネル編集ダイアログのバインディング選択肢がトンネル名を入力するまで表示されない問題を修正（パネルの表示条件が名前に誤って依存していました）。ダイアログを開くとすぐ表示され、選択した NIC は保存成功後に書き込まれ、失敗してもトンネル作成には影響しません。
+
 ## [1.7.5] - 2026-09-07
 
 ### ✨ 新機能
