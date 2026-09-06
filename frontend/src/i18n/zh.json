@@ -68,7 +68,10 @@
     "sort_last_used": "最近使用",
     "sort_added_new": "最新添加",
     "sort_added_old": "最早添加",
-    "awg_badge": "AmneziaWG"
+    "awg_on": "AmneziaWG ON",
+    "awg_off": "AmneziaWG OFF",
+    "awg_on_tip": "已启用 AmneziaWG 支持——服务器端也必须运行 AmneziaWG",
+    "awg_off_tip": "设置中已关闭 AmneziaWG 支持——该隧道将被拒绝连接"
   },
   "import": {
     "zip_result_title": "导入结果",
@@ -81,7 +84,10 @@
     "save": "保存",
     "cancel": "取消",
     "name_placeholder": "隧道名称",
-    "name_required": "隧道名称必填"
+    "name_required": "隧道名称必填",
+    "tab_conf": "conf 编辑器",
+    "tab_fields": "字段编辑",
+    "close": "关闭"
   },
   "settings": {
     "title": "设置",
@@ -173,7 +179,22 @@
     "wg_scripts_cancel": "取消",
     "section_awg": "AmneziaWG",
     "enable_awg": "启用 AmneziaWG 支持",
-    "enable_awg_hint": "允许使用 AmneziaWG (AWG) 混淆协议的隧道连接。AWG 是 WireGuard 的分支，带流量混淆。仅当 AWG 后端在此机器上出现问题时才关闭——关闭期间 AWG 隧道将无法连接。"
+    "enable_awg_hint": "允许使用 AmneziaWG (AWG) 混淆协议的隧道连接。AWG 是 WireGuard 的分支，带流量混淆。仅当 AWG 后端在此机器上出现问题时才关闭——关闭期间 AWG 隧道将无法连接。",
+    "scripts_folder": "脚本文件夹",
+    "scripts_folder_hint": "PreUp/PostUp/PreDown/PostDown 脚本文件的默认存放位置。",
+    "section_backup": "备份与恢复",
+    "export_settings": "导出设置",
+    "export_settings_hint": "将隧道、脚本和应用设置打包为 zip 压缩包（不包含日志）。",
+    "import_settings": "导入设置",
+    "import_settings_hint": "从导出的 zip 压缩包恢复隧道、脚本和应用设置。同名隧道将以新名称导入。",
+    "export_ok": "设置已导出到 {path}",
+    "export_fail": "导出失败：{error}",
+    "import_ok": "已导入 {t} 个隧道和 {s} 个脚本",
+    "import_fail": "导入失败：{error}",
+    "import_settings_applied": "应用设置已生效",
+    "awg_confirm": "启用 AmneziaWG 支持？服务器端也必须运行 AmneziaWG：标准 WireGuard 服务器会丢弃混淆握手包，隧道将无法建立连接。参数不会被静默忽略。",
+    "awg_confirm_enable": "仍要启用",
+    "awg_confirm_cancel": "取消"
   },
   "confirm": {
     "delete_title": "删除隧道",
@@ -420,5 +441,49 @@
     "decision_manual_off": "将连接，但已手动关闭",
     "fallback_active": "兜底生效——没有更高优先级规则匹配",
     "fallback_shadowed": "被更高优先级规则覆盖"
+  },
+  "scripts": {
+    "title": "钩子脚本",
+    "hint": "为每个钩子关联脚本文件或内联命令。脚本文件由隧道引用，在连接/断开时由辅助进程执行——仅在设置中启用 WireGuard 脚本后生效。",
+    "select_file": "选文件",
+    "new_blank": "新建空白",
+    "edit_code": "代码编辑",
+    "clear": "清除",
+    "status_file": "脚本文件",
+    "status_inline": "内联命令",
+    "status_empty": "未设置"
+  },
+  "fields": {
+    "name": "名称",
+    "section_interface": "接口",
+    "section_awg": "AmneziaWG 参数",
+    "section_peer": "对端",
+    "peer_n": "对端 {n}",
+    "section_bind": "物理出口",
+    "bind_egress": "出口网卡",
+    "bind_auto": "自动（最优网卡）",
+    "bind_hint": "将此隧道的加密流量绑定到指定物理网卡，重新连接后生效。",
+    "bind_down": "未连接"
+  },
+  "awg_reminder": {
+    "title": "AmneziaWG 隧道",
+    "body": "该隧道使用 AmneziaWG 混淆。只有当服务器运行 AmneziaWG 且设置中已启用 AWG 支持时才能连接——标准 WireGuard 服务器无法理解混淆握手。",
+    "state_on": "设置中当前已启用 AWG 支持。",
+    "state_off": "设置中当前已关闭 AWG 支持——该隧道将被拒绝连接，直到你重新启用。",
+    "dismiss": "不再提醒",
+    "cancel": "取消",
+    "confirm": "仍然保存"
+  },
+  "egress_lost": {
+    "title": "出口网卡已断开",
+    "body": "隧道「{tunnel}」绑定在网卡「{ifname}」上，该网卡当前不可用。隧道保持绑定——流量不会泄漏到其他网卡。",
+    "reason_down": "网卡存在但链路已断开。",
+    "reason_missing": "该网卡已从系统中移除。",
+    "reason_invalid": "该网卡不可用作出口。",
+    "note": "在应用以下选项之一或网卡恢复之前，隧道将保持断开状态。",
+    "wait": "保持绑定等待连接",
+    "auto": "自动切换到可用网卡",
+    "manual": "手动指定其他网卡",
+    "switched": "已清除「{tunnel}」的绑定——重新连接后将自动选择最优网卡。"
   }
 }

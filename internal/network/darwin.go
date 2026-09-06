@@ -65,6 +65,12 @@ type DarwinManager struct {
 	// pinInterface controls whether bypass routes use -ifscope to pin
 	// to the upstream interface. Disabled by default.
 	pinInterface bool
+	// bindIface is the per-tunnel egress the user picked (Settings →
+	// interface binding, "en0" style). When set it OVERRIDES the
+	// auto-detected lastUpstreamIface, so the encrypted UDP traffic leaves
+	// through the chosen NIC instead of whatever the routing table prefers.
+	// Empty means auto.
+	bindIface string
 
 	// Route-monitor subscription key (the tunnel interface name). The
 	// underlying `route -n monitor` subprocess is process-wide; this
@@ -82,6 +88,26 @@ func (m *DarwinManager) SetPinInterface(enabled bool) {
 	}
 	m.mu.Unlock()
 	slog.Info("pin interface toggled", "enabled", enabled)
+}
+
+// SetBindInterface pins the tunnel's endpoint egress to the named physical
+// interface (per-tunnel interface binding). Empty string restores auto.
+//
+// This is the darwin counterpart of LinuxManager.SetBindInterface: darwin
+// has no SO_MARK / IP_BOUND_IF, so the egress is chosen by the routing
+// table — and a host route scoped with `-ifscope <dev>` is exactly "send
+// packets for this peer out this device".
+func (m *DarwinManager) SetBindInterface(name string) {
+	dev := strings.TrimSpace(name)
+	m.mu.Lock()
+	m.bindIface = dev
+	if dev != "" {
+		m.lastUpstreamIface = dev
+	}
+	m.mu.Unlock()
+	if dev != "" {
+		slog.Info("darwin egress binding set", "dev", dev)
+	}
 }
 
 func NewPlatformManager() NetworkManager {
@@ -191,11 +217,18 @@ func (m *DarwinManager) AddRoutes(ifaceName string, allowedIPs []string, fullTun
 
 	// Cache the upstream interface BEFORE installing split routes — after
 	// split routes, route-get would return utun instead of the physical iface.
-	// Only when pinInterface is enabled (dual-network stability).
+	// Only when pinInterface is enabled (dual-network stability) or the user
+	// picked an explicit egress — in which case the chosen device wins over
+	// whatever the routing table currently prefers.
 	m.mu.Lock()
 	pin := m.pinInterface
+	bound := m.bindIface
 	m.mu.Unlock()
-	if pin {
+	if bound != "" {
+		m.mu.Lock()
+		m.lastUpstreamIface = bound
+		m.mu.Unlock()
+	} else if pin {
 		upstreamIface := getDefaultInterface()
 		m.mu.Lock()
 		m.lastUpstreamIface = upstreamIface
@@ -681,16 +714,33 @@ func (m *DarwinManager) addBypassForIP(ipStr, gwV4, gwV6 string, gwV4Err, gwV6Er
 
 	// Use the cached upstream interface to pin the bypass route with
 	// -ifscope. This prevents macOS from flapping between WiFi and
-	// Ethernet when both are active.
+	// Ethernet when both are active. An explicit per-tunnel binding wins.
 	m.mu.Lock()
-	iface := m.lastUpstreamIface
+	iface := m.bindIface
+	bound := iface != ""
+	if !bound {
+		iface = m.lastUpstreamIface
+	}
 	m.mu.Unlock()
+
+	// Fail closed when the user pinned an egress: the kernel has no
+	// -ifscope route to fall back on, and an UNSCOPED bypass route would
+	// send the handshake out whatever interface the routing table picks —
+	// silently defeating the binding. Surface the error so the connect
+	// aborts instead of leaking through an unchosen NIC.
+	if bound && !darwinIfaceUsable(iface) {
+		return fmt.Errorf("bound egress interface %s is not available (disconnected or renamed)", iface)
+	}
 
 	// Try `route add` first, fall back to `route change` if the kernel
 	// already has a route for this host (common when reconnecting).
 	if iface != "" {
 		if err := run("route", "-q", "-n", "add", family, ipStr, "-gateway", gw, "-ifscope", iface); err != nil {
 			if err2 := run("route", "-q", "-n", "change", family, ipStr, "-gateway", gw, "-ifscope", iface); err2 != nil {
+				if bound {
+					// Never silently go unscoped on an explicit binding.
+					return fmt.Errorf("bypass route %s via %s (ifscope %s failed): %v", ipStr, gw, iface, err2)
+				}
 				// Fallback: try without -ifscope in case the OS rejects it
 				slog.Debug("ifscope route failed, falling back to unscoped", "ip", ipStr, "iface", iface)
 				if err3 := run("route", "-q", "-n", "add", family, ipStr, "-gateway", gw); err3 != nil {
@@ -1442,6 +1492,21 @@ var run = func(name string, args ...string) error {
 		return fmt.Errorf("%s %s: %w (%s)", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// darwinIfaceUsable reports whether the named interface still exists and is
+// UP. Used by the per-tunnel egress binding to fail closed: a pinned NIC
+// that has been unplugged or renamed must abort the connect, not silently
+// fall back to whatever the routing table prefers.
+func darwinIfaceUsable(name string) bool {
+	if name == "" {
+		return false
+	}
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return false
+	}
+	return ifc.Flags&net.FlagUp != 0
 }
 
 // runOut runs a command with LC_ALL=C and returns combined output.

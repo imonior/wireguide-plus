@@ -5,6 +5,7 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -50,6 +51,14 @@ type LinuxManager struct {
 	// by this manager. They must be removed explicitly; deleting the default
 	// route from the policy table does not flush sibling throw routes.
 	endpointThrowRoutes []string
+	// bindIface (optional) pins the tunnel's physical egress: endpoint host
+	// routes are installed via `dev <bindIface>` in the main table instead
+	// of policy-table throw routes. Set by the manager when the tunnel has
+	// a per-tunnel egress binding (Settings → interface binding).
+	bindIface string
+	// endpointBindRoutes tracks the dev-pinned endpoint host routes for
+	// explicit removal on teardown.
+	endpointBindRoutes []string
 }
 
 func NewPlatformManager() NetworkManager {
@@ -189,6 +198,14 @@ func (m *LinuxManager) AddRoutes(ifaceName string, allowedIPs []string, fullTunn
 				return fmt.Errorf("adding route %s: %w", cidr, err)
 			}
 		}
+	}
+	// Interface binding: pin endpoint egress in split-tunnel mode too.
+	// A failure here must FAIL the connect, not fall back to default
+	// routing — silently re-routing the endpoint through the default
+	// path would leak tunnel traffic out an interface the user did not
+	// choose. Failing keeps the pin (the user fixes the NIC or re-picks).
+	if err := m.addEndpointBindRoutes(endpointIPs); err != nil {
+		return fmt.Errorf("pinning endpoint egress to %q: %w", m.bindIface, err)
 	}
 	return nil
 }
@@ -378,6 +395,14 @@ func (m *LinuxManager) addFullTunnelRoutesWithConfig(ifaceName string, endpoints
 	// default in main. wg-quick papers over this by relying on src_valid_mark
 	// (IPv4 only); the host route is the documented workaround for IPv6 +
 	// firewalld's ipv6_rpfilter.
+	//
+	// Interface binding: when the tunnel pins a physical egress, the host
+	// routes go out `dev <bindIface>` in the MAIN table INSTEAD of throw
+	// routes — this forces the encrypted WG packets out the chosen NIC no
+	// matter what the policy rules would otherwise select.
+	if m.bindIface != "" {
+		return m.addEndpointBindRoutes(endpoints)
+	}
 	for _, ep := range endpoints {
 		if ep == "" {
 			continue
@@ -429,7 +454,68 @@ func (m *LinuxManager) RemoveRoutes(ifaceName string, allowedIPs []string, fullT
 			slog.Warn("failed to remove route", "cidr", cidr, "iface", ifaceName, "table", tableStr, "error", err)
 		}
 	}
+	m.removeEndpointBindRoutes()
 	return nil
+}
+
+// SetBindInterface pins endpoint egress to the named physical interface
+// (per-tunnel interface binding). Empty string restores auto-routing.
+func (m *LinuxManager) SetBindInterface(name string) {
+	m.bindIface = strings.TrimSpace(name)
+}
+
+// addEndpointBindRoutes installs per-endpoint host routes via the bound
+// device in the main table. Any failure returns an error so the connect
+// FAILS instead of silently falling back to default routing — leaking
+// endpoint traffic through an unchosen interface defeats the whole point
+// of a pinned egress.
+func (m *LinuxManager) addEndpointBindRoutes(endpoints []string) error {
+	if m.bindIface == "" {
+		return nil
+	}
+	var errs []error
+	for _, ep := range endpoints {
+		if ep == "" {
+			continue
+		}
+		ip := net.ParseIP(ep)
+		if ip == nil {
+			continue
+		}
+		proto := "-4"
+		hostCIDR := ep + "/32"
+		if ip.To4() == nil {
+			proto = "-6"
+			hostCIDR = ep + "/128"
+		}
+		existing, _ := runOut("ip", proto, "route", "show", hostCIDR)
+		if strings.TrimSpace(string(existing)) != "" {
+			continue // already a more-specific route present
+		}
+		if err := runCmd("ip", proto, "route", "add", hostCIDR, "dev", m.bindIface); err != nil {
+			slog.Warn("endpoint bind route add failed — connect will fail (no fallback)",
+				"ep", ep, "dev", m.bindIface, "error", err)
+			errs = append(errs, err)
+			continue
+		}
+		m.endpointBindRoutes = append(m.endpointBindRoutes, hostCIDR)
+	}
+	return errors.Join(errs...)
+}
+
+// removeEndpointBindRoutes deletes the dev-pinned endpoint host routes
+// installed by addEndpointBindRoutes.
+func (m *LinuxManager) removeEndpointBindRoutes() {
+	for _, hostCIDR := range m.endpointBindRoutes {
+		proto := "-4"
+		if strings.Contains(hostCIDR, ":") {
+			proto = "-6"
+		}
+		if err := runCmd("ip", proto, "route", "delete", hostCIDR); err != nil {
+			slog.Warn("failed to remove endpoint bind route", "route", hostCIDR, "error", err)
+		}
+	}
+	m.endpointBindRoutes = nil
 }
 
 // splitRouteDeleteArgs mirrors AddRoutes' address-family selection. `ip route`
@@ -517,6 +603,7 @@ func (m *LinuxManager) removeFullTunnelRoutes(ifaceName string) error {
 		}
 	}
 	m.endpointThrowRoutes = nil
+	m.removeEndpointBindRoutes()
 
 	// Policy rules — delete by priority. Targeting our priority is precise
 	// even when a previous helper crash left duplicates (each duplicate

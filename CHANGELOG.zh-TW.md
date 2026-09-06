@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.5] - 2026-09-07
+
+### ✨ 新增
+
+- **隧道腳本（PreUp / PostUp / PreDown / PostDown）編輯器** — 隧道編輯視窗新增腳本面板：可為每個鉤子選擇既有腳本檔案（不限目錄）、新建空白腳本（預設放在 scripts 目錄，可重新命名）、直接編輯程式碼或一鍵清除；寫入採用純文字改寫，不破壞 conf 中的註解與手工排序。
+- **獨立 scripts 資料夾與設定匯入/匯出** — 新增與 tunnels、logs 並列的 scripts 資料目錄；設定新增「匯出設定」（打包 tunnels + scripts + config.json，不含日誌）與「匯入設定」，方便整機遷移。
+- **欄位編輯檢視** — 隧道編輯視窗新增 conf / 欄位雙頁籤：欄位頁按 conf 鍵逐一提供輸入框（interface / peer 分組），AmneziaWG 混淆參數僅在其開關開啟時顯示；儲存時仍寫回 conf 文字，註解與自訂行原樣保留。
+- **每隧道實體出口綁定（Windows / Linux / macOS）** — 開啟 Pin Interface 後，可在隧道編輯中將該隧道的加密流量固定到指定實體網卡：Windows 使用 socket 層級 IP_UNICAST_IF 綁定，Linux 使用 `ip route … dev <網卡>` 旁路路由，macOS 旁路路由附加 `-ifscope`；綁定失敗即連線失敗，不回退預設路由，避免流量外洩。
+- **綁定網卡失效處理彈窗** — 綁定的出口網卡遺失時不再靜默回退：彈窗提供「保持綁定等待恢復」「自動切換到可用網卡」「開啟隧道編輯手動指定」三種處理方式，且每次失效事件只提示一次。
+- **AmneziaWG 開關二次確認與統一徽章** — 設定中開啟 AmneziaWG 支援時要求與 Pre/Post Scripts 相同的高亮二次確認；隧道清單與詳情頁的徽章統一為 AmneziaWG ON（紫）/ AmneziaWG OFF（紅）兩種樣式。
+
+### 🐛 修復
+
+- **網卡清單改用通用名稱** — Windows 網卡下拉此前顯示硬體描述（如 Realtek…），現優先顯示系統通用名稱（乙太網路、WLAN 等），硬體型號作輔助資訊；Linux 按 Wi-Fi / Ethernet / 行動網路分類，並修正預設路由判定導致所有網卡都被標為預設出口的問題；macOS 讀取系統網路設定中的連接埠名稱。
+- **欄位編輯器無法開啟** — 頁籤切換參照了未定義的變數，點擊「欄位編輯」直接報錯；已補齊宣告並在切換時按目前 conf 文字重新解析。
+- **AmneziaWG 徽章首次進入誤顯示 ON** — 徽章此前按預設值渲染、未等待設定載入完成；現嚴格以已載入的設定為準，讀不到開關狀態時不渲染。
+- **Pin Interface 誤報「目前平台不支援」** — 有作用中隧道時切換開關會被誤判為平台不支援並回溯；現在作用中隧道保持目前綁定、重新連線後生效，僅記錄日誌。
+- **Linux 出口綁定不再回退預設路由** — 旁路路由安裝失敗時連線直接失敗，避免流量走預設出口造成外洩。
+
+### 🛠 內部
+
+- **視窗統一支援拖曳與縮放** — 設定 / 自動化 / 隧道編輯視窗可按標題列拖曳位置、右下角自由縮放；編輯視窗預設尺寸加大、右上角新增關閉按鈕，「conf 文字」頁籤更名為「conf 編輯器」，欄位頁按鈕樣式與 conf 頁統一。
+- **欄位編輯分組全寬顯示** — interface / AmneziaWG / peer 分組統一填滿編輯區寬度，長值不再被擠在半欄。
+- **本機建置補齊圖示與版本資源** — 手動建置時按 CI 同款流程產生資源檔案，測試套件不再缺圖示；正式發布仍由 CI 建置。
+
 ## [1.7.1] - 2026-09-06
 
 ### ✨ 新增

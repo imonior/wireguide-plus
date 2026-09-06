@@ -68,7 +68,10 @@
     "sort_last_used": "最終使用順",
     "sort_added_new": "新しい順",
     "sort_added_old": "古い順",
-    "awg_badge": "AmneziaWG"
+    "awg_on": "AmneziaWG ON",
+    "awg_off": "AmneziaWG OFF",
+    "awg_on_tip": "AmneziaWG サポート有効 — サーバー側も AmneziaWG が必要です",
+    "awg_off_tip": "設定で AmneziaWG サポートが無効です。このトンネルは接続を拒否されます"
   },
   "import": {
     "zip_result_title": "インポート結果",
@@ -81,7 +84,10 @@
     "save": "保存",
     "cancel": "キャンセル",
     "name_placeholder": "トンネル名",
-    "name_required": "トンネル名を入力してください"
+    "name_required": "トンネル名を入力してください",
+    "tab_conf": "conf エディタ",
+    "tab_fields": "フィールド編集",
+    "close": "閉じる"
   },
   "settings": {
     "title": "設定",
@@ -173,7 +179,22 @@
     "wg_scripts_cancel": "キャンセル",
     "section_awg": "AmneziaWG",
     "enable_awg": "AmneziaWG サポートを有効化",
-    "enable_awg_hint": "AmneziaWG (AWG) 難読化を使用するトンネルの接続を許可します。AWG はトラフィック難読化を備えた WireGuard フォークです。このマシンで AWG バックエンドに問題がある場合のみ無効化してください——無効化中は AWG トンネルは接続できません。"
+    "enable_awg_hint": "AmneziaWG (AWG) 難読化を使用するトンネルの接続を許可します。AWG はトラフィック難読化を備えた WireGuard フォークです。このマシンで AWG バックエンドに問題がある場合のみ無効化してください——無効化中は AWG トンネルは接続できません。",
+    "scripts_folder": "スクリプトフォルダー",
+    "scripts_folder_hint": "PreUp/PostUp/PreDown/PostDown スクリプトファイルの既定の保存先。",
+    "section_backup": "バックアップと復元",
+    "export_settings": "設定をエクスポート",
+    "export_settings_hint": "トンネル・スクリプト・アプリ設定を zip アーカイブにまとめます（ログは含まれません）。",
+    "import_settings": "設定をインポート",
+    "import_settings_hint": "エクスポート済みの zip からトンネル・スクリプト・アプリ設定を復元します。同名トンネルは新しい名前で取り込まれます。",
+    "export_ok": "設定を {path} にエクスポートしました",
+    "export_fail": "エクスポート失敗：{error}",
+    "import_ok": "{t} 個のトンネルと {s} 個のスクリプトをインポートしました",
+    "import_fail": "インポート失敗：{error}",
+    "import_settings_applied": "アプリ設定を適用しました",
+    "awg_confirm": "AmneziaWG サポートを有効にしますか？サーバー側も AmneziaWG を実行している必要があります。標準の WireGuard サーバーは難読化ハンドシェイクを破棄するため、トンネルは接続できません。パラメータが黙って無視されることはありません。",
+    "awg_confirm_enable": "有効にする",
+    "awg_confirm_cancel": "キャンセル"
   },
   "confirm": {
     "delete_title": "トンネルを削除",
@@ -420,5 +441,49 @@
     "decision_manual_off": "接続予定ですが、手動オフ中です",
     "fallback_active": "フォールバック有効——上位ルールが一致しませんでした",
     "fallback_shadowed": "上位ルールに覆われています"
+  },
+  "scripts": {
+    "title": "フックスクリプト",
+    "hint": "各フックにスクリプトファイルまたはインラインコマンドを関連付けます。スクリプトファイルはトンネルから参照され、接続/切断時にヘルパーによって実行されます。設定で WireGuard スクリプトが有効な場合のみ動作します。",
+    "select_file": "ファイルを選択",
+    "new_blank": "新規作成",
+    "edit_code": "コード編集",
+    "clear": "クリア",
+    "status_file": "スクリプトファイル",
+    "status_inline": "インラインコマンド",
+    "status_empty": "未設定"
+  },
+  "fields": {
+    "name": "名前",
+    "section_interface": "インターフェース",
+    "section_awg": "AmneziaWG パラメータ",
+    "section_peer": "ピア",
+    "peer_n": "ピア {n}",
+    "section_bind": "物理的な出口",
+    "bind_egress": "出口インターフェース",
+    "bind_auto": "自動（最適 NIC）",
+    "bind_hint": "このトンネルの暗号化トラフィックを指定した物理 NIC に固定します。次回接続時に有効になります。",
+    "bind_down": "ダウン"
+  },
+  "awg_reminder": {
+    "title": "AmneziaWG トンネル",
+    "body": "このトンネルは AmneziaWG 難読化を使用します。サーバーが AmneziaWG を実行し、設定で AWG サポートが有効な場合にのみ接続できます。標準の WireGuard サーバーは難読化ハンドシェイクを理解できません。",
+    "state_on": "設定で AWG サポートは現在有効です。",
+    "state_off": "設定で AWG サポートは現在無効です。有効にするまでこのトンネルは接続を拒否されます。",
+    "dismiss": "今後表示しない",
+    "cancel": "キャンセル",
+    "confirm": "それでも保存"
+  },
+  "egress_lost": {
+    "title": "出口インターフェースが切断されました",
+    "body": "トンネル「{tunnel}」はインターフェース「{ifname}」に固定されていますが、現在利用できません。トンネルは固定を維持し、他のインターフェースに漏れることはありません。",
+    "reason_down": "インターフェースは検出されましたが、リンクがダウンしています。",
+    "reason_missing": "このインターフェースはシステムに存在しません。",
+    "reason_invalid": "このインターフェースは出口として使用できません。",
+    "note": "以下のオプションを適用するか、インターフェースが復旧するまで、トンネルは切断されたままです。",
+    "wait": "このインターフェースを待ち続ける",
+    "auto": "利用可能なインターフェースに自動切替",
+    "manual": "別のインターフェースを手動指定",
+    "switched": "「{tunnel}」のバインディングを解除しました。再接続すると自動選択が適用されます。"
   }
 }

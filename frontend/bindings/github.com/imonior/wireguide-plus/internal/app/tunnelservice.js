@@ -51,7 +51,7 @@ import * as $models from "./models.js";
  * leaving indicators stale until the next poll. The actual control
  * decision is still made by the helper from the persisted rules; this
  * endpoint only powers the "what would happen if I saved this" markers.
- *
+ * 
  * The response shape matches AutomationPreview so the frontend consumes
  * both identically; the Tunnels slice always contains exactly one entry
  * for the requested tunnel (even when it has no rules yet).
@@ -237,8 +237,7 @@ export function DisconnectTunnel(name) {
 
 /**
  * DismissLegacyMigration records the user's "don't remind me again" choice so
- * the startup prompt stays hidden. The migration entry in Settings can
- * re-trigger the flow later.
+ * the startup prompt stays hidden.
  * @returns {$CancellablePromise<void>}
  */
 export function DismissLegacyMigration() {
@@ -262,6 +261,16 @@ export function DismissUpdate(version) {
  */
 export function ExportConfig(name) {
     return $Call.ByID(3734780847, name);
+}
+
+/**
+ * ExportSettings writes tunnels + scripts + config.json (never logs) into
+ * a zip chosen via a native save dialog. Returns the path, or "" when the
+ * user cancels.
+ * @returns {$CancellablePromise<string>}
+ */
+export function ExportSettings() {
+    return $Call.ByID(3996827936);
 }
 
 /**
@@ -326,6 +335,17 @@ export function GetCurrentSubnets() {
 }
 
 /**
+ * GetHookFromText extracts the current command for one hook from raw
+ * .conf content.
+ * @param {string} content
+ * @param {string} hook
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetHookFromText(content, hook) {
+    return $Call.ByID(3681850161, content, hook);
+}
+
+/**
  * GetKnownSSIDs returns the currently-connected SSID (if any) plus the
  * system's saved wireless networks. Both are best-effort — empty values
  * are normal on a Mac that's only ever been on Ethernet.
@@ -385,6 +405,17 @@ export function GetStatus() {
 }
 
 /**
+ * GetTunnelBinding returns the saved physical-egress binding for a tunnel.
+ * @param {string} name
+ * @returns {$CancellablePromise<$models.TunnelMetaBinding | null>}
+ */
+export function GetTunnelBinding(name) {
+    return $Call.ByID(1947637108, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType20($result);
+    }));
+}
+
+/**
  * GetTunnelDetail returns the full WireGuardConfig for a tunnel. Used by the
  * detail pane to show allowed IPs, DNS, public keys, etc.
  * @param {string} name
@@ -392,7 +423,19 @@ export function GetStatus() {
  */
 export function GetTunnelDetail(name) {
     return $Call.ByID(1211015818, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
+    }));
+}
+
+/**
+ * GetTunnelFields extracts the field-editor model from a .conf text using
+ * pure text scanning.
+ * @param {string} content
+ * @returns {$CancellablePromise<$models.TunnelFields | null>}
+ */
+export function GetTunnelFields(content) {
+    return $Call.ByID(2828369410, content).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType24($result);
     }));
 }
 
@@ -402,7 +445,7 @@ export function GetTunnelDetail(name) {
  */
 export function GetUpdateState() {
     return $Call.ByID(1422034669).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType21($result);
+        return $$createType25($result);
     }));
 }
 
@@ -423,7 +466,7 @@ export function GetVersion() {
  */
 export function ImportConfig(name, content) {
     return $Call.ByID(3041138216, name, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType27($result);
     }));
 }
 
@@ -437,7 +480,7 @@ export function ImportConfig(name, content) {
  */
 export function ImportQRFromBytes(data, name) {
     return $Call.ByID(3697630092, data, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType27($result);
     }));
 }
 
@@ -450,7 +493,21 @@ export function ImportQRFromBytes(data, name) {
  */
 export function ImportQRFromPath(path, name) {
     return $Call.ByID(1276410894, path, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType23($result);
+        return $$createType27($result);
+    }));
+}
+
+/**
+ * ImportSettings asks for a settings zip (exported by ExportSettings),
+ * restores scripts into the scripts folder, imports tunnels, applies
+ * config.json, and re-points each imported tunnel's script references at
+ * the local scripts folder so packages stay portable across machines.
+ * Returns nil when the user cancels the file dialog.
+ * @returns {$CancellablePromise<$models.SettingsImportResult | null>}
+ */
+export function ImportSettings() {
+    return $Call.ByID(3314465931).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType29($result);
     }));
 }
 
@@ -462,7 +519,7 @@ export function ImportQRFromPath(path, name) {
  */
 export function ImportZip(path) {
     return $Call.ByID(4220907101, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType31($result);
     }));
 }
 
@@ -474,7 +531,19 @@ export function ImportZip(path) {
  */
 export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType31($result);
+    }));
+}
+
+/**
+ * ListPhysicalInterfaces enumerates candidate egress interfaces for the
+ * per-tunnel binding dropdown. Platform implementations live in
+ * interface_ops_windows.go / interface_ops_linux.go / interface_ops_other.go.
+ * @returns {$CancellablePromise<$models.PhysicalInterface[]>}
+ */
+export function ListPhysicalInterfaces() {
+    return $Call.ByID(682080878).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType33($result);
     }));
 }
 
@@ -492,7 +561,7 @@ export function ImportZipData(data) {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType34($result);
     }));
 }
 
@@ -507,7 +576,7 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType34($result);
     }));
 }
 
@@ -520,7 +589,7 @@ export function ListTunnelsLocal() {
  */
 export function MigrateLegacyData(opts) {
     return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType28($result);
+        return $$createType36($result);
     }));
 }
 
@@ -529,7 +598,7 @@ export function MigrateLegacyData(opts) {
  * file manager. Only directories the app itself owns are accepted — a
  * compromised frontend cannot point the opener at arbitrary paths.
  * 
- * kind ∈ {"config", "tunnels", "logs", "legacy-config", "legacy-logs"}.
+ * kind ∈ {"config", "tunnels", "scripts", "logs", "legacy-config", "legacy-logs"}.
  * @param {string} kind
  * @returns {$CancellablePromise<void>}
  */
@@ -558,6 +627,15 @@ export function OpenReleasePage() {
 }
 
 /**
+ * OpenScriptFile shows a native open dialog restricted to supported
+ * script types (any folder). Returns "" when the user cancels.
+ * @returns {$CancellablePromise<string>}
+ */
+export function OpenScriptFile() {
+    return $Call.ByID(1800068898);
+}
+
+/**
  * OpenURL opens a URL in the default browser. Only HTTPS URLs on
  * github.com are allowed to prevent misuse from a compromised frontend.
  * @param {string} url
@@ -575,6 +653,15 @@ export function OpenURL(url) {
  */
 export function ReadFile(path) {
     return $Call.ByID(1829837485, path);
+}
+
+/**
+ * ReadScriptFile reads a script file for inline editing.
+ * @param {string} path
+ * @returns {$CancellablePromise<string>}
+ */
+export function ReadScriptFile(path) {
+    return $Call.ByID(1489304770, path);
 }
 
 /**
@@ -619,7 +706,7 @@ export function ReconcileHistoryFromStatus(activeNames, rxByTunnel, txByTunnel, 
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType30($result);
+        return $$createType38($result);
     }));
 }
 
@@ -653,6 +740,17 @@ export function ResetPublicDNSServers() {
 }
 
 /**
+ * ResolveScriptRef classifies a hook command as file-backed or inline.
+ * @param {string} command
+ * @returns {$CancellablePromise<$models.ScriptRef | null>}
+ */
+export function ResolveScriptRef(command) {
+    return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType40($result);
+    }));
+}
+
+/**
  * RunDNSLeakTest performs a DNS leak test using the currently active tunnel's
  * DNS servers as the expected (VPN) resolvers. If no tunnel is connected, the
  * expected set is empty — all detected resolvers will be flagged as leaks.
@@ -666,7 +764,7 @@ export function ResetPublicDNSServers() {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType32($result);
+        return $$createType42($result);
     }));
 }
 
@@ -725,6 +823,17 @@ export function SavePublicDNSServers(list) {
 }
 
 /**
+ * SaveScriptFile shows a native save dialog that defaults to the scripts
+ * folder with a preset name (tunnel + hook). The user may pick any other
+ * folder or name. Returns the chosen path, or "" when cancelled.
+ * @param {string} defaultName
+ * @returns {$CancellablePromise<string>}
+ */
+export function SaveScriptFile(defaultName) {
+    return $Call.ByID(1724628375, defaultName);
+}
+
+/**
  * SaveSettings persists the settings file AND applies any side effects:
  * currently, pushing the new log level to both the GUI's slog handler and
  * the helper's slog handler. Without those side effects a user lowering the
@@ -735,6 +844,25 @@ export function SavePublicDNSServers(list) {
  */
 export function SaveSettings(settings) {
     return $Call.ByID(4141280863, settings);
+}
+
+/**
+ * ScriptInvocation returns the shell command that runs the given script
+ * file (platform-appropriate wrapper). The frontend embeds the result
+ * into the .conf hook line.
+ * @param {string} path
+ * @returns {$CancellablePromise<string>}
+ */
+export function ScriptInvocation(path) {
+    return $Call.ByID(2669183294, path);
+}
+
+/**
+ * ScriptsDir returns (and creates) the app-managed scripts folder.
+ * @returns {$CancellablePromise<string>}
+ */
+export function ScriptsDir() {
+    return $Call.ByID(1180459744);
 }
 
 /**
@@ -767,6 +895,19 @@ export function SetHealthCheck(enabled) {
 }
 
 /**
+ * SetHookInText returns new .conf content with the hook's command set
+ * (empty command removes the hook lines). Only the target lines inside
+ * [Interface] are touched.
+ * @param {string} content
+ * @param {string} hook
+ * @param {string} command
+ * @returns {$CancellablePromise<string>}
+ */
+export function SetHookInText(content, hook, command) {
+    return $Call.ByID(1992207518, content, hook, command);
+}
+
+/**
  * SetKillSwitch asks the helper to enable or disable the firewall kill switch.
  * @param {boolean} enabled
  * @returns {$CancellablePromise<void>}
@@ -793,6 +934,33 @@ export function SetLogLevel(level) {
  */
 export function SetPinInterface(enabled) {
     return $Call.ByID(332454519, enabled);
+}
+
+/**
+ * SetTunnelBinding persists (or clears, when ifIndex <= 0) the physical
+ * egress binding of a tunnel in its meta sidecar.
+ * @param {string} name
+ * @param {number} ifIndex
+ * @param {string} ifName
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetTunnelBinding(name, ifIndex, ifName) {
+    return $Call.ByID(3460371752, name, ifIndex, ifName);
+}
+
+/**
+ * SetTunnelFields applies the field-editor model onto a .conf text. Managed
+ * keys are replaced in place (or deleted when the model value is empty);
+ * keys absent from the text are appended at the end of their section.
+ * Comments, blank lines, unknown keys, and ordering are preserved. The
+ * model's Peers array maps positionally onto the [Peer] sections; extra
+ * conf peers are untouched, extra model peers are ignored.
+ * @param {string} content
+ * @param {$models.TunnelFields | null} fields
+ * @returns {$CancellablePromise<string>}
+ */
+export function SetTunnelFields(content, fields) {
+    return $Call.ByID(3693883454, content, fields);
 }
 
 /**
@@ -859,7 +1027,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType33($result);
+        return $$createType43($result);
     }));
 }
 
@@ -895,6 +1063,17 @@ export function ValidateConfig(content) {
     }));
 }
 
+/**
+ * WriteScriptFile writes script content back (or creates the file for
+ * "new blank"). Scripts may contain secrets echoed into logs — 0600.
+ * @param {string} path
+ * @param {string} content
+ * @returns {$CancellablePromise<void>}
+ */
+export function WriteScriptFile(path, content) {
+    return $Call.ByID(1888281791, path, content);
+}
+
 // Private type creation functions
 const $$createType0 = $models.AutomationPreviewResponse.createFrom;
 const $$createType1 = diag$0.ConflictInfo.createFrom;
@@ -915,18 +1094,28 @@ const $$createType15 = storage$0.Settings.createFrom;
 const $$createType16 = $Create.Nullable($$createType15);
 const $$createType17 = domain$0.ConnectionStatus.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = domain$0.WireGuardConfig.createFrom;
+const $$createType19 = $models.TunnelMetaBinding.createFrom;
 const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = $models.UpdateState.createFrom;
-const $$createType22 = $models.TunnelInfo.createFrom;
-const $$createType23 = $Create.Nullable($$createType22);
-const $$createType24 = $models.ZipImportResult.createFrom;
-const $$createType25 = $Create.Array($$createType24);
-const $$createType26 = $Create.Array($$createType22);
-const $$createType27 = storage$0.MigrateResult.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = $models.PublicDNSRefresh.createFrom;
-const $$createType30 = $Create.Nullable($$createType29);
-const $$createType31 = $models.DNSLeakResult.createFrom;
-const $$createType32 = $Create.Nullable($$createType31);
-const $$createType33 = $models.TestProxyResult.createFrom;
+const $$createType21 = domain$0.WireGuardConfig.createFrom;
+const $$createType22 = $Create.Nullable($$createType21);
+const $$createType23 = $models.TunnelFields.createFrom;
+const $$createType24 = $Create.Nullable($$createType23);
+const $$createType25 = $models.UpdateState.createFrom;
+const $$createType26 = $models.TunnelInfo.createFrom;
+const $$createType27 = $Create.Nullable($$createType26);
+const $$createType28 = $models.SettingsImportResult.createFrom;
+const $$createType29 = $Create.Nullable($$createType28);
+const $$createType30 = $models.ZipImportResult.createFrom;
+const $$createType31 = $Create.Array($$createType30);
+const $$createType32 = $models.PhysicalInterface.createFrom;
+const $$createType33 = $Create.Array($$createType32);
+const $$createType34 = $Create.Array($$createType26);
+const $$createType35 = storage$0.MigrateResult.createFrom;
+const $$createType36 = $Create.Nullable($$createType35);
+const $$createType37 = $models.PublicDNSRefresh.createFrom;
+const $$createType38 = $Create.Nullable($$createType37);
+const $$createType39 = $models.ScriptRef.createFrom;
+const $$createType40 = $Create.Nullable($$createType39);
+const $$createType41 = $models.DNSLeakResult.createFrom;
+const $$createType42 = $Create.Nullable($$createType41);
+const $$createType43 = $models.TestProxyResult.createFrom;

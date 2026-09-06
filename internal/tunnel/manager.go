@@ -75,6 +75,10 @@ type Manager struct {
 	// Defaults to network.NewPlatformManager. Overridable in tests.
 	netMgrFactory func() network.NetworkManager
 
+	// egressLost is the optional pinned-egress-loss reporter (see
+	// EgressLostHook). nil when nobody is listening.
+	egressLost EgressLostHook
+
 	// engineFactory creates the WireGuard engine. Defaults to NewEngine.
 	// Overridable in tests to avoid requiring root / TUN device access.
 	engineFactory func(cfg *domain.WireGuardConfig) (*Engine, error)
@@ -336,7 +340,12 @@ func (m *Manager) ConnectWithContext(ctx context.Context, cfg *domain.WireGuardC
 		entry.socketBindInitialV6 = 0
 
 		tunnelLUIDUint := engine.TunnelLUID()
-		startSocketBindMonitor(sbCtx, engine.bind, ifaceName, tunnelLUIDUint)
+		// Capture the hook locally: the monitor invokes it from a
+		// background goroutine, and calling m's accessor under m.mu
+		// here would risk lock-ordering issues if the hook itself
+		// calls back into the Manager.
+		lostHook := m.egressLost
+		startSocketBindMonitor(sbCtx, engine.bind, ifaceName, tunnelLUIDUint, pinnedIfIndex(entry), name, lostHook)
 
 	}
 	m.mu.Unlock()
@@ -471,3 +480,29 @@ func (m *Manager) DisconnectAll() {
 //   manager_dns.go    — AllDNSServers, CapturePreModDNS, etc.
 //   manager_pin.go    — SetPinInterface
 // All those methods share Manager.mu defined here.
+
+// pinnedIfIndex returns the tunnel's configured physical-egress ifIndex
+// (0 = auto-select, from the meta sidecar via the helper).
+func pinnedIfIndex(entry *tunnelEntry) int {
+	if entry != nil && entry.cfg != nil {
+		return entry.cfg.BindIfIndex
+	}
+	return 0
+}
+
+// EgressLostHook is invoked (on a background goroutine) when a tunnel
+// with a manually pinned physical egress loses that interface (NIC
+// unplugged, Wi-Fi dropped, driver disabled). The tunnel STAYS pinned —
+// the hook never changes routing itself; its job is to notify the GUI so
+// the user can choose: keep waiting on the pinned NIC, switch to
+// auto-selection, or pick a different interface.
+// reason ∈ {"missing", "down", "invalid"}.
+type EgressLostHook func(tunnel, ifName string, ifIndex int, reason string)
+
+// SetEgressLostHook wires the pinned-egress-loss reporter. Set once at
+// helper startup; safe to call again to replace the hook.
+func (m *Manager) SetEgressLostHook(h EgressLostHook) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.egressLost = h
+}

@@ -249,6 +249,20 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		startedAt:       time.Now(),
 	}
 
+	// Pinned-egress loss reporter: when a tunnel's manually pinned
+	// physical interface disappears, tell the GUI so it can raise the
+	// resolution dialog (keep waiting / switch to auto / re-pick). The
+	// tunnel STAYS pinned — this hook never reroutes on its own.
+	manager.SetEgressLostHook(func(tunnelName, ifName string, ifIndex int, reason string) {
+		h.server.Broadcast(ipc.EventEgressInterfaceLost, ipc.EgressInterfaceLostPayload{
+			Tunnel:   tunnelName,
+			IfIndex:  ifIndex,
+			IfName:   ifName,
+			LostUnix: time.Now().Unix(),
+			Reason:   reason,
+		})
+	})
+
 	// Derive the user's Application Support dir from the uid the
 	// LaunchDaemon plist passed in (`--uid=501` typically). Helper
 	// runs as root, so os.UserHomeDir() returns /var/root — useless.

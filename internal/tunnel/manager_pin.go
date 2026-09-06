@@ -1,18 +1,25 @@
 package tunnel
 
-import "fmt"
+import "log/slog"
 
-// SetPinInterface enables or disables -ifscope bypass route pinning on macOS.
-// The setting is stored on the Manager and propagated to every active
-// tunnel's NetworkManager, as well as any future tunnels created via Connect.
+// SetPinInterface flips the "bind tunnel traffic to a physical interface"
+// master switch (Settings → pin_interface) and propagates it to every
+// active tunnel's NetworkManager.
 //
-// Returns an error when there are active tunnels and NONE of their
-// NetworkManagers implement the setting — this happens on Linux/Windows where
-// the toggle is not meaningful. Callers (and through them, the GUI) should
-// see a real "not supported" rather than silent success.
+// The feature has two platform implementations, so an error here must mean
+// "this platform cannot do it at all" — not "no active tunnel happens to
+// implement the darwin-only -ifscope hook":
 //
-// With zero active tunnels, returns nil — the new value is stored and will
-// apply at the next Connect, which is the correct behaviour on any platform.
+//   - macOS  : NetworkManager.SetPinInterface(bool) — -ifscope bypass routes.
+//   - Windows: per-tunnel BindIfIndex (IP_UNICAST_IF socket pinning), read
+//     from the tunnel's meta sidecar by the helper at connect time.
+//   - Linux  : per-tunnel BindIfName (explicit `ip route ... dev <iface>`).
+//
+// The Windows/Linux binding is resolved when a tunnel CONNECTS, so toggling
+// the switch while tunnels are up does not rebind them live; it only takes
+// effect on the next connect (or reconnect). That is expected, not a
+// failure — returning an error here made the GUI show "not supported on
+// this platform" and roll the toggle back, which was simply wrong.
 func (m *Manager) SetPinInterface(enabled bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -29,8 +36,12 @@ func (m *Manager) SetPinInterface(enabled bool) error {
 			applied++
 		}
 	}
+	// Informational only. On Windows/Linux the per-tunnel binding is
+	// applied at connect time from the meta sidecar, so there is nothing
+	// to push into a running NetworkManager — `applied == 0` is normal.
 	if active > 0 && applied == 0 {
-		return fmt.Errorf("SetPinInterface not supported on this platform's NetworkManager")
+		slog.Info("pin-interface toggle: active tunnels keep their current egress binding until reconnect",
+			"enabled", enabled, "active", active)
 	}
 	return nil
 }

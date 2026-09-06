@@ -68,7 +68,10 @@
     "sort_last_used": "Last used",
     "sort_added_new": "Newest first",
     "sort_added_old": "Oldest first",
-    "awg_badge": "AmneziaWG"
+    "awg_on": "AmneziaWG ON",
+    "awg_off": "AmneziaWG OFF",
+    "awg_on_tip": "AmneziaWG support enabled — the server must also run AmneziaWG",
+    "awg_off_tip": "AmneziaWG support is disabled in Settings — this tunnel will refuse to connect"
   },
   "import": {
     "zip_result_title": "Import Results",
@@ -81,7 +84,10 @@
     "save": "Save",
     "cancel": "Cancel",
     "name_placeholder": "Tunnel name",
-    "name_required": "Tunnel name is required"
+    "name_required": "Tunnel name is required",
+    "tab_conf": "conf editor",
+    "tab_fields": "field editor",
+    "close": "Close"
   },
   "settings": {
     "title": "Settings",
@@ -173,7 +179,22 @@
     "wg_scripts_cancel": "Cancel",
     "section_awg": "AmneziaWG",
     "enable_awg": "Enable AmneziaWG support",
-    "enable_awg_hint": "Allows tunnels that use AmneziaWG (AWG) obfuscation to connect. AWG is a WireGuard fork with traffic obfuscation. Turn this off only if the AWG backend misbehaves on this machine — AWG tunnels won't connect while it is off."
+    "enable_awg_hint": "Allows tunnels that use AmneziaWG (AWG) obfuscation to connect. AWG is a WireGuard fork with traffic obfuscation. Turn this off only if the AWG backend misbehaves on this machine — AWG tunnels won't connect while it is off.",
+    "scripts_folder": "Scripts folder",
+    "scripts_folder_hint": "Default home for PreUp/PostUp/PreDown/PostDown script files.",
+    "section_backup": "Backup & Restore",
+    "export_settings": "Export settings",
+    "export_settings_hint": "Packages tunnels, scripts and app settings into a zip archive (logs are excluded).",
+    "import_settings": "Import settings",
+    "import_settings_hint": "Restores tunnels, scripts and app settings from an exported zip. Same-name tunnels are imported under a new name.",
+    "export_ok": "Settings exported to {path}",
+    "export_fail": "Export failed: {error}",
+    "import_ok": "Imported {t} tunnel(s) and {s} script(s)",
+    "import_fail": "Import failed: {error}",
+    "import_settings_applied": "app settings applied",
+    "awg_confirm": "Enable AmneziaWG support? The server must also run AmneziaWG: a plain WireGuard server drops the obfuscated handshake, so the tunnel cannot connect. The parameters are never silently ignored.",
+    "awg_confirm_enable": "Enable AWG",
+    "awg_confirm_cancel": "Cancel"
   },
   "confirm": {
     "delete_title": "Delete Tunnel",
@@ -420,5 +441,49 @@
     "decision_manual_off": "would connect, but manual-off is on",
     "fallback_active": "fallback active — no higher-priority rule matched",
     "fallback_shadowed": "shadowed by a higher-priority rule"
+  },
+  "scripts": {
+    "title": "Hook scripts",
+    "hint": "Attach a script file (or an inline command) to each hook. Script files are referenced by the tunnel and executed by the helper when it starts/stops — only while WireGuard scripts are enabled in Settings.",
+    "select_file": "Select file",
+    "new_blank": "New blank",
+    "edit_code": "Edit code",
+    "clear": "Clear",
+    "status_file": "Script file",
+    "status_inline": "Inline command",
+    "status_empty": "Not set"
+  },
+  "fields": {
+    "name": "Name",
+    "section_interface": "Interface",
+    "section_awg": "AmneziaWG parameters",
+    "section_peer": "Peer",
+    "peer_n": "Peer {n}",
+    "section_bind": "Physical egress",
+    "bind_egress": "Egress interface",
+    "bind_auto": "Auto (best underlay)",
+    "bind_hint": "Pin this tunnel's encrypted traffic to a physical NIC — takes effect on the next connect.",
+    "bind_down": "down"
+  },
+  "awg_reminder": {
+    "title": "AmneziaWG tunnel",
+    "body": "This tunnel uses AmneziaWG obfuscation. It only connects when the server runs AmneziaWG AND AWG support is enabled in Settings — a plain WireGuard server cannot understand the obfuscated handshake.",
+    "state_on": "AWG support is currently ENABLED in Settings.",
+    "state_off": "AWG support is currently DISABLED in Settings — this tunnel will refuse to connect until you enable it.",
+    "dismiss": "Don't remind me again",
+    "cancel": "Cancel",
+    "confirm": "Save anyway"
+  },
+  "egress_lost": {
+    "title": "Egress interface lost",
+    "body": "Tunnel \"{tunnel}\" is pinned to interface \"{ifname}\", which is no longer available. The tunnel stays pinned — traffic will not leak through another interface.",
+    "reason_down": "Interface detected but link is down.",
+    "reason_missing": "Interface no longer exists on this system.",
+    "reason_invalid": "Interface is unusable for egress.",
+    "note": "The tunnel is disconnected until one of the options below is applied or the interface returns.",
+    "wait": "Keep waiting on this interface",
+    "auto": "Switch to best available interface",
+    "manual": "Pick another interface",
+    "switched": "Binding cleared for \"{tunnel}\" — reconnect to apply auto-selection."
   }
 }

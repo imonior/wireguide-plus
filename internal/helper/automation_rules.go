@@ -37,6 +37,34 @@ func (h *Helper) loadUserSettings() (*storage.Settings, error) {
 	return s, nil
 }
 
+// loadTunnelBinding reads the per-tunnel physical-egress binding from the
+// meta sidecar in the user dir (the helper keeps no TunnelStore). Returns
+// (0, "") when absent or unreadable — every failure mode means "auto", the
+// conservative default. Mirrors the authoritative-check pattern of
+// loadUserSettings so CLI/automation connects get the same binding as
+// GUI-initiated ones.
+func (h *Helper) loadTunnelBinding(name string) (int, string) {
+	if h.userAppSupport == "" {
+		return 0, ""
+	}
+	if err := storage.ValidateTunnelName(name); err != nil {
+		return 0, ""
+	}
+	path := filepath.Join(h.userAppSupport, "tunnels", name+".meta.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, ""
+	}
+	var meta struct {
+		BindIfIndex int    `json:"bind_if_index"`
+		BindIfName  string `json:"bind_if_name"`
+	}
+	if json.Unmarshal(data, &meta) != nil {
+		return 0, ""
+	}
+	return meta.BindIfIndex, meta.BindIfName
+}
+
 // currentNetworkContext builds the NetworkContext automation rules are
 // evaluated against — the single source for both the live engine
 // (reevaluateAutomation) and the read-only preview, so `wireguideplus ctl

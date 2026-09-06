@@ -518,6 +518,25 @@ export class WireGuardConfig {
              */
             this["enable_scripts"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * BindIfIndex/BindIfName are injected at runtime by the helper from
+             * the tunnel's meta sidecar (per-tunnel physical egress binding, a
+             * Settings opt-in feature). They are NOT part of the on-disk .conf
+             * serialization. BindIfName is used on Linux (route-level egress
+             * pinning); BindIfIndex on Windows (IP_UNICAST_IF socket pinning).
+             * @member
+             * @type {number | undefined}
+             */
+            this["bind_if_index"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["bind_if_name"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

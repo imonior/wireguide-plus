@@ -21,6 +21,7 @@ func pinSocketToPhysical(_ any, _ string) (uint32, uint32) {
 // startSocketBindMonitor is a no-op on non-Windows platforms. The signature
 // must match socketbind_windows.go (manager.go calls it unconditionally via
 // a runtime.GOOS-free code path); on Linux/macOS there is no IP_UNICAST_IF
-// pinning and the kernel handles loop protection differently.
-func startSocketBindMonitor(_ context.Context, _ any, _ string, _ uint64) {
+// pinning and the kernel handles loop protection differently. Linux egress
+// binding is done at the route level in network.LinuxManager (SetBindInterface).
+func startSocketBindMonitor(_ context.Context, _ any, _ string, _ uint64, _ int, _ string, _ EgressLostHook) {
 }

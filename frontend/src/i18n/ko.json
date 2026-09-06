@@ -68,7 +68,10 @@
     "sort_last_used": "마지막 사용순",
     "sort_added_new": "최근 추가순",
     "sort_added_old": "오래된 추가순",
-    "awg_badge": "AmneziaWG"
+    "awg_on": "AmneziaWG ON",
+    "awg_off": "AmneziaWG OFF",
+    "awg_on_tip": "AmneziaWG 지원 활성화됨 — 서버 측도 AmneziaWG를 실행해야 합니다",
+    "awg_off_tip": "설정에서 AmneziaWG 지원이 비활성화되어 이 터널은 연결이 거부됩니다"
   },
   "import": {
     "zip_result_title": "가져오기 결과",
@@ -81,7 +84,10 @@
     "save": "저장",
     "cancel": "취소",
     "name_placeholder": "터널 이름",
-    "name_required": "터널 이름을 입력하세요"
+    "name_required": "터널 이름을 입력하세요",
+    "tab_conf": "conf 편집기",
+    "tab_fields": "필드 편집",
+    "close": "닫기"
   },
   "settings": {
     "title": "설정",
@@ -173,7 +179,22 @@
     "wg_scripts_cancel": "취소",
     "section_awg": "AmneziaWG",
     "enable_awg": "AmneziaWG 지원 활성화",
-    "enable_awg_hint": "AmneziaWG (AWG) 난독화를 사용하는 터널의 연결을 허용합니다. AWG는 트래픽 난독화가 포함된 WireGuard 포크입니다. 이 기기에서 AWG 백엔드에 문제가 있을 때만 끄세요——끄는 동안 AWG 터널은 연결할 수 없습니다."
+    "enable_awg_hint": "AmneziaWG (AWG) 난독화를 사용하는 터널의 연결을 허용합니다. AWG는 트래픽 난독화가 포함된 WireGuard 포크입니다. 이 기기에서 AWG 백엔드에 문제가 있을 때만 끄세요——끄는 동안 AWG 터널은 연결할 수 없습니다.",
+    "scripts_folder": "스크립트 폴더",
+    "scripts_folder_hint": "PreUp/PostUp/PreDown/PostDown 스크립트 파일의 기본 저장 위치입니다.",
+    "section_backup": "백업 및 복원",
+    "export_settings": "설정 내보내기",
+    "export_settings_hint": "터널, 스크립트, 앱 설정을 zip 아카이브로 묶습니다(로그 제외).",
+    "import_settings": "설정 가져오기",
+    "import_settings_hint": "내보낸 zip에서 터널, 스크립트, 앱 설정을 복원합니다. 이름이 같은 터널은 새 이름으로 가져옵니다.",
+    "export_ok": "설정을 {path}에 내보냈습니다",
+    "export_fail": "내보내기 실패: {error}",
+    "import_ok": "터널 {t}개와 스크립트 {s}개를 가져왔습니다",
+    "import_fail": "가져오기 실패: {error}",
+    "import_settings_applied": "앱 설정 적용됨",
+    "awg_confirm": "AmneziaWG 지원을 활성화하시겠습니까? 서버 측도 AmneziaWG를 실행해야 합니다. 표준 WireGuard 서버는 난독화 핸드셰이크를 폐기하므로 터널을 연결할 수 없습니다. 파라미터가 조용히 무시되지 않습니다.",
+    "awg_confirm_enable": "활성화",
+    "awg_confirm_cancel": "취소"
   },
   "confirm": {
     "delete_title": "터널 삭제",
@@ -420,5 +441,49 @@
     "decision_manual_off": "연결 예정이지만 수동 꺼짐 상태입니다",
     "fallback_active": "폴스백 활성——더 높은 우선순위 규칙이 일치하지 않음",
     "fallback_shadowed": "더 높은 우선순위 규칙에 의해 덮어씀"
+  },
+  "scripts": {
+    "title": "훅 스크립트",
+    "hint": "각 훅에 스크립트 파일 또는 인라인 명령을 연결합니다. 스크립트 파일은 터널에서 참조되며 연결/해제 시 헬퍼가 실행합니다. 설정에서 WireGuard 스크립트가 활성화된 경우에만 동작합니다.",
+    "select_file": "파일 선택",
+    "new_blank": "새로 만들기",
+    "edit_code": "코드 편집",
+    "clear": "지우기",
+    "status_file": "스크립트 파일",
+    "status_inline": "인라인 명령",
+    "status_empty": "설정 안 됨"
+  },
+  "fields": {
+    "name": "이름",
+    "section_interface": "인터페이스",
+    "section_awg": "AmneziaWG 파라미터",
+    "section_peer": "피어",
+    "peer_n": "피어 {n}",
+    "section_bind": "물리적 출구",
+    "bind_egress": "출구 인터페이스",
+    "bind_auto": "자동(최적 NIC)",
+    "bind_hint": "이 터널의 암호화 트래픽을 지정된 물리 NIC에 고정합니다. 다음 연결 시 적용됩니다.",
+    "bind_down": "연결 안 됨"
+  },
+  "awg_reminder": {
+    "title": "AmneziaWG 터널",
+    "body": "이 터널은 AmneziaWG 난독화를 사용합니다. 서버가 AmneziaWG를 실행하고 설정에서 AWG 지원이 활성화된 경우에만 연결됩니다. 표준 WireGuard 서버는 난독화 핸드셰이크를 이해하지 못합니다.",
+    "state_on": "설정에서 현재 AWG 지원이 활성화되어 있습니다.",
+    "state_off": "설정에서 현재 AWG 지원이 비활성화되어 있습니다. 활성화할 때까지 이 터널은 연결이 거부됩니다.",
+    "dismiss": "다시 알리지 않기",
+    "cancel": "취소",
+    "confirm": "그래도 저장"
+  },
+  "egress_lost": {
+    "title": "출구 인터페이스 연결 끊김",
+    "body": "터널 \"{tunnel}\"이(가) 인터페이스 \"{ifname}\"에 고정되어 있지만 현재 사용할 수 없습니다. 터널은 고정을 유지하며 다른 인터페이스로 유출되지 않습니다.",
+    "reason_down": "인터페이스가 감지되었지만 링크가 다운되었습니다.",
+    "reason_missing": "이 인터페이스는 더 이상 시스템에 존재하지 않습니다.",
+    "reason_invalid": "이 인터페이스는 출구로 사용할 수 없습니다.",
+    "note": "아래 옵션 중 하나를 적용하거나 인터페이스가 복구될 때까지 터널은 연결 해제 상태를 유지합니다.",
+    "wait": "이 인터페이스를 기다리기",
+    "auto": "사용 가능한 인터페이스로 자동 전환",
+    "manual": "다른 인터페이스 직접 지정",
+    "switched": "\"{tunnel}\"의 바인딩을 해제했습니다. 다시 연결하면 자동 선택이 적용됩니다."
   }
 }

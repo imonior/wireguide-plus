@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.5] - 2026-09-07
+
+### ✨ New
+
+- **Tunnel script (PreUp / PostUp / PreDown / PostDown) editor** — the tunnel editor now has a script panel: pick an existing script file (any folder), create a blank script (placed in the scripts folder by default, renameable), edit the code in place, or clear a hook in one click; hooks are rewritten as plain text so comments and hand-ordered lines in the conf survive.
+- **Dedicated scripts folder and settings export/import** — a new scripts data folder sits next to tunnels and logs; Settings gains "Export settings" (bundles tunnels + scripts + config.json, excluding logs) and "Import settings" for easy migration to a new machine.
+- **Field editor view** — the tunnel editor now has conf / fields tabs: the fields tab renders one input per conf key (interface / peer groups), with the AmneziaWG obfuscation parameters shown only while the AmneziaWG switch is on; saving still writes back to the conf text, preserving comments and custom lines.
+- **Per-tunnel physical egress binding (Windows / Linux / macOS)** — with Pin Interface enabled, each tunnel can pin its encrypted traffic to a specific physical NIC: socket-level IP_UNICAST_IF binding on Windows, `ip route … dev <iface>` bypass routes on Linux, and `-ifscope` scoped routes on macOS; a failed bind fails the connection instead of falling back to the default route, preventing traffic leaks.
+- **NIC-loss handling dialog** — when the bound egress NIC disappears, the tunnel no longer silently falls back: a dialog offers keep the binding and wait, switch to the best available NIC, or open the tunnel editor to pick one manually, and each loss episode is reported only once.
+- **AmneziaWG switch confirmation and unified badge** — enabling AmneziaWG support in Settings now requires the same highlight-and-confirm step as Pre/Post Scripts; the tunnel list and detail badges are unified as AmneziaWG ON (purple) / AmneziaWG OFF (red).
+
+### 🐛 Fixes
+
+- **NIC list now shows common names** — the Windows dropdown used to show hardware descriptions (e.g. Realtek…); it now prefers system common names (Ethernet, WLAN, …) with the hardware model as secondary info. Linux classifies devices as Wi-Fi / Ethernet / Cellular and no longer marks every NIC as carrying the default route; macOS reads port names from system network setup.
+- **Fields editor failed to open** — the tab switcher referenced undefined variables and threw on click; the declarations are in place and switching now re-parses the current conf text.
+- **AmneziaWG badge showed ON on first launch** — badges used to render from a default value before settings loaded; they now render only from loaded settings and are hidden while the switch state is unknown.
+- **Pin Interface falsely reported "not supported on this platform"** — toggling the switch with an active tunnel was treated as unsupported and rolled back; active tunnels now keep their current binding (effective on reconnect) and the outcome is only logged.
+- **Linux egress binding no longer falls back to the default route** — if the bypass route cannot be installed, the connection fails outright instead of leaking traffic through the default egress.
+
+### 🛠 Internal
+
+- **Dialogs are now draggable and resizable** — the Settings, Automation and tunnel editor dialogs can be moved by their title bar and resized from the corner; the editor dialog opens larger, gained a corner close button, its "conf text" tab was renamed "conf editor", and the fields tab buttons now match the conf tab styling.
+- **Field editor groups span the full width** — interface / AmneziaWG / peer groups all fill the editor width so long values are no longer squeezed into half a column.
+- **Icon and version resources for local builds** — local builds now generate the resource file the same way CI does, so test executables no longer lack the icon; official releases remain CI-built.
+
 ## [1.7.1] - 2026-09-06
 
 ### ✨ New

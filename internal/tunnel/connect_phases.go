@@ -203,6 +203,18 @@ func (m *Manager) connectPhases(ctx context.Context, cfg *domain.WireGuardConfig
 	// the chicken-and-egg that wg-quick sidesteps by resolving endpoints
 	// via the `wg` tool BEFORE touching the route table.
 	endpointIPs := engine.ResolvedEndpointIPs()
+	// Per-tunnel interface binding (Settings → interface binding): on Linux
+	// this routes the peer endpoints via the bound physical device. Windows
+	// ignores this here — it pins at the socket level (IP_UNICAST_IF) via
+	// the socket-bind monitor in manager.go.
+	if cfg.BindIfName != "" {
+		if bm, ok := netMgr.(interface{ SetBindInterface(string) }); ok {
+			bm.SetBindInterface(cfg.BindIfName)
+			slog.Info("tunnel egress pinned to interface", "tunnel", ifaceName, "dev", cfg.BindIfName)
+		} else {
+			slog.Warn("interface binding not supported by this platform's network manager", "tunnel", ifaceName, "dev", cfg.BindIfName)
+		}
+	}
 	if err := netMgr.AddRoutes(ifaceName, allAllowedIPs, fullTunnel, endpointIPs, cfg.Interface.Table, cfg.Interface.FwMark); err != nil {
 		return nil, rollback(newTunnelError(ErrNetwork, "adding routes", err))
 	}

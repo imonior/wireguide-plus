@@ -15,10 +15,15 @@ export {
     DNSLeakResult,
     DNSServer,
     KnownSSIDs,
+    PhysicalInterface,
     PublicDNSRefresh,
     RouteEntry,
+    ScriptRef,
+    SettingsImportResult,
     TestProxyResult,
+    TunnelFields,
     TunnelInfo,
+    TunnelMetaBinding,
     UpdateState,
     ZipImportResult
 } from "./models.js";

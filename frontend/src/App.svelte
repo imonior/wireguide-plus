@@ -5,6 +5,10 @@
   import TunnelDetail from './lib/TunnelDetail.svelte';
   import ConflictWarning from './lib/ConflictWarning.svelte';
   import ConfigEditor from './lib/ConfigEditor.svelte';
+  import ScriptEditor from './lib/ScriptEditor.svelte';
+  import FieldsEditor from './lib/FieldsEditor.svelte';
+  import EgressBinding from './lib/EgressBinding.svelte';
+  import { appSettings, refreshAppSettings } from './stores/settings.js';
   import Settings from './lib/Settings.svelte';
   import LogViewer from './lib/LogViewer.svelte';
   import History from './lib/History.svelte';
@@ -13,6 +17,8 @@
   import StatsDashboard from './lib/StatsDashboard.svelte';
   import UpdateNotice from './lib/UpdateNotice.svelte';
   import LegacyMigration from './lib/LegacyMigration.svelte';
+  import EgressLostDialog from './lib/EgressLostDialog.svelte';
+  import { modalDrag } from './lib/actions/modal-drag.js';
   import { tunnels, selectedTunnel, refreshTunnels, refreshStatus, subscribeToEvents, unsubscribe, initialLoad, connectionStatus } from './stores/tunnels.js';
   import { applyTheme, initThemeWatcher } from './stores/theme.js';
   import { startLogListener, stopLogListener } from './stores/logs.js';
@@ -38,6 +44,17 @@
   let editorContent = '';
   let editorOriginalName = ''; // preserved across bind updates for rename detection
   let editorErrors = [];
+  // 'conf' = raw conf text editor, 'fields' = per-field form editor.
+  let editorTab = 'conf';
+  // Bumped every time the fields tab becomes visible: FieldsEditor reparses
+  // the CURRENT conf text on change, so edits made in the conf view (or by
+  // the script panel) are picked up instead of showing a stale model.
+  let fieldsReloadKey = 0;
+  function switchEditorTab(tab) {
+    if (tab === editorTab) return;
+    if (tab === 'fields') fieldsReloadKey++;
+    editorTab = tab;
+  }
   let toast = '';
   let toastTimer = null;
   let updateInfo = null;
@@ -54,6 +71,10 @@
   let showLegacyMigration = false;
   let filesDroppedUnsub = null;
   let helperUnsub = null;
+  let egressLostUnsub = null;
+  // Pinned-egress-lost dialog state (payload from event.egress_interface_lost)
+  let showEgressLost = false;
+  let egressLostInfo = null;
   let helperResetUnsub = null;
   let wifiSsidUnsub = null;
   let autoConnectedUnsub = null;
@@ -127,6 +148,12 @@
     startLogListener();
 
     await initialLoad(TunnelService);
+    // Publish the persisted feature gates (AWG support, WireGuard scripts,
+    // interface binding) into the shared store BEFORE anything renders.
+    // Without this the AmneziaWG badge and the editor's field gating used
+    // the store's hard-coded defaults until the user happened to open the
+    // Settings dialog — which is the only other place that refreshes it.
+    await refreshAppSettings(TunnelService);
     subscribeToEvents();
     // Scan for data left behind by pre-rename ("wireguide") installs; the
     // modal only appears while legacy data exists and hasn't been migrated
@@ -191,6 +218,15 @@
       } else {
         showToast('Helper reconnected');
       }
+    });
+
+    // Pinned-egress interface lost — the tunnel stays pinned (no silent
+    // failover); raise the resolution dialog (wait / auto / re-pick).
+    egressLostUnsub = Events.On('egress_interface_lost', (event) => {
+      const d = event?.data || event || {};
+      if (!d?.tunnel) return;
+      egressLostInfo = d;
+      showEgressLost = true;
     });
 
     // Helper reset — the GUI's IPC client was swapped after a helper
@@ -263,6 +299,7 @@
     stopLogListener();
     if (filesDroppedUnsub) filesDroppedUnsub();
     if (helperUnsub) helperUnsub();
+    if (egressLostUnsub) egressLostUnsub();
     if (helperResetUnsub) helperResetUnsub();
     if (wifiSsidUnsub) wifiSsidUnsub();
     if (autoConnectedUnsub) autoConnectedUnsub();
@@ -272,6 +309,32 @@
     if (tunnelsChangedUnsub) tunnelsChangedUnsub();
     if (toastTimer) clearTimeout(toastTimer);
   });
+
+  // --- Pinned-egress-lost dialog handlers ----------------------------
+  // "Keep waiting": nothing to change — the tunnel stays pinned; the
+  // monitor re-pins automatically once the NIC comes back.
+  function onEgressLostWait() { /* dialog already closed itself */ }
+
+  // "Switch to auto": clear the saved binding. Takes effect on the next
+  // connect — tell the user to reconnect if the tunnel is up.
+  async function onEgressLostAuto() {
+    const name = egressLostInfo?.tunnel;
+    if (!name) return;
+    try {
+      await TunnelService.SetTunnelBinding(name, 0, '');
+      showToast($t('egress_lost.switched', { tunnel: name }));
+    } catch (e) {
+      showToast('Failed to clear binding: ' + errText(e));
+    }
+  }
+
+  // "Pick manually": open the editor on this tunnel so the user can
+  // choose a different interface in the fields tab.
+  function onEgressLostManual() {
+    const name = egressLostInfo?.tunnel;
+    if (!name) return;
+    handleEdit({ detail: name });
+  }
 
   function dismissCriticalError(idx) {
     criticalErrors = criticalErrors.filter((_, i) => i !== idx);
@@ -360,9 +423,15 @@
       }
       const baseName = await TunnelService.BaseName(path);
       const name = await uniqueName(baseName);
-      await TunnelService.ImportConfig(name, content);
-      showToast(`Imported "${name}"`);
-      await refreshTunnels(TunnelService);
+      gateAWGReminder(content, async () => {
+        try {
+          await TunnelService.ImportConfig(name, content);
+          showToast(`Imported "${name}"`);
+          await refreshTunnels(TunnelService);
+        } catch (e) {
+          showToast("Import failed: " + errText(e));
+        }
+      });
     } catch (e) {
       showToast("Import failed: " + errText(e));
     }
@@ -418,9 +487,15 @@
         return;
       }
       const name = await uniqueName(baseName);
-      await TunnelService.ImportConfig(name, content);
-      showToast(`Imported "${name}"`);
-      await refreshTunnels(TunnelService);
+      gateAWGReminder(content, async () => {
+        try {
+          await TunnelService.ImportConfig(name, content);
+          showToast(`Imported "${name}"`);
+          await refreshTunnels(TunnelService);
+        } catch (e) {
+          showToast("Import failed: " + errText(e));
+        }
+      });
     } catch (e) {
       showToast("Import failed: " + errText(e));
     }
@@ -499,13 +574,27 @@
   }
 
   let editorIsNew = false;
+  // Script panel visibility — read fresh every time the editor opens so a
+  // settings change (Settings → WireGuard scripts) takes effect without
+  // an app restart.
+  let scriptsEnabled = false;
+  async function refreshScriptsEnabled() {
+    try {
+      const s = await TunnelService.GetSettings();
+      scriptsEnabled = s?.enable_wg_scripts ?? false;
+    } catch {
+      scriptsEnabled = false;
+    }
+  }
 
   async function handleNewTunnelOpen() {
     editName = '';
     editorContent = ''; // ConfigEditor will generate template when isNew + empty
     editorErrors = [];
     editorIsNew = true;
+    editorTab = 'conf';
     showEditor = true;
+    refreshScriptsEnabled();
   }
 
   // editGen serializes rapid Edit clicks: a slow GetConfigText for
@@ -527,7 +616,9 @@
       editorContent = content;
       editorErrors = [];
       editorIsNew = false;
+      editorTab = 'conf';
       showEditor = true;
+      refreshScriptsEnabled();
     } catch (err) {
       if (myGen !== editGen) return;
       // Surface the failure as a toast so the user knows why the
@@ -535,6 +626,41 @@
       // clicking Edit repeatedly with no feedback.
       showToast(`Edit failed: ${errText(err)}`);
     }
+  }
+
+  // AmneziaWG detection for the save/import reminder: any AWG obfuscation
+  // key present in the config text (same keys the Go parser keys on).
+  function contentIsAWG(content) {
+    return /^\s*(Jc|Jmin|Jmax|S[1-4]|H[1-4])\s*=/im.test(content);
+  }
+
+  // One-time reminder gate: AWG tunnels only connect when the server runs
+  // AmneziaWG AND Settings → AWG support is enabled. Deferred runs after
+  // the user confirms; dismissed runs execute immediately.
+  let showAwgReminder = false;
+  let awgRemindDismiss = false;
+  let awgPendingRun = null;
+
+  function gateAWGReminder(content, run) {
+    if (!contentIsAWG(content) || localStorage.getItem('awg_reminder_dismissed')) {
+      run();
+      return;
+    }
+    awgPendingRun = run;
+    showAwgReminder = true;
+  }
+
+  async function onAwgReminderConfirm() {
+    if (awgRemindDismiss) localStorage.setItem('awg_reminder_dismissed', '1');
+    showAwgReminder = false;
+    const run = awgPendingRun;
+    awgPendingRun = null;
+    if (run) await run();
+  }
+
+  function onAwgReminderCancel() {
+    showAwgReminder = false;
+    awgPendingRun = null;
   }
 
   async function doSave(e) {
@@ -545,6 +671,7 @@
     // is in flight would otherwise make the rollback rename to the
     // wrong target.
     const originalName = editorOriginalName;
+    const wasNew = editorIsNew;
     editorErrors = [];
 
     if (!saveName) {
@@ -558,7 +685,17 @@
         editorErrors = errors;
         return;
       }
-      if (editorIsNew) {
+    } catch (err) {
+      editorErrors = [errText(err)];
+      return;
+    }
+    gateAWGReminder(saveContent, () => persistEditorSave(saveName, saveContent, originalName, wasNew));
+  }
+
+  async function persistEditorSave(saveName, saveContent, originalName, wasNew) {
+    editorErrors = [];
+    try {
+      if (wasNew) {
         await TunnelService.ImportConfig(saveName, saveContent);
       } else {
         const renamed = saveName !== originalName;
@@ -900,23 +1037,62 @@
   <!-- Modals -->
   {#if showEditor}
     <div class="modal-backdrop" on:click={() => showEditor = false}>
-      <div class="modal modal-editor" on:click|stopPropagation
+      <div class="modal modal-editor" use:modalDrag={'.editor-tabs'} on:click|stopPropagation
         role="dialog" aria-modal="true" tabindex="-1"
         aria-label={editorIsNew ? $t('tunnel.new_tunnel') : $t('tunnel.edit')}>
-        <ConfigEditor
-          bind:content={editorContent}
-          bind:name={editName}
-          errors={editorErrors}
-          isNew={editorIsNew}
-          nameEditable={true}
-          on:save={doSave}
-          on:cancel={() => showEditor = false} />
+        <!-- Explicit close affordance: the backdrop click exists but is
+             invisible, so an X in the corner makes "dismiss without saving"
+             discoverable. -->
+        <button class="editor-close" aria-label={$t('editor.close')}
+          title={$t('editor.close')} on:click={() => showEditor = false}>✕</button>
+        <div class="editor-stack">
+          <div class="editor-tabs" role="tablist">
+            <button
+              class="editor-tab"
+              class:active={editorTab === 'conf'}
+              role="tab"
+              aria-selected={editorTab === 'conf'}
+              on:click={() => switchEditorTab('conf')}>{$t('editor.tab_conf')}</button>
+            <button
+              class="editor-tab"
+              class:active={editorTab === 'fields'}
+              role="tab"
+              aria-selected={editorTab === 'fields'}
+              on:click={() => switchEditorTab('fields')}>{$t('editor.tab_fields')}</button>
+          </div>
+          {#if editorTab === 'conf'}
+            <ConfigEditor
+              bind:content={editorContent}
+              bind:name={editName}
+              errors={editorErrors}
+              isNew={editorIsNew}
+              nameEditable={true}
+              on:save={doSave}
+              on:cancel={() => showEditor = false} />
+          {:else}
+            <FieldsEditor
+              bind:content={editorContent}
+              bind:name={editName}
+              isNew={editorIsNew}
+              nameEditable={true}
+              {TunnelService}
+              reloadKey={fieldsReloadKey}
+              on:save={doSave}
+              on:cancel={() => showEditor = false} />
+          {/if}
+          <!-- Binding is a TOP-LEVEL tunnel property: rendered outside the
+               conf/fields tabs so it is visible (and editable) from either
+               one. Keyed by the SAVED name — the meta sidecar key — so a
+               rename-in-progress cannot orphan the binding. -->
+          <EgressBinding name={editorOriginalName || editName} isNew={editorIsNew} />
+          <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} />
+        </div>
       </div>
     </div>
   {/if}
 
   {#if showSettings}
-    <Settings {TunnelService} onClose={() => showSettings = false} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} {showToast} />
+    <Settings {TunnelService} onClose={() => { showSettings = false; refreshAppSettings(TunnelService); }} {updateInfo} onInstall={handleUpdate} onOpenRelease={handleOpenRelease} {showToast} />
   {/if}
 
   {#if showConflictWarning}
@@ -924,6 +1100,35 @@
       conflicts={conflictList}
       on:proceed={handleConflictProceed}
       on:cancel={handleConflictCancel} />
+  {/if}
+
+  <EgressLostDialog
+    open={showEgressLost}
+    info={egressLostInfo}
+    on:wait={onEgressLostWait}
+    on:auto={onEgressLostAuto}
+    on:manual={onEgressLostManual} />
+
+  {#if showAwgReminder}
+    <div class="modal-backdrop" on:click={onAwgReminderCancel}>
+      <div class="modal modal-awg-reminder" on:click|stopPropagation
+        role="alertdialog" aria-modal="true" tabindex="-1"
+        aria-label={$t('awg_reminder.title')}>
+        <h4 class="awg-reminder-title">{$t('awg_reminder.title')}</h4>
+        <p class="awg-reminder-text">{$t('awg_reminder.body')}</p>
+        <p class="awg-reminder-text" class:awg-reminder-bad={!$appSettings.enable_awg}>
+          {$appSettings.enable_awg ? $t('awg_reminder.state_on') : $t('awg_reminder.state_off')}
+        </p>
+        <label class="awg-reminder-dismiss">
+          <input type="checkbox" bind:checked={awgRemindDismiss} />
+          <span>{$t('awg_reminder.dismiss')}</span>
+        </label>
+        <div class="awg-reminder-actions">
+          <button class="btn" on:click={onAwgReminderCancel}>{$t('awg_reminder.cancel')}</button>
+          <button class="btn btn--primary" on:click={onAwgReminderConfirm}>{$t('awg_reminder.confirm')}</button>
+        </div>
+      </div>
+    </div>
   {/if}
 
   {#if showLegacyMigration && legacyReport}
@@ -1472,16 +1677,117 @@
     box-shadow: var(--shadow-lg);
   }
   .modal-editor {
-    width: 760px;
-    height: 500px;
+    position: relative;
+    width: 860px;
+    height: 620px;
     padding: 0;
     overflow: hidden;
     resize: both;
-    min-width: 520px;
-    min-height: 360px;
+    min-width: 560px;
+    min-height: 420px;
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 40px);
     border-radius: 14px;
+  }
+  /* Corner close button for the editor dialog. Positioned over the tab bar
+     so the editor content keeps its full-width layout. */
+  .editor-close {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0.5px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font: 500 13px/13px var(--font-sans);
+    cursor: pointer;
+    z-index: 2;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .editor-close {
+      transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+  }
+  .editor-close:hover {
+    background: var(--bg-hover);
+    border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+    color: var(--red);
+  }
+  /* conf 文本 / 字段编辑 顶部切换条（同时是弹窗拖拽把手） */
+  .editor-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px 0;
+    flex-shrink: 0;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+  }
+  .editor-tab {
+    padding: 5px 14px;
+    font-size: 13px;
+    border: 1px solid var(--border, #ccc);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+  }
+  .editor-tab.active {
+    opacity: 1;
+    font-weight: 600;
+    background: var(--bg-secondary, rgba(127, 127, 127, 0.12));
+  }
+  .modal-awg-reminder {
+    width: 420px;
+    padding: 18px 20px;
+  }
+  .awg-reminder-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+  .awg-reminder-text {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .awg-reminder-bad {
+    color: #d33;
+    font-weight: 600;
+  }
+  .awg-reminder-dismiss {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    margin: 10px 0;
+    opacity: 0.85;
+    cursor: pointer;
+  }
+  .awg-reminder-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  /* Stacks the .conf editor and the (optional) script panel vertically
+     inside the resizable modal. The CodeMirror wrapper flexes; the script
+     panel keeps its natural height. */
+  .editor-stack {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .editor-stack :global(.editor-wrapper) {
+    flex: 1;
+    min-height: 0;
   }
   .modal-zip-result {
     max-width: 90vw;

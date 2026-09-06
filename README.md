@@ -42,6 +42,9 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   (default 10 s, adjustable in Settings).
 - **Tunnel management** — import / export `.conf`, connection history, quick toggles.
 - **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
+- **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear).
+- **Per-tunnel physical egress binding** — with Pin Interface enabled, each tunnel's encrypted traffic can be pinned to a specific physical NIC (Windows / Linux / macOS); if the bound NIC disappears, a dialog offers wait / auto-switch / manual pick.
+- **Settings export & import** — bundles tunnels, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
 
 ## Fixes & enhancements over upstream wireguide
 
@@ -81,9 +84,12 @@ tunnel match those values. Virtual adapters are excluded. When Wi-Fi is not conn
 SSID row says `Wi-Fi not connected`. The panel and rule guidance can be collapsed, and the
 whole editor scrolls so large rule sets remain usable.
 
-`Pin Interface` is currently implemented on macOS using `-ifscope` for VPN bypass routes.
-Windows and Linux do not expose this setting as supported yet; selecting a WireGuard
-interface is an operating-system routing policy feature, not a WireGuard protocol setting.
+`Pin Interface` is now supported on all desktop platforms: Windows binds the tunnel's UDP
+sockets to the chosen NIC via `IP_UNICAST_IF`, Linux installs `ip route … dev <iface>`
+bypass routes, and macOS scopes bypass routes with `-ifscope`. Choosing a physical egress
+is an operating-system routing policy (not a WireGuard protocol setting), and when the
+bound NIC disappears a dialog lets you keep the binding and wait, switch automatically, or
+pick the NIC manually.
 
 ### Rule logic
 
@@ -224,6 +230,7 @@ the release automatically (see [docs/release.md](docs/release.md)).
 | --- | --- |
 | Settings / history | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
 | Tunnel configs | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Tunnel scripts | `%APPDATA%\wireguideplus\scripts\` |
 | Logs | `%APPDATA%\wireguideplus\logs\` |
 
 ## Uninstall

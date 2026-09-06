@@ -418,6 +418,92 @@ export class KnownSSIDs {
 }
 
 /**
+ * PhysicalInterface describes one network interface offered in the
+ * per-tunnel "physical egress" dropdown (Settings → interface binding).
+ * 
+ * The naming is deliberately split: `Friendly` is the GENERIC name a human
+ * recognises ("以太网" / "WLAN" / "Wi-Fi" / "Ethernet"), while `Hardware`
+ * carries the vendor model string ("Realtek PCIe GbE Family Controller").
+ * Showing only the hardware name made every entry look alike and gave no
+ * clue which port was which.
+ */
+export class PhysicalInterface {
+    /**
+     * Creates a new PhysicalInterface instance.
+     * @param {Partial<PhysicalInterface>} [$$source = {}] - The source object to create the PhysicalInterface.
+     */
+    constructor($$source = {}) {
+        if (!("index" in $$source)) {
+            /**
+             * OS interface index (ifIndex)
+             * @member
+             * @type {number}
+             */
+            this["index"] = 0;
+        }
+        if (!("name" in $$source)) {
+            /**
+             * OS device name ("en0", "wlan0", "Ethernet")
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("friendly" in $$source)) {
+            /**
+             * generic name: "Wi-Fi", "以太网", "Ethernet"
+             * @member
+             * @type {string}
+             */
+            this["friendly"] = "";
+        }
+        if (!("hardware" in $$source)) {
+            /**
+             * vendor/model detail or device name
+             * @member
+             * @type {string}
+             */
+            this["hardware"] = "";
+        }
+        if (!("is_physical" in $$source)) {
+            /**
+             * hardware NIC (not tunnel/loopback/virtual)
+             * @member
+             * @type {boolean}
+             */
+            this["is_physical"] = false;
+        }
+        if (!("is_up" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_up"] = false;
+        }
+        if (!("has_default" in $$source)) {
+            /**
+             * carries a default route (v4 or v6)
+             * @member
+             * @type {boolean}
+             */
+            this["has_default"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PhysicalInterface instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PhysicalInterface}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new PhysicalInterface(/** @type {Partial<PhysicalInterface>} */($$parsedSource));
+    }
+}
+
+/**
  * PublicDNSRefresh is the result of RefreshPublicDNSServers: the list
  * fetched from the live feed, the resolver list now in effect (custom list
  * takes precedence over the fetched one), when the live feed was last
@@ -540,6 +626,98 @@ export class RouteEntry {
 }
 
 /**
+ * ScriptRef describes whether a hook command references a script file
+ * (and where) or is a plain inline shell command.
+ */
+export class ScriptRef {
+    /**
+     * Creates a new ScriptRef instance.
+     * @param {Partial<ScriptRef>} [$$source = {}] - The source object to create the ScriptRef.
+     */
+    constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["path"] = undefined;
+        }
+        if (!("is_file" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["is_file"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ScriptRef instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ScriptRef}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ScriptRef(/** @type {Partial<ScriptRef>} */($$parsedSource));
+    }
+}
+
+/**
+ * SettingsImportResult reports what one import pass produced.
+ */
+export class SettingsImportResult {
+    /**
+     * Creates a new SettingsImportResult instance.
+     * @param {Partial<SettingsImportResult>} [$$source = {}] - The source object to create the SettingsImportResult.
+     */
+    constructor($$source = {}) {
+        if (!("tunnels" in $$source)) {
+            /**
+             * @member
+             * @type {ZipImportResult[]}
+             */
+            this["tunnels"] = [];
+        }
+        if (!("scripts" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["scripts"] = [];
+        }
+        if (!("settings_applied" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["settings_applied"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SettingsImportResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SettingsImportResult}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType10;
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tunnels" in $$parsedSource) {
+            $$parsedSource["tunnels"] = $$createField0_0($$parsedSource["tunnels"]);
+        }
+        if ("scripts" in $$parsedSource) {
+            $$parsedSource["scripts"] = $$createField1_0($$parsedSource["scripts"]);
+        }
+        return new SettingsImportResult(/** @type {Partial<SettingsImportResult>} */($$parsedSource));
+    }
+}
+
+/**
  * TestProxyResult is the outcome of a proxy connectivity test.
  */
 export class TestProxyResult {
@@ -581,6 +759,54 @@ export class TestProxyResult {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new TestProxyResult(/** @type {Partial<TestProxyResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * TunnelFields is the field-editor model for one tunnel config. Values are
+ * raw strings; list fields (Address/DNS/AllowedIPs) stay comma-joined. An
+ * empty value means "remove this key from the conf".
+ */
+export class TunnelFields {
+    /**
+     * Creates a new TunnelFields instance.
+     * @param {Partial<TunnelFields>} [$$source = {}] - The source object to create the TunnelFields.
+     */
+    constructor($$source = {}) {
+        if (!("interface" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["interface"] = {};
+        }
+        if (!("peers" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }[]}
+             */
+            this["peers"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelFields instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelFields}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType11;
+        const $$createField1_0 = $$createType12;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("interface" in $$parsedSource) {
+            $$parsedSource["interface"] = $$createField0_0($$parsedSource["interface"]);
+        }
+        if ("peers" in $$parsedSource) {
+            $$parsedSource["peers"] = $$createField1_0($$parsedSource["peers"]);
+        }
+        return new TunnelFields(/** @type {Partial<TunnelFields>} */($$parsedSource));
     }
 }
 
@@ -668,6 +894,44 @@ export class TunnelInfo {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new TunnelInfo(/** @type {Partial<TunnelInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * TunnelMetaBinding is the wire form of the per-tunnel egress binding.
+ */
+export class TunnelMetaBinding {
+    /**
+     * Creates a new TunnelMetaBinding instance.
+     * @param {Partial<TunnelMetaBinding>} [$$source = {}] - The source object to create the TunnelMetaBinding.
+     */
+    constructor($$source = {}) {
+        if (!("bind_if_index" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["bind_if_index"] = 0;
+        }
+        if (!("bind_if_name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["bind_if_name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelMetaBinding instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelMetaBinding}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TunnelMetaBinding(/** @type {Partial<TunnelMetaBinding>} */($$parsedSource));
     }
 }
 
@@ -802,3 +1066,7 @@ const $$createType5 = wifi$0.RuleDetail.createFrom;
 const $$createType6 = $Create.Array($$createType5);
 const $$createType7 = DNSServer.createFrom;
 const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = ZipImportResult.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $Create.Map($Create.Any, $Create.Any);
+const $$createType12 = $Create.Array($$createType11);

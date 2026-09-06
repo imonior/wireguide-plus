@@ -32,6 +32,9 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
   自动关闭（默认 10 秒，可在设置中调整）。
 - **隧道管理** — 导入 / 导出 `.conf`、连接历史、快速开关。
 - **AmneziaWG（AWG）隧道** — 支持导入并连接 AmneziaWG（混淆版 WireGuard）配置。AWG 由配置中的 Jc/Jmin/Jmax/S1-S4/H1-H4 混淆参数自动识别，对应隧道会显示「AmneziaWG」徽标；可在「设置 → 高级」中关闭支持。
+- **隧道编辑器：字段视图与脚本钩子** — 除 conf 文本外，提供逐字段表单（interface / peer 分组）编辑配置，并支持管理 PreUp / PostUp / PreDown / PostDown 脚本钩子（选择文件、新建空白、编辑代码、清除）。
+- **每隧道物理出口绑定** — 开启「固定接口」后，可将单个隧道的加密流量固定到指定物理网卡（Windows / Linux / macOS）；绑定网卡失效时弹窗提供等待、自动切换或手动指定。
+- **设置导出与导入** — 将 tunnels、scripts 与 `config.json`（不含日志）打包为单个压缩包，便于迁移到其他机器。
 
 ## 针对原 wireguide 的修复与增强
 
@@ -65,7 +68,7 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 
 编辑器顶部的实时网络看板只描述**当前隧道**的网络环境，每类信息一行：所有检测到的真实硬件接口（标注「使用中」或「未使用」）、Wi-Fi SSID、网关 MAC、网关 IP 和子网，并显示当前隧道中哪些条件命中了这些值。虚拟网卡会被排除；未连接 Wi-Fi 时 SSID 显示「Wi-Fi 未连接」。看板和规则说明都可以折叠，整个编辑器支持滚动，规则较多时仍便于操作。
 
-「固定接口」目前仅在 macOS 上通过 `-ifscope` 为 VPN 旁路路由绑定接口。Windows 和 Linux 暂未将此设置标记为支持；指定 WireGuard 的物理出口属于操作系统路由策略，不是 WireGuard 协议本身的设置。
+「固定接口」现已支持全部桌面平台：Windows 通过 `IP_UNICAST_IF` 将隧道的 UDP 套接字绑定到指定网卡，Linux 使用 `ip route … dev <网卡>` 旁路路由，macOS 以 `-ifscope` 限定旁路路由。指定物理出口属于操作系统路由策略（而非 WireGuard 协议设置）；绑定网卡失效时会弹窗让你选择保持绑定等待、自动切换或手动指定。
 
 ### 规则逻辑
 
@@ -180,6 +183,7 @@ zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 | --- | --- |
 | 设置 / 历史 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
 | 隧道配置 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| 隧道脚本 | `%APPDATA%\wireguideplus\scripts\` |
 | 日志 | `%APPDATA%\wireguideplus\logs\` |
 
 ## 卸载

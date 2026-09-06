@@ -257,20 +257,55 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 // and as the implementation of every monitor re‑evaluation.
 // Returns the (v4, v6) ifIndex pair actually bound (0 = blackhole/no
 // underlay for that family).
-func pinSocketToPhysical(bind any, tunnelInterfaceName string, tunnelLUID winipcfg.LUID) (uint32, uint32) {
+//
+// pinned: the tunnel's configured physical egress ifIndex (0 = auto).
+// When set, the auto-selection is skipped for that family.
+func pinSocketToPhysical(bind any, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, pinned uint32) (uint32, uint32, string) {
 	binder, ok := bind.(bindSocketPinner)
 	if !ok {
-		return 0, 0
+		return 0, 0, ""
 	}
-	v4 := pinFamily(binder, tunnelInterfaceName, tunnelLUID, false)
-	v6 := pinFamily(binder, tunnelInterfaceName, tunnelLUID, true)
-	return v4, v6
+	v4, r4 := pinFamily(binder, tunnelInterfaceName, tunnelLUID, false, pinned)
+	v6, r6 := pinFamily(binder, tunnelInterfaceName, tunnelLUID, true, pinned)
+	// Either family noticing the loss is enough to report it.
+	reason := r4
+	if reason == "" {
+		reason = r6
+	}
+	return v4, v6, reason
 }
 
-// pinFamily resolves one address family's best non‑tunnel default route
-// and binds the corresponding socket. Returns the bound ifIndex (0 if
-// no usable underlay was found and blackhole was applied).
-func pinFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool) uint32 {
+// resolveEgressIfIndex picks the family's egress ifIndex: the pinned
+// interface when valid (up, not the tunnel itself), otherwise the
+// best-underlay auto-selection with the established fallback chain.
+//
+// The second return value is a non-empty machine-readable reason when a
+// pinned interface is configured but currently unusable ("missing",
+// "down", "invalid"). In that case the FIRST return value is still the
+// pinned ifIndex: the tunnel stays pinned and therefore disconnected.
+//
+// Why no auto-failover: the user pinned an egress precisely so traffic
+// would NOT leave via some other NIC. Silently re-routing to the best
+// remaining interface would defeat that intent and can leak traffic out
+// a metered/untrusted link. Instead we stay pinned and surface the loss
+// (EventEgressInterfaceLost) so the GUI can offer: wait for the NIC,
+// switch to auto, or pick a different interface.
+func resolveEgressIfIndex(tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, pinned uint32) (uint32, string) {
+	if pinned > 0 {
+		iface, err := net.InterfaceByIndex(int(pinned))
+		if err == nil && (iface.Flags&net.FlagUp) != 0 && iface.Name != tunnelInterfaceName {
+			return pinned, ""
+		}
+		reason := "down"
+		if err != nil {
+			reason = "missing"
+		} else if iface.Name == tunnelInterfaceName {
+			reason = "invalid"
+		}
+		slog.Warn("pinned egress interface unavailable; staying pinned (no auto-failover)",
+			"family", familyName(ipv6), "pinned_ifIndex", pinned, "reason", reason)
+		return pinned, reason
+	}
 	var ifIndex uint32
 	_, ifIndex, err := findDefaultUnderlayByLUID(tunnelLUID, ipv6)
 	if err != nil {
@@ -283,21 +318,29 @@ func pinFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID w
 	if ifIndex > 0 {
 		iface, errIface := net.InterfaceByIndex(int(ifIndex))
 		if errIface == nil && iface.Name == tunnelInterfaceName {
-			slog.Warn("pinFamily: default‑route points to tunnel itself, trigger fallback scan",
+			slog.Warn("resolveEgressIfIndex: default-route points to tunnel itself, trigger fallback scan",
 				"family", familyName(ipv6), "tunnel_ifIndex", ifIndex)
 			ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
 		}
 	}
 
-	// validate: route‑returned interface must be UP
+	// validate: route-returned interface must be UP
 	if ifIndex > 0 {
 		iface, errIface := net.InterfaceByIndex(int(ifIndex))
 		if errIface != nil || (iface.Flags&net.FlagUp) == 0 {
-			slog.Warn("pinFamily: default‑route interface is down/invalid, trigger fallback scan",
-				"family", familyName(ipv6), "invalid_ifIndex", ifIndex)
+		slog.Warn("resolveEgressIfIndex: default-route interface is down/invalid, trigger fallback scan",
+			"family", familyName(ipv6), "invalid_ifIndex", ifIndex)
 			ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
 		}
 	}
+	return ifIndex, ""
+}
+
+// pinFamily resolves one address family's egress interface and binds the
+// corresponding socket. Returns the bound ifIndex (0 if no usable underlay
+// was found and blackhole was applied).
+func pinFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, pinned uint32) (uint32, string) {
+	ifIndex, reason := resolveEgressIfIndex(tunnelInterfaceName, tunnelLUID, ipv6, pinned)
 
 	blackhole := ifIndex == 0
 	var errBind error
@@ -312,14 +355,14 @@ func pinFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID w
 			"ifIndex", ifIndex,
 			"blackhole", blackhole,
 			"error", errBind)
-		return 0
+		return 0, reason
 	}
 	slog.Info("WG socket pinned to underlay",
 		"family", familyName(ipv6),
 		"ifIndex", ifIndex,
 		"blackhole", blackhole,
 		"tunnel_excluded", tunnelInterfaceName)
-	return ifIndex
+	return ifIndex, reason
 }
 
 func familyName(ipv6 bool) string {
@@ -333,6 +376,7 @@ func familyName(ipv6 bool) string {
 // kernel callbacks. Any route or interface‑parameter change pumps the
 // debounce timer; the timer fires re‑evaluation in pinSocketToPhysical's
 // idempotent path (which is a no‑op when the best underlay hasn't moved).
+// pinnedIfIndex: the tunnel's configured physical egress (0 = auto).
 //
 // Timing: register kernel callbacks FIRST, then perform initial pin, align official wireguard‑windows.
 //
@@ -340,12 +384,12 @@ func familyName(ipv6 bool) string {
 // debounce timer. The callbacks themselves are guarded by sync.WaitGroup
 // so concurrent goroutines spawned by the kernel callback drain before
 // the manager calls engine.Close.
-func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName string, tunnelLUID uint64) {
+func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName string, tunnelLUID uint64, pinnedIfIndex int, tunnelName string, onLost EgressLostHook) {
 
 	realTunnelLUID := winipcfg.LUID(tunnelLUID)
 
 	// 在这里插入一行日志
-	slog.Info("socket bind monitor started", "tunnelLUID", realTunnelLUID)
+	slog.Info("socket bind monitor started", "tunnelLUID", realTunnelLUID, "pinnedIfIndex", pinnedIfIndex)
 
 	if bind == nil {
 		return
@@ -358,6 +402,9 @@ func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName s
 		binder:              binder,
 		tunnelInterfaceName: tunnelInterfaceName,
 		tunnelLUID:          realTunnelLUID,
+		pinned:              uint32(pinnedIfIndex),
+		tunnelName:          tunnelName,
+		onLost:              onLost,
 	}
 	mon.lastV4.Store(0)
 	mon.lastV6.Store(0)
@@ -373,9 +420,11 @@ func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName s
 		return
 	}
 	// After callback registered: do initial pin
-	initialV4, initialV6 := pinSocketToPhysical(bind, tunnelInterfaceName, realTunnelLUID)
+	initialV4, initialV6, lostReason := pinSocketToPhysical(bind, tunnelInterfaceName, realTunnelLUID, mon.pinned)
 	mon.lastV4.Store(initialV4)
 	mon.lastV6.Store(initialV6)
+	// The egress may already be gone at connect time — report immediately.
+	mon.noteLost(lostReason)
 	// startup grace poll: short‑time fallback for wintun‑up kernel route table lag
 	go func() {
 		const gracePeriod = 1200 * time.Millisecond
@@ -384,7 +433,8 @@ func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName s
 			if mon.stopped.Load() {
 				return
 			}
-			v4, v6 := pinSocketToPhysical(bind, tunnelInterfaceName, realTunnelLUID)
+			v4, v6, lostReason := pinSocketToPhysical(bind, tunnelInterfaceName, realTunnelLUID, mon.pinned)
+			mon.noteLost(lostReason)
 			if v4 != 0 && v6 != 0 {
 				slog.Info("startup grace poll: got valid underlay index", "v4", v4, "v6", v6)
 				return
@@ -409,6 +459,19 @@ type socketBindMonitor struct {
 	binder              bindSocketPinner
 	tunnelInterfaceName string
 	tunnelLUID          winipcfg.LUID
+	pinned              uint32 // tunnel's configured egress ifIndex (0 = auto)
+
+	// tunnelName is the logical tunnel (config) name, used when reporting
+	// a lost pinned egress to the GUI. Distinct from tunnelInterfaceName
+	// (the wintun adapter name) which is meaningless to the user.
+	tunnelName string
+	// onLost is invoked once per loss episode when the pinned egress NIC
+	// becomes unusable. nil when nobody is listening (tests, CLI).
+	onLost EgressLostHook
+	// lostReported latches the current loss episode so a noisy route table
+	// does not spam the GUI with repeated dialogs. Cleared when the NIC
+	// comes back.
+	lostReported atomic.Bool
 	lastV4              atomic.Uint32
 	lastV6              atomic.Uint32
 	burstMu             sync.Mutex
@@ -449,44 +512,54 @@ func (mon *socketBindMonitor) reevaluate() {
 	mon.burstMu.Lock()
 	mon.firstBurst = time.Time{}
 	mon.burstMu.Unlock()
-	newV4 := evaluateOneFamily(mon.binder, mon.tunnelInterfaceName, mon.tunnelLUID, false, mon.lastV4.Load())
+	newV4, r4 := evaluateOneFamily(mon.binder, mon.tunnelInterfaceName, mon.tunnelLUID, false, mon.lastV4.Load(), mon.pinned)
 	mon.lastV4.Store(newV4)
-	newV6 := evaluateOneFamily(mon.binder, mon.tunnelInterfaceName, mon.tunnelLUID, true, mon.lastV6.Load())
+	newV6, r6 := evaluateOneFamily(mon.binder, mon.tunnelInterfaceName, mon.tunnelLUID, true, mon.lastV6.Load(), mon.pinned)
 	mon.lastV6.Store(newV6)
+	// Either family noticing the loss is enough to report it; a clean
+	// evaluation on both families clears the latch so a later loss can
+	// report again.
+	reason := r4
+	if reason == "" {
+		reason = r6
+	}
+	mon.noteLost(reason)
 }
 
-// evaluateOneFamily resolves the best non‑tunnel for one address family and (re‑)binds.
-func evaluateOneFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, previous uint32) uint32 {
-	var ifIndex uint32
-	_, ifIndex, err := findDefaultUnderlayByLUID(tunnelLUID, ipv6)
-	if err != nil {
-		slog.Warn("evaluateOneFamily: findDefaultUnderlayByLUID failed, fallback to interface scan",
-			"family", familyName(ipv6), "error", err)
-		ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
+// noteLost reports one pinned-egress loss episode to the GUI. Exactly
+// one hook invocation per episode: a noisy route table re-resolving the
+// same dead NIC must not spam dialogs. reason == "" clears the latch
+// (the NIC came back), re-arming future reports.
+func (mon *socketBindMonitor) noteLost(reason string) {
+	if reason == "" {
+		mon.lostReported.Store(false)
+		return
 	}
-
-	// 如果拿到的默认路由网卡就是隧道自身，直接走fallback
-	if ifIndex > 0 {
-		iface, errIface := net.InterfaceByIndex(int(ifIndex))
-		if errIface == nil && iface.Name == tunnelInterfaceName {
-			slog.Warn("evaluateOneFamily: default‑route points to tunnel itself, trigger fallback scan",
-				"family", familyName(ipv6), "tunnel_ifIndex", ifIndex)
-			ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
-		}
+	if mon.onLost == nil || mon.pinned == 0 {
+		return
 	}
-
-	// validate route‑returned interface status on runtime re‑evaluation
-	if ifIndex > 0 {
-		iface, errIface := net.InterfaceByIndex(int(ifIndex))
-		if errIface != nil || (iface.Flags&net.FlagUp) == 0 {
-			slog.Warn("evaluateOneFamily: default‑route interface down/invalid, trigger fallback scan",
-				"family", familyName(ipv6), "invalid_ifIndex", ifIndex)
-			ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
-		}
+	if mon.lostReported.Swap(true) {
+		return // already reported this episode
 	}
+	ifName := ""
+	if iface, err := net.InterfaceByIndex(int(mon.pinned)); err == nil {
+		ifName = iface.Name
+	}
+	hook, tunnelName := mon.onLost, mon.tunnelName
+	slog.Warn("pinned egress interface lost — notifying GUI",
+		"tunnel", tunnelName, "pinned_ifIndex", mon.pinned, "if_name", ifName, "reason", reason)
+	go hook(tunnelName, ifName, int(mon.pinned), reason)
+}
 
+// evaluateOneFamily resolves the best non-tunnel for one address family and (re‑)binds.
+func evaluateOneFamily(binder bindSocketPinner, tunnelInterfaceName string, tunnelLUID winipcfg.LUID, ipv6 bool, previous uint32, pinned uint32) (uint32, string) {
+	ifIndex, reason := resolveEgressIfIndex(tunnelInterfaceName, tunnelLUID, ipv6, pinned)
+
+	// No change: stay where we are. The pinned-loss reason is still
+	// returned so the monitor can report it even though no re-bind is
+	// needed (a pinned NIC that went down keeps its ifIndex).
 	if ifIndex == previous {
-		return previous
+		return previous, reason
 	}
 
 	blackhole := ifIndex == 0
@@ -503,14 +576,14 @@ func evaluateOneFamily(binder bindSocketPinner, tunnelInterfaceName string, tunn
 			"previous_ifIndex", previous,
 			"blackhole", blackhole,
 			"error", errBind)
-		return previous
+		return previous, reason
 	}
 	slog.Info("WG socket re‑pinned (underlay changed)",
 		"family", familyName(ipv6),
 		"previous_ifIndex", previous,
 		"new_ifIndex", ifIndex,
 		"blackhole", blackhole)
-	return ifIndex
+	return ifIndex, reason
 }
 
 // --- Kernel callback wiring ----------------------------------------

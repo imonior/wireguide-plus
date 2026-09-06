@@ -240,6 +240,18 @@ func (h *Helper) doConnectHeld(cfg *domain.WireGuardConfig) error {
 		}
 	}
 
+	// Authoritative per-tunnel physical-egress binding: read from the meta
+	// sidecar so EVERY connect path (RPC, CLI, automation, reconnect) pins
+	// the same egress. Values are runtime-injected on the config — they are
+	// never part of the .conf file itself. Gated on the Settings toggle so
+	// turning the feature off neutralizes all saved bindings.
+	if idx, ifName := h.loadTunnelBinding(cfg.Name); idx > 0 {
+		if settings, err := h.loadUserSettings(); err == nil && settings != nil && settings.PinInterface {
+			cfg.BindIfIndex = idx
+			cfg.BindIfName = ifName
+		}
+	}
+
 	// A firewall cannot permit a not-yet-created tunnel interface, and a
 	// pre-enabled base kill switch deliberately blocks DNS and WireGuard UDP.
 	// This applies equally to nftables, PF, and WFP (and is fatal before Engine

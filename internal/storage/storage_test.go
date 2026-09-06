@@ -313,13 +313,33 @@ func TestEnsureDirs(t *testing.T) {
 	paths := &Paths{
 		ConfigDir:  filepath.Join(dir, "config"),
 		TunnelsDir: filepath.Join(dir, "tunnels"),
+		ScriptsDir: filepath.Join(dir, "scripts"),
 		LogsDir:    filepath.Join(dir, "logs"),
 		DataDir:    filepath.Join(dir, "data"),
 	}
 	if err := paths.EnsureDirs(); err != nil {
 		t.Fatalf("EnsureDirs failed: %v", err)
 	}
-	for _, d := range []string{paths.ConfigDir, paths.TunnelsDir, paths.LogsDir, paths.DataDir} {
+	for _, d := range []string{paths.ConfigDir, paths.TunnelsDir, paths.ScriptsDir, paths.LogsDir, paths.DataDir} {
+		if _, err := os.Stat(d); os.IsNotExist(err) {
+			t.Errorf("directory should exist: %s", d)
+		}
+	}
+}
+
+// EnsureDirs must tolerate zero-valued Paths entries — tests and future
+// callers may construct partial structs; an empty dir must not abort
+// creation of the others.
+func TestEnsureDirsSkipsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	paths := &Paths{
+		ConfigDir: filepath.Join(dir, "config"),
+		LogsDir:   filepath.Join(dir, "logs"),
+	}
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatalf("EnsureDirs failed: %v", err)
+	}
+	for _, d := range []string{paths.ConfigDir, paths.LogsDir} {
 		if _, err := os.Stat(d); os.IsNotExist(err) {
 			t.Errorf("directory should exist: %s", d)
 		}

@@ -40,6 +40,14 @@ type WireGuardConfig struct {
 	// reuses the cached config and applies the same policy as the
 	// initial connect.
 	EnableScripts bool `json:"enable_scripts,omitempty"`
+
+	// BindIfIndex/BindIfName are injected at runtime by the helper from
+	// the tunnel's meta sidecar (per-tunnel physical egress binding, a
+	// Settings opt-in feature). They are NOT part of the on-disk .conf
+	// serialization. BindIfName is used on Linux (route-level egress
+	// pinning); BindIfIndex on Windows (IP_UNICAST_IF socket pinning).
+	BindIfIndex int    `json:"bind_if_index,omitempty"`
+	BindIfName  string `json:"bind_if_name,omitempty"`
 }
 
 // InterfaceConfig represents the [Interface] section of a .conf file.

@@ -5,7 +5,9 @@
   import { applyTheme } from '../stores/theme.js';
   import { connectionStatus, tunnels } from '../stores/tunnels.js';
   import { compactList } from '../stores/ui.js';
+  import { appSettings } from '../stores/settings.js';
   import Icon from './Icon.svelte';
+  import { modalDrag } from './actions/modal-drag.js';
 
   export let TunnelService;
   export let onClose = () => {};
@@ -169,12 +171,17 @@
     log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
     history_retention_days: DEFAULT_HISTORY_RETENTION_DAYS,
     enable_wg_scripts: false,
-    enable_awg: true,
+    // Strict default: the gate is OFF until the persisted settings are
+    // actually read back as ON. Never assume an unread feature flag.
+    enable_awg: false,
   };
   let loaded = false;
   let appVersion = '';
   let folderError = '';
   let wgScriptsWarn = false;
+  // AWG inline confirm (same pattern as wg-scripts-warn): shown when the
+  // user flips the toggle ON, dismissed by Confirm/Cancel.
+  let awgWarn = false;
 
   async function load() {
     try {
@@ -214,13 +221,30 @@
           ? histRetention
           : DEFAULT_HISTORY_RETENTION_DAYS;
         settings.enable_wg_scripts = s.enable_wg_scripts ?? false;
-        settings.enable_awg = s.enable_awg ?? true;
+        settings.enable_awg = s.enable_awg === true;
       }
     } catch (e) {
       console.error('load settings:', e);
     }
     loaded = true;
   }
+
+  // Keep the global appSettings store in sync so TunnelList/TunnelDetail
+  // badges and the editor field gating react to changes live.
+  $: if (loaded) {
+    appSettings.set({
+      // `loaded` MUST be carried: consumers hide the AWG badge while it is
+      // false, so dropping it here would make every badge vanish the first
+      // time the Settings dialog is opened.
+      loaded: true,
+      enable_awg: settings.enable_awg === true,
+      enable_wg_scripts: settings.enable_wg_scripts === true,
+      // Interface binding reuses the existing pin_interface switch — it
+      // is the "bind traffic to a physical interface" master toggle.
+      pin_interface: settings.pin_interface,
+    });
+  }
+
   load();
 
   async function save() {
@@ -378,7 +402,33 @@
   }
 
   function onAwgChange(e) {
+    // Exact same flow as wg-scripts: ENABLING pops the inline highlight
+    // bar and does NOT write the value until the user confirms; the
+    // checkbox stays at its persisted value for the whole bar lifetime.
+    // DISABLING applies immediately (no confirmation needed — turning a
+    // protocol off is not a risk the bar exists to prevent).
+    if (e.target.checked && !awgWarn) {
+      awgWarn = true;
+      // Do NOT mutate settings or call scheduleSave() here: the user
+      // either confirms (→ onAwgWarnConfirm writes + saves) or cancels
+      // (→ onAwgWarnCancel writes; the reactive binding reverts the
+      // native checkbox). settings.enable_awg stays at its persisted
+      // value for the whole bar lifetime.
+      return;
+    }
     settings.enable_awg = e.target.checked;
+    scheduleSave();
+  }
+
+  function onAwgWarnConfirm() {
+    awgWarn = false;
+    settings.enable_awg = true;
+    scheduleSave();
+  }
+
+  function onAwgWarnCancel() {
+    awgWarn = false;
+    settings.enable_awg = false;
     scheduleSave();
   }
 
@@ -393,6 +443,45 @@
       folderError = e?.message || String(e);
     }
     openingFolder = false;
+  }
+
+  // --- settings backup: export / import (tunnels + scripts, no logs) ---
+  let backupBusy = false;
+  function notifyBackup(msg) {
+    if (typeof showToast === 'function') showToast(msg);
+    else console.log(msg);
+  }
+  async function exportSettings() {
+    if (backupBusy) return;
+    backupBusy = true;
+    try {
+      const path = await TunnelService.ExportSettings();
+      if (path) notifyBackup($t('settings.export_ok', { path }));
+    } catch (e) {
+      notifyBackup($t('settings.export_fail', { error: e?.message || String(e) }));
+    }
+    backupBusy = false;
+  }
+  async function importSettings() {
+    if (backupBusy) return;
+    backupBusy = true;
+    try {
+      const res = await TunnelService.ImportSettings();
+      if (res) {
+        // config.json may have been replaced — reload into this screen so
+        // toggles reflect the imported values instead of stale memory.
+        await load();
+        const nTunnels = res.tunnels?.length ?? 0;
+        const nScripts = res.scripts?.length ?? 0;
+        notifyBackup(
+          $t('settings.import_ok', { t: nTunnels, s: nScripts }) +
+            (res.settings_applied ? ' · ' + $t('settings.import_settings_applied') : '')
+        );
+      }
+    } catch (e) {
+      notifyBackup($t('settings.import_fail', { error: e?.message || String(e) }));
+    }
+    backupBusy = false;
   }
 
   function onLogLevelChange(e) {
@@ -629,8 +718,11 @@
 </script>
 
 <div class="modal-backdrop" on:mousedown={handleBackdropMousedown}>
-  <div class="modal" on:mousedown={stopEvent} role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="settings-title">
-    <h3 id="settings-title">{$t('settings.title')}</h3>
+  <div class="modal" use:modalDrag={'.settings-head'} on:mousedown={stopEvent} role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="settings-title">
+    <div class="settings-head">
+      <h3 id="settings-title">{$t('settings.title')}</h3>
+      <button class="settings-close" aria-label={$t('editor.close')} title={$t('editor.close')} on:click={close}>✕</button>
+    </div>
 
     <div class="settings-layout">
       <div class="settings-sidebar" role="tablist" aria-label="Settings sections">
@@ -944,6 +1036,17 @@
                   </div>
                 </div>
               {/if}
+              {#if settings.enable_wg_scripts}
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <span class="setting-label">{$t('settings.scripts_folder')}</span>
+                    <p class="setting-desc">{$t('settings.scripts_folder_hint')}</p>
+                  </div>
+                  <button class="folder-btn" on:click={() => openFolder('scripts')} disabled={openingFolder}>
+                    {$t('settings.open_folder')}
+                  </button>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -959,6 +1062,42 @@
                   <input id="awg-support" type="checkbox" checked={settings.enable_awg} on:change={onAwgChange} />
                   <span class="toggle-track"></span>
                 </label>
+              </div>
+              {#if awgWarn}
+                <!-- Inline highlight bar, identical structure and styling to
+                     the wg-scripts confirm — a nested modal was explicitly
+                     rejected by the user. -->
+                <div class="wg-scripts-warn">
+                  <p class="wg-scripts-warn-text">{$t('settings.awg_confirm')}</p>
+                  <div class="wg-scripts-warn-actions">
+                    <button class="btn btn--primary" on:click={onAwgWarnConfirm}>{$t('settings.awg_confirm_enable')}</button>
+                    <button class="btn" on:click={onAwgWarnCancel}>{$t('settings.awg_confirm_cancel')}</button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_backup')}</h4>
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">{$t('settings.export_settings')}</span>
+                  <p class="setting-desc">{$t('settings.export_settings_hint')}</p>
+                </div>
+                <button class="folder-btn" on:click={exportSettings} disabled={backupBusy}>
+                  {$t('settings.export_settings')}
+                </button>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">{$t('settings.import_settings')}</span>
+                  <p class="setting-desc">{$t('settings.import_settings_hint')}</p>
+                </div>
+                <button class="folder-btn" on:click={importSettings} disabled={backupBusy}>
+                  {$t('settings.import_settings')}
+                </button>
               </div>
             </div>
           </div>
@@ -1075,6 +1214,47 @@
     box-shadow: var(--shadow-lg);
     overflow: hidden;
     box-sizing: border-box;
+    position: relative;
+    resize: both;
+    min-width: 560px;
+    min-height: 420px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 40px);
+  }
+  /* Title row doubles as the drag handle for the dialog. */
+  .settings-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-bottom: 14px;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+  }
+  .settings-head h3 {
+    margin: 0;
+  }
+  .settings-close {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0.5px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font: 500 13px/13px var(--font-sans);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .settings-close:hover {
+    background: var(--bg-hover);
+    border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+    color: var(--red);
   }
   h3 {
     margin: 0 0 14px;

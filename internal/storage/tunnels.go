@@ -398,6 +398,10 @@ func (s *TunnelStore) path(name string) string {
 type TunnelMeta struct {
 	Notes              string `json:"notes,omitempty"`
 	LatencyProbeTarget string `json:"latency_probe_target,omitempty"`
+	// BindIfIndex/BindIfName pin the tunnel's physical egress to a chosen
+	// interface (Settings → interface binding opt-in). 0/"" = auto-select.
+	BindIfIndex int    `json:"bind_if_index,omitempty"`
+	BindIfName  string `json:"bind_if_name,omitempty"`
 	// CreatedUnix is when the tunnel was first added, stamped once on
 	// creation and preserved across edits/rename. The .conf mtime is NOT a
 	// reliable "date added": editing a tunnel rewrites the file and would

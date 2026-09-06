@@ -13,6 +13,7 @@ type FolderKind string
 const (
 	FolderConfig  FolderKind = "config"
 	FolderTunnels FolderKind = "tunnels"
+	FolderScripts FolderKind = "scripts"
 	FolderLogs    FolderKind = "logs"
 	// Legacy locations (pre-rename "wireguide" dirs). Exposed so the
 	// migration dialog can let the user compare old vs new before deciding.
@@ -24,7 +25,7 @@ const (
 // file manager. Only directories the app itself owns are accepted — a
 // compromised frontend cannot point the opener at arbitrary paths.
 //
-// kind ∈ {"config", "tunnels", "logs", "legacy-config", "legacy-logs"}.
+// kind ∈ {"config", "tunnels", "scripts", "logs", "legacy-config", "legacy-logs"}.
 func (s *TunnelService) OpenFolder(kind string) error {
 	paths, err := storage.GetPaths()
 	if err != nil {
@@ -36,6 +37,8 @@ func (s *TunnelService) OpenFolder(kind string) error {
 		dir = paths.ConfigDir
 	case FolderTunnels:
 		dir = paths.TunnelsDir
+	case FolderScripts:
+		dir = paths.ScriptsDir
 	case FolderLogs:
 		dir = paths.LogsDir
 	case FolderLegacyConfig:

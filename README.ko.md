@@ -38,6 +38,9 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
   자동으로 닫힙니다.
 - **터널 관리** — `.conf` 가져오기 / 내보내기, 연결 기록, 빠른 켜기/끄기.
 - **AmneziaWG(AWG) 터널** — AmneziaWG(난독화 WireGuard) 설정 가져오기 및 연결 지원. AWG는 설정의 Jc/Jmin/Jmax/S1-S4/H1-H4 난독화 매개변수로 자동 감지되며, 해당 터널에는 「AmneziaWG」 배지가 표시됩니다. 설정 → 고급에서 지원을 끌 수 있습니다.
+- **터널 편집기: 필드 뷰와 스크립트 훅** — conf 텍스트 외에 키별 폼(interface / peer 그룹)으로 구성을 편집하고, PreUp / PostUp / PreDown / PostDown 스크립트 훅을 관리(파일 선택, 빈 스크립트 생성, 코드 편집, 지우기)할 수 있습니다.
+- **터널별 물리적 출구 바인딩** — 「인터페이스 고정」 활성화 시 터널마다 암호화 트래픽을 특정 물리 NIC에 고정(Windows / Linux / macOS)할 수 있으며, 바인딩된 NIC가 사라지면 대화상자에서 대기 / 자동 전환 / 수동 지정을 선택합니다.
+- **설정 내보내기/가져오기** — tunnels, scripts, `config.json`(로그 제외)을 하나의 아카이브로 묶어 다른 머신으로 쉽게 이전할 수 있습니다.
 
 ## 업스트림 wireguide 대비 수정·개선 사항
 
@@ -71,7 +74,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 
 편집기 상단의 실시간 네트워크 패널은 **현재 터널**의 환경만 표시합니다. 실제 하드웨어 인터페이스(`in use` / `not in use` 표시), Wi-Fi SSID, 게이트웨이 MAC, 게이트웨이 IP, 서브넷을 항목별 한 줄로 보여 주며, 이 터널의 어떤 조건이 해당 값을 매치했는지도 표시합니다. 가상 어댑터는 제외되고 Wi-Fi 미연결 시 SSID는 "Wi-Fi 연결 안 됨"으로 표시됩니다. 패널과 규칙 안내는 접을 수 있으며 편집기 전체를 스크롤할 수 있습니다.
 
-「인터페이스 고정」은 현재 macOS에서 `-ifscope`를 사용한 VPN 바이패스 라우트 고정만 지원합니다. Windows와 Linux에서는 아직 지원 기능으로 표시하지 않습니다. WireGuard의 물리적 출구를 지정하는 기능은 프로토콜 설정이 아니라 운영체제 라우팅 정책에 의존합니다.
+「인터페이스 고정」은 이제 모든 데스크톱 플랫폼을 지원합니다: Windows는 `IP_UNICAST_IF`로 터널의 UDP 소켓을 지정 NIC에 바인딩하고, Linux는 `ip route … dev <iface>` 바이패스 라우트를, macOS는 `-ifscope` 스코프 바이패스 라우트를 사용합니다. 물리적 출구 지정은 운영체제 라우팅 정책(WireGuard 프로토콜 설정이 아님)에 속하며, 바인딩된 NIC가 사라지면 대화상자에서 바인딩 유지 대기 / 자동 전환 / 수동 지정을 선택할 수 있습니다.
 
 ### 규칙 로직
 
@@ -195,6 +198,7 @@ NSIS 설치 프로그램 설명, 버전 리소스 및 릴리스 워크플로는 
 | --- | --- |
 | 설정 / 기록 | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
 | 터널 설정 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| 터널 스크립트 | `%APPDATA%\wireguideplus\scripts\` |
 | 로그 | `%APPDATA%\wireguideplus\logs\` |
 
 ## 제거

@@ -18,6 +18,7 @@
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
   import SSIDPermissionBanner from './SSIDPermissionBanner.svelte';
+  import { modalDrag } from './actions/modal-drag.js';
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
@@ -743,7 +744,7 @@
 <svelte:window on:keydown={(e) => e.key === 'Escape' && open && close()} />
 {#if open}
   <div class="am-backdrop" on:click={close}>
-    <div class="am-dialog" on:click|stopPropagation role="dialog" aria-modal="true" tabindex="-1" aria-label={$t('automation.title')}>
+    <div class="am-dialog" use:modalDrag={'.am-header'} on:click|stopPropagation role="dialog" aria-modal="true" tabindex="-1" aria-label={$t('automation.title')}>
       <div class="am-header">
         <div class="am-icon"><Icon name="wifi" size={18} strokeWidth={2} /></div>
         <div class="am-header-text">
@@ -940,9 +941,12 @@
     padding: 24px;
   }
   .am-dialog {
-    width: 100%; max-width: 580px; height: 600px; max-height: 92vh;
+    width: 580px; max-width: calc(100vw - 48px); height: 600px; max-height: calc(100vh - 48px);
     display: flex; flex-direction: column;
     overflow-y: auto;
+    resize: both;
+    min-width: 480px;
+    min-height: 420px;
     background: var(--bg-elevated, var(--bg-secondary));
     border: 1px solid var(--border);
     border-radius: 14px; padding: 20px;
@@ -956,7 +960,7 @@
   .am-help > summary::-webkit-details-marker, .am-info > summary::-webkit-details-marker { display: none; }
   .am-help > summary::after, .am-info > summary::after { content: '+'; float: right; color: var(--text-muted); font-size: 14px; }
   .am-help[open] > summary::after, .am-info[open] > summary::after { content: '−'; }
-  .am-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .am-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; cursor: move; user-select: none; touch-action: none; }
   .am-icon {
     width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;

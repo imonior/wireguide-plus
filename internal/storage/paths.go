@@ -29,6 +29,7 @@ func canWriteDir(dir string) bool {
 type Paths struct {
 	ConfigDir  string // App settings (config.json)
 	TunnelsDir string // .conf files
+	ScriptsDir string // Pre/PostUp/Down hook scripts (sibling of tunnels)
 	LogsDir    string // Log files
 	DataDir    string // Daemon state / recovery journal (system-level)
 }
@@ -46,6 +47,7 @@ func GetPaths() (*Paths, error) {
 		appSupport := filepath.Join(home, "Library", "Application Support", appName)
 		p.ConfigDir = appSupport
 		p.TunnelsDir = filepath.Join(appSupport, "tunnels")
+		p.ScriptsDir = filepath.Join(appSupport, "scripts")
 		p.LogsDir = filepath.Join(home, "Library", "Logs", appName)
 		p.DataDir = filepath.Join("/Library", "Application Support", appName)
 
@@ -60,6 +62,7 @@ func GetPaths() (*Paths, error) {
 		}
 		p.ConfigDir = filepath.Join(configHome, appName)
 		p.TunnelsDir = filepath.Join(configHome, appName, "tunnels")
+		p.ScriptsDir = filepath.Join(configHome, appName, "scripts")
 
 		dataHome := os.Getenv("XDG_DATA_HOME")
 		if dataHome == "" {
@@ -83,6 +86,7 @@ func GetPaths() (*Paths, error) {
 		}
 		p.ConfigDir = filepath.Join(appData, appName)
 		p.TunnelsDir = filepath.Join(appData, appName, "tunnels")
+		p.ScriptsDir = filepath.Join(appData, appName, "scripts")
 		p.LogsDir = filepath.Join(appData, appName, "logs")
 
 		programData := os.Getenv("PROGRAMDATA")
@@ -166,8 +170,11 @@ func copyFile(src, dst string) error {
 // failing the entire startup — the helper process will create it when running
 // as root.
 func (p *Paths) EnsureDirs() error {
-	userDirs := []string{p.ConfigDir, p.TunnelsDir, p.LogsDir}
+	userDirs := []string{p.ConfigDir, p.TunnelsDir, p.ScriptsDir, p.LogsDir}
 	for _, dir := range userDirs {
+		if dir == "" {
+			continue // not available on this platform / not set by the caller
+		}
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}
@@ -196,4 +203,21 @@ func (p *Paths) EnsureDirs() error {
 		}
 	}
 	return nil
+}
+
+// ScriptsDirPath resolves and creates the scripts directory, returning its
+// absolute path. Used by the GUI bindings when saving/opening hook scripts
+// so the default save location always exists.
+func ScriptsDirPath() (string, error) {
+	p, err := GetPaths()
+	if err != nil {
+		return "", err
+	}
+	if p.ScriptsDir == "" {
+		return "", fmt.Errorf("scripts directory not available on %s", runtime.GOOS)
+	}
+	if err := os.MkdirAll(p.ScriptsDir, 0700); err != nil {
+		return "", err
+	}
+	return p.ScriptsDir, nil
 }

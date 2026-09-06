@@ -167,7 +167,30 @@ const (
 	// value so a running GUI can update its toggle without racing a
 	// re-read of config.json.
 	EventSettingsChanged = "event.settings_changed"
+	// EventEgressInterfaceLost is broadcast when a tunnel that has a
+	// manually pinned physical egress interface loses that interface
+	// (NIC unplugged, Wi-Fi dropped, driver disabled). The tunnel stays
+	// pinned and therefore disconnected — it does NOT silently fail over
+	// to another NIC, because leaking traffic out an unchosen interface
+	// is exactly what the user pinned an egress to prevent.
+	//
+	// The GUI is expected to raise a dialog offering three resolutions:
+	// keep waiting on the pinned NIC, switch to auto-selection, or pick
+	// a different interface by hand.
+	EventEgressInterfaceLost = "event.egress_interface_lost"
 )
+
+// EgressInterfaceLostPayload describes a lost pinned egress interface.
+type EgressInterfaceLostPayload struct {
+	Tunnel    string `json:"tunnel"`
+	IfIndex   int    `json:"if_index"`
+	IfName    string `json:"if_name"`
+	LostUnix  int64  `json:"lost_unix"`
+	// Reason is a short machine-readable cause: "down" (NIC present but
+	// link down), "missing" (interface no longer exists), or "invalid"
+	// (resolved to the tunnel itself / unusable).
+	Reason string `json:"reason"`
+}
 
 // CodedError is an error that carries a specific JSON-RPC error code.
 // Handlers can return this to override the default ErrCodeAppError.

@@ -1,5 +1,6 @@
 <script>
   import { tunnels, selectedTunnel, connectionStatus, refreshTunnels, refreshStatus } from '../stores/tunnels.js';
+  import { appSettings } from '../stores/settings.js';
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
@@ -444,9 +445,16 @@
             <span class="hero-sep">·</span>
             <span class="hero-endpoint">{$selectedTunnel.endpoint}</span>
           {/if}
-          {#if $selectedTunnel.protocol === 'amneziawg'}
+          {#if $selectedTunnel.protocol === 'amneziawg' && $appSettings.loaded}
             <span class="hero-sep">·</span>
-            <span class="awg-badge" title="{$t('settings.section_awg')}">{$t('tunnel.awg_badge')}</span>
+            <!-- Single element / single style, two states — mirrors the
+                 tunnel list badge exactly. -->
+            <span
+              class="awg-badge"
+              class:awg-badge--off={!$appSettings.enable_awg}
+              title={$appSettings.enable_awg ? $t('tunnel.awg_on_tip') : $t('tunnel.awg_off_tip')}>
+              {$appSettings.enable_awg ? $t('tunnel.awg_on') : $t('tunnel.awg_off')}
+            </span>
           {/if}
         </div>
       </div>
@@ -869,12 +877,21 @@
     padding: 0 6px;
     border-radius: 999px;
     font: 600 9px/16px var(--font-sans);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    /* No text-transform — preserves the AmneziaWG wordmark. */
     white-space: nowrap;
+    /* Matches the tunnel-list badge geometry in both states. */
+    min-width: 86px;
+    text-align: center;
     color: var(--purple);
     background: color-mix(in srgb, var(--purple) 13%, transparent);
     border: 1px solid color-mix(in srgb, var(--purple) 32%, transparent);
+  }
+  /* AWG support disabled in Settings — same geometry, red palette. */
+  .awg-badge--off {
+    color: var(--danger, #d33);
+    background: color-mix(in srgb, var(--danger, #d33) 13%, transparent);
+    border-color: color-mix(in srgb, var(--danger, #d33) 32%, transparent);
   }
 
   /* ========== PRIMARY ACTION ==========
