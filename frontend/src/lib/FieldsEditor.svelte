@@ -31,9 +31,12 @@
   const PEER_KEYS = ['PublicKey', 'PresharedKey', 'Endpoint', 'AllowedIPs', 'PersistentKeepalive'];
 
   // Keys wg-quick refuses to start without: the interface needs a private
-  // key and at least one address; every peer needs its public key and its
-  // routing (AllowedIPs). Everything else is optional tuning.
-  const REQUIRED = new Set(['PrivateKey', 'Address', 'PublicKey', 'AllowedIPs']);
+  // key and at least one address; every peer needs its public key, the
+  // peer's Endpoint (without it the tunnel can never initiate a
+  // handshake — it would only ever answer an inbound one, which is not
+  // what a peer entry is for) and its routing (AllowedIPs). Everything
+  // else is optional tuning.
+  const REQUIRED = new Set(['PrivateKey', 'Address', 'PublicKey', 'Endpoint', 'AllowedIPs']);
   function isRequired(key) { return REQUIRED.has(key); }
 
   let iface = {};        // canonical-key → value (working model)

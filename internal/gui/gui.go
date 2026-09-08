@@ -97,6 +97,15 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	buildWindowsTrayIcons()
 	buildMacTrayIcons()
 
+	// First line of every GUI log session: which build, on what platform.
+	// Support questions ("which version did this happen on?") are answered
+	// by the log itself instead of a screenshot round-trip.
+	slog.Info("gui starting",
+		"category", "app",
+		"version", update.CurrentVersion(),
+		"goos", runtime.GOOS,
+		"goarch", runtime.GOARCH)
+
 	// 1. Local storage
 	paths, err := storage.GetPaths()
 	if err != nil {

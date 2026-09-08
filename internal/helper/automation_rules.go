@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/ipc"
@@ -210,7 +211,10 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 	settings.EnsureAutomation()
 	auto := settings.Automation
-	if auto == nil || len(auto.PerTunnel) == 0 {
+	// Both maps count: a tunnel with rules has a policy, and so does a
+	// tunnel with only a Default State ("always converge to it"). Only a
+	// tunnel in NEITHER map is policy-free.
+	if auto == nil || (len(auto.PerTunnel) == 0 && len(auto.Defaults) == 0) {
 		return
 	}
 
@@ -233,6 +237,27 @@ func (h *Helper) reevaluateAutomation(reason string) {
 		return
 	}
 
+	// Context line: every evaluation states WHAT it judged against. This
+	// is the first thing anyone diagnosing "the tunnel didn't come up"
+	// needs, and it used to be missing entirely.
+	ipStrs := make([]string, 0, len(ctx.PhysicalIPs))
+	for _, ip := range ctx.PhysicalIPs {
+		ipStrs = append(ipStrs, ip.String())
+	}
+	ifaces := make([]string, 0, len(ctx.Interfaces))
+	for _, inf := range ctx.Interfaces {
+		ifaces = append(ifaces, inf.Name)
+	}
+	slog.Info("automation: evaluating",
+		"category", "network",
+		"reason", reason,
+		"tunnels", len(auto.PolicyTunnelNames()),
+		"ssid", ctx.SSID,
+		"gateway_mac", ctx.GatewayMAC,
+		"gateway_ip", ctx.GatewayIP,
+		"physical_ips", strings.Join(ipStrs, ","),
+		"interfaces", strings.Join(ifaces, ","))
+
 	// A tunnel the user has manually switched off (UI or tray menu) must
 	// not be silently reconnected by its rules until they reconnect it by
 	// hand once or the app restarts — the manual off wins over automation.
@@ -246,19 +271,52 @@ func (h *Helper) reevaluateAutomation(reason string) {
 		active[n] = true
 	}
 
-	for _, name := range auto.TunnelNames() {
-		state := wifi.EvaluatePolicy(auto.PerTunnel[name], auto.Defaults[name], ctx)
+	for _, name := range auto.PolicyTunnelNames() {
+		rules := auto.PerTunnel[name]
+		state := wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx)
 		switch reconcileAction(state, active[name], manualOff[name]) {
 		case "connect":
 			h.automationConnect(name, reason, ctx.SSID)
 		case "disconnect":
-			slog.Info("automation: rule disconnect", "tunnel", name, "reason", reason, "ssid", ctx.SSID)
+			slog.Info("automation: rule disconnect",
+				"category", "network",
+				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
 			h.disconnectAutoManaged(name)
 		case "skip-manual-off":
 			slog.Info("automation: skip connect (manually switched off)",
+				"category", "network",
 				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
+		default:
+			// No action — log it anyway. Without this line an evaluation
+			// that leaves everything alone is invisible in the log viewer,
+			// and "why didn't my tunnel connect?" has no answer.
+			slog.Info("automation: no action",
+				"category", "network",
+				"tunnel", name,
+				"reason", reason,
+				"decision", decisionLabel(state, manualOff[name]),
+				"rules", len(rules),
+				"default", auto.Defaults[name],
+				"active", active[name],
+				"ssid", ctx.SSID)
 		}
 	}
+}
+
+// decisionLabel renders an evaluated desired state (plus the manual-off
+// latch) as the word the log viewer and the CLI preview both use, so the
+// same vocabulary appears everywhere.
+func decisionLabel(state wifi.DesiredState, manualOff bool) string {
+	switch state {
+	case wifi.StateConnect:
+		if manualOff {
+			return "manual-off"
+		}
+		return "connect"
+	case wifi.StateDisconnect:
+		return "disconnect"
+	}
+	return "unmanaged"
 }
 
 // handleAutomationPreview is a read-only dry-run of the Automation
@@ -299,7 +357,7 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 		Interfaces:  ctx.Interfaces,
 	}
 	if auto != nil {
-		for _, name := range auto.TunnelNames() {
+		for _, name := range auto.PolicyTunnelNames() {
 			rules := auto.PerTunnel[name]
 			decision := "unmanaged"
 			switch wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx) {
@@ -336,7 +394,9 @@ func (h *Helper) automationConnect(name, reason, ssid string) {
 		slog.Warn("automation: cannot load tunnel config", "tunnel", name, "error", err)
 		return
 	}
-	slog.Info("automation: rule connect", "tunnel", name, "reason", reason, "ssid", ssid)
+	slog.Info("automation: rule connect",
+		"category", "network",
+		"tunnel", name, "reason", reason, "ssid", ssid)
 	h.connectMu.Lock()
 	err = h.doConnectHeld(cfg)
 	if err == nil {

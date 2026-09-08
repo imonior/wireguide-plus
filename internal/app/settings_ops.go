@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -401,6 +403,13 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		s.cleanupLogs(settings.LogRetentionDays)
 	}
 
+	// An Automation policy that arrived through a whole-settings save (not
+	// SaveAutomationRules) must take effect now, not at the next network
+	// event — see requestAutomationEval.
+	if changedAutomation(changed) {
+		s.requestAutomationEval()
+	}
+
 	// Proxy setting applies to update checks immediately — the next
 	// scheduled check (and any manual "Check now") uses the new mode/URL
 	// without a restart.
@@ -512,7 +521,30 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	if prev.EnableAWG != next.EnableAWG {
 		out = append(out, "enable_awg")
 	}
+	if !automationEqual(prev.Automation, next.Automation) {
+		// Rules and Default States live here, not in a scalar field, so a
+		// plain != can't see the change. Needed both for the audit log and
+		// to trigger an immediate automation re-evaluation.
+		out = append(out, "automation")
+	}
 	return out
+}
+
+// automationEqual compares two Automation policies by value. The struct
+// holds maps and slices, so DeepEqual would be the obvious tool — but it
+// reports a difference between nil and empty maps that are semantically
+// identical (a freshly migrated policy vs a saved one), which would flag a
+// change on every save. JSON comparison ignores that distinction.
+func automationEqual(a, b *wifi.Automation) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	aj, errA := json.Marshal(a)
+	bj, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false // can't compare → treat as changed (fail loud, not silent)
+	}
+	return bytes.Equal(aj, bj)
 }
 
 // cleanupLogs sweeps daily log files older than retentionDays for both the
@@ -623,7 +655,7 @@ func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule, de
 	if def != wifi.ActionConnect && def != wifi.ActionDisconnect {
 		def = wifi.ActionDisconnect
 	}
-	return s.settingsStore.Update(func(st *storage.Settings) error {
+	err := s.settingsStore.Update(func(st *storage.Settings) error {
 		st.EnsureAutomation()
 		if st.Automation.PerTunnel == nil {
 			st.Automation.PerTunnel = map[string][]wifi.Rule{}
@@ -644,6 +676,44 @@ func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule, de
 		st.Automation.Defaults[tunnel] = def
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// Audit trail: the policy is the single most common "why did/didn't my
+	// tunnel connect?" question, and until now saving one logged nothing.
+	slog.Info("automation: policy saved",
+		"category", "settings",
+		"tunnel", tunnel,
+		"rules", len(rules),
+		"default", def)
+	// Apply immediately — otherwise the new policy waits for the next
+	// network event, which for a default-only tunnel may never come.
+	s.requestAutomationEval()
+	return nil
+}
+
+// changedAutomation reports whether a changed-field list (from
+// changedSettingsFields) contains "automation" — including the first-save
+// marker "all", where nothing is known about the previous policy.
+func changedAutomation(changed []string) bool {
+	for _, c := range changed {
+		if c == "automation" || c == "all" {
+			return true
+		}
+	}
+	return false
+}
+
+// requestAutomationEval asks the helper to re-run the automation engine
+// right now. A saved policy would otherwise sit idle until the next network
+// event (SSID change, route change, 30s poll), which reads as "the Default
+// State does nothing" — especially for a default-only policy, where nothing
+// else changes to trigger an evaluation. Best-effort: an unreachable helper
+// (shutting down) must not fail the save.
+func (s *TunnelService) requestAutomationEval() {
+	if err := s.call(ipc.MethodAutomationReevaluate, nil, nil); err != nil {
+		slog.Debug("automation: could not request re-evaluation", "error", err)
+	}
 }
 
 // SetLogLevel updates both the GUI's and the helper's slog level

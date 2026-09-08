@@ -105,24 +105,40 @@ func parseDarwinRouteOutput(out string) []RouteEntry {
 // -f inet` on macOS/FreeBSD prints network routes with the trailing zero
 // octets elided:
 //
-//	127.0.0.0/8   → "127"
+//	127.0.0.0/8    → "127"
 //	169.254.0.0/16 → "169.254"
 //	192.168.1.0/24 → "192.168.1"
 //
-// Host addresses (127.0.0.1), IPv6 addresses, "default" and link-layer
+// It does the same for classless networks, whose prefix is printed but
+// whose address is still elided — those used to reach the UI as "2/7" or
+// "128.0/1" and read like truncated addresses:
+//
+//	2.0.0.0/7      → "2/7"
+//	128.0.0.0/1    → "128.0/1"
+//
+// Host addresses (10.20.20.5), IPv6 addresses, "default" and link-layer
 // names (link#4) pass through untouched.
 func expandDarwinNetAddr(s string) string {
-	// IPv6 (contains ':') and anything with a netmask/prefix already
-	// present are left alone.
-	if strings.Contains(s, ":") || strings.Contains(s, "/") {
+	// IPv6 is left completely alone (the zone id and the prefix are both
+	// meaningful and never elided).
+	if strings.Contains(s, ":") {
 		return s
 	}
-	parts := strings.Split(s, ".")
-	if len(parts) > 3 {
-		// Full dotted-quad — already canonical.
+	// Split an explicit prefix off ("2/7", "10.20.20/24", "128.0/1") so
+	// the address part can be expanded on its own. macOS omits the prefix
+	// only for classful networks ("127", "169.254", "192.168.1") and for
+	// host routes ("10.20.20.5").
+	addr, prefix := s, ""
+	if i := strings.Index(s, "/"); i >= 0 {
+		addr, prefix = s[:i], s[i+1:]
+	}
+	parts := strings.Split(addr, ".")
+	if len(parts) > 4 {
+		// Full dotted-quad — already canonical (a host route when there
+		// is no prefix).
 		return s
 	}
-	// 1..3 dotted-decimal octets: verify every octet is pure digits so
+	// 1..4 dotted-decimal octets: verify every octet is pure digits so
 	// "default", "link#4", "fe80" etc. never get mangled.
 	octets := len(parts)
 	for _, p := range parts {
@@ -138,7 +154,15 @@ func expandDarwinNetAddr(s string) string {
 	for len(parts) < 4 {
 		parts = append(parts, "0")
 	}
-	return strings.Join(parts, ".") + "/" + strconv.Itoa(octets*8)
+	if prefix == "" {
+		if octets == 4 {
+			// A host address was already complete — don't invent a /32.
+			return strings.Join(parts, ".")
+		}
+		// Classful elision: "127" is 127.0.0.0/8, "169.254" is /16.
+		prefix = strconv.Itoa(octets * 8)
+	}
+	return strings.Join(parts, ".") + "/" + prefix
 }
 
 func getRoutesLinuxFull() ([]RouteEntry, error) {

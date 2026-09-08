@@ -39,6 +39,16 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodSetPinInterface, h.handleSetPinInterface)
 	h.server.Handle(ipc.MethodReportSSID, h.handleReportSSID)
 	h.server.Handle(ipc.MethodAutomationPreview, h.handleAutomationPreview)
+	h.server.Handle(ipc.MethodAutomationReevaluate, h.handleAutomationReevaluate)
+}
+
+// handleAutomationReevaluate runs one automation evaluation immediately.
+// It returns as soon as the request is queued — the evaluation itself is
+// coalesced and executed by automationEvalLoop, so a save never blocks on
+// connect/disconnect work.
+func (h *Helper) handleAutomationReevaluate(_ json.RawMessage) (interface{}, error) {
+	h.requestAutomationEval("settings-save")
+	return ipc.Empty{}, nil
 }
 
 func (h *Helper) handleSetLogLevel(params json.RawMessage) (interface{}, error) {
@@ -390,7 +400,7 @@ func (h *Helper) handleConnect(params json.RawMessage) (interface{}, error) {
 	if st := h.manager.StatusFor(req.Config.Name); st != nil && st.InterfaceName != "" {
 		exclude = append(exclude, st.InterfaceName)
 	}
-	if conflicts, err := diag.CheckConflicts(allowedIPs, exclude...); err == nil && len(conflicts) > 0 {
+	if conflicts, err := diag.CheckConflicts(allowedIPs, req.Config.Interface.Address, exclude...); err == nil && len(conflicts) > 0 {
 		for _, c := range conflicts {
 			slog.Warn("routing conflict detected",
 				"interface", c.InterfaceName,

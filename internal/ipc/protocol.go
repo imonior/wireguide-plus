@@ -133,6 +133,12 @@ const (
 	// current Automation rules against the current network context and
 	// returns each tunnel's decision WITHOUT connecting/disconnecting.
 	MethodAutomationPreview = "Automation.Preview"
+	// MethodAutomationReevaluate asks the helper to run one automation
+	// evaluation right now. The GUI calls it after saving a tunnel's
+	// Automation policy: without it a rule or Default State edit only
+	// took effect on the next network event (SSID change / route change /
+	// poll), so "default: connect" looked broken until the Wi-Fi flapped.
+	MethodAutomationReevaluate = "Automation.Reevaluate"
 	// MethodRequestQuit asks the helper to bring the WHOLE app down —
 	// this is `wireguideplus ctl stop`. It is deliberately NOT the same as
 	// MethodShutdown: shutting the helper down while the GUI is still

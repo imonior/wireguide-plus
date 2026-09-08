@@ -276,7 +276,8 @@
     "route_vpn_badge": "VPN",
     "route_direct_badge": "직접",
     "route_legend_vpn": "VPN 경로",
-    "route_legend_direct": "직접 경로"
+    "route_legend_direct": "직접 경로",
+    "route_gateway_onlink": "온링크"
   },
   "stats": {
     "speed_graph": "속도 그래프",

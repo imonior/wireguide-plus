@@ -90,6 +90,45 @@ func TestFindOverlapsFullVsSubnet(t *testing.T) {
 	}
 }
 
+// Regression (v1.7.9 user report): the tunnel's AllowedIPs sat strictly
+// inside a Clash/Mihomo TUN near-default route (10.30.30.0/24 ⊂ 8.0.0.0/5),
+// and the pre-connect dialog reported both of the tunnel's CIDRs as
+// "conflicting". Longest-prefix-match means the tunnel's more-specific
+// route always wins regardless of install order, so a strict subset of
+// an existing route is NOT a conflict.
+func TestFindOverlapsNewInsideExistingSuppressed(t *testing.T) {
+	overlaps := findOverlaps(
+		[]string{"10.30.30.0/24", "10.30.35.0/24"},
+		[]string{"8.0.0.0/5"}, // covers 8.0.0.0–15.255.255.255 incl. all of 10/8
+	)
+	if len(overlaps) != 0 {
+		t.Errorf("new CIDR strictly inside an existing route must not warn, got %v", overlaps)
+	}
+}
+
+// Equal prefixes are last-writer-wins — genuine conflict, still reported.
+func TestFindOverlapsEqualPrefixes(t *testing.T) {
+	overlaps := findOverlaps(
+		[]string{"10.30.30.0/24"},
+		[]string{"10.30.30.0/24"},
+	)
+	if len(overlaps) == 0 {
+		t.Error("equal prefixes must still be reported as a conflict")
+	}
+}
+
+// New superset over an existing more-specific route is still reported —
+// the classic "full tunnel vs Tailscale" warning.
+func TestFindOverlapsNewSupersetStillReported(t *testing.T) {
+	overlaps := findOverlaps(
+		[]string{"0.0.0.0/0"},
+		[]string{"100.64.0.0/10"},
+	)
+	if len(overlaps) == 0 {
+		t.Error("new superset over an existing route must still warn")
+	}
+}
+
 func TestNormalizeCIDR(t *testing.T) {
 	if normalizeCIDR("10.0.0.1") != "10.0.0.1/32" {
 		t.Error("should add /32 to bare IP")

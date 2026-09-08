@@ -276,7 +276,8 @@
     "route_vpn_badge": "VPN",
     "route_direct_badge": "直接",
     "route_legend_vpn": "VPN ルート",
-    "route_legend_direct": "直接ルート"
+    "route_legend_direct": "直接ルート",
+    "route_gateway_onlink": "オンリンク"
   },
   "stats": {
     "speed_graph": "速度グラフ",

@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg" // QR codes may arrive as JPEG (phone-camera capture, exports)
 	_ "image/png"  // ...or PNG (most common — qrencode + WG mobile apps default)
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,15 @@ func (s *TunnelService) importZipReader(r *zip.Reader) ([]ZipImportResult, error
 	if len(results) == 0 {
 		return nil, fmt.Errorf("no .conf files found in zip")
 	}
+	ok, failed := 0, 0
+	for _, r := range results {
+		if r.Error == "" {
+			ok++
+		} else {
+			failed++
+		}
+	}
+	slog.Info("tunnel: zip imported", "category", "tunnel", "imported", ok, "failed", failed)
 	return results, nil
 }
 
@@ -116,12 +126,14 @@ func (s *TunnelService) importZipReader(r *zip.Reader) ([]ZipImportResult, error
 func (s *TunnelService) ImportConfig(name, content string) (*TunnelInfo, error) {
 	cfg, err := s.tunnelStore.ImportFromContent(name, content)
 	if err != nil {
+		slog.Warn("tunnel: import failed", "category", "tunnel", "tunnel", name, "error", err)
 		return nil, err
 	}
 	endpoint := ""
 	if len(cfg.Peers) > 0 {
 		endpoint = cfg.Peers[0].Endpoint
 	}
+	slog.Info("tunnel: imported", "category", "tunnel", "tunnel", cfg.Name, "endpoint", endpoint)
 	return &TunnelInfo{
 		Name:     cfg.Name,
 		Endpoint: endpoint,
@@ -262,7 +274,12 @@ func (s *TunnelService) UpdateConfig(name, content string) error {
 		return fmt.Errorf("validation failed: %s", strings.Join(result.ErrorMessages(), "; "))
 	}
 	cfg.Name = name
-	return s.tunnelStore.Save(cfg)
+	if err := s.tunnelStore.Save(cfg); err != nil {
+		slog.Warn("tunnel: save failed", "category", "tunnel", "tunnel", name, "error", err)
+		return err
+	}
+	slog.Info("tunnel: config saved", "category", "tunnel", "tunnel", name, "bytes", len(content))
+	return nil
 }
 
 // ExportConfig returns the serialized text for display in the export dialog.

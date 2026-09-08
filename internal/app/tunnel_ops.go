@@ -197,7 +197,7 @@ func (s *TunnelService) CheckConflicts(name string) ([]diag.ConflictInfo, error)
 	// already running on, otherwise every one of its own CIDRs is
 	// reported as overlapping (each contains itself) whenever the user
 	// reconnects or the app restores the previous session.
-	conflicts, err := diag.CheckConflicts(allowedIPs, s.tunnelInterfaces(name)...)
+	conflicts, err := diag.CheckConflicts(allowedIPs, cfg.Interface.Address, s.tunnelInterfaces(name)...)
 	if err != nil {
 		slog.Warn("conflict check failed", "tunnel", name, "error", err)
 		// Non-fatal — don't block connect if the scan itself fails.
@@ -266,15 +266,36 @@ func (s *TunnelService) Connect(name string) error {
 	// IPC so a failed attempt still leaves automation free to act.
 	s.clearManualOff(name)
 
+	slog.Info("tunnel: connect requested",
+		"category", "tunnel",
+		"tunnel", name,
+		"protocol", cfg.Protocol,
+		"scripts", cfg.EnableScripts,
+		"endpoints", strings.Join(cfg.Endpoints(), ","))
+
 	// Mark the RPC as in-flight so the health monitor doesn't falsely
 	// detect helper death while the server is busy processing Connect
 	// (which blocks the per-connection request loop, preventing pings).
 	s.clients.MarkInflight()
 	defer s.clients.UnmarkInflight()
 
-	return s.callLong(ipc.MethodConnect, ipc.ConnectRequest{
+	err = s.callLong(ipc.MethodConnect, ipc.ConnectRequest{
 		Config: cfg,
 	}, nil)
+	if err != nil {
+		// Warn, not Info: a failed connect is always worth noticing, and
+		// the GUI surfaces its own toast — the log keeps the reason.
+		slog.Warn("tunnel: connect failed",
+			"category", "tunnel",
+			"tunnel", name,
+			"error", err)
+		return err
+	}
+	slog.Info("tunnel: connected",
+		"category", "tunnel",
+		"tunnel", name,
+		"protocol", cfg.Protocol)
+	return nil
 }
 
 // Disconnect tears down whatever tunnel the helper currently has active.
@@ -291,6 +312,7 @@ func (s *TunnelService) Connect(name string) error {
 func (s *TunnelService) Disconnect() error {
 	name, rx, tx := s.snapshotActiveStats("")
 	s.markUserDisconnect(name, rx, tx)
+	slog.Info("tunnel: disconnect requested", "category", "tunnel", "tunnel", name)
 	// Manual off wins over automation: latch every tunnel this tears down
 	// so rules don't silently reconnect them until each is reconnected by
 	// hand once or the app restarts.
@@ -310,8 +332,11 @@ func (s *TunnelService) Disconnect() error {
 		// have the tunnel up). Clear the hint, KEEP the rx/tx so a
 		// genuine helper-driven close still has accurate counters.
 		s.clearUserDisconnect(name)
+		slog.Warn("tunnel: disconnect failed", "category", "tunnel", "tunnel", name, "error", err)
+		return err
 	}
-	return err
+	slog.Info("tunnel: disconnected", "category", "tunnel", "tunnel", name)
+	return nil
 }
 
 // DisconnectTunnel disconnects a specific tunnel by name. Mirrors
@@ -322,6 +347,7 @@ func (s *TunnelService) Disconnect() error {
 func (s *TunnelService) DisconnectTunnel(name string) error {
 	_, rx, tx := s.snapshotActiveStats(name)
 	s.markUserDisconnect(name, rx, tx)
+	slog.Info("tunnel: disconnect requested", "category", "tunnel", "tunnel", name)
 	// Manual off wins over automation: latch the tunnel so its rules
 	// don't silently reconnect it until the user reconnects it by hand
 	// once or the app restarts.
@@ -337,8 +363,11 @@ func (s *TunnelService) DisconnectTunnel(name string) error {
 	}
 	if err != nil {
 		s.clearUserDisconnect(name)
+		slog.Warn("tunnel: disconnect failed", "category", "tunnel", "tunnel", name, "error", err)
+		return err
 	}
-	return err
+	slog.Info("tunnel: disconnected", "category", "tunnel", "tunnel", name)
+	return nil
 }
 
 // markUserDisconnect sets the reason hint on a tunnel's lastKnownStats to
@@ -386,7 +415,13 @@ func (s *TunnelService) setManualOff(name string) {
 		return nil
 	}); err != nil {
 		slog.Warn("failed to record manual-off latch", "tunnel", name, "error", err)
+		return
 	}
+	// Logged because the latch is the #1 reason "my automation rule didn't
+	// connect the tunnel": until it is cleared, every rule is suppressed.
+	slog.Info("automation: manual-off latch set — rules suppressed until a manual reconnect",
+		"category", "network",
+		"tunnel", name)
 }
 
 // clearManualOff removes the manual-off latch for a tunnel: a manual
@@ -400,7 +435,11 @@ func (s *TunnelService) clearManualOff(name string) {
 		return nil
 	}); err != nil {
 		slog.Warn("failed to clear manual-off latch", "tunnel", name, "error", err)
+		return
 	}
+	slog.Info("automation: manual-off latch cleared — rules active again",
+		"category", "network",
+		"tunnel", name)
 }
 
 // ClearManualOffAll releases every manually-off tunnel, restoring full
@@ -738,6 +777,7 @@ func (s *TunnelService) DeleteTunnel(name string) error {
 	if err := s.tunnelStore.Delete(name); err != nil {
 		return err
 	}
+	slog.Info("tunnel: deleted", "category", "tunnel", "tunnel", name)
 	// Drop the tunnel's automation rules so they don't linger and re-attach
 	// to a future same-named tunnel (issue #12). Best-effort — the tunnel
 	// is already gone.
@@ -783,6 +823,7 @@ func (s *TunnelService) RenameTunnel(oldName, newName string) error {
 			return err
 		}
 	}
+	slog.Info("tunnel: renamed", "category", "tunnel", "from", oldName, "to", newName)
 	// Carry the tunnel's automation rules over to the new name so they
 	// aren't orphaned (issue #12). Best-effort — the rename succeeded.
 	if err := s.settingsStore.Update(func(cfg *storage.Settings) error {

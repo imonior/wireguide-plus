@@ -47,16 +47,18 @@ type ConflictInfo struct {
 // 0.0.0.0/0 vs ::/0 against Tailscale), the entries are merged so
 // the user sees one warning per conflicting interface, not two.
 //
-// excludeIfaces names interfaces to skip, typically the interface the
-// tunnel being checked is ALREADY running on. A tunnel can never
-// conflict with itself: its own routes come from its own AllowedIPs, so
-// scanning them reports every one of its CIDRs as "conflicting" (each
-// contains itself) — pure noise that made reconnect, session restore
-// and the pre-connect dialog look broken for a tunnel that was already
-// up. Pass the interface names reported by the helper's status for this
-// tunnel; an empty set keeps the previous behaviour.
-func CheckConflicts(newAllowedIPs []string, excludeIfaces ...string) ([]ConflictInfo, error) {
-	interfaces, err := scanWireGuardInterfaces(excludeIfaces...)
+// excludeIfaces names interfaces to skip by name, typically the
+// interface the tunnel being checked is ALREADY running on.
+//
+// selfAddrs are the tunnel's own Address entries. Any scanned
+// interface carrying one of them IS the tunnel under test and is
+// skipped entirely: a tunnel can never conflict with itself. This
+// works even when no interface name was excluded (the CLI connect
+// path, or a GUI check whose helper-status query failed), which
+// previously reported each of the tunnel's CIDRs as "conflicting"
+// against its own routes.
+func CheckConflicts(newAllowedIPs, selfAddrs []string, excludeIfaces ...string) ([]ConflictInfo, error) {
+	interfaces, err := scanWireGuardInterfaces(selfAddrs, excludeIfaces...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +112,7 @@ type ExistingInterface struct {
 	Routes []string // Known routes via this interface
 }
 
-func scanWireGuardInterfaces(excludeIfaces ...string) ([]ExistingInterface, error) {
+func scanWireGuardInterfaces(selfAddrs []string, excludeIfaces ...string) ([]ExistingInterface, error) {
 	var result []ExistingInterface
 
 	skip := make(map[string]bool, len(excludeIfaces))
@@ -119,6 +121,10 @@ func scanWireGuardInterfaces(excludeIfaces ...string) ([]ExistingInterface, erro
 			skip[n] = true
 		}
 	}
+	// The tunnel's own Address entries, mask-stripped. An interface
+	// carrying one of these is the tunnel itself — matched by address,
+	// not by name, so it works without a helper status round-trip.
+	selfIPs := parseIPList(selfAddrs)
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -137,8 +143,9 @@ func scanWireGuardInterfaces(excludeIfaces ...string) ([]ExistingInterface, erro
 		if !isWireGuardLike(name) {
 			continue
 		}
-		// The tunnel under test's own interface is never a conflict.
-		if skip[name] {
+		// The tunnel under test's own interface is never a conflict —
+		// by name (helper status) or by address (its own Address).
+		if skip[name] || ifaceHasAnyIP(iface, selfIPs) {
 			continue
 		}
 
@@ -221,6 +228,46 @@ func tailscaleLocalIPs() []string {
 		}
 	}
 	return ips
+}
+
+// parseIPList parses "a.b.c.d/nn" (or bare IP) entries into net.IP
+// values, mask stripped. Unparseable entries are dropped.
+func parseIPList(cidrs []string) []net.IP {
+	var ips []net.IP
+	for _, s := range cidrs {
+		if i := strings.Index(s, "/"); i >= 0 {
+			s = s[:i]
+		}
+		if ip := net.ParseIP(strings.TrimSpace(s)); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
+// ifaceHasAnyIP reports whether the interface carries any of the given
+// IPs. net.IP.Equal ignores the IPv4/IPv6 presentation difference.
+func ifaceHasAnyIP(iface net.Interface, ips []net.IP) bool {
+	if len(ips) == 0 {
+		return false
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		ipStr := a.String()
+		if i := strings.Index(ipStr, "/"); i >= 0 {
+			ipStr = ipStr[:i]
+		}
+		ip := net.ParseIP(ipStr)
+		for _, want := range ips {
+			if ip != nil && ip.Equal(want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isWireGuardLike(name string) bool {
@@ -407,11 +454,17 @@ func getRoutesLinux(ifaceName string) []string {
 // (e.g. full-tunnel 0.0.0.0/0 matching every existing route), each
 // newCIDR contributes at most one overlap entry.
 //
-// "Overlap" is judged by cidrOverlaps, which requires the two ranges to
-// actually INTERSECT: sibling prefixes of the same size (10.30.30.0/24
-// and 10.30.35.0/24) are disjoint and must never be reported, while a
-// supernet/subnet pair (10.30.0.0/16 vs 10.30.30.0/24) is a genuine
-// routing conflict.
+// "Overlap" is judged by cidrOverlaps (a real intersection; sibling
+// prefixes like 10.30.30.0/24 and 10.30.35.0/24 are disjoint), plus
+// one suppression rule: when the NEW cidr lies strictly INSIDE an
+// existing route, no conflict is reported. The kernel routes by
+// longest prefix match, so the tunnel's more-specific route always
+// wins regardless of install order — deterministic, no ambiguity.
+// This is exactly the Clash/Mihomo TUN case: its near-default split
+// (…/5, /4, /3… covering 10.0.0.0/8) must not make every private
+// range a "conflict". Equal prefixes (last-writer-wins) and new
+// SUPERSETS (new would shadow an existing more-specific route) stay
+// reported.
 func findOverlaps(newIPs, existingIPs []string) []string {
 	var overlaps []string
 	seen := map[string]bool{}
@@ -425,13 +478,19 @@ func findOverlaps(newIPs, existingIPs []string) []string {
 			if err != nil {
 				continue
 			}
-			if cidrOverlaps(newNet, existNet) {
-				if seen[newCIDR] {
-					continue
-				}
-				overlaps = append(overlaps, fmt.Sprintf("%s <> %s", newCIDR, existCIDR))
-				seen[newCIDR] = true
+			if !cidrOverlaps(newNet, existNet) {
+				continue
 			}
+			// new strictly inside existing → more-specific new route
+			// wins; skip instead of warning.
+			if existNet.Contains(newNet.IP) && !newNet.Contains(existNet.IP) {
+				continue
+			}
+			if seen[newCIDR] {
+				continue
+			}
+			overlaps = append(overlaps, fmt.Sprintf("%s <> %s", newCIDR, existCIDR))
+			seen[newCIDR] = true
 		}
 	}
 	return overlaps

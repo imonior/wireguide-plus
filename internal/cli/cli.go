@@ -314,7 +314,7 @@ func cmdConnect(args []string) int {
 	for _, p := range cfg.Peers {
 		allowedIPs = append(allowedIPs, p.AllowedIPs...)
 	}
-	if conflicts, cerr := diag.CheckConflicts(allowedIPs); cerr == nil {
+	if conflicts, cerr := diag.CheckConflicts(allowedIPs, cfg.Interface.Address); cerr == nil {
 		for _, cf := range conflicts {
 			fmt.Fprintf(os.Stderr, "warning: routes overlap with %s (%s): %s\n",
 				cf.Owner, cf.InterfaceName, strings.Join(cf.OverlappingIPs, ", "))

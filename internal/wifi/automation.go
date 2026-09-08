@@ -680,6 +680,37 @@ func canonicalMAC(s string) string {
 	return hex
 }
 
+// PolicyTunnelNames returns every tunnel the engine has a POLICY for: the
+// union of the rule lists (PerTunnel) and the Default State map
+// (Defaults), sorted. A tunnel that appears only in Defaults still carries
+// a complete policy — "always converge to my Default State" — so it must be
+// evaluated (and listed by the preview) even though it has no rules.
+// Iterating PerTunnel alone silently ignores those tunnels, which is how a
+// plain "default: connect" tunnel failed to come up.
+func (a *Automation) PolicyTunnelNames() []string {
+	if a == nil {
+		return nil
+	}
+	names := make([]string, 0, len(a.PerTunnel)+len(a.Defaults))
+	seen := make(map[string]struct{}, len(a.PerTunnel)+len(a.Defaults))
+	for n := range a.PerTunnel {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	for n := range a.Defaults {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // TunnelNames returns the rule set's tunnel names in deterministic
 // (sorted) order.
 func (a *Automation) TunnelNames() []string {

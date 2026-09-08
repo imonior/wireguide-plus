@@ -276,7 +276,8 @@
     "route_vpn_badge": "VPN",
     "route_direct_badge": "直连",
     "route_legend_vpn": "VPN 路由",
-    "route_legend_direct": "直连路由"
+    "route_legend_direct": "直连路由",
+    "route_gateway_onlink": "链路直连"
   },
   "stats": {
     "speed_graph": "速度图表",

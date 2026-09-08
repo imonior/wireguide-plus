@@ -13,6 +13,13 @@ func TestExpandDarwinNetAddr(t *testing.T) {
 		{"169.254", "169.254.0.0/16"},
 		{"192.168.1", "192.168.1.0/24"},
 		{"10", "10.0.0.0/8"},
+		// Classless routes (the ones a split-tunnel VPN installs) print
+		// their prefix but still elide the address: "2/7" is 2.0.0.0/7.
+		// These used to reach the diagnostics UI looking truncated.
+		{"2/7", "2.0.0.0/7"},
+		{"4/6", "4.0.0.0/6"},
+		{"128.0/1", "128.0.0.0/1"},
+		{"10.20.20/24", "10.20.20.0/24"},
 		// Already-canonical or non-network entries pass through.
 		{"127.0.0.1", "127.0.0.1"},
 		{"255.255.255.255", "255.255.255.255"},

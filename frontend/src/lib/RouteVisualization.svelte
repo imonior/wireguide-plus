@@ -29,6 +29,26 @@
     return iface.startsWith('utun') || iface.startsWith('wg') || iface.startsWith('tun');
   }
 
+  // macOS prints link-layer gateways as "link#<ifindex>" (no IP at all —
+  // the destination is reachable directly on that interface). Rendering
+  // the raw token in a column headed "Gateway" reads like garbage, so
+  // show "on-link" and keep the raw value in the tooltip.
+  function gwLabel(gw) {
+    if (!gw) return '-';
+    return /^link#\d+$/.test(gw) ? $t('tools.route_gateway_onlink') : gw;
+  }
+
+  // IPv6 addresses carry a zone id ("fe80::1%utun2"). The interface is
+  // already its own column, so the "%utun2" suffix only adds noise — and
+  // at these widths it overflowed into the next column, which is what
+  // made the table look like "IP mixed with utun". Raw value stays in
+  // the tooltip.
+  function stripZone(v) {
+    if (typeof v !== 'string') return v;
+    const i = v.indexOf('%');
+    return i > 0 ? v.slice(0, i) : v;
+  }
+
   onMount(loadRoutes);
 </script>
 
@@ -62,8 +82,8 @@
         </div>
         {#each routes as route}
           <div class="route-row" class:vpn={isVPN(route)}>
-            <span class="dest">{route.destination}</span>
-            <span class="gw">{route.gateway || '-'}</span>
+            <span class="dest" title={route.destination}>{stripZone(route.destination)}</span>
+            <span class="gw" title={route.gateway || ''}>{gwLabel(route.gateway)}</span>
             <span class="iface" class:vpn-iface={isVPN(route)}>
               {route.interface}
               {#if isVPN(route)}
@@ -158,7 +178,12 @@
   }
   .route-header {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    /* minmax(0,…) is what makes the ellipsis work: a bare 1fr track is
+       sized by its content, so a long IPv6 destination expanded the
+       column and either pushed the row's other cells around or overflowed
+       into them ("IP mixed with utun"). Destination gets the most room
+       because it is the longest and most important value. */
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1fr);
     padding: var(--space-2) var(--space-3);
     font: var(--text-footnote);
     font-weight: 600;
@@ -173,7 +198,7 @@
   }
   .route-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1fr);
     padding: var(--space-1) var(--space-3);
     font: var(--text-body);
     font-family: var(--font-mono);
@@ -181,6 +206,14 @@
   }
   .route-row:last-child { border-bottom: 0; }
   .route-row.vpn { background: color-mix(in srgb, var(--green) 6%, transparent); }
+  /* Never let a cell bleed into its neighbour — clip with an ellipsis and
+     expose the full value through the title tooltip instead. */
+  .dest,
+  .gw {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .dest { color: var(--text-primary); }
   .gw { color: var(--text-secondary); }
   .iface { color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-1); }

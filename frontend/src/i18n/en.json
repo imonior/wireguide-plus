@@ -276,7 +276,8 @@
     "route_vpn_badge": "VPN",
     "route_direct_badge": "Direct",
     "route_legend_vpn": "VPN route",
-    "route_legend_direct": "Direct route"
+    "route_legend_direct": "Direct route",
+    "route_gateway_onlink": "on-link"
   },
   "stats": {
     "speed_graph": "Speed Graph",

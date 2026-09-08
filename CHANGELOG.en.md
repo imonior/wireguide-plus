@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.8.0] - 2026-09-09
+
+### ✨ Added
+
+- **Much richer runtime logs** — the GUI logs its version and platform at startup; tunnel connect/disconnect requests and outcomes (failures logged at WARN with the reason), config import (including per-zip success/failure counts), save, delete and rename all have entries; the automation engine logs a per-tunnel decision line (connect, disconnect, or skip with the reason), and the manual-off latch logs whenever it is set or cleared — troubleshooting "why didn't my rule connect" no longer means guessing.
+- **On-link gateways in the route table** — link-layer gateways (`link#N`) now render as a localised "on-link" label instead of a kernel abbreviation (the raw value stays available via tooltip).
+
+### 🔧 Changed
+
+- **Automation policy applies immediately** — saving rules or a default state in the automation editor now triggers a re-evaluation right away instead of waiting for the next network event.
+- **Category field in logs** — log entries now carry a `category` (tunnel / network / app) for easier filtering.
+
+### 🐛 Fixed
+
+- **AllowedIPs conflict false positives fully fixed** (completing the incomplete 1.7.9 fix):
+  - The tunnel's own interface is now recognised **by address** (any scanned interface carrying the tunnel's own Address is skipped), removing the dependency on the helper's status round-trip — the CLI `connect` pre-check and any failed GUI status query no longer count the tunnel's own routes as conflicts.
+  - A new CIDR lying **strictly inside an existing wider route** no longer warns: under longest-prefix match the more-specific route always wins, deterministically. Previously the near-default split of a Clash/Mihomo TUN (e.g. `8.0.0.0/5` covering all of `10.0.0.0/8`) flagged every private range as "conflicting". Equal prefixes (two tunnels claiming the same range) and new supersets (full-tunnel over an existing route) are still reported.
+- **Tunnels with only a default state were never evaluated** — the engine only iterated tunnels that had rules, so 1.7.9's "default state alone takes effect" did not actually work: a default-connect tunnel without rules never auto-connected. Default states are now evaluated together with rules.
+- **Route table display fixes** — macOS abbreviated destinations are expanded to full CIDRs (`2/7` → `2.0.0.0/7`); destination and gateway columns no longer overflow into each other or truncate (ellipsis + full value on hover instead).
+- **Endpoint marked as required** — Endpoint now carries the red \* marker like the other required fields.
+
+### 🛠 Internal
+
+- Regression tests for conflict detection (subnet suppression / equal prefixes / new supersets / live-system verification), macOS route expansion tests and automation re-evaluation trigger tests; i18n files aligned at 456 keys.
+
 ## [1.7.9] - 2026-09-08
 
 ### ✨ New
