@@ -46,15 +46,32 @@ jobs:
           node-version: '20.19.2'
 
       - name: Install wails3 + task
+        # GOBIN is pinned to a directory we create under the runner temp dir
+        # instead of the default $HOME/go/bin: paths appended to
+        # GITHUB_PATH are not reliably visible to later steps on every
+        # runner image (the v1.7.9 Windows x86/arm64 jobs died with
+        # "The term 'wails3' is not recognized" right after this step
+        # reported success). Every step that needs one of these tools
+        # therefore prepends the same literal directory itself.
         run: |
+          set -euo pipefail
+          export GOBIN="${{ runner.temp }}/gobin"
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
           go install github.com/go-task/task/v3/cmd/task@v3.45.4
-          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          ls -l "$GOBIN"
 
       - name: Build .app bundle (ad-hoc signed)
         # darwin:package does: build:native → create:app:bundle →
         # codesign:adhoc.
-        run: wails3 task darwin:package ARCH=arm64 SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+        run: |
+          set -euo pipefail
+          # Belt-and-braces: prepend the tool dir explicitly instead of
+          # relying on the GITHUB_PATH entry written by the install step.
+          export PATH="${{ runner.temp }}/gobin:$PATH"
+          command -v wails3
+          wails3 task darwin:package ARCH=arm64 SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
       - name: Archive .app (portable)
         # ditto preserves macOS metadata (extended attributes, symlinks,
@@ -117,7 +134,18 @@ jobs:
 
       - name: Install wails3 + task + goversioninfo
         shell: pwsh
+        # GOBIN is pinned to a directory we create under the runner temp dir
+        # instead of the default %USERPROFILE%\go\bin: paths appended to
+        # GITHUB_PATH are not reliably visible to later steps on every
+        # runner image (the v1.7.9 x86 and arm64 jobs died here with
+        # "The term 'wails3' is not recognized" even though this step
+        # reported success). Every step that needs one of these tools
+        # therefore prepends the same literal directory itself.
         run: |
+          $ErrorActionPreference = 'Stop'
+          $gobin = Join-Path '${{ runner.temp }}' 'gobin'
+          New-Item -ItemType Directory -Force -Path $gobin | Out-Null
+          $env:GOBIN = $gobin
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
           go install github.com/go-task/task/v3/cmd/task@v3.45.4
           # generate:syso invokes `goversioninfo` directly; without it the
@@ -125,7 +153,8 @@ jobs:
           # not @latest, for reproducible CI builds.
           go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
           # Append, don't overwrite — PATH already has system entries.
-          "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          Add-Content -Path $env:GITHUB_PATH -Value $gobin
+          Get-ChildItem -Name $gobin
 
       - name: Install NSIS + add to PATH
         # NSIS used to ship preinstalled on windows-latest runners but is
@@ -145,7 +174,38 @@ jobs:
         # Our Windows binary is pure-syscall (no cgo) so CGO_ENABLED=0
         # is correct. vendor:wintun pulls the pinned arch-specific wintun
         # DLL (wintun-x86.dll / wintun-amd64.dll) into bin/.
-        run: wails3 task windows:package ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+        shell: pwsh
+        # Prepend the tool dir + NSIS explicitly instead of trusting the
+        # GITHUB_PATH entries written by the two install steps above —
+        # on some windows-latest runners those entries never reach this
+        # step's PATH (v1.7.9 x86/arm64: "The term 'wails3' is not
+        # recognized"). wails3 task also shells out to makensis and the
+        # task file calls goversioninfo, so all three must resolve here.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gobin = Join-Path '${{ runner.temp }}' 'gobin'
+          $env:PATH = "$gobin;C:\Program Files (x86)\NSIS;$env:PATH"
+          $env:GOBIN = $gobin
+          # Self-heal: reinstall any tool that still doesn't resolve, so a
+          # lost PATH entry or a wiped temp dir degrades to a warning
+          # instead of failing the whole release matrix.
+          $pkgs = @(
+            'github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74',
+            'github.com/go-task/task/v3/cmd/task@v3.45.4',
+            'github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0'
+          )
+          foreach ($pkg in $pkgs) {
+            $name = (($pkg -split '/')[-1] -split '@')[0]
+            if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
+              Write-Host "::warning::$name not found on PATH; reinstalling into $gobin"
+              New-Item -ItemType Directory -Force -Path $gobin | Out-Null
+              go install $pkg
+              $env:PATH = "$gobin;$env:PATH"
+            }
+          }
+          Get-Command wails3 | Select-Object -ExpandProperty Source
+          Get-Command makensis | Select-Object -ExpandProperty Source
+          wails3 task windows:package ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
       - name: Verify NSIS installer exists
         shell: bash
@@ -301,13 +361,24 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
 
       - name: Install wails3 + task
+        # Same pinned-GOBIN pattern as the macOS job — see the comment
+        # there: GITHUB_PATH propagation is not reliable enough to be the
+        # only thing standing between us and "command not found".
         run: |
+          set -euo pipefail
+          export GOBIN="${{ runner.temp }}/gobin"
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
           go install github.com/go-task/task/v3/cmd/task@v3.45.4
-          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          ls -l "$GOBIN"
 
       - name: Build native Linux binary
-        run: task linux:build ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
+        run: |
+          set -euo pipefail
+          export PATH="${{ runner.temp }}/gobin:$PATH"
+          command -v task
+          task linux:build ARCH=${{ matrix.arch }} SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
       - name: Check runtime linking
         run: |
@@ -323,6 +394,9 @@ jobs:
           GIT_COMMITTER_NAME: WireGuide CI
           GIT_COMMITTER_EMAIL: noreply@example.com
         run: |
+          set -euo pipefail
+          export PATH="${{ runner.temp }}/gobin:$PATH"
+          command -v wails3
           wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           dpkg-deb --info bin/wireguideplus.deb
           mv bin/wireguideplus.deb "bin/WireGuidePlus-linux-${{ matrix.arch }}.deb"
