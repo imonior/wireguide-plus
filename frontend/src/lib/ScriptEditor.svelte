@@ -198,8 +198,13 @@
       <p class="scripts-hint">{$t('scripts.hint')}</p>
     </div>
 
-    {#each HOOKS as hook}
-      <div class={rowClass(hook)}>
+    <!-- Two hooks per row (PreUp+PostUp, then PreDown+PostDown): the script
+         panel no longer needs four stacked rows, so the .conf / fields editor
+         above keeps the vertical space. Collapses to one column on a narrow
+         dialog. -->
+    <div class="hooks-grid">
+      {#each HOOKS as hook}
+        <div class={rowClass(hook)}>
         <div class="hook-info">
           <span class="hook-name">{hook}</span>
           <span class="hook-status" title={hookCmd(hook)}>
@@ -228,6 +233,7 @@
         </div>
       </div>
     {/each}
+    </div>
 
     {#if error}
       <p class="scripts-error">{error}</p>
@@ -257,9 +263,19 @@
        panel compresses first (its own overflow takes over) instead of
        squeezing the CodeMirror area. */
     flex: 0 1 auto;
-    min-height: 96px;
-    max-height: 220px;
+    min-height: 88px;
+    max-height: 170px;
     overflow-y: auto;
+  }
+  /* Two hooks per row: halving the stacked rows keeps the scripts panel
+     compact so the conf/fields editor above keeps the vertical space. */
+  .hooks-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 860px) {
+    .hooks-grid { grid-template-columns: 1fr; }
   }
   .scripts-head {
     display: flex;
@@ -281,11 +297,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     padding: 7px 10px;
     border: 0.5px solid var(--border);
     border-radius: 10px;
     background: var(--bg-card);
+    /* Half-width cells: let the action buttons wrap under the name/status
+       instead of forcing the row taller or clipping them. */
+    flex-wrap: wrap;
   }
   .hook-row.has-value {
     border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
@@ -306,12 +325,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 320px;
+    max-width: 100%;
   }
   .hook-actions {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
   .hook-btn {
     height: 26px;

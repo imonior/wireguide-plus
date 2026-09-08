@@ -46,8 +46,17 @@ type ConflictInfo struct {
 // for both IPv4 and IPv6 against the same other-tunnel (e.g.
 // 0.0.0.0/0 vs ::/0 against Tailscale), the entries are merged so
 // the user sees one warning per conflicting interface, not two.
-func CheckConflicts(newAllowedIPs []string) ([]ConflictInfo, error) {
-	interfaces, err := scanWireGuardInterfaces()
+//
+// excludeIfaces names interfaces to skip, typically the interface the
+// tunnel being checked is ALREADY running on. A tunnel can never
+// conflict with itself: its own routes come from its own AllowedIPs, so
+// scanning them reports every one of its CIDRs as "conflicting" (each
+// contains itself) — pure noise that made reconnect, session restore
+// and the pre-connect dialog look broken for a tunnel that was already
+// up. Pass the interface names reported by the helper's status for this
+// tunnel; an empty set keeps the previous behaviour.
+func CheckConflicts(newAllowedIPs []string, excludeIfaces ...string) ([]ConflictInfo, error) {
+	interfaces, err := scanWireGuardInterfaces(excludeIfaces...)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +110,15 @@ type ExistingInterface struct {
 	Routes []string // Known routes via this interface
 }
 
-func scanWireGuardInterfaces() ([]ExistingInterface, error) {
+func scanWireGuardInterfaces(excludeIfaces ...string) ([]ExistingInterface, error) {
 	var result []ExistingInterface
+
+	skip := make(map[string]bool, len(excludeIfaces))
+	for _, n := range excludeIfaces {
+		if n != "" {
+			skip[n] = true
+		}
+	}
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -119,6 +135,10 @@ func scanWireGuardInterfaces() ([]ExistingInterface, error) {
 		name := iface.Name
 		// Only check utun (macOS), wg (Linux), or WireGuard-like interfaces
 		if !isWireGuardLike(name) {
+			continue
+		}
+		// The tunnel under test's own interface is never a conflict.
+		if skip[name] {
 			continue
 		}
 
@@ -386,20 +406,26 @@ func getRoutesLinux(ifaceName string) []string {
 // To avoid producing hundreds of entries when newCIDR is a supernet
 // (e.g. full-tunnel 0.0.0.0/0 matching every existing route), each
 // newCIDR contributes at most one overlap entry.
+//
+// "Overlap" is judged by cidrOverlaps, which requires the two ranges to
+// actually INTERSECT: sibling prefixes of the same size (10.30.30.0/24
+// and 10.30.35.0/24) are disjoint and must never be reported, while a
+// supernet/subnet pair (10.30.0.0/16 vs 10.30.30.0/24) is a genuine
+// routing conflict.
 func findOverlaps(newIPs, existingIPs []string) []string {
 	var overlaps []string
 	seen := map[string]bool{}
 	for _, newCIDR := range newIPs {
-		_, newNet, err := net.ParseCIDR(normalizeCIDR(newCIDR))
+		newNet, err := parseNet(newCIDR)
 		if err != nil {
 			continue
 		}
 		for _, existCIDR := range existingIPs {
-			_, existNet, err := net.ParseCIDR(normalizeCIDR(existCIDR))
+			existNet, err := parseNet(existCIDR)
 			if err != nil {
 				continue
 			}
-			if newNet.Contains(existNet.IP) || existNet.Contains(newNet.IP) {
+			if cidrOverlaps(newNet, existNet) {
 				if seen[newCIDR] {
 					continue
 				}
@@ -409,6 +435,41 @@ func findOverlaps(newIPs, existingIPs []string) []string {
 		}
 	}
 	return overlaps
+}
+
+// parseNet turns a possibly-abbreviated route string into a masked
+// *net.IPNet. Unparseable input yields an error and the caller skips
+// that entry rather than guessing.
+func parseNet(s string) (*net.IPNet, error) {
+	_, n, err := net.ParseCIDR(normalizeCIDR(s))
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+// cidrOverlaps reports whether two IP networks share at least one
+// address. Two networks intersect exactly when one's network address
+// falls inside the other, so this is a single containment test in each
+// direction — but the address families are compared FIRST:
+//
+//   - IPv4 vs IPv6 can never overlap, and net.IPNet.Contains already
+//     returns false across families, so this is belt-and-braces against
+//     a future parser change that yields 4-in-6 addresses.
+//   - Sibling prefixes (10.30.30.0/24, 10.30.35.0/24) contain each
+//     other's network address in neither direction → disjoint → false.
+//
+// Host bits are already masked off by net.ParseCIDR, so a route read
+// back as 10.30.35.7/24 is treated as 10.30.35.0/24 and cannot be
+// mistaken for a wider range than it is.
+func cidrOverlaps(a, b *net.IPNet) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if (a.IP.To4() != nil) != (b.IP.To4() != nil) {
+		return false
+	}
+	return a.Contains(b.IP) || b.Contains(a.IP)
 }
 
 func normalizeCIDR(s string) string {

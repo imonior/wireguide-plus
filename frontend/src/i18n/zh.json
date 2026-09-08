@@ -462,6 +462,7 @@
   },
   "fields": {
     "name": "名称",
+    "required_hint": "必填",
     "section_interface": "接口",
     "section_awg": "AmneziaWG 参数",
     "section_peer": "对端",

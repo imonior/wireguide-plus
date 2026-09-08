@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 )
@@ -34,13 +35,36 @@ type Paths struct {
 	DataDir    string // Daemon state / recovery journal (system-level)
 }
 
+// homeDir resolves the current user's home directory without depending on
+// the environment.
+//
+// os.UserHomeDir() only reads $HOME, which launchd does NOT set for the
+// processes it spawns from a LaunchAgent (nor systemd for its units). That
+// is exactly how the GUI starts when "Launch at startup" is enabled, so the
+// app used to die a fraction of a second after login with
+// "paths: $HOME is not defined" and the user saw no autostart at all.
+//
+// The fallback asks the user database (getpwuid when cgo is enabled — which
+// it always is for the macOS/Windows GUI builds), keyed off the real UID and
+// therefore independent of any environment variable.
+func homeDir() (string, error) {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home, nil
+	}
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		slog.Debug("home directory resolved from the user database ($HOME unset)", "home", u.HomeDir)
+		return u.HomeDir, nil
+	}
+	return "", fmt.Errorf("cannot determine home directory ($HOME is not defined and the user database lookup failed)")
+}
+
 // GetPaths returns OS-specific paths for the application.
 func GetPaths() (*Paths, error) {
 	var p Paths
 
 	switch runtime.GOOS { //nolint:exhaustive
 	case "darwin":
-		home, err := os.UserHomeDir()
+		home, err := homeDir()
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +78,7 @@ func GetPaths() (*Paths, error) {
 	case "linux":
 		configHome := os.Getenv("XDG_CONFIG_HOME")
 		if configHome == "" {
-			home, err := os.UserHomeDir()
+			home, err := homeDir()
 			if err != nil {
 				return nil, err
 			}
@@ -66,7 +90,7 @@ func GetPaths() (*Paths, error) {
 
 		dataHome := os.Getenv("XDG_DATA_HOME")
 		if dataHome == "" {
-			home, err := os.UserHomeDir()
+			home, err := homeDir()
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +102,7 @@ func GetPaths() (*Paths, error) {
 	case "windows":
 		appData := os.Getenv("APPDATA")
 		if appData == "" {
-			home, err := os.UserHomeDir()
+			home, err := homeDir()
 			if err != nil {
 				return nil, err
 			}
@@ -114,7 +138,7 @@ const legacyAppName = "wireguide"
 
 // legacyConfigDir returns the pre-rename config directory for this OS.
 func legacyConfigDir() string {
-	home, err := os.UserHomeDir()
+	home, err := homeDir()
 	if err != nil {
 		return ""
 	}

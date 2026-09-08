@@ -119,6 +119,12 @@ const (
 	// postConnectRuleCheckDelay is how long after a connect we wait before
 	// re-evaluating the rules.
 	postConnectRuleCheckDelay = 3 * time.Second
+
+	// evalReasonStartup tags the one-shot evaluation the helper runs
+	// shortly after start (login / boot / LaunchDaemon restart). It is a
+	// log label only — startup evaluations obey exactly the same rules as
+	// every other trigger, including the unidentified-network skip below.
+	evalReasonStartup = "startup"
 )
 
 // scheduleRuleCheck re-runs the automation rules shortly after a manual
@@ -183,9 +189,10 @@ func reconcileAction(state wifi.DesiredState, active, manualOff bool) string {
 // rules keep firing whether or not a GUI is alive.
 //
 // Semantics (issue #12): a rule can connect OR disconnect its tunnel
-// regardless of how the tunnel was brought up — unlike the legacy path
-// which only touched helper-auto-connected tunnels. A tunnel with NO
-// rules is never touched.
+// regardless of how it was brought up. A tunnel with neither rules nor
+// an explicit Default State is never touched; a default-only policy
+// always converges on its Default State. On an UNIDENTIFIED network the
+// whole evaluation is skipped (see below) — no condition, no action.
 //
 // Concurrency: triggers must NOT call this directly — they post through
 // requestAutomationEval, and automationEvalLoop is the only caller. A
@@ -208,6 +215,23 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 
 	ctx := h.currentNetworkContext()
+
+	// An UNIDENTIFIED network (no SSID reported AND no physical-interface
+	// address yet) means no condition can be judged: SSID rules have
+	// nothing to match against, subnet/MAC rules have no interfaces to
+	// inspect. Acting anyway would blind-connect tunnels onto a network
+	// we haven't seen — then tear them down seconds later when the SSID
+	// report arrives — or wrongly tear down a crash-recovered tunnel.
+	// So: skip the entire evaluation, in BOTH directions, and wait. The
+	// SSID report, route-change events and the poll each re-post an eval
+	// request, so the real decision runs the moment the network is
+	// identified — a Default State of "connect" therefore still takes
+	// effect at autostart, only a few seconds later.
+	if ctx.SSID == "" && len(ctx.PhysicalIPs) == 0 {
+		slog.Debug("automation: network unidentified — skipping evaluation",
+			"reason", reason)
+		return
+	}
 
 	// A tunnel the user has manually switched off (UI or tray menu) must
 	// not be silently reconnected by its rules until they reconnect it by

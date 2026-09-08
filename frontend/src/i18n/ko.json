@@ -462,6 +462,7 @@
   },
   "fields": {
     "name": "이름",
+    "required_hint": "필수",
     "section_interface": "인터페이스",
     "section_awg": "AmneziaWG 파라미터",
     "section_peer": "피어",

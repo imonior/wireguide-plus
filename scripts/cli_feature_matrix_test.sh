@@ -242,8 +242,10 @@ if [[ "$restored_ip" != "$baseline_ip" ]]; then
 fi
 log "custom full Table/FwMark/DNS-leak/routes/disconnect restoration passed"
 
-# Delete also removes associated automation state.
-cli automation add table-off disconnect else >>"$test_log" 2>&1
+# Delete also removes associated automation state. A default-only policy
+# is enough here: the tunnel converges to its Default State, and `delete`
+# must remove that state along with the tunnel.
+cli automation default table-off disconnect >>"$test_log" 2>&1
 cli delete table-off >>"$test_log" 2>&1
 if ! cli automation rules table-off | grep -q 'has no automation rules'; then
   log "FAIL: delete left automation rules addressable"

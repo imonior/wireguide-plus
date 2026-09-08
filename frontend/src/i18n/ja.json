@@ -462,6 +462,7 @@
   },
   "fields": {
     "name": "名前",
+    "required_hint": "必須",
     "section_interface": "インターフェース",
     "section_awg": "AmneziaWG パラメータ",
     "section_peer": "ピア",

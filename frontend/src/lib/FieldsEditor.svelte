@@ -30,6 +30,12 @@
   const IFACE_AWG = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4'];
   const PEER_KEYS = ['PublicKey', 'PresharedKey', 'Endpoint', 'AllowedIPs', 'PersistentKeepalive'];
 
+  // Keys wg-quick refuses to start without: the interface needs a private
+  // key and at least one address; every peer needs its public key and its
+  // routing (AllowedIPs). Everything else is optional tuning.
+  const REQUIRED = new Set(['PrivateKey', 'Address', 'PublicKey', 'AllowedIPs']);
+  function isRequired(key) { return REQUIRED.has(key); }
+
   let iface = {};        // canonical-key → value (working model)
   let peers = [];        // [{ key: value }]
   let peerIdx = 0;
@@ -115,7 +121,7 @@
         <h5 class="fe-group-title">{$t('fields.section_interface')}</h5>
         {#each IFACE_STD as key}
           <div class="fe-row">
-            <label class="fe-label" for="fe-if-{key}">{key}</label>
+            <label class="fe-label" for="fe-if-{key}">{key}{#if isRequired(key)}<span class="fe-req" title={$t('fields.required_hint')}>*</span>{/if}</label>
             <input class="fe-input" id="fe-if-{key}" type="text" value={iface[key] ?? ''}
               spellcheck="false" on:change={(e) => { setIface(key, e.target.value); apply(); }} />
           </div>
@@ -148,7 +154,7 @@
         </h5>
         {#each PEER_KEYS as key}
           <div class="fe-row">
-            <label class="fe-label" for="fe-peer-{key}">{key}</label>
+            <label class="fe-label" for="fe-peer-{key}">{key}{#if isRequired(key)}<span class="fe-req" title={$t('fields.required_hint')}>*</span>{/if}</label>
             <input class="fe-input" id="fe-peer-{key}" type="text" value={currentPeer[key] ?? ''}
               spellcheck="false" on:change={(e) => { setPeer(key, e.target.value); apply(); }} />
           </div>
@@ -275,7 +281,12 @@
   .fe-group-title { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.75; display: flex; align-items: center; gap: 8px; }
   .fe-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .fe-row:last-child { margin-bottom: 0; }
-  .fe-label { width: 130px; flex-shrink: 0; font-size: 12px; font-family: ui-monospace, monospace; opacity: 0.85; }
+  /* Wide enough for the longest key (PersistentKeepalive) at 12px mono so
+     the text never sits under the input's left edge. */
+  .fe-label { width: 175px; flex-shrink: 0; font-size: 12px; font-family: ui-monospace, monospace; opacity: 0.85; }
+  /* Required-field marker: a small accent-coloured asterisk glued to the
+     key name; hovering (or focusing the row) explains it via the title. */
+  .fe-req { margin-left: 3px; color: var(--red, #e5484d); font-weight: 700; }
   .fe-input {
     flex: 1; min-width: 0; padding: 5px 8px; font-size: 13px;
     font-family: ui-monospace, monospace;

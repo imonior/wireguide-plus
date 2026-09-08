@@ -22,10 +22,10 @@ import (
 // Whatever the path, the engine (helper) and every other entry point
 // re-read the file later, so divergence here would mean one entry point's
 // writes silently change what the others execute. These tests pin the
-// shared invariants: no none_match survives on disk, a valid Default
-// State exists exactly when rules exist, Normalize is idempotent across
-// a reload, and equal logical policies from different entry points
-// evaluate to equal desired states.
+// shared invariants: no none_match survives on disk, a rules-less tunnel
+// may carry an explicit Default State (default-only policy), Normalize is
+// idempotent across a reload, and equal logical policies from different
+// entry points evaluate to equal desired states.
 func TestAutomationEntryPointsConverge(t *testing.T) {
 	officeRule := wifi.Rule{When: []wifi.Condition{{Type: wifi.CondSSID, SSID: "office"}}, Do: wifi.ActionConnect}
 
@@ -53,8 +53,17 @@ func TestAutomationEntryPointsConverge(t *testing.T) {
 		rules := st.Automation.PerTunnel[tunnel]
 		def, hasDef := st.Automation.Defaults[tunnel]
 		if len(rules) == 0 {
-			if hasDef {
-				t.Errorf("tunnel %q has no rules but a default %q — must be removed with the rules", tunnel, def)
+			// Rules-less: either no policy at all, or a default-only
+			// policy (an explicit default with an empty entry). Both are
+			// valid shapes; what must NOT happen is the entry silently
+			// vanishing while a default survives.
+			if !hasDef {
+				if _, present := st.Automation.PerTunnel[tunnel]; present {
+					t.Errorf("tunnel %q has neither rules nor default but a PerTunnel entry — dead config", tunnel)
+				}
+			}
+			if hasDef && def != wantDef {
+				t.Errorf("tunnel %q default-only policy: got %q, want %q", tunnel, def, wantDef)
 			}
 			return st
 		}
@@ -132,24 +141,40 @@ func TestAutomationEntryPointsConverge(t *testing.T) {
 		t.Fatal(err)
 	}
 	s2 := assertNormalized(t, dir, "work", wifi.ActionDisconnect)
+	// Path 2 (CLI) stored the mirror-image policy — office → connect with
+	// the conservative disconnect default — and must decide accordingly.
+	if got := wifi.EvaluatePolicy(s2.Automation.PerTunnel["work"], s2.Automation.Defaults["work"], wifi.NetworkContext{SSID: "office"}); got != wifi.StateConnect {
+		t.Errorf("CLI policy on office: got %v, want connect", got)
+	}
+	if got := wifi.EvaluatePolicy(s2.Automation.PerTunnel["work"], s2.Automation.Defaults["work"], wifi.NetworkContext{SSID: "home"}); got != wifi.StateDisconnect {
+		t.Errorf("CLI policy on home: got %v, want disconnect (default)", got)
+	}
 
-	// CLI `automation rm` of the last rule must remove the default too
-	// (mirrors automationRm), leaving no policy behind.
+	// CLI `automation rm` of the last rule keeps the tunnel's Default
+	// State as a default-only policy (mirrors automationRm) — the tunnel
+	// now always converges to its default.
 	if err := store2.Update(func(st *Settings) error {
 		st.EnsureAutomation()
 		rules := st.Automation.PerTunnel["work"]
 		st.Automation.PerTunnel["work"] = append(rules[:0:0], rules[1:]...)
 		if len(st.Automation.PerTunnel["work"]) == 0 {
-			delete(st.Automation.PerTunnel, "work")
-			if st.Automation.Defaults != nil {
-				delete(st.Automation.Defaults, "work")
+			if def := st.Automation.Defaults["work"]; def != wifi.ActionConnect && def != wifi.ActionDisconnect {
+				delete(st.Automation.PerTunnel, "work")
+				if st.Automation.Defaults != nil {
+					delete(st.Automation.Defaults, "work")
+				}
 			}
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	assertNormalized(t, dir, "work", wifi.Action(""))
+	s2 = assertNormalized(t, dir, "work", wifi.ActionDisconnect)
+	// The default-only policy must actually decide: with no rules the
+	// default applies on every network.
+	if got := wifi.EvaluatePolicy(s2.Automation.PerTunnel["work"], s2.Automation.Defaults["work"], wifi.NetworkContext{SSID: "anywhere"}); got != wifi.StateDisconnect {
+		t.Errorf("default-only CLI policy: got %v, want disconnect", got)
+	}
 
 	// --- Path 3: GUI SaveAutomationRules mutator (mirrors settings_ops) ---
 	dir = filepath.Join(t.TempDir(), "p3")
@@ -162,10 +187,16 @@ func TestAutomationEntryPointsConverge(t *testing.T) {
 				def = wifi.ActionDisconnect // GUI normalizes an absent default
 			}
 			if len(rules) == 0 {
-				delete(st.Automation.PerTunnel, "work")
-				if st.Automation.Defaults != nil {
-					delete(st.Automation.Defaults, "work")
+				// Zero rules + explicit default = default-only policy; the GUI
+				// save path keeps the entry so the engine keeps driving it.
+				if st.Automation.PerTunnel == nil {
+					st.Automation.PerTunnel = map[string][]wifi.Rule{}
 				}
+				if st.Automation.Defaults == nil {
+					st.Automation.Defaults = map[string]wifi.Action{}
+				}
+				st.Automation.PerTunnel["work"] = []wifi.Rule{}
+				st.Automation.Defaults["work"] = def
 				return nil
 			}
 			if st.Automation.PerTunnel == nil {
@@ -183,11 +214,15 @@ func TestAutomationEntryPointsConverge(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3 := assertNormalized(t, dir, "work", wifi.ActionConnect)
-	// Saving an empty rule list clears the whole policy.
+	// Saving an empty rule list with a default keeps a default-only
+	// policy: the tunnel always converges to the default.
 	if err := saveLikeGUI(nil, "connect"); err != nil {
 		t.Fatal(err)
 	}
-	assertNormalized(t, dir, "work", wifi.Action(""))
+	s3 = assertNormalized(t, dir, "work", wifi.ActionConnect)
+	if got := wifi.EvaluatePolicy(s3.Automation.PerTunnel["work"], s3.Automation.Defaults["work"], wifi.NetworkContext{}); got != wifi.StateConnect {
+		t.Errorf("default-only GUI policy: got %v, want connect", got)
+	}
 
 	// --- Cross-path: equal logical policies must evaluate equally ---
 	// Save through the GUI path the policy the legacy config migrated to
@@ -219,13 +254,5 @@ func TestAutomationEntryPointsConverge(t *testing.T) {
 	}
 	if got := wifi.EvaluatePolicy(s1.Automation.PerTunnel["work"], s1.Automation.Defaults["work"], wifi.NetworkContext{SSID: "home"}); got != wifi.StateConnect {
 		t.Errorf("migrated policy on home: got %v, want connect (from the old none_match else)", got)
-	}
-	// Path 2 (CLI) stored the mirror-image policy — office → connect with
-	// the conservative disconnect default — and must decide accordingly.
-	if got := wifi.EvaluatePolicy(s2.Automation.PerTunnel["work"], s2.Automation.Defaults["work"], wifi.NetworkContext{SSID: "office"}); got != wifi.StateConnect {
-		t.Errorf("CLI policy on office: got %v, want connect", got)
-	}
-	if got := wifi.EvaluatePolicy(s2.Automation.PerTunnel["work"], s2.Automation.Defaults["work"], wifi.NetworkContext{SSID: "home"}); got != wifi.StateDisconnect {
-		t.Errorf("CLI policy on home: got %v, want disconnect (default)", got)
 	}
 }

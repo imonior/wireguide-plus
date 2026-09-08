@@ -243,7 +243,9 @@ func Evaluate(rules []Rule, ctx NetworkContext) DesiredState {
 // `def` is the tunnel's entry in Automation.Defaults.
 func EvaluatePolicy(rules []Rule, def Action, ctx NetworkContext) DesiredState {
 	state := Evaluate(rules, ctx)
-	if state == StateUnmanaged && len(rules) > 0 {
+	if state == StateUnmanaged {
+		// Default State applies with zero rules too — see
+		// EvaluatePolicyDetail for why.
 		switch def {
 		case ActionConnect:
 			return StateConnect
@@ -260,7 +262,14 @@ func EvaluatePolicy(rules []Rule, def Action, ctx NetworkContext) DesiredState {
 // Default State.
 func EvaluatePolicyDetail(rules []Rule, def Action, ctx NetworkContext) (DesiredState, []RuleDetail) {
 	state, details := EvaluateDetail(rules, ctx)
-	if state == StateUnmanaged && len(rules) > 0 {
+	if state == StateUnmanaged {
+		// The Default State applies whenever no rule matched — including
+		// the zero-rule case. A tunnel with an explicit Default State and
+		// no rules has a well-defined policy ("always converge to the
+		// default"), which is what makes a plain "default: connect"
+		// tunnel come up at boot without any SSID rules. Only a tunnel
+		// with NEITHER rules NOR a default stays Unmanaged (never
+		// touched).
 		switch def {
 		case ActionConnect:
 			return StateConnect, details

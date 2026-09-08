@@ -135,12 +135,12 @@ http_ok
 log "gateway-MAC rule live auto-connect passed"
 
 cli automation rm "$name" 1 >>"$test_log" 2>&1
-cli automation add "$name" disconnect else >>"$test_log" 2>&1
+cli automation default "$name" disconnect >>"$test_log" 2>&1
 cli automation | tee -a "$test_log" | grep -q 'decision=disconnect'
 wait_active no 40
 ! ip -4 route show | grep -q '^10.255.252.1'
 http_ok
-log "else rule live auto-disconnect passed"
+log "default-state live auto-disconnect passed"
 
 cli automation rm "$name" 1 >>"$test_log" 2>&1
 cli delete "$name" >>"$test_log" 2>&1

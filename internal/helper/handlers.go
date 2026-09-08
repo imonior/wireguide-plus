@@ -378,12 +378,19 @@ func (h *Helper) handleConnect(params json.RawMessage) (interface{}, error) {
 	}
 
 	// Check for routing conflicts with existing interfaces (Tailscale etc).
-	// Log warnings but don't block — users can override via UI.
+	// Log warnings but don't block — users can override via UI. Skip the
+	// tunnel's OWN interface when it is already up (reconnect): its routes
+	// come from its own AllowedIPs, so counting them reports every CIDR as
+	// conflicting with itself.
 	var allowedIPs []string
 	for _, peer := range req.Config.Peers {
 		allowedIPs = append(allowedIPs, peer.AllowedIPs...)
 	}
-	if conflicts, err := diag.CheckConflicts(allowedIPs); err == nil && len(conflicts) > 0 {
+	var exclude []string
+	if st := h.manager.StatusFor(req.Config.Name); st != nil && st.InterfaceName != "" {
+		exclude = append(exclude, st.InterfaceName)
+	}
+	if conflicts, err := diag.CheckConflicts(allowedIPs, exclude...); err == nil && len(conflicts) > 0 {
 		for _, c := range conflicts {
 			slog.Warn("routing conflict detected",
 				"interface", c.InterfaceName,

@@ -271,7 +271,12 @@ current network context = { SSID, physical IPs, gateway MAC/IP, interfaces }
   ├─ startup (3s)     → one evaluation after the network stack settles
   └─ post-connect     → 3s after an RPC connect inside the startup window
 
-for each tunnel with rules:
+for each tunnel with a policy (rules and/or a Default State):
+  if ctx is UNIDENTIFIED (no SSID reported AND no physical IPs):
+      skip the WHOLE evaluation — no condition can be judged, so acting
+      would blind-connect or wrongly tear down a crash-recovered tunnel.
+      The SSID report / route-change event / poll re-runs it moments
+      later with a real context. This applies to startup too.
   if manual-off(tunnel): skip   # no auto-connect until user reconnects or restart
   EvaluatePolicy(rules, default, ctx)
       → StateConnect     → doConnectHeld (same as manual)

@@ -103,8 +103,9 @@ pick the NIC manually.
   AND "connect on X SSID" for the same tunnel.
 - **Default State fallback**: when **no rule matches** the current network, the
   tunnel converges to its **Default State** (connected or disconnected — chosen
-  at the top of the Automation editor). A tunnel with no rules at all is never
-  touched by automation.
+  at the top of the Automation editor). A tunnel with neither rules nor a
+  Default State is never touched by automation; setting only a Default State
+  (zero rules) makes the tunnel always converge to it.
 - Rule editing shows **live match indicators**: while the Automation editor is
   open, every condition shows whether it currently matches the live network, the
   first effective rule is highlighted as "in use", and a top bar shows the

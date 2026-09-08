@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -42,28 +43,70 @@ func RemoveAutostart() error {
 
 // --- macOS: LaunchAgent ---
 
+// currentHome resolves the home directory for the plist we are about to
+// write. Unlike the GUI's own path resolution this always runs inside the
+// app (an interactive session), so $HOME is normally present; the user-
+// database fallback only matters if it ever isn't.
+func currentHome() (string, error) {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home, nil
+	}
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		return u.HomeDir, nil
+	}
+	return "", fmt.Errorf("cannot determine home directory ($HOME is not defined)")
+}
+
+// escapeXML returns s escaped for embedding in a plist <string>, refusing
+// to continue if the escaper itself fails (see installMacAutostart).
+func escapeXML(s string) (string, error) {
+	var b strings.Builder
+	if err := xml.EscapeText(&b, []byte(s)); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
 func installMacAutostart(appPath string) error {
-	home, err := os.UserHomeDir()
+	home, err := currentHome()
 	if err != nil {
-		return fmt.Errorf("cannot determine home directory: %w", err)
+		return err
 	}
 	plistDir := filepath.Join(home, "Library", "LaunchAgents")
 	if err := os.MkdirAll(plistDir, 0755); err != nil {
 		return fmt.Errorf("creating LaunchAgents dir: %w", err)
 	}
 
-	// XML-escape appPath to prevent plist injection from special characters.
-	// xml.EscapeText returning an error means the escaping itself failed
-	// (extremely rare — only from the io.Writer surface) and the buffer
-	// may contain partial unescaped bytes. We MUST refuse to write the
-	// plist in that case, otherwise an attacker who controls the path
-	// could inject `</string>...<key>...` and modify our plist.
-	var b strings.Builder
-	if err := xml.EscapeText(&b, []byte(appPath)); err != nil {
+	// XML-escape both values to prevent plist injection from special
+	// characters. xml.EscapeText returning an error means the escaping
+	// itself failed (extremely rare — only from the io.Writer surface)
+	// and the buffer may contain partial unescaped bytes. We MUST refuse
+	// to write the plist in that case, otherwise an attacker who controls
+	// the path could inject `</string>...<key>...` and modify our plist.
+	safeAppPath, err := escapeXML(appPath)
+	if err != nil {
 		return fmt.Errorf("xml-escape app path: %w", err)
 	}
-	safeAppPath := b.String()
+	safeHome, err := escapeXML(home)
+	if err != nil {
+		return fmt.Errorf("xml-escape home: %w", err)
+	}
 
+	// Notes on the keys below:
+	//
+	// EnvironmentVariables/HOME — launchd hands LaunchAgents a minimal
+	// environment (PATH and little else): **$HOME is not set**. The GUI
+	// resolves its config/log/tunnel directories from it, so without this
+	// the app was launched at login and died immediately with
+	// "paths: $HOME is not defined" — the "Launch at startup" switch
+	// looked like it did nothing.
+	//
+	// LimitLoadToSessionType/ProcessType — confine the job to graphical
+	// sessions and run it as an interactive process so the Wails/Cocoa
+	// window server context is a normal one instead of a daemon spawn.
+	//
+	// RunAtLoad only: no KeepAlive. A restart loop would fight the user
+	// when they quit the app on purpose.
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -76,21 +119,36 @@ func installMacAutostart(appPath string) error {
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>%s</string>
+    </dict>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>ProcessType</key>
+    <string>Interactive</string>
 </dict>
 </plist>
-`, safeAppPath)
+`, safeAppPath, safeHome)
 
 	return os.WriteFile(filepath.Join(plistDir, "com.wireguideplus.gui.plist"), []byte(plist), 0644)
 }
 
 func removeMacAutostart() error {
-	home, err := os.UserHomeDir()
+	home, err := currentHome()
 	if err != nil {
-		return fmt.Errorf("cannot determine home directory: %w", err)
+		return err
 	}
+	// Unload first so launchd forgets the job, then remove the file.
 	// Remove the current plist, plus the pre-plus "com.wireguide.gui.plist"
 	// left behind by an older install, so upgrades don't orphan a launch item.
+	domain := fmt.Sprintf("gui/%d", os.Getuid())
 	for _, name := range []string{"com.wireguideplus.gui.plist", "com.wireguide.gui.plist"} {
+		label := strings.TrimSuffix(name, ".plist")
+		// Non-fatal: the job is usually not loaded, and a missing
+		// plist is exactly the end state we want anyway.
+		_ = exec.Command("launchctl", "bootout", domain+"/"+label).Run()
 		_ = os.Remove(filepath.Join(home, "Library", "LaunchAgents", name))
 	}
 	return nil

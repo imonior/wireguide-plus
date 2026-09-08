@@ -193,13 +193,43 @@ func (s *TunnelService) CheckConflicts(name string) ([]diag.ConflictInfo, error)
 	for _, peer := range cfg.Peers {
 		allowedIPs = append(allowedIPs, peer.AllowedIPs...)
 	}
-	conflicts, err := diag.CheckConflicts(allowedIPs)
+	// A tunnel can't conflict with itself — skip the interface it is
+	// already running on, otherwise every one of its own CIDRs is
+	// reported as overlapping (each contains itself) whenever the user
+	// reconnects or the app restores the previous session.
+	conflicts, err := diag.CheckConflicts(allowedIPs, s.tunnelInterfaces(name)...)
 	if err != nil {
 		slog.Warn("conflict check failed", "tunnel", name, "error", err)
 		// Non-fatal — don't block connect if the scan itself fails.
 		return nil, nil
 	}
 	return conflicts, nil
+}
+
+// tunnelInterfaces returns the interface names the given tunnel is
+// currently up on — usually zero (tunnel down) or one. The conflict
+// scan skips them so a tunnel is never compared against its own
+// routes, which would report each of its CIDRs as overlapping itself.
+// A failed status query yields "no interfaces to skip", i.e. the
+// previous behaviour; the scan itself is best-effort.
+func (s *TunnelService) tunnelInterfaces(name string) []string {
+	if name == "" {
+		return nil
+	}
+	st, err := s.GetStatus()
+	if err != nil || st == nil {
+		return nil
+	}
+	all := make([]ConnectionStatus, 0, 1+len(st.Tunnels))
+	all = append(all, *st)
+	all = append(all, st.Tunnels...)
+	var out []string
+	for _, t := range all {
+		if t.TunnelName == name && t.InterfaceName != "" {
+			out = append(out, t.InterfaceName)
+		}
+	}
+	return out
 }
 
 // Connect loads a tunnel config from local storage and asks the helper to

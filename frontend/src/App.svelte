@@ -1696,8 +1696,8 @@
   }
   .modal-editor {
     position: relative;
-    width: 860px;
-    height: 620px;
+    width: 900px;
+    height: 760px;
     padding: 0;
     overflow: hidden;
     resize: both;

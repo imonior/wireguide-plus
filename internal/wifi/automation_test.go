@@ -669,9 +669,18 @@ func TestValidateRule_NewConditions(t *testing.T) {
 
 func TestEvaluatePolicy_DefaultFallback(t *testing.T) {
 	office := singleCond(Condition{Type: CondSSID, SSID: "office"}, ActionConnect)
-	// No rules at all → unmanaged regardless of default (no policy = no touch).
-	if got := EvaluatePolicy(nil, ActionConnect, NetworkContext{SSID: "x"}); got != StateUnmanaged {
-		t.Errorf("no rules + default connect: got %v, want unmanaged", got)
+	// No rules but an explicit default → default-only policy: the tunnel
+	// always converges to the default (this is what makes a plain
+	// "default: connect" tunnel come up at boot without SSID rules).
+	if got := EvaluatePolicy(nil, ActionConnect, NetworkContext{SSID: "x"}); got != StateConnect {
+		t.Errorf("no rules + default connect: got %v, want connect", got)
+	}
+	if got := EvaluatePolicy(nil, ActionDisconnect, NetworkContext{SSID: "x"}); got != StateDisconnect {
+		t.Errorf("no rules + default disconnect: got %v, want disconnect", got)
+	}
+	// No rules and NO default → unmanaged (no policy = no touch).
+	if got := EvaluatePolicy(nil, Action(""), NetworkContext{SSID: "x"}); got != StateUnmanaged {
+		t.Errorf("no rules + no default: got %v, want unmanaged", got)
 	}
 	// Rules present, one matched → rule wins over default.
 	if got := EvaluatePolicy([]Rule{office}, ActionDisconnect, NetworkContext{SSID: "office"}); got != StateConnect {

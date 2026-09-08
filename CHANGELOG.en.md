@@ -4,6 +4,28 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.9] - 2026-09-08
+
+### ✨ New
+
+- **Tray menu shows the version** — the first row of the menu bar menu now reads "WireGuide Plus" followed by the running version, so the active build is obvious at a glance.
+- **Required-field markers in the field editor** — required keys such as PrivateKey, Address, PublicKey and AllowedIPs now carry a red \* marker with a localised tooltip on hover.
+
+### 🔧 Changed
+
+- **A Default State now works on its own** — a tunnel with only a Default State and zero rules now **always converges to that state** (previously such a configuration was ignored entirely); tunnels with neither rules nor a Default State are still never touched. Accordingly, `automation default` no longer requires existing rules, and removing the last rule keeps the Default State.
+- **Editor layout improvements** — the config editor dialog is larger (860×620 → 900×760); the four script hooks in the scripts editor now sit in two columns (PreUp+PostUp on one row, PreDown+PostDown on another) inside a more compact panel; the field editor's label column is wider so PersistentKeepalive no longer overlaps the input.
+
+### 🐛 Fixes
+
+- **Fixed macOS launch-at-login not working** — launchd does not provide `HOME` in the LaunchAgent environment, so the app was killed moments after spawn because it could not locate its data directories (the plist did fire; the process just exited instantly). Path resolution now falls back to the system account database (getpwuid) instead of environment variables; the LaunchAgent also injects `HOME` explicitly, declares itself an Aqua-session interactive process, and removal now unregisters the job before deleting it.
+- **Default-connect tunnels did not auto-connect after login** — a startup automation evaluation is now always posted; while the network is still unidentified (no SSID and no physical-interface addresses) it takes no action, and the decision completes with real conditions once the SSID report or a route event arrives. Autostart connecting still works, and every decision is condition-judged.
+- **Fixed AllowedIPs conflict-detection false positives** — a connected tunnel no longer counts **its own interface** as a conflict source (previously every check flagged all of its CIDRs as overlapping themselves); overlap detection now requires strict intersection, so sibling prefixes (e.g. `10.30.30.0/24` and `10.30.35.0/24`) are no longer reported as containment conflicts, and address families (IPv4 vs IPv6) are never compared across.
+
+### 🛠 Internal
+
+- Test scripts and docs updated for the removed "otherwise" condition and the Default State semantics; new regression tests for CIDR overlap and engine-level default-only policies.
+
 ## [1.7.8] - 2026-09-08
 
 ### ✨ New

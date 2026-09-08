@@ -15,6 +15,7 @@ import (
 	"time"
 
 	wgapp "github.com/imonior/wireguide-plus/internal/app"
+	"github.com/imonior/wireguide-plus/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/icons"
 	"golang.org/x/image/draw"
@@ -761,6 +762,18 @@ func (t *trayManager) scheduleRebuild() {
 	})
 }
 
+// trayMenuTitle is the disabled first menu row: the app name plus the
+// running version, so users can tell which build they're on without
+// opening Settings (and so bug reports can quote it). The version is
+// injected at link time; a dev build reports "0.0.0-dev".
+func trayMenuTitle() string {
+	v := strings.TrimSpace(version.Version)
+	if v == "" {
+		return "WireGuide Plus"
+	}
+	return "WireGuide Plus " + v
+}
+
 // rebuildMenu reconstructs the whole tray menu: tunnel list, Show Window,
 // Quit. Uses ListTunnelsLocal (disk only, no IPC) + the cached activeTunnel
 // for connected-state glyphs. Safe to invoke from any goroutine.
@@ -801,7 +814,7 @@ func (t *trayManager) rebuildMenu() {
 		t.menu.Clear()
 	}
 	m := t.menu
-	m.Add("WireGuide Plus").SetEnabled(false)
+	m.Add(trayMenuTitle()).SetEnabled(false)
 	m.AddSeparator()
 
 	for _, tun := range tunnels {

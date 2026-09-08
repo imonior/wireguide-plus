@@ -427,21 +427,27 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		default:
 		}
 		// Use the helper's known SSID (reported by the GUI on macOS 14+,
-		// polled elsewhere) rather than a direct read. Skip only when the
-		// network is entirely unknown — acting on an unknown SSID would
-		// let the Default State disconnect a freshly crash-recovered
-		// tunnel before we know what network we're on. Subnet-only rules
-		// still get their first evaluation from the network-change / poll
-		// trigger below.
+		// polled elsewhere) rather than a direct read.
+		//
+		// We deliberately DO post an evaluation at startup even when the
+		// network is not identified yet — but acting on it is the
+		// engine's call (see reevaluateAutomation): an unidentified
+		// network (no SSID and no physical addresses) means no condition
+		// can be judged, so that evaluation is a no-op and the decision
+		// happens on the NEXT trigger (SSID report, route-change event,
+		// poll) once the network is known. That keeps every decision
+		// condition-judged while still making a Default State of
+		// "connect" take effect at autostart, seconds after login.
 		ssid := ""
 		if h.wifiMon != nil {
 			ssid = h.wifiMon.LastSSID()
 		}
 		if ssid == "" {
-			return
+			slog.Info("startup rule re-evaluation (network not identified yet — deferring decision to the next trigger)")
+		} else {
+			slog.Info("startup rule re-evaluation", "ssid", ssid)
 		}
-		slog.Info("startup rule re-evaluation", "ssid", ssid)
-		h.requestAutomationEval("startup")
+		h.requestAutomationEval(evalReasonStartup)
 	})
 
 	// Hybrid subnet-rule trigger. Subnet-based Automation conditions must

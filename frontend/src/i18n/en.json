@@ -462,6 +462,7 @@
   },
   "fields": {
     "name": "Name",
+    "required_hint": "Required",
     "section_interface": "Interface",
     "section_awg": "AmneziaWG parameters",
     "section_peer": "Peer",

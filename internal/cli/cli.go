@@ -560,11 +560,15 @@ func automationRules(args []string) int {
 		return 1
 	}
 	rules := s.Automation.PerTunnel[name]
+	def := s.Automation.Defaults[name]
 	if len(rules) == 0 {
-		fmt.Printf("%s has no automation rules\n", name)
+		if def == wifi.ActionConnect || def == wifi.ActionDisconnect {
+			fmt.Printf("%s has no rules — default-only policy: when no rule matches → %s (i.e. always)\n", name, def)
+		} else {
+			fmt.Printf("%s has no automation rules\n", name)
+		}
 		return 0
 	}
-	def := s.Automation.Defaults[name]
 	if def != wifi.ActionConnect && def != wifi.ActionDisconnect {
 		def = wifi.ActionDisconnect
 	}
@@ -688,9 +692,15 @@ func automationRm(args []string) int {
 		removed = rules[idx-1]
 		s.Automation.PerTunnel[name] = append(rules[:idx-1:idx-1], rules[idx:]...)
 		if len(s.Automation.PerTunnel[name]) == 0 {
-			delete(s.Automation.PerTunnel, name)
-			if s.Automation.Defaults != nil {
-				delete(s.Automation.Defaults, name)
+			// Keep the entry and its Default State: a default-only policy
+			// ("always converge to the default") is meaningful, and the GUI
+			// save path persists the same shape. The tunnel only becomes
+			// policy-free once the user clears the default too.
+			if s.Automation.Defaults == nil || s.Automation.Defaults[name] != wifi.ActionConnect && s.Automation.Defaults[name] != wifi.ActionDisconnect {
+				delete(s.Automation.PerTunnel, name)
+				if s.Automation.Defaults != nil {
+					delete(s.Automation.Defaults, name)
+				}
 			}
 		}
 		return nil
@@ -775,11 +785,17 @@ func automationDefault(args []string) int {
 	}
 	err = ss.Update(func(s *storage.Settings) error {
 		s.EnsureAutomation()
-		if len(s.Automation.PerTunnel[name]) == 0 {
-			return fmt.Errorf("%s has no automation rules — add one first ('automation add')", name)
+		if s.Automation.PerTunnel == nil {
+			s.Automation.PerTunnel = map[string][]wifi.Rule{}
 		}
 		if s.Automation.Defaults == nil {
 			s.Automation.Defaults = map[string]wifi.Action{}
+		}
+		// A default without rules is a valid policy ("always converge to
+		// this state") — make sure the tunnel has a PerTunnel entry so the
+		// engine's TunnelNames() picks it up.
+		if _, ok := s.Automation.PerTunnel[name]; !ok {
+			s.Automation.PerTunnel[name] = []wifi.Rule{}
 		}
 		s.Automation.Defaults[name] = wifi.Action(action)
 		return nil

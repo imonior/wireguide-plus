@@ -625,18 +625,20 @@ func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule, de
 	}
 	return s.settingsStore.Update(func(st *storage.Settings) error {
 		st.EnsureAutomation()
-		if len(rules) == 0 {
-			delete(st.Automation.PerTunnel, tunnel)
-			if st.Automation.Defaults != nil {
-				delete(st.Automation.Defaults, tunnel)
-			}
-			return nil
-		}
 		if st.Automation.PerTunnel == nil {
 			st.Automation.PerTunnel = map[string][]wifi.Rule{}
 		}
 		if st.Automation.Defaults == nil {
 			st.Automation.Defaults = map[string]wifi.Action{}
+		}
+		if len(rules) == 0 {
+			// Zero rules + an explicit Default State is a valid policy:
+			// "always converge to the default" (e.g. a plain always-on
+			// tunnel). Keep the entry so the engine keeps driving it;
+			// only a tunnel with neither rules nor a default is policy-free.
+			st.Automation.PerTunnel[tunnel] = []wifi.Rule{}
+			st.Automation.Defaults[tunnel] = def
+			return nil
 		}
 		st.Automation.PerTunnel[tunnel] = rules
 		st.Automation.Defaults[tunnel] = def

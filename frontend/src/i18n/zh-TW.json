@@ -462,6 +462,7 @@
   },
   "fields": {
     "name": "名稱",
+    "required_hint": "必填",
     "section_interface": "介面",
     "section_awg": "AmneziaWG 參數",
     "section_peer": "對端",
