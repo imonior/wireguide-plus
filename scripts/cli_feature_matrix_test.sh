@@ -89,9 +89,23 @@ if cli import "$generated_dir/full.conf" full-a >>"$test_log" 2>&1; then
   log "FAIL: duplicate import unexpectedly overwrote full-a"
   exit 1
 fi
-cli automation add rename-source connect else >>"$test_log" 2>&1
+cli automation add rename-source connect ssid:regression-net >>"$test_log" 2>&1
 cli rename rename-source split-v4 >>"$test_log" 2>&1
-cli automation rules split-v4 | grep -Eq 'connect[[:space:]]+when otherwise'
+# Rules are ordered and the fallback is the tunnel's Default State (the old
+# unconditional "else"/none_match rule no longer exists). Adding the first
+# rule must synthesise a default, and it must be changeable.
+cli automation rules split-v4 | grep -Eq '^split-v4 .*when no rule matches → disconnect'
+if ! cli automation rules split-v4 | grep -Eq 'connect[[:space:]]+when ssid:regression-net'; then
+  log "FAIL: rule did not survive the rename"
+  exit 1
+fi
+if cli automation add split-v4 connect else >>"$test_log" 2>&1; then
+  log "FAIL: the removed 'else' (none_match) condition was accepted"
+  exit 1
+fi
+cli automation default split-v4 connect >>"$test_log" 2>&1
+cli automation rules split-v4 | grep -Eq 'when no rule matches → connect'
+cli automation move split-v4 1 1 >>"$test_log" 2>&1
 if ! cli automation rules rename-source | grep -q 'has no automation rules'; then
   log "FAIL: rename left rules under the old name"
   exit 1

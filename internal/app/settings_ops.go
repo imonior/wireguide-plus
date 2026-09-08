@@ -147,7 +147,7 @@ func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
 
 	for _, name := range st.Automation.TunnelNames() {
 		rules := st.Automation.PerTunnel[name]
-		state, details := wifi.EvaluateDetail(rules, ctx)
+		state, details := wifi.EvaluatePolicyDetail(rules, st.Automation.Defaults[name], ctx)
 		resp.Tunnels = append(resp.Tunnels, AutomationTunnelPreview{
 			Name:     name,
 			Rules:    details,
@@ -174,7 +174,11 @@ func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
 // The response shape matches AutomationPreview so the frontend consumes
 // both identically; the Tunnels slice always contains exactly one entry
 // for the requested tunnel (even when it has no rules yet).
-func (s *TunnelService) AutomationEvaluate(tunnel string, rules []wifi.Rule) AutomationPreviewResponse {
+//
+// defaultState is the draft's Default State ("connect" / "disconnect" /
+// "" for none) applied when the draft's rules all miss; it is passed
+// separately because the draft has not been persisted yet.
+func (s *TunnelService) AutomationEvaluate(tunnel string, rules []wifi.Rule, defaultState string) AutomationPreviewResponse {
 	ctx, resp := currentNetworkPreview()
 	if tunnel == "" {
 		return resp
@@ -192,7 +196,7 @@ func (s *TunnelService) AutomationEvaluate(tunnel string, rules []wifi.Rule) Aut
 	// EvaluateDetail internally skips rules that fail Validate, so a
 	// half-typed draft condition simply yields fewer RuleDetail entries
 	// than cards — the frontend already maps by persisted-rule order.
-	state, details := wifi.EvaluateDetail(rules, ctx)
+	state, details := wifi.EvaluatePolicyDetail(rules, wifi.Action(strings.ToLower(strings.TrimSpace(defaultState))), ctx)
 	resp.Tunnels = []AutomationTunnelPreview{{
 		Name:     tunnel,
 		Rules:    details,
@@ -591,14 +595,19 @@ func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
 	return TestProxyResult{OK: true, LatencyMs: int(time.Since(start).Milliseconds())}
 }
 
-// SaveAutomationRules atomically replaces one tunnel's Automation rules.
+// SaveAutomationRules atomically replaces one tunnel's Automation policy:
+// its ordered rule list plus its Default State (the state the tunnel
+// converges to when NO rule matches — "connect" / "disconnect"; an empty
+// or unknown value is stored as "disconnect", the conservative reading).
 // It goes through SettingsStore.Update — the cross-process locked
 // read-modify-write — instead of a whole-object SaveSettings, so a
 // concurrent `wireguideplus ctl` edit to any other tunnel or field can never
 // be clobbered by a stale GUI snapshot (issue #27 review follow-up).
-// An empty rules slice removes the tunnel's entry entirely. The helper
-// re-reads settings from disk on every evaluation, so no push is needed.
-func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule) error {
+// An empty rules slice removes the tunnel's entry (and its Default State)
+// entirely: no rules = no policy = the engine never touches the tunnel.
+// The helper re-reads settings from disk on every evaluation, so no push
+// is needed.
+func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule, defaultState string) error {
 	if tunnel == "" {
 		return fmt.Errorf("automation: empty tunnel name")
 	}
@@ -610,16 +619,27 @@ func (s *TunnelService) SaveAutomationRules(tunnel string, rules []wifi.Rule) er
 			return fmt.Errorf("automation: rule %d: %w", i+1, err)
 		}
 	}
+	def := wifi.Action(strings.ToLower(strings.TrimSpace(defaultState)))
+	if def != wifi.ActionConnect && def != wifi.ActionDisconnect {
+		def = wifi.ActionDisconnect
+	}
 	return s.settingsStore.Update(func(st *storage.Settings) error {
 		st.EnsureAutomation()
 		if len(rules) == 0 {
 			delete(st.Automation.PerTunnel, tunnel)
+			if st.Automation.Defaults != nil {
+				delete(st.Automation.Defaults, tunnel)
+			}
 			return nil
 		}
 		if st.Automation.PerTunnel == nil {
 			st.Automation.PerTunnel = map[string][]wifi.Rule{}
 		}
+		if st.Automation.Defaults == nil {
+			st.Automation.Defaults = map[string]wifi.Action{}
+		}
 		st.Automation.PerTunnel[tunnel] = rules
+		st.Automation.Defaults[tunnel] = def
 		return nil
 	})
 }

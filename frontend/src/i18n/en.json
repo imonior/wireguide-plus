@@ -357,7 +357,7 @@
   },
   "automation": {
     "title": "Automation",
-    "hint": "Disconnect rules are evaluated before Connect rules; the first matching rule decides the outcome. Rules under the same action are OR'd — any single matching rule triggers the action. Within a rule, every condition must match (AND). Pick a condition type and type its value, or use the suggestion for the network you're on. \"This network\" matches a specific router by gateway MAC (precise — tells apart networks sharing a subnet); \"subnet\" matches an IP range; \"on any Wi-Fi\" matches every wireless network. If both Connect and Disconnect match, Disconnect wins because it is checked first.",
+    "hint": "Rules are evaluated top to bottom and the first matching rule decides the outcome — drag a rule to change its priority. Within a rule, every condition must match (AND). Pick a condition type and type its value, or use the suggestion for the network you're on. \"This network\" matches a specific router by gateway MAC (precise — tells apart networks sharing a subnet); \"subnet\" matches an IP range; \"on any Wi-Fi\" matches every wireless network. When NO rule matches, the tunnel converges to its Default State (chosen at the top).",
     "empty": "No rules — this tunnel is never auto-managed. Add a rule below.",
     "add_rule": "Add rule",
     "rule": "Rule",
@@ -409,8 +409,6 @@
     "cond_wifi": "on any Wi-Fi",
     "cond_wifi_desc": "matches whenever the current network is Wi-Fi",
     "cond_subnet": "on subnet",
-    "cond_none": "otherwise",
-    "cond_none_desc": "matches when no rule above matched — keep it last as the fallback",
     "ssid_placeholder": "Wi-Fi name",
     "ssid_select_hint": "Select or enter a Wi-Fi name",
     "cond_network": "on this network",
@@ -440,7 +438,16 @@
     "decision_unmanaged": "no rule matches this network",
     "decision_manual_off": "would connect, but manual-off is on",
     "fallback_active": "fallback active — no higher-priority rule matched",
-    "fallback_shadowed": "shadowed by a higher-priority rule"
+    "fallback_shadowed": "shadowed by a higher-priority rule",
+    "default_state": "Default State",
+    "default_when_no_match": "When no rule matches → {state}",
+    "rules_title": "Rules (position = priority)",
+    "empty_rules": "No rules — automation never touches this tunnel.",
+    "rule_drag_hint": "Drag to change priority (rules are evaluated top to bottom)",
+    "action_toggle_hint": "Click to switch this rule between connect and disconnect",
+    "priority_note": "Rules are evaluated top to bottom — the first matching rule decides the outcome; when no rule matches, the tunnel converges to its Default State.",
+    "action_connect": "Connect",
+    "action_disconnect": "Disconnect"
   },
   "scripts": {
     "title": "Hook scripts",

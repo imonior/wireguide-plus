@@ -38,6 +38,18 @@ export class Automation {
      * @param {Partial<Automation>} [$$source = {}] - The source object to create the Automation.
      */
     constructor($$source = {}) {
+        if (/** @type {any} */(false)) {
+            /**
+             * Defaults maps a tunnel name to the state its policy converges to
+             * when NO rule matches ("connect" / "disconnect"). Written by the
+             * none_match migration (see Normalize) and by the editor's Default
+             * State control. A missing entry (or a tunnel with no rules) means
+             * the engine never touches the tunnel on a no-match evaluation.
+             * @member
+             * @type {{ [_ in string]?: Action } | undefined}
+             */
+            this["default_state"] = undefined;
+        }
         if (!("per_tunnel_rules" in $$source)) {
             /**
              * PerTunnel maps a tunnel name to its ordered rule list.
@@ -56,10 +68,14 @@ export class Automation {
      * @returns {Automation}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType2;
+        const $$createField0_0 = $$createType0;
+        const $$createField1_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("default_state" in $$parsedSource) {
+            $$parsedSource["default_state"] = $$createField0_0($$parsedSource["default_state"]);
+        }
         if ("per_tunnel_rules" in $$parsedSource) {
-            $$parsedSource["per_tunnel_rules"] = $$createField0_0($$parsedSource["per_tunnel_rules"]);
+            $$parsedSource["per_tunnel_rules"] = $$createField1_0($$parsedSource["per_tunnel_rules"]);
         }
         return new Automation(/** @type {Partial<Automation>} */($$parsedSource));
     }
@@ -174,7 +190,7 @@ export class Condition {
      * @returns {Condition}
      */
     static createFrom($$source = {}) {
-        const $$createField8_0 = $$createType3;
+        const $$createField8_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("days" in $$parsedSource) {
             $$parsedSource["days"] = $$createField8_0($$parsedSource["days"]);
@@ -320,7 +336,7 @@ export class Rule {
      * @returns {Rule}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType5;
+        const $$createField0_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("when" in $$parsedSource) {
             $$parsedSource["when"] = $$createField0_0($$parsedSource["when"]);
@@ -378,7 +394,7 @@ export class RuleDetail {
      * @returns {RuleDetail}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType7;
+        const $$createField3_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("conditions" in $$parsedSource) {
             $$parsedSource["conditions"] = $$createField3_0($$parsedSource["conditions"]);
@@ -425,8 +441,8 @@ export class Rules {
      * @returns {Rules}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType8;
-        const $$createField1_0 = $$createType10;
+        const $$createField0_0 = $$createType9;
+        const $$createField1_0 = $$createType11;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("trusted_ssids" in $$parsedSource) {
             $$parsedSource["trusted_ssids"] = $$createField0_0($$parsedSource["trusted_ssids"]);
@@ -506,7 +522,7 @@ export class TunnelSSIDs {
      * @returns {TunnelSSIDs}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType8;
+        const $$createField0_0 = $$createType9;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("auto_connect_ssids" in $$parsedSource) {
             $$parsedSource["auto_connect_ssids"] = $$createField0_0($$parsedSource["auto_connect_ssids"]);
@@ -516,14 +532,15 @@ export class TunnelSSIDs {
 }
 
 // Private type creation functions
-const $$createType0 = Rule.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Map($Create.Any, $$createType1);
-const $$createType3 = $Create.Array($Create.Any);
-const $$createType4 = Condition.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = ConditionDetail.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = $Create.Array($Create.Any);
-const $$createType9 = TunnelSSIDs.createFrom;
-const $$createType10 = $Create.Map($Create.Any, $$createType9);
+const $$createType0 = $Create.Map($Create.Any, $Create.Any);
+const $$createType1 = Rule.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $Create.Map($Create.Any, $$createType2);
+const $$createType4 = $Create.Array($Create.Any);
+const $$createType5 = Condition.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = ConditionDetail.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $Create.Array($Create.Any);
+const $$createType10 = TunnelSSIDs.createFrom;
+const $$createType11 = $Create.Map($Create.Any, $$createType10);

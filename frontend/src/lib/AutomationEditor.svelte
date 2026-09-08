@@ -1,16 +1,17 @@
 <script>
-  // Per-tunnel Automation rule editor (issue #12), WireTunnels-style
-  // Connect/Disconnect groups. Under each action you can add MULTIPLE
-  // independent rules — any one matching rule triggers the action (rules
-  // under the same action are OR'd). Within a rule, conditions are always
-  // combined with AND: every condition in the rule must match for the rule
-  // to fire. This covers all practical cases while keeping the UI simple.
+  // Per-tunnel Automation policy editor: Default State + Ordered Rules
+  // (first-match-wins). The tunnel's rules form ONE ordered list — rule
+  // position IS priority, and rules may mix connect/disconnect actions
+  // freely (drag to reorder). Within a rule, conditions are always
+  // combined with AND: every condition must match for the rule to fire.
   // "on any Wi-Fi" is a condition that needs no value.
-  // Persisted to Settings.automation.per_tunnel_rules[tunnelName] as one
-  // {when: [...], do} entry per rule, disconnect rules FIRST so that when
-  // both actions match the tunnel disconnects (safe default). The whole
-  // settings object is re-fetched and spread on save so other screens' edits
-  // (and other tunnels' rules) are never clobbered.
+  // When NO rule matches, the tunnel converges to its Default State
+  // (connected / disconnected), edited at the top of this dialog.
+  // Persisted to Settings.automation.per_tunnel_rules[tunnelName] (in
+  // UI order) and Settings.automation.default_state[tunnelName] via
+  // SaveAutomationRules. The whole settings object is re-fetched and
+  // spread on save so other screens' edits (and other tunnels' rules)
+  // are never clobbered.
   import { afterUpdate, onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
   import { AutomationEvaluate } from '../../bindings/github.com/imonior/wireguide-plus/internal/app/tunnelservice.js';
@@ -22,8 +23,10 @@
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
-  // groups[do] = [ rule, ... ]; rule = { _gid, match: 'all', conds: [ {_id, type, ssid, subnet, gateway_mac, label} ] }
-  let groups = { connect: [], disconnect: [] };
+  // rules = [ rule, ... ] in priority order; rule = { _gid, do: 'connect'|'disconnect', conds: [ {_id, type, ...} ] }
+  let rules = [];
+  // The state the tunnel converges to when NO rule matches.
+  let defaultState = 'disconnect';
   // Local-only identity for {#each} keys; never persisted.
   let condId = 0;
   let ruleId = 0;
@@ -85,21 +88,24 @@
       const s = await TunnelService.GetSettings();
       if (gen !== loadGen) return;
       const per = s?.automation?.per_tunnel_rules || {};
-      groups = toGroups(per[name] || []);
-      // Only mark "loaded" AFTER groups are actually populated. Setting
+      rules = toList(per[name] || []);
+      const defs = s?.automation?.default_state || {};
+      defaultState = defs[name] === 'connect' ? 'connect' : 'disconnect';
+      // Only mark "loaded" AFTER rules are actually populated. Setting
       // loadedFor earlier caused refreshPreview()'s guard to pass while
-      // groups were still empty/stale, evaluating a wrong draft and
+      // rules were still empty/stale, evaluating a wrong draft and
       // showing all badges as no-match/inactive until the load finished
       // — this was the direct cause of "every open looks different".
       loadedFor = name;
     } catch (e) {
       if (gen === loadGen) {
-        groups = { connect: [], disconnect: [] };
+        rules = [];
+        defaultState = 'disconnect';
         loadedFor = name;
       }
       console.error('automation load:', e);
     }
-    // The draft for THIS tunnel is now loaded (groups populated). Rate it
+    // The draft for THIS tunnel is now loaded (rules populated). Rate it
     // against the live network immediately so reopening the editor draws
     // the correct match / in-use badges on the first frame instead of
     // waiting for the 3 s poll; refreshPreview no-ops unless this load is
@@ -122,21 +128,25 @@
       currentGatewayMAC = mac;
     } catch (_) { if (gen === loadGen) currentGatewayMAC = ''; }
   }
-  // Convert the persisted rule array into the editor model. Conditions inside
-  // a rule are always AND; rules under the same action are OR. Legacy configs
-  // that used OR within a rule (match !== 'all' or missing with multiple
-  // conditions) are migrated by splitting each condition into its own rule,
-  // preserving the original semantics under the new model.
-  function toGroups(rules) {
-    const g = { connect: [], disconnect: [] };
-    for (const r of rules || []) {
-      const d = r.do === 'disconnect' ? 'disconnect' : 'connect';
+  // Convert the persisted rule array into the editor model, PRESERVING the
+  // stored order (position = priority — the engine evaluates top to bottom,
+  // and rules may mix connect/disconnect actions). Conditions inside a rule
+  // are always AND; legacy configs that used OR within a rule (match !==
+  // 'all' with multiple conditions) are split into one rule per condition,
+  // preserving the original semantics under the AND model. Legacy
+  // none_match rules are dropped — the backend's Normalize already turned
+  // the first one into the tunnel's Default State.
+  function toList(rulesIn) {
+    const out = [];
+    for (const r of rulesIn || []) {
       const whens = Array.isArray(r.when) ? r.when : (r.when ? [r.when] : []);
       if (!whens.length) continue;
+      if (whens.length === 1 && (whens[0]?.type || inferType(whens[0])) === 'none_match') continue;
+      const doAction = r.do === 'disconnect' ? 'disconnect' : 'connect';
       const isLegacyOR = r.match !== 'all' && whens.length > 1;
       const makeRule = (w) => ({
         _gid: ++ruleId,
-        match: 'all',
+        do: doAction,
         conds: [{
           _id: ++condId,
           type: w?.type || inferType(w),
@@ -152,14 +162,14 @@
         }],
       });
       if (isLegacyOR) {
-        for (const w of whens) g[d].push(makeRule(w));
+        for (const w of whens) out.push(makeRule(w));
       } else {
-        const rule = { _gid: ++ruleId, match: 'all', conds: [] };
+        const rule = { _gid: ++ruleId, do: doAction, conds: [] };
         for (const w of whens) rule.conds.push(makeRule(w).conds[0]);
-        g[d].push(rule);
+        out.push(rule);
       }
     }
-    return g;
+    return out;
   }
   // Infer the condition type of a rule that somehow lacks one (e.g. written
   // by an older tool or hand-edited). Keeps such rules intact on reload.
@@ -183,30 +193,70 @@
     };
   }
   // A new rule card carries one blank condition so the user can start
-  // editing immediately. No save() here: a blank draft is not a config
+  // editing immediately, and defaults to the connect action (one click on
+  // the badge flips it). No save() here: a blank draft is not a config
   // change — it becomes persistable on the first input that completes it.
-  function addRule(d) {
-    const rule = { _gid: ++ruleId, match: 'all', conds: [newCond()] };
-    groups = { ...groups, [d]: [...groups[d], rule] };
+  function addRule() {
+    const rule = { _gid: ++ruleId, do: 'connect', conds: [newCond()] };
+    rules = [...rules, rule];
   }
-  function removeRule(d, ruleIdx) {
-    groups = { ...groups, [d]: groups[d].filter((_, i) => i !== ruleIdx) };
+  function removeRule(ruleIdx) {
+    rules = rules.filter((_, i) => i !== ruleIdx);
     save();
   }
-  function addCond(d, ruleIdx) {
-    const rule = groups[d][ruleIdx];
+  function addCond(ruleIdx) {
+    const rule = rules[ruleIdx];
     if (rule.conds.length >= MAX_CONDS) return;
-    const nextRules = groups[d].map((r, i) => i === ruleIdx
+    const nextRules = rules.map((r, i) => i === ruleIdx
       ? { ...r, conds: [...r.conds, newCond()] }
       : r);
-    groups = { ...groups, [d]: nextRules };
+    rules = nextRules;
   }
-  function removeCond(d, ruleIdx, i) {
-    const nextRules = groups[d].map((r, idx) => idx === ruleIdx
+  function removeCond(ruleIdx, i) {
+    const nextRules = rules.map((r, idx) => idx === ruleIdx
       ? { ...r, conds: r.conds.filter((_, j) => j !== i) }
       : r);
-    groups = { ...groups, [d]: nextRules };
+    rules = nextRules;
     save();
+  }
+  // Toggle a rule's action between connect and disconnect.
+  function toggleRuleDo(rule) {
+    rule.do = rule.do === 'connect' ? 'disconnect' : 'connect';
+    rules = rules;
+    save();
+  }
+  // Set the tunnel's Default State (what it converges to when no rule
+  // matches). Persisted with the next save.
+  function setDefaultState(v) {
+    defaultState = v;
+    save();
+  }
+  // Rule-level drag & drop: reorder rules — position IS priority. Live
+  // reorder while dragging (same feel as condition rows); persisted by
+  // onRuleDragEnd's save().
+  let ruleDragIdx = null;
+  function onRuleDragStart(e, i) {
+    ruleDragIdx = i;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', 'rule:' + i); } catch (_) {}
+    const card = e.currentTarget.closest('.am-rule');
+    if (card) {
+      try { e.dataTransfer.setDragImage(card, 24, 20); } catch (_) {}
+    }
+  }
+  function onRuleDragOver(e, i) {
+    if (ruleDragIdx === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (ruleDragIdx === i) return;
+    const arr = [...rules];
+    const [moved] = arr.splice(ruleDragIdx, 1);
+    arr.splice(i, 0, moved);
+    rules = arr;
+    ruleDragIdx = i;
+  }
+  function onRuleDragEnd() {
+    if (ruleDragIdx !== null) { ruleDragIdx = null; save(); }
   }
   // Lightweight format validation for user feedback (see engine-safe
   // comment in the original editor).
@@ -219,14 +269,14 @@
   }
   function onMacChange(c) {
     c.gateway_mac = macCanon(c.gateway_mac);
-    groups = groups;
+    rules = rules;
     save();
   }
   // Toggle one weekday (0=Sunday … 6=Saturday) on a time condition row.
   function toggleDay(c, d) {
     const days = Array.isArray(c.days) ? c.days : [];
     c.days = days.includes(d) ? days.filter(x => x !== d) : [...days, d];
-    groups = groups;
+    rules = rules;
     save();
   }
   // Lightweight IPv4 check for user feedback; "" is allowed (incomplete).
@@ -250,35 +300,35 @@
     if (octets.some(o => o === '' || !/^\d+$/.test(o) || Number(o) > 255)) return true;
     return prefix < 0 || prefix > 32;
   }
-  // Drag-to-reorder WITHIN a rule card (live reordering feel).
+  // Drag-to-reorder WITHIN a rule card (live reordering feel). Kept
+  // separate from rule-level dragging (ruleDragIdx) so dragging a
+  // condition never reorders rules and vice versa.
   let dragIndex = null;
-  let dragGroup = null;
   let dragRule = null;
-  function onDragStart(e, d, ruleIdx, i) {
+  function onDragStart(e, ruleIdx, i) {
     dragIndex = i;
-    dragGroup = d;
     dragRule = ruleIdx;
     e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {}
+    try { e.dataTransfer.setData('text/plain', 'cond:' + i); } catch (_) {}
     const row = e.currentTarget.closest('.am-cond');
     if (row) {
       try { e.dataTransfer.setDragImage(row, 24, row.offsetHeight / 2); } catch (_) {}
     }
   }
-  function onCondDragOver(e, d, ruleIdx, i) {
-    if (dragIndex === null || dragGroup !== d || dragRule !== ruleIdx) return;
+  function onCondDragOver(e, ruleIdx, i) {
+    if (dragIndex === null || dragRule !== ruleIdx) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragIndex === i) return;
-    const arr = [...groups[d][ruleIdx].conds];
+    const arr = [...rules[ruleIdx].conds];
     const [moved] = arr.splice(dragIndex, 1);
     arr.splice(i, 0, moved);
-    const nextRules = groups[d].map((r, idx) => idx === ruleIdx ? { ...r, conds: arr } : r);
-    groups = { ...groups, [d]: nextRules };
+    const nextRules = rules.map((r, idx) => idx === ruleIdx ? { ...r, conds: arr } : r);
+    rules = nextRules;
     dragIndex = i;
   }
   function onDragEnd() {
-    if (dragIndex !== null) { dragIndex = null; dragGroup = null; dragRule = null; save(); }
+    if (dragIndex !== null) { dragIndex = null; dragRule = null; save(); }
   }
   // Scroll affordance for the rules area.
   let rulesEl;
@@ -291,10 +341,11 @@
   }
   afterUpdate(updateScroll);
   // cleanedCond returns the normalized persisted form of a condition row,
-  // or null while incomplete. wifi / ethernet / none_match need no value.
+  // or null while incomplete. wifi / ethernet need no value. (none_match
+  // is no longer creatable in this editor — the Default State control
+  // replaces the "otherwise" fallback.)
   function cleanedCond(c) {
     const t = c.type;
-    if (t === 'none_match') return { type: 'none_match', label: c.label || '' };
     if (t === 'wifi') return { type: 'wifi', label: c.label || '' };
     if (t === 'ethernet') return { type: 'ethernet', label: c.label || '' };
     if (t === 'ssid') return c.ssid.trim() !== '' ? { type: 'ssid', ssid: c.ssid.trim(), label: c.label || '' } : null;
@@ -309,20 +360,18 @@
     return null;
   }
   // buildRules assembles the persisted rule array — one entry per editor
-  // rule card. Disconnect is emitted BEFORE connect so that when both
-  // actions match the tunnel disconnects (safe default — avoids connecting
-  // on a network the user asked to avoid). A rule with no complete
+  // rule card, IN UI ORDER (position = priority; the first complete rule
+  // that matches the current network decides the outcome, so the user can
+  // interleave connect/disconnect rules freely). A rule with no complete
   // conditions contributes no entry.
   function buildRules() {
     const out = [];
-    for (const d of ['disconnect', 'connect']) {
-      for (const rule of groups[d]) {
-        const conds = rule.conds.map(cleanedCond).filter(Boolean);
-        if (!conds.length) continue;
-        const r = { when: conds, do: d };
-        if (rule.match === 'all') r.match = 'all';
-        out.push(r);
-      }
+    for (const rule of rules) {
+      const conds = rule.conds.map(cleanedCond).filter(Boolean);
+      if (!conds.length) continue;
+      const r = { when: conds, do: rule.do };
+      r.match = 'all';
+      out.push(r);
     }
     return out;
   }
@@ -331,7 +380,7 @@
   let pending = null;
   let saveChain = Promise.resolve();
   function save() {
-    pending = { name: tunnelName, rules: buildRules() };
+    pending = { name: tunnelName, rules: buildRules(), def: defaultState };
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(runSave, 300);
   }
@@ -342,8 +391,9 @@
   // CURRENT network — otherwise the user types a new SSID and stares at a
   // stale "no match" badge for up to 3 seconds.
   //
-  // We trigger via a reactive statement on a JSON fingerprint of both rule
-  // groups — that way EVERY change (new rule, removed rule, condition type
+  // We trigger via a reactive statement on a JSON fingerprint of the rule
+  // list + default state — that way EVERY change (new rule, removed rule,
+  // condition type
   // switch, text input blur/input, day toggles, drag reorder) naturally
   // invalidates the fingerprint without us having to sprinkle calls through
   // every handler.
@@ -364,9 +414,9 @@
     // and doubles as the fingerprint for "did the draft really change".
     // We only react once the draft for the CURRENT tunnel is loaded, so a
     // reopen never rates the previous tunnel's leftover cards.
-    const _touchD = JSON.stringify(groups.disconnect);
-    const _touchC = JSON.stringify(groups.connect);
-    void _touchD; void _touchC;
+    const _touchR = JSON.stringify(rules);
+    const _touchD = defaultState;
+    void _touchR; void _touchD;
     schedulePreviewRefresh();
   }
   // Re-rate the DRAFT (not the disk state) shortly after the user stops
@@ -398,7 +448,7 @@
   async function persist(snap) {
     saveError = '';
     try {
-      await TunnelService.SaveAutomationRules(snap.name, snap.rules);
+      await TunnelService.SaveAutomationRules(snap.name, snap.rules, snap.def);
       lastSavedFingerprint = JSON.stringify(normRules(snap.rules));
       // No refreshPreview() here: the live indicators rate the in-memory
       // DRAFT (via AutomationEvaluate), which a disk write does not change.
@@ -431,16 +481,15 @@
   }
   // ---- Live match indicators -------------------------------------------
   // Marker semantics (same engine the helper enforces):
-  //   - conditions inside one rule are AND; rules are alternatives with
-  //     first-match-wins priority, disconnect rules before connect rules;
+  //   - conditions inside one rule are AND; rules form ONE ordered list
+  //     evaluated top-to-bottom, first match wins;
   //   - per-condition "match" badge = that condition's own result, judged
   //     individually — a rule only fires when ALL its conditions match;
   //   - "in use" badge + winning frame = the FIRST matching rule overall
   //     only, and only when its action actually executes; rules that also
-  //     match but rank behind it (all connect rules behind a matched
-  //     disconnect rule, later rules of the same action) stay match-only;
-  //   - none_match ("otherwise") matches exactly when no rule above it
-  //     matched.
+  //     match but rank behind it stay match-only;
+  //   - when no rule matches, the tunnel converges to its Default State
+  //     (shown at the top of the dialog).
   // The GUI sends the editor's CURRENT DRAFT rules to AutomationEvaluate,
   // which rates them against the live network context with the same wifi
   // engine the helper enforces and returns per-rule / per-condition match
@@ -468,7 +517,7 @@
   async function refreshPreview() {
     if (!open || !tunnelName) return;
     // Only rate once the DRAFT for this tunnel is loaded. Right after a
-    // reopen (or tunnel switch) `groups` still holds the previous tunnel's
+    // reopen (or tunnel switch) `rules` still holds the previous tunnel's
     // cards; rating those and mapping the details back onto the new cards
     // is exactly what lit up the wrong frame / showed stale badges. The
     // load() completion and the draft-fingerprint reactive both call us
@@ -483,7 +532,8 @@
     // reactive fire a fresh rating — cards and details can never land from
     // two different drafts.
     const draft = buildRules();
-    const fingerprint = JSON.stringify(draft);
+    const myDefault = defaultState;
+    const fingerprint = JSON.stringify(draft) + '|' + myDefault;
     // Cancel any previous in-flight fetch: Wails calls that are already on
     // the wire don't have an HTTP abort, so for the AbortController guard
     // we still benefit from the epoch check below — no stale result ever
@@ -492,14 +542,14 @@
     if (previewAbort) { try { previewAbort.abort?.(); } catch (_) {} }
     previewAbort = new AbortController();
     try {
-      const pv = await AutomationEvaluate(myTunnel, draft);
+      const pv = await AutomationEvaluate(myTunnel, draft, myDefault);
       if (previewEpoch !== myEpoch) return;        // session changed
       if (tunnelName !== myTunnel) return;          // switched tunnel
       if (!open) return;
       // The draft was edited while this call was in flight: its details
-      // describe an older draft, so drop it. The groups reactive statement
+      // describe an older draft, so drop it. The rules reactive statement
       // will re-rate the current draft on its own debounce.
-      if (JSON.stringify(buildRules()) !== fingerprint) return;
+      if (JSON.stringify(buildRules()) + '|' + defaultState !== fingerprint) return;
       // AutomationEvaluate always returns exactly one tunnel entry for the
       // requested tunnel (even an empty rule set yields an explicit
       // "unmanaged" decision), so a missing entry means the call predates
@@ -532,9 +582,10 @@
       }
     }
   }
-  // Rules are evaluated top-to-bottom (disconnect before connect). The first
-  // matching rule decides the outcome. We expose this so the UI can highlight
-  // the winning rule and dim/shadow lower-priority rules that also match.
+  // Rules are evaluated top-to-bottom in list order; the first matching rule
+  // decides the outcome, and when nothing matches the tunnel converges to
+  // its Default State. We expose this so the UI can highlight the winning
+  // rule and dim lower-priority rules that also match.
   $: winningRuleIndex = (() => {
     const rules = preview?.rules || [];
     for (let i = 0; i < rules.length; i++) {
@@ -545,32 +596,32 @@
   // Build one marker snapshot from the same ordered draft/details pair used
   // by the backend. Keying condition markers by the editor row id avoids
   // stale deep lookups when Svelte updates nested bind:value fields.
+  // Preview RuleDetails align 1:1 with the PERSISTED draft rules (the ones
+  // buildRules emits) in list order, so a single running counter maps cards
+  // to details; draft (incomplete) cards are skipped when counting.
   $: markerSnapshot = (() => {
-  const result = { rules: {}, conditions: {} };
+    const result = { rules: {}, conditions: {} };
     const details = preview?.rules || [];
     let detailIndex = 0;
     let firstMatch = -1;
-    let globalIndex = 0;
-    for (const d of ['disconnect', 'connect']) {
-      for (let ruleIdx = 0; ruleIdx < (groups[d] || []).length; ruleIdx++) {
-        const rule = groups[d][ruleIdx];
-        const persisted = isPersistedRule(rule);
-        const rd = persisted ? details[detailIndex++] : null;
-        const ruleMatched = !!rd?.matched;
-        if (ruleMatched && firstMatch < 0) firstMatch = globalIndex;
-        const winning = ruleMatched && firstMatch === globalIndex;
-        result.rules[rule._gid] = winning && actionExecuted();
-        for (let i = 0; i < rule.conds.length; i++) {
-          const c = rule.conds[i];
-          const idx = condIndexInRule(rule, i);
-          const conditionMatched = !!rd?.conditions?.[idx]?.matched;
-          result.conditions[c._id] = {
-            match: conditionMatched,
-            active: conditionMatched && winning && actionExecuted(),
-            tunnelActive: conditionMatched && !!preview?.active,
-          };
-        }
-        if (persisted) globalIndex++;
+    for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
+      const rule = rules[ruleIdx];
+      const persisted = isPersistedRule(rule);
+      const rd = persisted ? details[detailIndex++] : null;
+      const globalIndex = detailIndex - 1;
+      const ruleMatched = !!rd?.matched;
+      if (ruleMatched && firstMatch < 0) firstMatch = globalIndex;
+      const winning = ruleMatched && firstMatch === globalIndex;
+      result.rules[rule._gid] = winning && actionExecuted();
+      for (let i = 0; i < rule.conds.length; i++) {
+        const c = rule.conds[i];
+        const idx = condIndexInRule(rule, i);
+        const conditionMatched = !!rd?.conditions?.[idx]?.matched;
+        result.conditions[c._id] = {
+          match: conditionMatched,
+          active: conditionMatched && winning && actionExecuted(),
+          tunnelActive: conditionMatched && !!preview?.active,
+        };
       }
     }
     return result;
@@ -582,15 +633,8 @@
     const k = decisionKey();
     return k === 'connect' || k === 'disconnect';
   }
-  // A group "wins" only when the final decision belongs to that action.
-  function groupWon(d) {
-    if (!actionExecuted()) return false;
-    const win = winningRuleIndex >= 0 ? preview.rules[winningRuleIndex] : null;
-    return win && win.do === d;
-  }
-  // Rule matching is order-based: rules are alternatives with first-match-
-  // wins priority (all disconnect rules before all connect rules). A rule is
-  // the winner iff it is the first matching rule of the whole list.
+  // Rule matching is order-based: the first matching rule of the whole
+  // list wins.
   function isWinningRule(rd) {
     if (!rd || !rd.matched || winningRuleIndex < 0) return false;
     const globalIdx = (preview?.rules || []).findIndex(r => r === rd);
@@ -598,36 +642,25 @@
   }
   // "In use" = this rule's action is what the engine executes right now:
   // it must be the first matching rule AND that action must actually run.
-  // Later rules that also match — including every connect rule behind a
-  // matched disconnect rule — are deprioritized: match-only, never used.
-  function ruleWon(d, ruleIdx) {
-    return actionExecuted() && isWinningRule(ruleDetailFor(d, ruleIdx));
+  // Later rules that also match are deprioritized: match-only, never used.
+  function ruleWon(ruleIdx) {
+    return actionExecuted() && isWinningRule(ruleDetailFor(ruleIdx));
   }
-  // "Otherwise" (none_match) judgment is independent of execution: it
-  // matches exactly when no rule ABOVE it matched, i.e. its rule is the
-  // first match — even if a manual-off latch then suppresses the action.
-  function otherwiseHit(d, ruleIdx) {
-    return isWinningRule(ruleDetailFor(d, ruleIdx));
-  }
-  // Preview rules keep the persisted order (disconnect first), so the k-th
-  // PERSISTED editor rule card under an action maps to the k-th preview
-  // RuleDetail of that action. Draft rules — cards whose conditions are
-  // incomplete and therefore not persisted — have no detail and must be
-  // SKIPPED when counting; mapping naively by card index would shift every
-  // card after a draft onto the wrong detail and light up the wrong rule
-  // frame even though the engine's decision is correct.
-  function ruleDetailsFor(d) {
-    return (preview?.rules || []).filter(r => r.do === d);
-  }
+  // Preview RuleDetails keep the persisted draft order, so the k-th
+  // PERSISTED editor rule card maps to the k-th preview RuleDetail. Draft
+  // rules — cards whose conditions are incomplete and therefore not
+  // persisted — have no detail and must be SKIPPED when counting; mapping
+  // naively by card index would shift every card after a draft onto the
+  // wrong detail and light up the wrong rule frame even though the
+  // engine's decision is correct.
   function isPersistedRule(rule) {
     return rule.conds.map(cleanedCond).filter(Boolean).length > 0;
   }
-  function ruleDetailFor(d, ruleIdx) {
-    const details = ruleDetailsFor(d);
-    const grp = groups[d] || [];
-    let k = 0; // index among this action's persisted rules
-    for (let i = 0; i < grp.length; i++) {
-      if (!isPersistedRule(grp[i])) continue;
+  function ruleDetailFor(ruleIdx) {
+    const details = preview?.rules || [];
+    let k = 0; // index among persisted rules
+    for (let i = 0; i < rules.length; i++) {
+      if (!isPersistedRule(rules[i])) continue;
       if (i === ruleIdx) return details[k] || null;
       k++;
     }
@@ -644,17 +677,13 @@
     }
     return -1;
   }
-  // Whether this condition row actually matches the current network. For
-  // concrete conditions we use the backend per-condition result (each row
-  // is judged individually even when the AND rule as a whole does not
-  // match); for the "otherwise" fallback the match judgment is "no rule
-  // above mine matched", independent of whether the action then executes.
-  function condNetworkMatched(d, ruleIdx, i) {
-    const c = groups[d][ruleIdx].conds[i];
-    if (c.type === 'none_match') return otherwiseHit(d, ruleIdx);
-    const rd = ruleDetailFor(d, ruleIdx);
+  // Whether this condition row actually matches the current network,
+  // taken from the backend per-condition result (each row is judged
+  // individually even when the AND rule as a whole does not match).
+  function condNetworkMatched(ruleIdx, i) {
+    const rd = ruleDetailFor(ruleIdx);
     if (!rd) return false;
-    const idx = condIndexInRule(groups[d][ruleIdx], i);
+    const idx = condIndexInRule(rules[ruleIdx], i);
     if (idx < 0) return false;
     return !!rd.conditions?.[idx]?.matched;
   }
@@ -722,12 +751,10 @@
   }
   function conditionMatchCount(type) {
     let count = 0;
-    for (const d of ['disconnect', 'connect']) {
-      for (let ruleIdx = 0; ruleIdx < (groups[d] || []).length; ruleIdx++) {
-        const rule = groups[d][ruleIdx];
-        for (let i = 0; i < rule.conds.length; i++) {
-          if (rule.conds[i].type === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
-        }
+    for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
+      const rule = rules[ruleIdx];
+      for (let i = 0; i < rule.conds.length; i++) {
+        if (rule.conds[i].type === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
       }
     }
     return count;
@@ -777,138 +804,147 @@
           {/each}
         </div>
       </details>
+      <div class="am-default-state">
+        <span class="am-default-label">{$t('automation.default_state')}</span>
+        <div class="am-default-opts" role="radiogroup" aria-label={$t('automation.default_state')}>
+          <button type="button" role="radio" class="am-default-opt am-default-opt-connect" class:on={defaultState === 'connect'}
+            aria-checked={defaultState === 'connect'} on:click={() => setDefaultState('connect')}>{$t('automation.action_connect')}</button>
+          <button type="button" role="radio" class="am-default-opt am-default-opt-disconnect" class:on={defaultState === 'disconnect'}
+            aria-checked={defaultState === 'disconnect'} on:click={() => setDefaultState('disconnect')}>{$t('automation.action_disconnect')}</button>
+        </div>
+        <span class="am-default-hint">{$t('automation.default_when_no_match', { state: $t(defaultState === 'connect' ? 'automation.action_connect' : 'automation.action_disconnect') })}</span>
+      </div>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
           <span class="am-chevron am-chevron-up"><Icon name="chevron-down" size={15} strokeWidth={2.5} /></span>
         </div>
         <div class="am-rules" bind:this={rulesEl} on:scroll={updateScroll}>
-          {#each ['disconnect', 'connect'] as d}
-            {@const grpRules = groups[d]}
-            <div class="am-group">
-              <div class="am-group-header">
-                <span class="am-group-dot am-group-dot-{d}" class:am-group-matched={groupWon(d)}></span>
-                <span class="am-group-title">{$t(d === 'connect' ? 'automation.section_connect' : 'automation.section_disconnect')}</span>
-                <button class="am-add-rule" on:click={() => addRule(d)}>
-                  <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_rule')}
-                </button>
-              </div>
-              {#if grpRules.length === 0}
-                <div class="am-empty am-group-empty">{$t(d === 'connect' ? 'automation.empty_connect' : 'automation.empty_disconnect')}</div>
-              {:else}
-                {#each grpRules as rule, ruleIdx (rule._gid)}
-                  {#if ruleIdx > 0}
-                    <div class="am-rule-or">{$t('automation.rule_or')}</div>
-                  {/if}
-                  <div class="am-rule" class:am-rule-won={markerSnapshot.rules[rule._gid] === true}>
-                    <div class="am-rule-head">
-                      <span class="am-rule-num">{$t('automation.rule')} {ruleIdx + 1}</span>
-                      <span class="am-match-badge" title={$t('automation.group_all_hint')}>{$t('automation.match_all')}</span>
-                      <button class="am-remove-rule" on:click={() => removeRule(d, ruleIdx)} title={$t('automation.remove_rule')} aria-label="remove rule"><Icon name="x" size={13} strokeWidth={2} /></button>
-                    </div>
-                    {#if rule.conds.length === 0}
-                      <div class="am-empty am-rule-empty">{$t('automation.rule_empty')}</div>
-                    {:else}
-                      {#each rule.conds as c, i (c._id)}
-                        {@const marker = markerSnapshot.conditions[c._id] || { match: false, active: false }}
-                        {@const net = marker.match}
-                        {@const use = marker.active}
-                        {@const tunnelActive = marker.tunnelActive}
-                        <div class="am-cond" class:am-dragging={dragIndex === i && dragGroup === d && dragRule === ruleIdx}
-                          on:dragover={(e) => onCondDragOver(e, d, ruleIdx, i)}
-                          on:dragend={onDragEnd}>
-                          <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
-                            on:dragstart={(e) => onDragStart(e, d, ruleIdx, i)}>⋮⋮</span>
-                            <select class="am-type" bind:value={c.type} on:change={() => { save(); schedulePreviewRefresh(); }} aria-label={$t('automation.condition')}>
-                            <option value="network">{$t('automation.cond_network')}</option>
-                            <option value="subnet">{$t('automation.cond_subnet')}</option>
-                            <option value="ssid">{$t('automation.cond_ssid')}</option>
-                            <option value="wifi">{$t('automation.cond_wifi')}</option>
-                            <option value="gateway_ip">{$t('automation.cond_gateway_ip')}</option>
-                            <option value="interface">{$t('automation.cond_interface')}</option>
-                            <option value="ethernet">{$t('automation.cond_ethernet')}</option>
-                            <option value="time">{$t('automation.cond_time')}</option>
-                            <option value="none_match">{$t('automation.cond_none')}</option>
-                          </select>
-                          {#if c.type === 'network'}
-                            <input
-                              class="am-val" class:am-invalid={macInvalid(c.gateway_mac)}
-                              list="am-mac-list"
-                              placeholder={currentGatewayMAC || $t('automation.mac_placeholder')}
-                              title={macInvalid(c.gateway_mac) ? $t('automation.mac_invalid') : ''}
-                              bind:value={c.gateway_mac}
-                              on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { onMacChange(c); schedulePreviewRefresh(); }} />
-                          {:else if c.type === 'subnet'}
-                            <input
-                              class="am-val" class:am-invalid={cidrInvalid(c.subnet)}
-                              list="am-subnet-list"
-                              placeholder={currentSubnets[0] || '192.168.0.0/24'}
-                              title={cidrInvalid(c.subnet) ? $t('automation.subnet_invalid') : ''}
-                              bind:value={c.subnet}
-                              on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { save(); schedulePreviewRefresh(); }} />
-                          {:else if c.type === 'ssid'}
-                            <input
-                              class="am-val"
-                              list="am-ssid-list"
-                              placeholder={$t('automation.ssid_select_hint')}
-                              bind:value={c.ssid}
-                              on:input={() => { save(); schedulePreviewRefresh(); }}
-                              on:change={() => { save(); schedulePreviewRefresh(); }}
-                            />
-                          {:else if c.type === 'gateway_ip'}
-                            <input
-                              class="am-val" class:am-invalid={gatewayIPInvalid(c.gateway_ip)}
-                              list="am-gwip-list"
-                              placeholder={preview?.gateway_ip || '192.168.0.1'}
-                              title={gatewayIPInvalid(c.gateway_ip) ? $t('automation.ip_invalid') : ''}
-                              bind:value={c.gateway_ip}
-                              on:input={() => { save(); schedulePreviewRefresh(); }}
-                              on:change={() => { save(); schedulePreviewRefresh(); }}
-                            />
-                          {:else if c.type === 'interface'}
-                            <input
-                              class="am-val"
-                              list="am-iface-list"
-                              placeholder={$t('automation.interface_placeholder')}
-                              bind:value={c.interface_name}
-                              on:input={() => { save(); schedulePreviewRefresh(); }}
-                              on:change={() => { save(); schedulePreviewRefresh(); }}
-                            />
-                          {:else if c.type === 'ethernet'}
-                            <span class="am-val am-val-none">{$t('automation.cond_ethernet_desc')}</span>
-                          {:else if c.type === 'time'}
-                            <div class="am-time">
-                              <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={() => { save(); schedulePreviewRefresh(); }} />
-                              <span class="am-time-dash">–</span>
-                              <input type="time" class="am-clock" aria-label={$t('automation.time_end')} bind:value={c.end} on:change={() => { save(); schedulePreviewRefresh(); }} />
-                              <div class="am-days" role="group" aria-label={$t('automation.days_label')}>
-                                {#each [0, 1, 2, 3, 4, 5, 6] as d}
-                                  <button type="button" class="am-day" class:on={(c.days || []).includes(d)} on:click={() => toggleDay(c, d)}>{$t('automation.day_' + d)}</button>
-                                {/each}
-                              </div>
-                            </div>
-                          {:else}
-                            <span class="am-val am-val-none">{c.type === 'wifi' ? $t('automation.cond_wifi_desc') : $t('automation.cond_none_desc')}</span>
-                          {/if}
-                          <span
-                            class="am-live-cond"
-                            title={net ? (use ? $t('automation.status_active') : $t('automation.status_shadowed')) : $t('automation.status_nomatch')}>
-                            <span class="am-badge am-badge-match" class:am-yes={net} class:am-no={!net}>{$t(net ? 'automation.label_match' : 'automation.label_no_match')}</span>
-                            <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_in_use' : 'automation.label_not_in_use')}</span>
-                            <span class="am-badge am-badge-active" class:am-yes={tunnelActive} class:am-no={!tunnelActive}>{$t(tunnelActive ? 'automation.label_active' : 'automation.label_inactive')}</span>
-                          </span>
-                          <button class="am-remove" on:click={() => removeCond(d, ruleIdx, i)} aria-label="remove condition"><Icon name="x" size={12} strokeWidth={2} /></button>
-                        </div>
-                      {/each}
-                    {/if}
-                    <button class="am-add-cond" on:click={() => addCond(d, ruleIdx)} disabled={rule.conds.length >= MAX_CONDS}>
-                      <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_condition')}
-                    </button>
-                  </div>
-                {/each}
-              {/if}
+          <div class="am-group">
+            <div class="am-group-header">
+              <span class="am-group-title">{$t('automation.rules_title')}</span>
+              <button class="am-add-rule" on:click={addRule}>
+                <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_rule')}
+              </button>
             </div>
-          {/each}
-          <p class="am-priority-note">{$t('automation.disconnect_priority_hint')}</p>
+            {#if rules.length === 0}
+              <div class="am-empty am-group-empty">{$t('automation.empty_rules')}</div>
+            {:else}
+              {#each rules as rule, ruleIdx (rule._gid)}
+                <div class="am-rule" class:am-rule-won={markerSnapshot.rules[rule._gid] === true}
+                  class:am-rule-dragging={ruleDragIdx === ruleIdx}
+                  on:dragover={(e) => onRuleDragOver(e, ruleIdx)}
+                  on:dragend={onRuleDragEnd}>
+                  <div class="am-rule-head">
+                    <span class="am-handle am-rule-handle" draggable="true" title={$t('automation.rule_drag_hint')}
+                      on:dragstart={(e) => onRuleDragStart(e, ruleIdx)}>⋮⋮</span>
+                    <span class="am-rule-num">{$t('automation.rule')} {ruleIdx + 1}</span>
+                    <button type="button" class="am-do-badge am-do-{rule.do}" on:click={() => toggleRuleDo(rule)}
+                      title={$t('automation.action_toggle_hint')}>{$t(rule.do === 'connect' ? 'automation.action_connect' : 'automation.action_disconnect')}</button>
+                    <span class="am-match-badge" title={$t('automation.group_all_hint')}>{$t('automation.match_all')}</span>
+                    <button class="am-remove-rule" on:click={() => removeRule(ruleIdx)} title={$t('automation.remove_rule')} aria-label="remove rule"><Icon name="x" size={13} strokeWidth={2} /></button>
+                  </div>
+                  {#if rule.conds.length === 0}
+                    <div class="am-empty am-rule-empty">{$t('automation.rule_empty')}</div>
+                  {:else}
+                    {#each rule.conds as c, i (c._id)}
+                      {@const marker = markerSnapshot.conditions[c._id] || { match: false, active: false }}
+                      {@const net = marker.match}
+                      {@const use = marker.active}
+                      {@const tunnelActive = marker.tunnelActive}
+                      <div class="am-cond" class:am-dragging={dragIndex === i && dragRule === ruleIdx}
+                        on:dragover={(e) => onCondDragOver(e, ruleIdx, i)}
+                        on:dragend={onDragEnd}>
+                        <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
+                          on:dragstart={(e) => onDragStart(e, ruleIdx, i)}>⋮⋮</span>
+                          <select class="am-type" bind:value={c.type} on:change={() => { save(); schedulePreviewRefresh(); }} aria-label={$t('automation.condition')}>
+                          <option value="network">{$t('automation.cond_network')}</option>
+                          <option value="subnet">{$t('automation.cond_subnet')}</option>
+                          <option value="ssid">{$t('automation.cond_ssid')}</option>
+                          <option value="wifi">{$t('automation.cond_wifi')}</option>
+                          <option value="gateway_ip">{$t('automation.cond_gateway_ip')}</option>
+                          <option value="interface">{$t('automation.cond_interface')}</option>
+                          <option value="ethernet">{$t('automation.cond_ethernet')}</option>
+                          <option value="time">{$t('automation.cond_time')}</option>
+                        </select>
+                        {#if c.type === 'network'}
+                          <input
+                            class="am-val" class:am-invalid={macInvalid(c.gateway_mac)}
+                            list="am-mac-list"
+                            placeholder={currentGatewayMAC || $t('automation.mac_placeholder')}
+                            title={macInvalid(c.gateway_mac) ? $t('automation.mac_invalid') : ''}
+                            bind:value={c.gateway_mac}
+                            on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { onMacChange(c); schedulePreviewRefresh(); }} />
+                        {:else if c.type === 'subnet'}
+                          <input
+                            class="am-val" class:am-invalid={cidrInvalid(c.subnet)}
+                            list="am-subnet-list"
+                            placeholder={currentSubnets[0] || '192.168.0.0/24'}
+                            title={cidrInvalid(c.subnet) ? $t('automation.subnet_invalid') : ''}
+                            bind:value={c.subnet}
+                            on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { save(); schedulePreviewRefresh(); }} />
+                        {:else if c.type === 'ssid'}
+                          <input
+                            class="am-val"
+                            list="am-ssid-list"
+                            placeholder={$t('automation.ssid_select_hint')}
+                            bind:value={c.ssid}
+                            on:input={() => { save(); schedulePreviewRefresh(); }}
+                            on:change={() => { save(); schedulePreviewRefresh(); }}
+                          />
+                        {:else if c.type === 'gateway_ip'}
+                          <input
+                            class="am-val" class:am-invalid={gatewayIPInvalid(c.gateway_ip)}
+                            list="am-gwip-list"
+                            placeholder={preview?.gateway_ip || '192.168.0.1'}
+                            title={gatewayIPInvalid(c.gateway_ip) ? $t('automation.ip_invalid') : ''}
+                            bind:value={c.gateway_ip}
+                            on:input={() => { save(); schedulePreviewRefresh(); }}
+                            on:change={() => { save(); schedulePreviewRefresh(); }}
+                          />
+                        {:else if c.type === 'interface'}
+                          <input
+                            class="am-val"
+                            list="am-iface-list"
+                            placeholder={$t('automation.interface_placeholder')}
+                            bind:value={c.interface_name}
+                            on:input={() => { save(); schedulePreviewRefresh(); }}
+                            on:change={() => { save(); schedulePreviewRefresh(); }}
+                          />
+                        {:else if c.type === 'ethernet'}
+                          <span class="am-val am-val-none">{$t('automation.cond_ethernet_desc')}</span>
+                        {:else if c.type === 'time'}
+                          <div class="am-time">
+                            <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={() => { save(); schedulePreviewRefresh(); }} />
+                            <span class="am-time-dash">–</span>
+                            <input type="time" class="am-clock" aria-label={$t('automation.time_end')} bind:value={c.end} on:change={() => { save(); schedulePreviewRefresh(); }} />
+                            <div class="am-days" role="group" aria-label={$t('automation.days_label')}>
+                              {#each [0, 1, 2, 3, 4, 5, 6] as d}
+                                <button type="button" class="am-day" class:on={(c.days || []).includes(d)} on:click={() => toggleDay(c, d)}>{$t('automation.day_' + d)}</button>
+                              {/each}
+                            </div>
+                          </div>
+                        {:else}
+                          <span class="am-val am-val-none">{c.type === 'wifi' ? $t('automation.cond_wifi_desc') : ''}</span>
+                        {/if}
+                        <span
+                          class="am-live-cond"
+                          title={net ? (use ? $t('automation.status_active') : $t('automation.status_shadowed')) : $t('automation.status_nomatch')}>
+                          <span class="am-badge am-badge-match" class:am-yes={net} class:am-no={!net}>{$t(net ? 'automation.label_match' : 'automation.label_no_match')}</span>
+                          <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_in_use' : 'automation.label_not_in_use')}</span>
+                          <span class="am-badge am-badge-active" class:am-yes={tunnelActive} class:am-no={!tunnelActive}>{$t(tunnelActive ? 'automation.label_active' : 'automation.label_inactive')}</span>
+                        </span>
+                        <button class="am-remove" on:click={() => removeCond(ruleIdx, i)} aria-label="remove condition"><Icon name="x" size={12} strokeWidth={2} /></button>
+                      </div>
+                    {/each}
+                  {/if}
+                  <button class="am-add-cond" on:click={() => addCond(ruleIdx)} disabled={rule.conds.length >= MAX_CONDS}>
+                    <Icon name="plus" size={12} strokeWidth={2.25} /> {$t('automation.add_condition')}
+                  </button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+          <p class="am-priority-note">{$t('automation.priority_note')}</p>
         </div>
         <div class="am-fade am-fade-bottom" class:show={canScrollDown}>
           <span class="am-chevron"><Icon name="chevron-down" size={15} strokeWidth={2.5} /></span>
@@ -1081,6 +1117,32 @@
   }
   .am-remove-rule { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0; }
   .am-remove-rule:hover { background: color-mix(in srgb, var(--red, #ff3b30) 18%, transparent); color: var(--red, #ff3b30); }
+  /* Default State control (no-rule-match fallback state) */
+  .am-default-state {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 8px 0 0; padding: 7px 10px;
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .am-default-label { font: 600 11px/1.3 var(--font-sans); color: var(--text-primary); flex-shrink: 0; }
+  .am-default-opts { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-shrink: 0; }
+  .am-default-opt {
+    font: 500 11px/1 var(--font-sans); color: var(--text-secondary);
+    background: transparent; border: 0; padding: 5px 10px; cursor: pointer;
+  }
+  .am-default-opt + .am-default-opt { border-left: 1px solid var(--border); }
+  .am-default-opt-connect.on { background: color-mix(in srgb, var(--green, #34c759) 22%, transparent); color: var(--green, #34c759); font-weight: 600; }
+  .am-default-opt-disconnect.on { background: color-mix(in srgb, var(--orange, #ff9f0a) 22%, transparent); color: var(--orange, #ff9f0a); font-weight: 600; }
+  .am-default-hint { font: 400 10px/1.3 var(--font-sans); color: var(--text-muted); margin-left: auto; text-align: right; }
+  /* Rule-level drag affordances */
+  .am-rule-handle { flex-shrink: 0; cursor: grab; }
+  .am-rule-dragging { opacity: 0.55; }
+  .am-do-badge {
+    flex-shrink: 0; font: 600 10px/1 var(--font-sans);
+    padding: 4px 9px; border-radius: 7px; cursor: pointer; border: 1px solid var(--border);
+  }
+  .am-do-connect { color: var(--green, #34c759); background: color-mix(in srgb, var(--green, #34c759) 12%, transparent); }
+  .am-do-disconnect { color: var(--orange, #ff9f0a); background: color-mix(in srgb, var(--orange, #ff9f0a) 12%, transparent); }
   .am-rule-or {
     text-align: center; font: 600 10px/1 var(--font-sans); color: var(--text-muted);
     letter-spacing: 0.08em; margin: 0; flex-shrink: 0;

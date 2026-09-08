@@ -664,3 +664,112 @@ func TestValidateRule_NewConditions(t *testing.T) {
 		}
 	}
 }
+
+// --- Default State + Ordered Rules policy model ---
+
+func TestEvaluatePolicy_DefaultFallback(t *testing.T) {
+	office := singleCond(Condition{Type: CondSSID, SSID: "office"}, ActionConnect)
+	// No rules at all → unmanaged regardless of default (no policy = no touch).
+	if got := EvaluatePolicy(nil, ActionConnect, NetworkContext{SSID: "x"}); got != StateUnmanaged {
+		t.Errorf("no rules + default connect: got %v, want unmanaged", got)
+	}
+	// Rules present, one matched → rule wins over default.
+	if got := EvaluatePolicy([]Rule{office}, ActionDisconnect, NetworkContext{SSID: "office"}); got != StateConnect {
+		t.Errorf("rule matched: got %v, want connect", got)
+	}
+	// Rules present, nothing matched → default state.
+	if got := EvaluatePolicy([]Rule{office}, ActionDisconnect, NetworkContext{SSID: "home"}); got != StateDisconnect {
+		t.Errorf("no match + default disconnect: got %v, want disconnect", got)
+	}
+	if got := EvaluatePolicy([]Rule{office}, ActionConnect, NetworkContext{SSID: "home"}); got != StateConnect {
+		t.Errorf("no match + default connect: got %v, want connect", got)
+	}
+	// Empty/unknown default fails closed to unmanaged.
+	if got := EvaluatePolicy([]Rule{office}, Action(""), NetworkContext{SSID: "home"}); got != StateUnmanaged {
+		t.Errorf("no match + empty default: got %v, want unmanaged", got)
+	}
+	if got := EvaluatePolicy([]Rule{office}, Action("bogus"), NetworkContext{SSID: "home"}); got != StateUnmanaged {
+		t.Errorf("no match + unknown default: got %v, want unmanaged", got)
+	}
+}
+
+func TestEvaluatePolicyDetail_DefaultFallback(t *testing.T) {
+	office := singleCond(Condition{Type: CondSSID, SSID: "office"}, ActionConnect)
+	state, details := EvaluatePolicyDetail([]Rule{office}, ActionDisconnect, NetworkContext{SSID: "home"})
+	if state != StateDisconnect {
+		t.Errorf("no match + default disconnect: got %v, want disconnect", state)
+	}
+	if len(details) != 1 || details[0].Matched {
+		t.Errorf("details should report the single unmatched rule, got %+v", details)
+	}
+}
+
+func TestAutomationNormalize_NoneMatchToDefault(t *testing.T) {
+	a := DefaultAutomation()
+	a.PerTunnel["work"] = []Rule{
+		singleCond(Condition{Type: CondSSID, SSID: "office"}, ActionDisconnect),
+		{When: []Condition{{Type: CondNoneMatch}}, Do: ActionConnect},
+		singleCond(Condition{Type: CondSSID, SSID: "never-reachable"}, ActionDisconnect),
+	}
+	// No none_match, rules present → conservative disconnect default.
+	a.PerTunnel["home"] = []Rule{singleCond(Condition{Type: CondSSID, SSID: "home"}, ActionConnect)}
+	// No rules → untouched.
+	a.PerTunnel["empty"] = nil
+	// Explicit default must never be overwritten.
+	a.Defaults["explicit"] = ActionConnect
+	a.PerTunnel["explicit"] = []Rule{singleCond(Condition{Type: CondSSID, SSID: "x"}, ActionConnect)}
+
+	a.Normalize()
+
+	if got := a.Defaults["work"]; got != ActionConnect {
+		t.Errorf("work default: got %q, want connect (from first none_match)", got)
+	}
+	if rules := a.PerTunnel["work"]; len(rules) != 1 {
+		t.Errorf("work rules: got %d, want 1 (none_match and everything after removed)", len(rules))
+	}
+	if got := a.Defaults["home"]; got != ActionDisconnect {
+		t.Errorf("home default: got %q, want disconnect (conservative fill)", got)
+	}
+	if _, ok := a.Defaults["empty"]; ok {
+		t.Error("empty tunnel should not gain a default")
+	}
+	if got := a.Defaults["explicit"]; got != ActionConnect {
+		t.Errorf("explicit default overwritten: got %q, want connect", got)
+	}
+
+	// Idempotent: a second Normalize is a no-op.
+	before := len(a.PerTunnel["work"])
+	a.Normalize()
+	if len(a.PerTunnel["work"]) != before || a.Defaults["work"] != ActionConnect {
+		t.Error("Normalize is not idempotent")
+	}
+
+	// The migrated policy evaluates to the migrated default on no-match.
+	if got := EvaluatePolicy(a.PerTunnel["work"], a.Defaults["work"], NetworkContext{SSID: "cafe"}); got != StateConnect {
+		t.Errorf("migrated work policy on no-match: got %v, want connect", got)
+	}
+}
+
+func TestAutomationNormalize_TruncatesAfterFirstNoneMatch(t *testing.T) {
+	// A malformed none_match (unknown action) never fires (fail closed) and
+	// must not be used as the default; the first VALID none_match supplies
+	// the default. The malformed rule is inert but retained — Normalize
+	// never silently drops user data it cannot interpret.
+	a := DefaultAutomation()
+	a.PerTunnel["x"] = []Rule{
+		{When: []Condition{{Type: CondNoneMatch}}, Do: Action("bogus")},
+		{When: []Condition{{Type: CondNoneMatch}}, Do: ActionDisconnect},
+	}
+	a.Normalize()
+	if got := a.Defaults["x"]; got != ActionDisconnect {
+		t.Errorf("x default: got %q, want disconnect", got)
+	}
+	if rules := a.PerTunnel["x"]; len(rules) != 1 {
+		t.Errorf("x rules: got %d, want 1 (valid none_match removed; malformed one kept, it never fires)", len(rules))
+	}
+	// The retained malformed rule cannot change the outcome: the policy
+	// still converges to the default on every context.
+	if got := EvaluatePolicy(a.PerTunnel["x"], a.Defaults["x"], NetworkContext{SSID: "any"}); got != StateDisconnect {
+		t.Errorf("x policy: got %v, want disconnect", got)
+	}
+}

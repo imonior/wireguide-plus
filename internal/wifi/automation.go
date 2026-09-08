@@ -21,6 +21,12 @@ import (
 // AutoConnectSSIDs) still exist for migration. MigrateFromLegacy builds
 // an equivalent Automation from a legacy Rules value.
 type Automation struct {
+	// Defaults maps a tunnel name to the state its policy converges to
+	// when NO rule matches ("connect" / "disconnect"). Written by the
+	// none_match migration (see Normalize) and by the editor's Default
+	// State control. A missing entry (or a tunnel with no rules) means
+	// the engine never touches the tunnel on a no-match evaluation.
+	Defaults map[string]Action `json:"default_state,omitempty"`
 	// PerTunnel maps a tunnel name to its ordered rule list.
 	PerTunnel map[string][]Rule `json:"per_tunnel_rules"`
 }
@@ -158,10 +164,13 @@ type NetworkContext struct {
 	Now time.Time
 }
 
-// DefaultAutomation returns an empty Automation with the map initialised
+// DefaultAutomation returns an empty Automation with the maps initialised
 // so JSON marshals to {} rather than null.
 func DefaultAutomation() *Automation {
-	return &Automation{PerTunnel: make(map[string][]Rule)}
+	return &Automation{
+		Defaults:  make(map[string]Action),
+		PerTunnel: make(map[string][]Rule),
+	}
 }
 
 // DesiredState is the outcome of evaluating one tunnel's rules.
@@ -217,6 +226,99 @@ func Evaluate(rules []Rule, ctx NetworkContext) DesiredState {
 		}
 	}
 	return state
+}
+
+// EvaluatePolicy is the CONTROL entry point for the Default State +
+// Ordered Rules policy model. It evaluates the ordered rule list (first
+// match wins, see Evaluate) and, when NO rule matched but the tunnel HAS
+// rules, converges to the tunnel's Default State instead of leaving it
+// unmanaged:
+//
+//   - no rules at all → Unmanaged (no policy = automation never touches
+//     the tunnel, matching pre-default-state behaviour);
+//   - rules present, one matched → that rule's action;
+//   - rules present, nothing matched → def (ActionConnect /
+//     ActionDisconnect); an empty/unknown def fails closed as Unmanaged.
+//
+// `def` is the tunnel's entry in Automation.Defaults.
+func EvaluatePolicy(rules []Rule, def Action, ctx NetworkContext) DesiredState {
+	state := Evaluate(rules, ctx)
+	if state == StateUnmanaged && len(rules) > 0 {
+		switch def {
+		case ActionConnect:
+			return StateConnect
+		case ActionDisconnect:
+			return StateDisconnect
+		}
+	}
+	return state
+}
+
+// EvaluatePolicyDetail is the MARKING counterpart of EvaluatePolicy for
+// the editor's live preview: same rule-by-rule reporting as
+// EvaluateDetail, with the no-match outcome resolved through the tunnel's
+// Default State.
+func EvaluatePolicyDetail(rules []Rule, def Action, ctx NetworkContext) (DesiredState, []RuleDetail) {
+	state, details := EvaluateDetail(rules, ctx)
+	if state == StateUnmanaged && len(rules) > 0 {
+		switch def {
+		case ActionConnect:
+			return StateConnect, details
+		case ActionDisconnect:
+			return StateDisconnect, details
+		}
+	}
+	return state, details
+}
+
+// Normalize migrates stored rule sets into the Default State model, in
+// place and idempotently:
+//
+//   - The first none_match ("Otherwise") rule in a tunnel's list marks the
+//     point where every later rule was unreachable under the old
+//     first-match engine (none_match matched unconditionally). Its action
+//     becomes the tunnel's Default State, it and everything after it are
+//     removed.
+//   - A tunnel with rules but no none_match and no explicit default gets
+//     Default State = disconnect (the conservative "off unless told
+//     otherwise" reading; old no-match behaviour was Unmanaged).
+//   - Tunnels with no rules are left alone: no rules = no policy = the
+//     engine never touches them.
+//
+// Existing explicit Defaults entries are never overwritten.
+func (a *Automation) Normalize() {
+	if a == nil {
+		return
+	}
+	if a.Defaults == nil {
+		a.Defaults = make(map[string]Action)
+	}
+	for name, rules := range a.PerTunnel {
+		if len(rules) == 0 {
+			continue
+		}
+		cut, def := len(rules), Action("")
+		for i, r := range rules {
+			if r.Validate() != nil {
+				continue
+			}
+			if len(r.When) == 1 && r.When[0].Type == CondNoneMatch {
+				def = r.Do
+				cut = i
+				break
+			}
+		}
+		if cut < len(rules) {
+			rules = rules[:cut]
+			a.PerTunnel[name] = rules
+		}
+		if _, ok := a.Defaults[name]; !ok {
+			if def != ActionConnect && def != ActionDisconnect {
+				def = ActionDisconnect
+			}
+			a.Defaults[name] = def
+		}
+	}
 }
 
 // ConditionDetail reports one condition's match outcome, for the editor's

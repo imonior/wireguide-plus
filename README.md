@@ -1,6 +1,6 @@
 # WireGuide Plus
 
-**A multi-tunnel, automation-first WireGuard client for Windows**
+**A multi-tunnel WireGuard client with network-aware automation.**
 
 WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source project
 [`korjwl1/wireguide`](https://github.com/korjwl1/wireguide). Its two core capabilities:
@@ -93,18 +93,18 @@ pick the NIC manually.
 
 ### Rule logic
 
-- **Rules inside one tunnel** are evaluated top-to-bottom in two ordered groups:
-  **disconnect rules first, then connect rules**. Within a group the order is your
-  drag-sorted priority.
-- **AND inside one rule, OR across rules, first-match-wins**: every condition on a
-  single rule must hold for the rule to fire, but only the **first** rule (across
-  both groups) that matches executes. Matching disconnect rules always beat
-  matching connect rules because the disconnect group is evaluated first — a
-  matching connect rule that ranks behind a matched disconnect rule is
-  "deprioritised" and does not execute, so you never both "disconnect on X SSID"
+- **Rules inside one tunnel form ONE ordered list**, evaluated top-to-bottom —
+  **rule position is priority**. Connect and disconnect rules can be freely
+  interleaved and drag-reordered across the whole list.
+- **First match wins (AND inside a rule)**: every condition on a single rule
+  must hold for the rule to fire, and only the **first matching rule** in the
+  list executes its action. Rules ranked behind a matched rule are
+  "deprioritised" and do not execute, so you never both "disconnect on X SSID"
   AND "connect on X SSID" for the same tunnel.
-- **Otherwise / none-match rule** (the last fallback card under each action
-  group): fires exactly when **no earlier rule in the same action group** matched.
+- **Default State fallback**: when **no rule matches** the current network, the
+  tunnel converges to its **Default State** (connected or disconnected — chosen
+  at the top of the Automation editor). A tunnel with no rules at all is never
+  touched by automation.
 - Rule editing shows **live match indicators**: while the Automation editor is
   open, every condition shows whether it currently matches the live network, the
   first effective rule is highlighted as "in use", and a top bar shows the
@@ -120,7 +120,7 @@ pick the NIC manually.
 | --- | --- | --- |
 | **SSID** | Case-sensitive, byte-exact full match against the Wi-Fi network's SSID name (spaces and special characters all count — per the 802.11 definition). | "On `Office 5 GHz` connect Work-VPN." |
 | **Subnet** | Whether the current local IP falls inside a given CIDR (e.g. `192.168.178.0/24`). | Home routers that use a predictable LAN range, not tied to SSID. |
-| **Network / BSSID** | The gateway's MAC address (BSSID). A specific physical access point, not just its SSID. | "Never auto-connect on the public café router." |
+| **Gateway MAC** | The MAC address of the current default gateway (router) — identifies a specific network even when SSIDs or subnets are generic. | "Never auto-connect on the café router." |
 | **Gateway IP** | The default gateway IP address of the current physical network. | Detect a specific home / office router when SSIDs are too generic. |
 | **Interface** | The name of the physical network adapter the system is routing through. The dropdown lists every physical adapter on the machine, including currently-disconnected ones, so you can pre-write rules for a laptop dock / USB dongle that isn't plugged in yet. | "Only connect the work VPN when I'm on the docked Ethernet adapter." |
 | **On wired network (Ethernet)** | True whenever the system's upstream routing is through a wired (non-wireless) adapter. No SSID needed — pure wired vs wireless decision. | "At the desk (cable) always connect; on Wi-Fi don't." |
@@ -205,13 +205,17 @@ the matching driver DLL, tunnels cannot be created.
 ## Code Signing
 
 Every published Windows **installer** is Authenticode-signed, which lets you verify
-both **integrity** (the binary has not been tampered with in transit or on disk)
-and **origin** (it was built and released by this project). Signed binaries also
-trigger fewer Windows SmartScreen warnings on first run.
+**integrity** — the binary has not been modified since it was signed. Signed
+binaries also trigger fewer Windows SmartScreen warnings on first run.
+
+A signature proves *who signed the file*, not on its own *how it was built*.
+Provenance (which pipeline produced the installer, approval workflow, account
+security and reproducibility) is documented separately in
+[SIGNING-POLICY.md](SIGNING-POLICY.md), together with the SHA-256 checksums that
+ship with every release.
 
 Note: only the installers are signed; the portable zips contain the unsigned build
-output. For the full signing policy (scope, approval workflow, account security and
-reproducibility) see [SIGNING-POLICY.md](SIGNING-POLICY.md).
+output.
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).

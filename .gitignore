@@ -49,9 +49,6 @@ build/darwin/Assets.car
 # launches with WIREGUIDE_HELPER_STDERR=1). Repo-relative, throwaway.
 debug-logs/
 
-# CodeBuddy local data — per-user plans, automations and settings; not repo state.
-.codebuddy/
-
 # Backup files
 *.bak
 

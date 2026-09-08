@@ -171,9 +171,15 @@ func (s *Settings) ClearAllManualOff() {
 // on each load without persisting (it's deterministic and cheap).
 func (s *Settings) EnsureAutomation() {
 	if s.Automation != nil {
+		// Already on the Automation model — just fold any pre-Default-State
+		// rule shapes (none_match "Otherwise", missing defaults) into the
+		// current policy model. Normalize is idempotent and never overwrites
+		// an explicit Defaults entry.
+		s.Automation.Normalize()
 		return
 	}
 	s.Automation = wifi.MigrateFromLegacy(&s.WifiRules)
+	s.Automation.Normalize()
 }
 
 // RenameTunnelRules moves a tunnel's Automation (and legacy WifiRules)
@@ -209,6 +215,9 @@ func (s *Settings) RenameTunnelRules(oldName, newName string) {
 func (s *Settings) DeleteTunnelRules(name string) {
 	if s.Automation != nil {
 		delete(s.Automation.PerTunnel, name)
+		if s.Automation.Defaults != nil {
+			delete(s.Automation.Defaults, name)
+		}
 	}
 	if s.WifiRules.PerTunnel != nil {
 		delete(s.WifiRules.PerTunnel, name)

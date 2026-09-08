@@ -55,12 +55,17 @@ import * as $models from "./models.js";
  * The response shape matches AutomationPreview so the frontend consumes
  * both identically; the Tunnels slice always contains exactly one entry
  * for the requested tunnel (even when it has no rules yet).
+ * 
+ * defaultState is the draft's Default State ("connect" / "disconnect" /
+ * "" for none) applied when the draft's rules all miss; it is passed
+ * separately because the draft has not been persisted yet.
  * @param {string} tunnel
  * @param {wifi$0.Rule[]} rules
+ * @param {string} defaultState
  * @returns {$CancellablePromise<$models.AutomationPreviewResponse>}
  */
-export function AutomationEvaluate(tunnel, rules) {
-    return $Call.ByID(1613909483, tunnel, rules).then(/** @type {($result: any) => any} */(($result) => {
+export function AutomationEvaluate(tunnel, rules, defaultState) {
+    return $Call.ByID(1613909483, tunnel, rules, defaultState).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType0($result);
     }));
 }
@@ -793,19 +798,25 @@ export function RunUpdate(info) {
 }
 
 /**
- * SaveAutomationRules atomically replaces one tunnel's Automation rules.
+ * SaveAutomationRules atomically replaces one tunnel's Automation policy:
+ * its ordered rule list plus its Default State (the state the tunnel
+ * converges to when NO rule matches — "connect" / "disconnect"; an empty
+ * or unknown value is stored as "disconnect", the conservative reading).
  * It goes through SettingsStore.Update — the cross-process locked
  * read-modify-write — instead of a whole-object SaveSettings, so a
  * concurrent `wireguideplus ctl` edit to any other tunnel or field can never
  * be clobbered by a stale GUI snapshot (issue #27 review follow-up).
- * An empty rules slice removes the tunnel's entry entirely. The helper
- * re-reads settings from disk on every evaluation, so no push is needed.
+ * An empty rules slice removes the tunnel's entry (and its Default State)
+ * entirely: no rules = no policy = the engine never touches the tunnel.
+ * The helper re-reads settings from disk on every evaluation, so no push
+ * is needed.
  * @param {string} tunnel
  * @param {wifi$0.Rule[]} rules
+ * @param {string} defaultState
  * @returns {$CancellablePromise<void>}
  */
-export function SaveAutomationRules(tunnel, rules) {
-    return $Call.ByID(3991232048, tunnel, rules);
+export function SaveAutomationRules(tunnel, rules, defaultState) {
+    return $Call.ByID(3991232048, tunnel, rules, defaultState);
 }
 
 /**

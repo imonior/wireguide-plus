@@ -107,9 +107,19 @@ The manager lock (`mu`) is held only for state reads/writes, never during the sl
 
 On disconnect, each tunnel cleans up via its own `NetworkManager`. If other tunnels remain active, their DNS union is re-applied. Crash-recovery state is cleared per-tunnel.
 
-### Security Hardening: No Script Execution
+### Security Hardening: Script Execution Is Opt-In
 
-Pre/PostUp/Down script execution has been **removed** as a security hardening measure. The config parser still accepts these fields so existing configs import without error, but the scripts are silently ignored.
+Pre/PostUp/Down scripts are **never executed by default**. The config parser accepts
+these fields so existing WireGuard configs import without error, and the tunnel
+editor can read, create and rewrite them, but `connect_phases.go` only runs a hook
+when `cfg.EnableScripts` is true. That flag is injected at runtime by the GUI from
+the user's settings (`EnableWgScripts`), which can only be turned on behind an
+explicit confirmation in Settings.
+
+Rationale: a `.conf` file is data, not code. Executing `PostUp` straight from an
+imported config would let any config file run arbitrary commands with the helper's
+privileges, so execution has to be a deliberate, per-installation opt-in rather
+than a side effect of importing a tunnel.
 
 ### Endpoint DNS Resolution -- Chicken-and-Egg
 
@@ -207,8 +217,8 @@ tunnels are up.)
 
 ### Model
 
-Each tunnel owns an ordered list of `condition → action` rules
-(`internal/wifi/automation.go`). A condition is one of:
+Each tunnel owns an ordered list of `condition → action` rules plus a
+**Default State** (`internal/wifi/automation.go`). A condition is one of:
 
 - `ssid` — the current Wi-Fi SSID equals a value
 - `subnet` — a physical-interface IP is inside a CIDR
@@ -216,14 +226,29 @@ Each tunnel owns an ordered list of `condition → action` rules
   medium-agnostic network fingerprint that disambiguates two networks
   sharing a subnet like `192.168.0.0/24`; MACs compare by bare hex, so
   separator/case don't matter)
-- `none_match` — the fallback ("otherwise")
+- `gateway_ip`, `interface`, `ethernet`, `time`, `wifi` — see
+  `Condition` in the source for the full set
 
-The action is `connect` or `disconnect`. `Evaluate` walks the rules top to
-bottom: the **first** matching concrete condition wins; if none match, the
-first `none_match` rule applies; else the tunnel is left untouched. **Order
-is priority** (drag-reorderable in the GUI). A rule disconnects a tunnel
-**regardless of how it was brought up** — but a tunnel with *no* rules is
-never auto-touched. A tunnel the user switched off manually from the GUI
+Behaviour:
+
+- **Order is priority.** `EvaluatePolicy` walks the rules top to bottom
+  and the **first matching rule decides**; every condition inside one rule
+  must match (AND). Drag-to-reorder in the GUI is exactly "change
+  priority".
+- **No rule matched → the tunnel converges to its Default State**
+  (`connect` / `disconnect`, stored in `Automation.Defaults`). An empty
+  or unknown default fails closed as *unmanaged*.
+- **No rules at all → unmanaged.** A tunnel with no policy is never
+  auto-touched.
+- The pre-Default-State `none_match` ("otherwise") rule no longer exists
+  as a user-facing option. Stored configs are migrated on load by
+  `Automation.Normalize()`: the first `none_match` rule's action becomes
+  the tunnel's Default State, and it (plus everything after it, which was
+  unreachable anyway) is dropped. A tunnel with rules but no `none_match`
+  gets the conservative `disconnect` default.
+
+The action is `connect` or `disconnect`. A rule disconnects a tunnel
+**regardless of how it was brought up**. A tunnel the user switched off manually from the GUI
 or tray is **exempt from connect rules**: it lands on
 `Settings.ManualOffTunnels` (persisted in `config.json`), and the engine
 skips its connect decisions until the user connects it again (which
@@ -235,21 +260,40 @@ migrated once into this model by `Settings.EnsureAutomation`.
 
 Rules are evaluated **entirely inside the helper** (`reevaluateAutomation`
 in `internal/helper/automation_rules.go`), so they fire whether or not a GUI is
-alive. `reevalMu` serialises evaluations. Triggers:
+alive. Triggers:
 
 ```
-current network context = { SSID, physical IPs, gateway MAC }
+current network context = { SSID, physical IPs, gateway MAC/IP, interfaces }
   ├─ SSID change      → wifiMon (CoreWLAN via GUI on macOS 14+) — instant
   ├─ network change   → macOS: the shared `route -n monitor` subscription
   │                     (SubscribeNetworkChange) — instant, ~zero added cost
-  └─ poll (30s)       → Windows/Linux fallback (no process-wide monitor yet)
+  ├─ poll (30s)       → Windows/Linux fallback (no process-wide monitor yet)
+  ├─ startup (3s)     → one evaluation after the network stack settles
+  └─ post-connect     → 3s after an RPC connect inside the startup window
 
 for each tunnel with rules:
   if manual-off(tunnel): skip   # no auto-connect until user reconnects or restart
-  Evaluate(rules, ctx) → StateConnect  → doConnectHeld (same as manual)
-                         StateDisconnect → disconnectAutoManaged
-                         StateUnmanaged  → leave as-is
+  EvaluatePolicy(rules, default, ctx)
+      → StateConnect     → doConnectHeld (same as manual)
+      → StateDisconnect  → disconnectAutoManaged
+      → StateUnmanaged   → leave as-is
 ```
+
+**Event coalescing** (`internal/helper/automation_eval.go`): a single
+Wi-Fi join fires a burst of route-table events plus an SSID transition.
+Naively each burst element queued its own full evaluation, and every one
+but the last acted on a stale context. Triggers therefore no longer call
+the engine directly — they post through `requestAutomationEval`, which
+writes into a **one-slot mailbox** and never blocks. A burst of N events
+collapses into at most one queued request; `automationEvalLoop` (the only
+caller of `reevaluateAutomation`) pops it and evaluates immediately — no
+settle window — and if further events arrived *during* the evaluation,
+exactly one survives to trigger a follow-up evaluation against the fresh
+context. The engine converges on the final network state without ever
+holding a backlog. A pending request is dropped rather than run once
+shutdown has begun, so no evaluation can race `cleanup()`'s teardown.
+
+`reevalMu` still serialises evaluations as defence in depth.
 
 The gateway MAC is read unprivileged and locale-independently:
 `route -n get default` + `arp` on macOS, `/proc/net/{route,arp}` on Linux,
@@ -266,12 +310,15 @@ helper's authoritative current SSID).
 
 ### Authoring
 
-Rules are edited in the GUI (tunnel detail → **Automation**: condition/
-action rows, self-entry with current-value autocomplete, drag-to-reorder,
-inline MAC/CIDR validation) or from the CLI (`wireguideplus ctl automation
-add/rm/rules`, and `wireguideplus ctl automation` for a read-only preview of
-the current decision). Both edit `Settings.Automation` in `config.json`,
-which the helper rereads on every evaluation — no restart needed.
+Rules are edited in the GUI (tunnel detail → **Automation**: Default State
+selector, condition/action rows, self-entry with current-value
+autocomplete, drag-to-reorder, inline MAC/CIDR validation) or from the CLI
+(`wireguideplus ctl automation add/rm/move/default/rules`, and
+`wireguideplus ctl automation` for a read-only preview of the current
+decision). Both edit `Settings.Automation` in `config.json`, which the
+helper rereads on every evaluation — no restart needed. All three write
+paths (legacy config migration, CLI, GUI) land the same normalized model;
+`internal/storage/automation_entries_test.go` pins that invariant.
 
 ### Post-Connect Refresh
 
@@ -284,10 +331,10 @@ broadcast drives the UI state update.
 
 The helper's locks:
 
-- `reevalMu` — serialises whole Automation re-evaluations so the three
-  triggers (SSID change, network change, poll) can't drive connect/
-  disconnect concurrently. Held around an evaluation, which internally
-  takes the locks below.
+- `reevalMu` — serialises whole Automation re-evaluations (defence in
+  depth; since the eval-mailbox coalescing, `automationEvalLoop` is the
+  only caller). Held around an evaluation, which internally takes the
+  locks below.
 - `connectMu` — serializes connect/disconnect operations
 - `mu` — protects `activeCfgs` and other manager state
 - `wifiMu` — protects `autoConnectedBy`

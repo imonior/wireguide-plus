@@ -30,6 +30,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/domain"
@@ -179,11 +180,26 @@ type Helper struct {
 	// on the old network's name. Guarded by wifiMu.
 	ssidStampGW string
 
-	// reevalMu serialises Automation re-evaluations. The three triggers
-	// (SSID change, network change, poll) can fire concurrently; the
-	// lock ensures only one evaluation drives connect/disconnect at a
-	// time so they don't race on the same tunnel.
+	// reevalMu serialises Automation re-evaluations, as defence in depth:
+	// since the eval-mailbox coalescing (automation_eval.go) the loop in
+	// automationEvalLoop is the only caller, but the lock keeps any future
+	// direct caller from racing a running evaluation on the same tunnel.
 	reevalMu sync.Mutex
+
+	// evalRequests is the Automation evaluation mailbox, buffered to
+	// exactly one slot (see automation_eval.go). Network triggers (SSID
+	// change, route change, poll, post-connect) post into it non-blocking;
+	// automationEvalLoop consumes. The single slot IS the coalescing:
+	// while a request is pending or an evaluation is running with one
+	// queued, further events find the mailbox full and are discarded as
+	// stale — the pending evaluation samples a FRESH NetworkContext anyway.
+	evalRequests chan struct{}
+
+	// evalReason records the reason string of the most recent eval
+	// request, for log lines. Written by requestAutomationEval (any
+	// trigger goroutine), read by automationEvalLoop. Guarded by
+	// atomic.Value.
+	evalReason atomic.Value
 
 	// userTunnelStore reads .conf files from the user's home dir
 	// (derived from the uid passed at launch). Needed so wifi rules
@@ -337,9 +353,17 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// helper background task.
 	h.goSafe("latencyLoop", h.latencyLoop)
 
+	// Start the Automation evaluation loop. It is the single consumer of
+	// the eval mailbox: every trigger (SSID change, route change, poll,
+	// post-connect, startup) posts a coalesced request, and only this
+	// goroutine calls reevaluateAutomation. Start it BEFORE the Wi-Fi
+	// monitor and the network-change subscription so nothing they post
+	// queues unattended.
+	h.goSafe("automationEvalLoop", h.automationEvalLoop)
+
 	// Start Wi-Fi SSID monitor. On change we broadcast the event for
-	// any GUI listener AND evaluate the user's wifi rules right here
-	// so auto-connect / auto-disconnect keep working when the GUI is
+	// any GUI listener AND post an Automation re-evaluation request so
+	// auto-connect / auto-disconnect keep working when the GUI is
 	// closed.
 	h.wifiMon = wifi.NewMonitor(func(oldSSID, newSSID string) {
 		h.server.Broadcast(ipc.EventWifiSSID, ipc.WifiSSIDPayload{
@@ -405,7 +429,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		// Use the helper's known SSID (reported by the GUI on macOS 14+,
 		// polled elsewhere) rather than a direct read. Skip only when the
 		// network is entirely unknown — acting on an unknown SSID would
-		// let none_match rules disconnect a freshly crash-recovered
+		// let the Default State disconnect a freshly crash-recovered
 		// tunnel before we know what network we're on. Subnet-only rules
 		// still get their first evaluation from the network-change / poll
 		// trigger below.
@@ -417,7 +441,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 			return
 		}
 		slog.Info("startup rule re-evaluation", "ssid", ssid)
-		h.reevaluateAutomation("startup")
+		h.requestAutomationEval("startup")
 	})
 
 	// Hybrid subnet-rule trigger. Subnet-based Automation conditions must
@@ -429,7 +453,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	//     they have no process-wide network-change monitor yet.
 	// SSID-based rules keep firing instantly via the Wi-Fi monitor above.
 	network.SubscribeNetworkChange("automation", func() {
-		h.reevaluateAutomation("network-change")
+		h.requestAutomationEval("network-change")
 	})
 	if runtime.GOOS != "darwin" {
 		h.goSafe("automationPoll", func() {
@@ -440,7 +464,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 				case <-h.done:
 					return
 				case <-ticker.C:
-					h.reevaluateAutomation("poll")
+					h.requestAutomationEval("poll")
 				}
 			}
 		})

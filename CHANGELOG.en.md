@@ -4,6 +4,26 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [1.7.8] - 2026-09-08
+
+### ✨ New
+
+- **Automation is now "default state + ordered rules"** — each tunnel owns one priority-ordered rule list: rules are matched top-down and the **first match wins**, with multiple conditions inside a rule combined with AND; when nothing matches the tunnel converges on its **default state** (connect / disconnect). The "otherwise" branch is gone. The default state is picked at the top of the automation editor, rules can be drag-reordered, and the action badge on a rule toggles between connect and disconnect with one click.
+- **Convergence on the desired state (Desired State → Reconcile)** — the engine now drives every tunnel toward the state it should be in: a "connect" match connects, a "disconnect" match disconnects, regardless of how the tunnel was brought up. A tunnel with no rules is still never touched.
+- **New CLI commands `automation move` and `automation default`** — `wireguideplus ctl automation move <tunnel> <from> <to>` reorders rules, and `wireguideplus ctl automation default <tunnel> <connect|disconnect>` sets the default state.
+
+### 🐛 Fixes
+
+- **Network event storms no longer re-trigger automation repeatedly** — the burst of SSID / route events produced by joining a Wi-Fi network now collapses into a single evaluation: triggers only post into a one-slot mailbox, each evaluation re-samples the freshest network context when it starts, and events arriving during an evaluation leave at most one follow-up pass. Nothing queues up, and no decision is ever made from a stale context.
+- **Shutdown race in the automation teardown** — an evaluation request still pending after the app begins shutting down no longer runs, so it can't fight the "disconnect all tunnels" cleanup over the same tunnel.
+- **Legacy "otherwise" rules migrate automatically** — when an old config is read, its first valid `none_match` rule becomes the tunnel's default state and every rule after it (fully shadowed by it) is dropped; configs without any "otherwise" rule migrate to a default of disconnected. The migration is idempotent and preserves the previous behaviour.
+
+### 🛠 Internal
+
+- **Reconcile action extracted into a pure function with idempotency tests** — evaluating the same network context twice must not produce a second state-changing action, and a tunnel switched off manually is never auto-reconnected on any path.
+- **Config-migration / CLI / GUI write-path consistency tests** — all three paths must land on the same normalised model: no `none_match` left on disk, a valid default state whenever rules exist, and no default state when there are none.
+- **Docs updated** — the design document now covers the default state and ordered-rule semantics, event coalescing and lock ordering; the manual test checklist drops the obsolete "otherwise" case and adds event-storm and shutdown-timing checks.
+
 ## [1.7.6] - 2026-09-07
 
 ### 🐛 Fixes
@@ -249,7 +269,7 @@ This release rebuilds the DNS leak test around public-resolver cross-checking: a
 
 ### ✨ New features
 
-- **Public DNS cross-check** — the test now also probes well-known public resolvers (Google, Cloudflare, OpenDNS, Quad9, Alibaba, Tencent DNSPod, 114DNS, Baidu, AdGuard, NextDNS, Comodo, plus common IPv6 addresses) so answers can be cross-verified against traffic leaving the tunnel. A public resolver answering only means it is reachable — not a leak.
+- **Public DNS cross-check** — the test now also probes well-known public resolvers (Google, Cloudflare, OpenDNS, Quad9, Alibaba, DNSPod, 114DNS, Baidu, AdGuard, NextDNS, Comodo, plus common IPv6 addresses) so answers can be cross-verified against traffic leaving the tunnel. A public resolver answering only means it is reachable — not a leak.
 - **Refresh from the network** — "Fetch from network" pulls the currently most reliable resolvers from public-dns.info (up to 30, 10-second timeout) and caches the last successful fetch so the list stays usable offline.
 - **Custom public resolver list** — add, edit or remove entries (IP or hostname) freely; the list is persisted in settings. Clearing it restores the built-in defaults — public probing always stays on.
 - **Resolver source tags** — system resolvers are now tagged by the interface they come from: physical adapters (WLAN / Ethernet) are "Local", tunnel interfaces are "VPN", the rest are "Public". Local resolvers are listed first, with the source interface name (Windows enumerates per-adapter DNS, Linux parses resolvectl output).

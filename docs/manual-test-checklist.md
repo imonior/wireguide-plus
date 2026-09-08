@@ -21,10 +21,11 @@ the CLI (`wireguideplus ctl automation add/rm/rules`). The read-only preview
 gateway MAC, physical IPs) and each tunnel's decision — use it to check
 expectations without reading logs.
 
-Semantics reminder: rules are evaluated top to bottom, first matching
-concrete condition wins (a `none_match`/`else` rule is the fallback);
-order = priority, and a rule can connect OR disconnect regardless of how
-the tunnel was brought up.
+Semantics reminder: rules are evaluated top to bottom and the first match
+wins — the list order IS the priority. When no rule matches, the tunnel
+converges on its **Default State** (connect / disconnect), set at the top of
+the automation editor or with `ctl automation default`. A rule can connect
+OR disconnect regardless of how the tunnel was brought up.
 
 ### Connect on a network (SSID)
 - [ ] Add `connect` when `ssid:<current-wifi>` for a tunnel; disconnect
@@ -51,9 +52,26 @@ the tunnel was brought up.
 
 ### Priority / conflict
 - [ ] Add two rules that both match now with opposite actions (e.g.
-      `disconnect ssid:X` and `connect else`, or two matching concrete
+      `disconnect ssid:X` and `connect ssid:X`, or two matching concrete
       conditions). **Expected**: the top rule wins. Reorder (GUI drag, or
-      `rm` + `add`) and confirm the result flips.
+      `ctl automation move <tunnel> <from> <to>`) and confirm the result
+      flips.
+- [ ] With rules present but NONE matching: **Expected** the tunnel
+      converges to its Default State. Change it with
+      `ctl automation default <tunnel> <connect|disconnect>` (or the GUI
+      selector) and confirm `ctl automation rules <tunnel>` / the preview
+      follow.
+
+### Burst / flapping (event coalescing)
+- [ ] Toggle Wi-Fi (or join/leave the same network) several times in quick
+      succession. **Expected**: the helper settles on the final network
+      state instead of running one evaluation per route-table event — at
+      `debug` log level the dropped bursts show up as
+      `automation: coalesced duplicate eval request`, and after the last
+      event there is no repeated connect/disconnect churn.
+- [ ] Quit the app while an evaluation is in flight. **Expected**: no
+      evaluation starts after `cleanup()` begins (a pending request is
+      dropped rather than reconnecting a tunnel being torn down).
 
 ### Rule edits without restart
 - [ ] Edit rules (GUI or `ctl automation add`) while connected to a

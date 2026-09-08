@@ -131,7 +131,7 @@ var publicResolvers = []string{
 	"9.9.9.9",
 	// Alibaba Public DNS
 	"223.5.5.5", "223.6.6.6",
-	// Tencent DNSPod
+	// DNSPod Public DNS
 	"119.29.29.29",
 	// 114 DNS
 	"114.114.114.114",

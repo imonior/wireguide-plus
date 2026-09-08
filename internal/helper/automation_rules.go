@@ -104,11 +104,12 @@ func (h *Helper) currentNetworkContext() wifi.NetworkContext {
 }
 
 // handleSSIDChange is one trigger for Automation re-evaluation: the
-// Wi-Fi monitor fires it on every SSID transition. The actual decision
-// logic lives in reevaluateAutomation so the network-change and poll
-// triggers share it.
+// Wi-Fi monitor fires it on every SSID transition. It only posts a
+// coalesced request — the decision logic (and the network-context probe)
+// lives in reevaluateAutomation, run by automationEvalLoop, which every
+// trigger (SSID change, network change, poll, post-connect) shares.
 func (h *Helper) handleSSIDChange(oldSSID, newSSID string) {
-	h.reevaluateAutomation("ssid-change")
+	h.requestAutomationEval("ssid-change")
 }
 
 const (
@@ -139,8 +140,41 @@ func (h *Helper) scheduleRuleCheck() {
 			return
 		case <-time.After(postConnectRuleCheckDelay):
 		}
-		h.reevaluateAutomation("post-connect")
+		h.requestAutomationEval("post-connect")
 	}()
+}
+
+// reconcileAction maps an evaluated desired state plus the tunnel's
+// actual reality to the ONE action the engine takes:
+//
+//	"connect"         → bring the tunnel up (rule/default says connect, it
+//	                    is down, and the manual-off latch is not set)
+//	"disconnect"      → tear the tunnel down (rule/default says disconnect
+//	                    and it is up — regardless of who brought it up)
+//	"skip-manual-off" → the policy wants connect but the user switched the
+//	                    tunnel off by hand; the latch wins until they
+//	                    reconnect manually or the app restarts
+//	""                → leave the tunnel alone (policy agrees with reality,
+//	                    the tunnel is unmanaged, or a wanted disconnect has
+//	                    nothing to tear down)
+//
+// Pure and side-effect free so the reconcile invariants (idempotency,
+// manual-off supremacy) are testable without a live tunnel manager.
+func reconcileAction(state wifi.DesiredState, active, manualOff bool) string {
+	switch state {
+	case wifi.StateConnect:
+		if manualOff {
+			return "skip-manual-off"
+		}
+		if !active {
+			return "connect"
+		}
+	case wifi.StateDisconnect:
+		if active {
+			return "disconnect"
+		}
+	}
+	return ""
 }
 
 // reevaluateAutomation drives every tunnel that has Automation rules
@@ -151,8 +185,13 @@ func (h *Helper) scheduleRuleCheck() {
 // Semantics (issue #12): a rule can connect OR disconnect its tunnel
 // regardless of how the tunnel was brought up — unlike the legacy path
 // which only touched helper-auto-connected tunnels. A tunnel with NO
-// rules is never touched. reevalMu serialises evaluations so the slow
-// connect/disconnect calls from two overlapping triggers can't race.
+// rules is never touched.
+//
+// Concurrency: triggers must NOT call this directly — they post through
+// requestAutomationEval, and automationEvalLoop is the only caller. A
+// mid-burst trigger therefore never queues a stale duplicate evaluation;
+// the NetworkContext is sampled fresh at the top of each run. reevalMu
+// remains as defence-in-depth serialisation.
 func (h *Helper) reevaluateAutomation(reason string) {
 	h.reevalMu.Lock()
 	defer h.reevalMu.Unlock()
@@ -184,22 +223,16 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 
 	for _, name := range auto.TunnelNames() {
-		state := wifi.Evaluate(auto.PerTunnel[name], ctx)
-		switch state {
-		case wifi.StateConnect:
-			if !active[name] {
-				if manualOff[name] {
-					slog.Info("automation: skip connect (manually switched off)",
-						"tunnel", name, "reason", reason, "ssid", ctx.SSID)
-					continue
-				}
-				h.automationConnect(name, reason, ctx.SSID)
-			}
-		case wifi.StateDisconnect:
-			if active[name] {
-				slog.Info("automation: rule disconnect", "tunnel", name, "reason", reason, "ssid", ctx.SSID)
-				h.disconnectAutoManaged(name)
-			}
+		state := wifi.EvaluatePolicy(auto.PerTunnel[name], auto.Defaults[name], ctx)
+		switch reconcileAction(state, active[name], manualOff[name]) {
+		case "connect":
+			h.automationConnect(name, reason, ctx.SSID)
+		case "disconnect":
+			slog.Info("automation: rule disconnect", "tunnel", name, "reason", reason, "ssid", ctx.SSID)
+			h.disconnectAutoManaged(name)
+		case "skip-manual-off":
+			slog.Info("automation: skip connect (manually switched off)",
+				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
 		}
 	}
 }
@@ -245,7 +278,7 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 		for _, name := range auto.TunnelNames() {
 			rules := auto.PerTunnel[name]
 			decision := "unmanaged"
-			switch wifi.Evaluate(rules, ctx) {
+			switch wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx) {
 			case wifi.StateConnect:
 				if manualOff[name] {
 					decision = "manual-off" // suppressed by the manual-off latch

@@ -102,8 +102,14 @@ Automation (per-tunnel connect/disconnect rules):
   wireguideplus ctl automation add <name> <connect|disconnect> <cond>
                                           append a rule; <cond> is one of:
                                             ssid:<wifi-name>   subnet:<CIDR>
-                                            mac:<gateway-MAC>  else
+                                            mac:<gateway-MAC>
   wireguideplus ctl automation rm <name> <n>  remove rule number <n> (from 'rules')
+  wireguideplus ctl automation move <name> <from> <to>
+                                          move rule <from> to position <to> —
+                                          position IS priority (1 = evaluated first)
+  wireguideplus ctl automation default <name> <connect|disconnect>
+                                          set the state a tunnel converges to when
+                                          no rule matches
 
 Settings & diagnostics:
   wireguideplus ctl set killswitch <on|off>       block non-VPN traffic if the tunnel drops
@@ -404,10 +410,14 @@ func cmdAutomation(args []string) int {
 			return automationAdd(args[1:])
 		case "rm", "remove", "delete":
 			return automationRm(args[1:])
+		case "move":
+			return automationMove(args[1:])
+		case "default":
+			return automationDefault(args[1:])
 		case "show", "status":
 			// fall through to the live preview below
 		default:
-			fmt.Fprintf(os.Stderr, "unknown automation subcommand %q (try: rules, add, rm)\n", args[0])
+			fmt.Fprintf(os.Stderr, "unknown automation subcommand %q (try: rules, add, rm, move, default)\n", args[0])
 			return 2
 		}
 	}
@@ -554,22 +564,27 @@ func automationRules(args []string) int {
 		fmt.Printf("%s has no automation rules\n", name)
 		return 0
 	}
-	fmt.Printf("%s (top rule wins on conflict):\n", name)
+	def := s.Automation.Defaults[name]
+	if def != wifi.ActionConnect && def != wifi.ActionDisconnect {
+		def = wifi.ActionDisconnect
+	}
+	fmt.Printf("%s (top rule wins on conflict; when no rule matches → %s):\n", name, def)
 	for i, r := range rules {
 		fmt.Printf("  %d. %-10s when %s\n", i+1, r.Do, formatConditions(r.When, r.Match))
 	}
 	return 0
 }
 
-// parseCondition turns "ssid:home" / "subnet:10.0.0.0/24" / "mac:.." /
-// "else" into a wifi.Condition. Returns an error for malformed values.
+// parseCondition turns "ssid:home" / "subnet:10.0.0.0/24" / "mac:.." into a
+// wifi.Condition. Returns an error for malformed values.
+//
+// There is deliberately no "else" / "otherwise" form any more: the fallback
+// is the tunnel's Default State (`automation default`), which is unambiguous
+// under the ordered first-match engine.
 func parseCondition(spec string) (wifi.Condition, error) {
-	if spec == "else" || spec == "otherwise" || spec == "none" {
-		return wifi.Condition{Type: wifi.CondNoneMatch}, nil
-	}
 	kind, val, ok := strings.Cut(spec, ":")
 	if !ok || val == "" {
-		return wifi.Condition{}, fmt.Errorf("condition %q must be ssid:<name>, subnet:<CIDR>, mac:<MAC> or else", spec)
+		return wifi.Condition{}, fmt.Errorf("condition %q must be ssid:<name>, subnet:<CIDR> or mac:<MAC>", spec)
 	}
 	switch kind {
 	case "ssid":
@@ -591,7 +606,7 @@ func parseCondition(spec string) (wifi.Condition, error) {
 		}
 		return wifi.Condition{Type: wifi.CondNetwork, GatewayMAC: strings.ToLower(val)}, nil
 	default:
-		return wifi.Condition{}, fmt.Errorf("unknown condition kind %q (use ssid/subnet/mac/else)", kind)
+		return wifi.Condition{}, fmt.Errorf("unknown condition kind %q (use ssid/subnet/mac)", kind)
 	}
 }
 
@@ -627,6 +642,14 @@ func automationAdd(args []string) int {
 		}
 		s.Automation.PerTunnel[name] = append(s.Automation.PerTunnel[name], wifi.Rule{When: []wifi.Condition{cond}, Do: wifi.Action(action)})
 		ruleNum = len(s.Automation.PerTunnel[name])
+		// A tunnel gaining its first rule needs an explicit Default State,
+		// otherwise the engine fails closed (Unmanaged) on no-match.
+		if s.Automation.Defaults == nil {
+			s.Automation.Defaults = map[string]wifi.Action{}
+		}
+		if _, ok := s.Automation.Defaults[name]; !ok {
+			s.Automation.Defaults[name] = wifi.ActionDisconnect
+		}
 		return nil
 	})
 	if err != nil {
@@ -666,6 +689,9 @@ func automationRm(args []string) int {
 		s.Automation.PerTunnel[name] = append(rules[:idx-1:idx-1], rules[idx:]...)
 		if len(s.Automation.PerTunnel[name]) == 0 {
 			delete(s.Automation.PerTunnel, name)
+			if s.Automation.Defaults != nil {
+				delete(s.Automation.Defaults, name)
+			}
 		}
 		return nil
 	})
@@ -678,6 +704,91 @@ func automationRm(args []string) int {
 		return 1
 	}
 	fmt.Printf("removed rule %d for %s: %s when %s\n", idx, name, removed.Do, formatConditions(removed.When, removed.Match))
+	return 0
+}
+
+// automationMove repositions one rule, 1-based: `move work 4 1` makes the
+// 4th rule the first evaluated. Rule position IS priority under the
+// Default State + Ordered Rules model, so this is the CLI's priority
+// control (the GUI equivalent is rule drag & drop).
+func automationMove(args []string) int {
+	if len(args) < 3 {
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl automation move <tunnel> <from> <to>")
+		return 2
+	}
+	name := args[0]
+	from, errFrom := strconv.Atoi(args[1])
+	to, errTo := strconv.Atoi(args[2])
+	if errFrom != nil || errTo != nil || from < 1 || to < 1 {
+		fmt.Fprintln(os.Stderr, "from/to must be positive rule numbers (see 'automation rules <tunnel>')")
+		return 2
+	}
+	ss, err := settingsStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "automation:", err)
+		return 1
+	}
+	tooFew := -1
+	var moved wifi.Rule
+	err = ss.Update(func(s *storage.Settings) error {
+		s.EnsureAutomation()
+		rules := s.Automation.PerTunnel[name]
+		if from > len(rules) || to > len(rules) {
+			tooFew = len(rules)
+			return fmt.Errorf("rule number out of range")
+		}
+		moved = rules[from-1]
+		rules = append(rules[:from-1:from-1], rules[from:]...)
+		rules = append(rules[:to-1], append([]wifi.Rule{moved}, rules[to-1:]...)...)
+		s.Automation.PerTunnel[name] = rules
+		return nil
+	})
+	if tooFew >= 0 {
+		fmt.Fprintf(os.Stderr, "%s has only %d rule(s)\n", name, tooFew)
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "automation: save failed:", err)
+		return 1
+	}
+	fmt.Printf("moved rule for %s: %s when %s → position %d\n", name, moved.Do, formatConditions(moved.When, moved.Match), to)
+	return 0
+}
+
+// automationDefault sets the state a tunnel converges to when no rule
+// matches ("connect" or "disconnect"). Removing every rule (rm) clears the
+// default along with the policy.
+func automationDefault(args []string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl automation default <tunnel> <connect|disconnect>")
+		return 2
+	}
+	name, action := args[0], strings.ToLower(args[1])
+	if action != "connect" && action != "disconnect" {
+		fmt.Fprintf(os.Stderr, "default state must be 'connect' or 'disconnect', got %q\n", args[1])
+		return 2
+	}
+	ss, err := settingsStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "automation:", err)
+		return 1
+	}
+	err = ss.Update(func(s *storage.Settings) error {
+		s.EnsureAutomation()
+		if len(s.Automation.PerTunnel[name]) == 0 {
+			return fmt.Errorf("%s has no automation rules — add one first ('automation add')", name)
+		}
+		if s.Automation.Defaults == nil {
+			s.Automation.Defaults = map[string]wifi.Action{}
+		}
+		s.Automation.Defaults[name] = wifi.Action(action)
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "automation:", err)
+		return 1
+	}
+	fmt.Printf("default state for %s when no rule matches: %s\n", name, action)
 	return 0
 }
 

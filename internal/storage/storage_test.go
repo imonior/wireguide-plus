@@ -391,8 +391,15 @@ func TestRenameAndDeleteTunnelRules(t *testing.T) {
 	if _, ok := got.Automation.PerTunnel["old"]; ok {
 		t.Error("old key should be gone after rename")
 	}
-	if len(got.Automation.PerTunnel["new"]) != 1 {
-		t.Errorf("new key should hold the migrated rule, got %+v", got.Automation.PerTunnel)
+	// The seeded policy was ONLY a none_match ("Otherwise" → connect) rule.
+	// Under the Default State model that is exactly Default=connect with no
+	// rules, so Normalize (run by EnsureAutomation on load) correctly
+	// removes the rule and records the default instead.
+	if rules := got.Automation.PerTunnel["new"]; len(rules) != 0 {
+		t.Errorf("none_match-only policy should migrate to a bare default, got %+v", rules)
+	}
+	if got.Automation.Defaults["new"] != wifi.ActionConnect {
+		t.Errorf("new key should hold Default=connect, got %q", got.Automation.Defaults["new"])
 	}
 	// Delete removes them.
 	if err := st.Update(func(s *Settings) error {
