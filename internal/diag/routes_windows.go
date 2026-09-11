@@ -15,12 +15,28 @@ import "github.com/imonior/wireguide-plus/internal/network"
 // default-route lookup.
 func getRoutesWindowsFull() ([]RouteEntry, error) {
 	rows := network.EnumerateIPv4Routes()
+	// Go's net.Interface Name on Windows IS the adapter FriendlyName the
+	// iphlpapi path reports, so the address map keys match directly.
+	addrs := buildIfaceAddrs()
 	out := make([]RouteEntry, 0, len(rows))
 	for _, r := range rows {
+		// The scheme renders the IPv4 default route as "default" rather
+		// than the synthetic 0.0.0.0/0.
+		dest := r.Destination
+		if dest == "0.0.0.0/0" || dest == "::/0" {
+			dest = "default"
+		}
+		// Keep only real unicast forwarding routes.
+		if !shouldKeepRoute(dest, r.Interface, 4, addrs) {
+			continue
+		}
+		kind, detail := classifyIface(r.Interface, "")
 		out = append(out, RouteEntry{
-			Destination: r.Destination,
-			Gateway:     r.Gateway,
-			Interface:   r.Interface,
+			Destination:     dest,
+			Gateway:         resolveOnLinkGateway(r.Gateway),
+			Interface:       r.Interface,
+			InterfaceType:   kind,
+			InterfaceDetail: detail,
 		})
 	}
 	return out, nil

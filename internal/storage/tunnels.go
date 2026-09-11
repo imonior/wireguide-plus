@@ -409,6 +409,58 @@ type TunnelMeta struct {
 	// (issue #17). 0 means "unknown" (tunnel predates this field) — callers
 	// fall back to the mtime.
 	CreatedUnix int64 `json:"created_unix,omitempty"`
+
+	// --- WireGuide Plus private policies -------------------------------
+	// These live in the sidecar and NEVER in the .conf (policy principle
+	// 1/2): the .conf stays a portable standard WireGuard/AWG document
+	// that wg-quick and the official clients can read unchanged.
+
+	// TrafficProtect marks this tunnel's AllowedIPs as protected: traffic
+	// to them must egress through this tunnel and must not leak through
+	// another interface when the tunnel is down. Tunnel-scoped — it is
+	// NOT a machine-wide kill switch; a full-tunnel config (0.0.0.0/0 +
+	// ::/0) is simply the maximum scope.
+	TrafficProtect bool `json:"traffic_protect,omitempty"`
+
+	// Domains lists the domains whose DNS should be routed through this
+	// tunnel (a DNS routing policy — principle 10), separate from
+	// AllowedIPs, which decides where IP traffic egresses (principle 12).
+	Domains []string `json:"domains,omitempty"`
+
+	// UseAsDefaultDNS selects this tunnel's DNS servers as the system's
+	// default resolver (principle 11). Only one tunnel can meaningfully
+	// hold this role; multiple selections are a detected conflict
+	// (principle 29).
+	UseAsDefaultDNS bool `json:"use_as_default_dns,omitempty"`
+
+	// DNSResolvePath marks this tunnel as the system's DNS RESOLVE PATH
+	// (principle 33): from the moment it connects, every DNS query made by
+	// any process on the machine must egress through this tunnel. It is
+	// enforced by dropping port 53/853 on every other interface, so a
+	// query can no longer bypass the tunnel — no matter WHICH resolver
+	// address the system (or an app) is configured to ask.
+	//
+	// It is deliberately NOT "use this tunnel's DNS servers as the system
+	// resolver" — that is UseAsDefaultDNS, which changes the ADDRESS.
+	// This flag changes the PATH: the resolver address the system already
+	// has is kept, and only the way out is constrained.
+	//
+	// The role is exclusive while running: several tunnels may have the
+	// switch ON in their config (saving only warns), but at most one
+	// connected tunnel may actually own the path. A second one asking for
+	// it is held at connect time until the user resolves it.
+	DNSResolvePath bool `json:"dns_resolve_path,omitempty"`
+}
+
+// NormalizeDomainEntry canonicalises one "domains through tunnel" entry so
+// the DNS analyzer compares like with like: trimmed, lowercased and without
+// the trailing root dot. Wildcard labels (*.example.com) keep their "*." —
+// the analyzer strips it when comparing, but the stored value should read
+// back exactly as the user typed it.
+func NormalizeDomainEntry(d string) string {
+	d = strings.TrimSpace(d)
+	d = strings.TrimSuffix(d, ".")
+	return strings.ToLower(d)
 }
 
 func (s *TunnelStore) metaPath(name string) string {

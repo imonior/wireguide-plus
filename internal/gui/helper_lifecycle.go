@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/elevate"
@@ -17,6 +18,46 @@ import (
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// shutdownGate lets the quit path tell the helper-recovery machinery that
+// the helper going away is EXPECTED, not a crash.
+//
+// Without it, quitting deadlocks the app: doShutdown sends the helper a
+// Shutdown RPC, the health monitor's next 5s tick sees the socket go dead,
+// concludes the helper crashed, and calls recoverHelper — which reaches
+// elevate.SpawnHelper and blocks in `osascript … with administrator
+// privileges`. That child is started with exec.Command (deliberately, so a
+// slow password entry isn't cancelled mid-typing), so it cannot be
+// interrupted: the WaitGroup in Run() then waits forever on a goroutine
+// parked behind an admin dialog, and the app never exits.
+//
+// The gate is tripped BEFORE the Shutdown RPC is sent, so the monitor is
+// already standing down by the time the socket actually goes dead.
+type shutdownGate struct {
+	once  sync.Once
+	ch    chan struct{}
+	tripd atomic.Bool
+}
+
+func newShutdownGate() *shutdownGate {
+	return &shutdownGate{ch: make(chan struct{})}
+}
+
+// Trip marks the app as shutting down. Idempotent and safe to call from
+// every quit path (tray item, dock, ApplicationWillTerminate, ctl stop).
+func (g *shutdownGate) Trip() {
+	g.once.Do(func() {
+		g.tripd.Store(true)
+		close(g.ch)
+	})
+}
+
+// Tripped reports whether shutdown has begun.
+func (g *shutdownGate) Tripped() bool { return g.tripd.Load() }
+
+// Signal returns a channel that is closed when shutdown begins, so
+// long-lived goroutines can select on it.
+func (g *shutdownGate) Signal() <-chan struct{} { return g.ch }
 
 // ensureHelper connects to an existing helper (via socket) or spawns a new
 // one with privilege elevation. Polls for readiness until the context expires.
@@ -159,7 +200,7 @@ func ensureHelper(ctx context.Context, dataDir string) (*ipc.Client, error) {
 // This fixes the previous design where a helper crash left the app
 // permanently unable to receive events (the bridge was still attached to a
 // dead socket).
-func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, dataDir string, bridge *eventBridge, done <-chan struct{}, wg *sync.WaitGroup) {
+func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, dataDir string, bridge *eventBridge, done <-chan struct{}, gate *shutdownGate, wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(5 * time.Second)
@@ -171,7 +212,19 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 			case <-done:
 				slog.Info("helper health monitor stopped")
 				return
+			case <-gate.Signal():
+				// Quit path: the helper is about to be shut down on
+				// purpose. Standing down here — rather than at
+				// close(healthDone), which only happens after
+				// app.Run() returns — is what keeps the monitor from
+				// mistaking the expected disconnect for a crash.
+				slog.Info("helper health monitor stopped (shutdown in progress)")
+				return
 			case <-ticker.C:
+			}
+
+			if gate.Tripped() {
+				return
 			}
 
 			c := clients.Get()
@@ -217,7 +270,7 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 				wasAlive = false
 
 				// Try to recover immediately — don't wait for the next tick.
-				if recoverHelper(clients, bridge, dataDir, done) {
+				if recoverHelper(clients, bridge, dataDir, done, gate) {
 					slog.Info("helper recovered")
 					app.Event.Emit("helper", HelperEvent{Alive: true})
 					wasAlive = true
@@ -225,7 +278,7 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 
 			case !alive && !wasAlive:
 				// Retry recovery on subsequent ticks until it comes back.
-				if recoverHelper(clients, bridge, dataDir, done) {
+				if recoverHelper(clients, bridge, dataDir, done, gate) {
 					slog.Info("helper recovered")
 					app.Event.Emit("helper", HelperEvent{Alive: true})
 					wasAlive = true
@@ -275,7 +328,14 @@ func probeHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir string)
 // recoverHelper attempts to re-establish a working helper connection. Returns
 // true if a new client is now in place. Best-effort — caller decides whether
 // to retry on the next tick.
-func recoverHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir string, done <-chan struct{}) bool {
+func recoverHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir string, done <-chan struct{}, gate *shutdownGate) bool {
+	// The helper's socket going dead during shutdown is the expected
+	// outcome, not a failure. Reinstalling here would pop an admin dialog
+	// that nothing can cancel, and the quit would never complete.
+	if gate.Tripped() {
+		slog.Debug("helper recovery skipped: shutdown in progress")
+		return false
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -285,6 +345,8 @@ func recoverHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir strin
 	go func() {
 		select {
 		case <-done:
+			cancel()
+		case <-gate.Signal():
 			cancel()
 		case <-ctx.Done():
 		case <-earlyExit:
@@ -305,6 +367,27 @@ func recoverHelper(clients *ipc.ClientHolder, bridge *eventBridge, dataDir strin
 	// Wi-Fi transition.
 	ResendSSIDToHelper(clients)
 	return true
+}
+
+// waitForShutdown waits for the background goroutines to exit, but gives up
+// after timeout instead of blocking app termination forever.
+//
+// This is the backstop for the quit deadlock: a goroutine that is already
+// parked inside an un-cancellable child process (the osascript elevation
+// dialog) will never return, and an unbounded WaitGroup wait would hang the
+// app at quit. Leaking it costs nothing — the process is exiting anyway.
+func waitForShutdown(wg *sync.WaitGroup, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		slog.Warn("shutdown: background goroutines did not exit in time; quitting anyway",
+			"timeout", timeout)
+	}
 }
 
 // isHelperGoneErr returns true when the error looks like "the helper

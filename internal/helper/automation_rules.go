@@ -394,6 +394,40 @@ func (h *Helper) automationConnect(name, reason, ssid string) {
 		slog.Warn("automation: cannot load tunnel config", "tunnel", name, "error", err)
 		return
 	}
+
+	// Policy validation sits BETWEEN the desired action and the tunnel
+	// operation (principle 32): the automation engine decides WHAT it
+	// wants; the policy layer decides whether that is allowed. Automation
+	// is blocked by default on a true tie and never prompts — it logs and
+	// notifies the tray instead (principle 25).
+	if block := h.policyBlockFor(name); block != nil {
+		slog.Warn("automation: connect blocked by policy",
+			"category", "policy",
+			"tunnel", name, "reason", block.Reason, "summary", block.Summary)
+		h.server.Broadcast(ipc.EventPolicyBlocked, *block)
+		return
+	}
+
+	// The DNS resolve path is exclusive among CONNECTED tunnels, which is a
+	// runtime fact the configuration-only analyzer cannot see. A manual
+	// connect gets parked and asks the user; automation has nobody to
+	// answer, so it never waits — it skips and notifies, same as any other
+	// policy block (principle 25).
+	if h.tunnelClaimsDNSPath(name) {
+		if blockers := h.dnsPathBlockers(name); len(blockers) > 0 {
+			block := ipc.PolicyBlockedPayload{
+				Tunnel: name,
+				Reason: "dns",
+				Summary: fmt.Sprintf("the system's DNS resolve path is already carried by %s — only one connected tunnel can carry it",
+					strings.Join(blockers, ", ")),
+			}
+			slog.Warn("automation: connect blocked by DNS resolve path",
+				"category", "policy", "tunnel", name, "blockers", blockers)
+			h.server.Broadcast(ipc.EventPolicyBlocked, block)
+			return
+		}
+	}
+
 	slog.Info("automation: rule connect",
 		"category", "network",
 		"tunnel", name, "reason", reason, "ssid", ssid)
@@ -401,9 +435,8 @@ func (h *Helper) automationConnect(name, reason, ssid string) {
 	err = h.doConnectHeld(cfg)
 	if err == nil {
 		// Same firewall follow-up a manual connect does — otherwise a
-		// headless automation connect gets no DNS protection and, if the
-		// kill switch is already on, its endpoints are never permitted so
-		// the tunnel can't pass traffic (issue #12).
+		// headless automation connect never enforces the tunnel's DNS resolve path
+		// DNS policy (issue #12).
 		h.applyPostConnectFirewall(cfg)
 	}
 	h.connectMu.Unlock()
@@ -431,28 +464,11 @@ func (h *Helper) disconnectAutoManaged(name string) {
 	if h.monitor != nil {
 		h.monitor.CancelRetryFor(name)
 	}
-	// Snapshot the interface name before teardown so we can strip it from
-	// the kill-switch filter set afterwards, exactly as handleDisconnect
-	// does. Without this a rule-driven disconnect leaves a dead tunnel's
-	// LUID permitted in the WFP filters (issue #12).
-	iface := ""
-	if h.firewall.IsKillSwitchEnabled() {
-		for _, st := range h.manager.AllStatuses() {
-			if st != nil && st.TunnelName == name && st.InterfaceName != "" {
-				iface = st.InterfaceName
-				break
-			}
-		}
-	}
 	if err := h.manager.DisconnectTunnel(name); err != nil {
 		slog.Warn("automation disconnect failed", "tunnel", name, "error", err)
 	}
-	if iface != "" {
-		if err := h.firewall.RemoveKillSwitchTunnel(iface); err != nil {
-			slog.Warn("RemoveKillSwitchTunnel after automation disconnect failed",
-				"interface", iface, "error", err)
-		}
-	}
+	// If this tunnel carried the DNS resolve path policy, drop its enforcement.
+	h.clearDNSPathIfOwner(name)
 	h.mu.Lock()
 	delete(h.activeCfgs, name)
 	h.mu.Unlock()

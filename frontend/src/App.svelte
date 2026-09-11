@@ -8,6 +8,7 @@
   import ScriptEditor from './lib/ScriptEditor.svelte';
   import FieldsEditor from './lib/FieldsEditor.svelte';
   import EgressBinding from './lib/EgressBinding.svelte';
+  import TunnelPolicies from './lib/TunnelPolicies.svelte';
   import { appSettings, refreshAppSettings } from './stores/settings.js';
   import Settings from './lib/Settings.svelte';
   import LogViewer from './lib/LogViewer.svelte';
@@ -39,6 +40,10 @@
   let showZipResult = false;
   let zipResults = [];
   let conflictList = [];
+  // A connect parked by the helper because another connected tunnel already
+  // owns the system's DNS resolve path. The helper holds the connect until
+  // the user answers here (principle 33).
+  let dnsPathConflict = null; // { tunnel, blockers }
   let pendingConnectName = '';
   let editName = '';
   let editorContent = '';
@@ -48,6 +53,10 @@
   // persistence (no meta sidecar exists before the first save), hands the
   // choice here, and persistEditorSave applies it with the final name.
   let pendingBinding = null;
+  // Private policies (Traffic Protect / domains / default DNS) staged for a
+  // NEW tunnel — persisted right after the config itself is saved, because
+  // the meta sidecar only exists once the tunnel does.
+  let pendingPolicies = null;
   // 'conf' = raw conf text editor, 'fields' = per-field form editor.
   let editorTab = 'conf';
   // Bumped every time the fields tab becomes visible: FieldsEditor reparses
@@ -86,6 +95,8 @@
   let updateUnsub = null;
   let configChangedUnsub = null;
   let tunnelsChangedUnsub = null;
+  let policyBlockedUnsub = null;
+  let dnsPathConflictUnsub = null;
   let criticalErrors = []; // array of { where, detail, at } — shown as a persistent banner
 
   // App-level ESC handler: close the editor modal. ConfigEditor wraps
@@ -195,6 +206,23 @@
       appVersion = await TunnelService.GetVersion();
     } catch (_) { /* version label is best-effort */ }
 
+    // Automation refused to connect a tunnel because its policies conflict
+    // with another tunnel. Passive notification only — automation runs
+    // unattended and must never open a modal and wait (principle 25).
+    policyBlockedUnsub = Events.On('policy_blocked', (event) => {
+      const p = event.data || {};
+      showToast($t('policy.blocked_toast', { tunnel: p.tunnel || '', reason: p.reason || '' }));
+    });
+
+    // A MANUAL connect is parked because another connected tunnel already
+    // carries the system's DNS resolve path. The helper is waiting for an
+    // answer — it neither connects nor fails until we reply.
+    dnsPathConflictUnsub = Events.On('dns_path_conflict', (event) => {
+      const d = event?.data || {};
+      if (!d?.tunnel) return;
+      dnsPathConflict = { tunnel: d.tunnel, blockers: d.blockers || [] };
+    });
+
     // Wails v3 native file drop — HTML5 dragdrop doesn't work in WebKit.
     // Event payload: { files: string[], details: {...} }
     filesDroppedUnsub = Events.On('files-dropped', async (event) => {
@@ -265,11 +293,10 @@
     });
 
     // Helper auto-connected a tunnel via Wi-Fi rules.
-    // EventStatus broadcast handles tunnel state/status update within 1s.
-    // Only need to apply firewall settings here (same as after manual connect).
-    autoConnectedUnsub = Events.On('auto_connected', async () => {
-      await applyFirewallSettings();
-    });
+    // EventStatus broadcast handles tunnel state/status update within 1s;
+    // per-tunnel policies (DNS resolve path etc.) are enforced helper-side, so
+    // nothing else is needed here.
+    autoConnectedUnsub = Events.On('auto_connected', () => {});
 
     // External config.json / tunnel-file changes (the CLI) — reflect them
     // in the running GUI so it never sits on stale state.
@@ -311,6 +338,7 @@
     if (updateUnsub) updateUnsub();
     if (configChangedUnsub) configChangedUnsub();
     if (tunnelsChangedUnsub) tunnelsChangedUnsub();
+    if (dnsPathConflictUnsub) dnsPathConflictUnsub();
     if (toastTimer) clearTimeout(toastTimer);
   });
 
@@ -598,6 +626,7 @@
     editorIsNew = true;
     editorTab = 'conf';
     pendingBinding = null;
+    pendingPolicies = null;
     showEditor = true;
     refreshScriptsEnabled();
   }
@@ -714,6 +743,14 @@
           }
         }
         pendingBinding = null;
+        if (pendingPolicies) {
+          try {
+            await TunnelService.SetTunnelPolicies(saveName, pendingPolicies);
+          } catch (polErr) {
+            showToast(`Policy save failed: ${errText(polErr)}`);
+          }
+        }
+        pendingPolicies = null;
       } else {
         const renamed = saveName !== originalName;
         if (renamed) {
@@ -764,44 +801,58 @@
     }
   }
 
-  // Apply kill switch and DNS protection based on saved settings.
-  // Called after any successful connect (manual or auto).
-  async function applyFirewallSettings() {
-    try {
-      const s = await TunnelService.GetSettings();
-      if (s?.kill_switch) await TunnelService.SetKillSwitch(true);
-      if (s?.dns_protection) await TunnelService.SetDNSProtection(true);
-    } catch (e) {
-      console.warn('auto-apply firewall settings failed:', e);
-    }
-  }
-
   // Actually perform the connect RPC (after all warnings have been resolved).
   async function doConnectFinal(name) {
     try {
       await TunnelService.Connect(name);
       await refreshTunnels(TunnelService);
       await refreshStatus(TunnelService);
-      await applyFirewallSettings();
     } catch (e) {
       showToast("Connect failed: " + errText(e));
     }
   }
 
-  // Check for routing conflicts before connecting. If conflicts exist, show
-  // the ConflictWarning dialog; otherwise proceed directly.
+  // Check for conflicts before connecting, then show one dialog that covers
+  // BOTH kinds:
+  //   - system interface overlaps (Tailscale, another WireGuard instance)
+  //   - policy conflicts between this app's own tunnels (routing / DNS /
+  //     traffic protection) from the pure analyzers
+  //
+  // Conflict Policy (manual connect): a blocking policy conflict — a true
+  // tie such as two tunnels claiming the same prefix — stops the connect by
+  // default; "Connect Anyway" is the explicit override. Informational
+  // conflicts (containment resolved by longest-prefix match) never block.
   async function doConnect(name) {
+    let policyReport = null;
     try {
-      const conflicts = await TunnelService.CheckConflicts(name);
-      if (conflicts && conflicts.length > 0) {
-        conflictList = conflicts;
-        pendingConnectName = name;
-        showConflictWarning = true;
-        return;
+      const report = await TunnelService.PolicyReport(name);
+      if (report && (report.routes?.length || report.dns?.length || report.protection?.length)) {
+        policyReport = report;
       }
     } catch (e) {
-      // Non-fatal — if the conflict check itself fails, proceed anyway.
+      // Non-fatal — the analyzers are advisory; a failure must not stop a
+      // manual connect the user explicitly asked for.
+      console.warn('policy check failed:', e);
+    }
+
+    let conflicts = [];
+    try {
+      conflicts = await TunnelService.CheckConflicts(name);
+    } catch (e) {
       console.warn('conflict check failed:', e);
+    }
+
+    const policyBlocking =
+      policyReport &&
+      [...(policyReport.routes || []), ...(policyReport.dns || []), ...(policyReport.protection || [])]
+        .some((c) => c.severity === 'blocking');
+
+    if (policyBlocking || (conflicts && conflicts.length > 0)) {
+      conflictList = conflicts || [];
+      policyConflictReport = policyReport;
+      pendingConnectName = name;
+      showConflictWarning = true;
+      return;
     }
     await doConnectFinal(name);
   }
@@ -814,6 +865,52 @@
   function handleConflictCancel() {
     showConflictWarning = false;
     conflictList = [];
+    policyConflictReport = null;
+  }
+
+  // "Edit Tunnel" from the conflict dialog: open the editor on the tunnel so
+  // the user can fix the overlap instead of overriding it (principle 26 —
+  // the app never rewrites AllowedIPs on the user's behalf).
+  async function handleConflictEdit() {
+    const name = pendingConnectName;
+    showConflictWarning = false;
+    conflictList = [];
+    policyConflictReport = null;
+    if (name) await handleEdit({ detail: name });
+  }
+
+  // --- Parked connect: DNS resolve path already taken ------------------
+  // "Turn it off and connect": drop THIS tunnel's claim, then let the
+  // parked connect through. The helper keeps the original connect RPC; we
+  // only answer it.
+  async function onDNSPathTurnOff() {
+    const name = dnsPathConflict?.tunnel;
+    dnsPathConflict = null;
+    if (!name) return;
+    try {
+      const p = (await TunnelService.GetTunnelPolicies(name)) || {};
+      await TunnelService.SetTunnelPolicies(name, { ...p, dns_resolve_path: false });
+    } catch (e) {
+      console.warn('failed to clear the DNS resolve path policy:', e);
+    }
+    try {
+      await TunnelService.ResolveDNSPathConflict(name, 'disable');
+    } catch (e) {
+      showToast('Resolve failed: ' + errText(e));
+    }
+  }
+
+  // "Stop connecting": the helper abandons the parked connect.
+  async function onDNSPathCancel() {
+    const name = dnsPathConflict?.tunnel;
+    dnsPathConflict = null;
+    if (!name) return;
+    try {
+      await TunnelService.ResolveDNSPathConflict(name, 'cancel');
+      showToast($t('conflict.dns_path_cancelled', { tunnel: name }));
+    } catch (e) {
+      showToast('Cancel failed: ' + errText(e));
+    }
   }
 
   // Legacy migration finished — reload tunnels/settings so the migrated data
@@ -1103,6 +1200,11 @@
                rename-in-progress cannot orphan the binding. -->
           <EgressBinding name={editorOriginalName || editName} isNew={editorIsNew}
             on:bindchange={(e) => { pendingBinding = e.detail; }} />
+          <!-- WireGuide Plus private policies. Deliberately NOT part of the
+               .conf: they live in the meta sidecar so the config stays
+               portable (policy principle 1/2). -->
+          <TunnelPolicies name={editorOriginalName || editName} isNew={editorIsNew}
+            on:policychange={(e) => { pendingPolicies = e.detail; }} />
           <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} />
         </div>
       </div>
@@ -1117,7 +1219,33 @@
     <ConflictWarning
       conflicts={conflictList}
       on:proceed={handleConflictProceed}
+      policyReport={policyConflictReport}
+      on:edit={handleConflictEdit}
       on:cancel={handleConflictCancel} />
+  {/if}
+
+  {#if dnsPathConflict}
+    <div class="modal-backdrop">
+      <div class="modal modal-dns-path" on:click|stopPropagation
+        role="alertdialog" aria-modal="true" tabindex="-1"
+        aria-label={$t('conflict.dns_path_title')}>
+        <h4 class="dns-path-title">{$t('conflict.dns_path_title')}</h4>
+        <p class="dns-path-text">
+          {$t('conflict.dns_path_message', {
+            tunnel: dnsPathConflict.tunnel,
+            blockers: dnsPathConflict.blockers.join(', '),
+          })}
+        </p>
+        <div class="dns-path-actions">
+          <button class="btn" on:click={onDNSPathCancel}>
+            {$t('conflict.dns_path_cancel')}
+          </button>
+          <button class="btn btn-primary" on:click={onDNSPathTurnOff}>
+            {$t('conflict.dns_path_disable')}
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 
   <EgressLostDialog
@@ -1697,12 +1825,12 @@
   .modal-editor {
     position: relative;
     width: 900px;
-    height: 760px;
+    height: 920px;
     padding: 0;
     overflow: hidden;
     resize: both;
     min-width: 560px;
-    min-height: 420px;
+    min-height: 460px;
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 40px);
     border-radius: 14px;
@@ -1795,17 +1923,50 @@
     gap: 8px;
     margin-top: 6px;
   }
+  /* Parked connect: the DNS resolve path is already owned by another
+     connected tunnel. Same footprint as the other alert dialogs. */
+  .modal-dns-path {
+    width: 440px;
+    padding: 18px 20px;
+  }
+  .dns-path-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+  .dns-path-text {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .dns-path-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
   /* Stacks the .conf editor and the (optional) script panel vertically
-     inside the resizable modal. The CodeMirror wrapper flexes; the script
-     panel keeps its natural height. */
+     inside the resizable modal. The stack itself scrolls: when the bottom
+     sections (EgressBinding / TunnelPolicies / ScriptEditor) are taller
+     than the modal, the WHOLE column scrolls instead of the editor being
+     squeezed away — the conf/fields editor keeps a guaranteed floor. */
   .editor-stack {
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow-y: auto;
   }
   .editor-stack :global(.editor-wrapper) {
-    flex: 1;
-    min-height: 0;
+    /* Fixed compact height for the .conf / fields editing area. flex-grow is
+       OFF so it never expands to fill the modal; the binding / policy /
+       script sections below flow beneath it and the whole stack scrolls. */
+    flex: 0 0 auto;
+    height: 280px;
+    min-height: 280px;
+  }
+  .editor-stack :global(.fields-editor) {
+    flex: 0 0 auto;
+    height: 280px;
+    min-height: 280px;
   }
   .modal-zip-result {
     max-width: 90vw;

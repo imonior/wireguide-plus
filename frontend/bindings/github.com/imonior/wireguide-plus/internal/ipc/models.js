@@ -88,20 +88,6 @@ export class SettingsChangedPayload {
              * @member
              * @type {boolean | null | undefined}
              */
-            this["kill_switch"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {boolean | null | undefined}
-             */
-            this["dns_protection"] = undefined;
-        }
-        if (/** @type {any} */(false)) {
-            /**
-             * @member
-             * @type {boolean | null | undefined}
-             */
             this["health_check"] = undefined;
         }
         if (/** @type {any} */(false)) {

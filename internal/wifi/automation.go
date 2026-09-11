@@ -140,6 +140,12 @@ type InterfaceInfo struct {
 	Name   string `json:"name"`
 	IsWiFi bool   `json:"is_wifi"`
 	Active bool   `json:"active"`
+	// Type is a stable kind label (wifi / ethernet / bridge / virtual /
+	// loopback / cellular / vpn) derived from the interface name and the
+	// Wi-Fi flag. The automation editor's network-status board shows it as a
+	// generic short label next to the raw name (e.g. "en0 · Wi-Fi"), matching
+	// the Routes view's interface column. Empty when the kind can't be told.
+	Type string `json:"type,omitempty"`
 }
 
 // NetworkContext is the current network state a rule set is evaluated

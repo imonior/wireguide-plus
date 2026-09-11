@@ -23,9 +23,9 @@ sudo bash scripts/<测试脚本>.sh <wireguideplus 二进制路径> <VPN 配置�
 | 脚本 | 用途 | 特殊要求 |
 |---|---|---|
 | `automation_integration_test.sh` | 自动化审计链路集成测试：验证自动重连/自动化配置下的行为，通过 `generate_204` 探测连通性 | 需 root + 可访问外网 |
-| `cli_feature_matrix_test.sh` | CLI 功能矩阵 + 恢复测试：遍历 `ctl` 子命令（killswitch、dns-protection 等），验证各开关与故障恢复 | 需 root |
+| `cli_feature_matrix_test.sh` | CLI 功能矩阵 + 恢复测试：遍历 `ctl` 子命令（healthcheck、pin-interface、loglevel 等），验证各开关与故障恢复 | 需 root |
 | `crash_recovery_integration_test.sh` | 崩溃恢复集成测试：构造崩溃场景（systemd 单元被杀），验证自动重连与 throw 路由清理 | 需 root + systemd |
-| `firewall_integration_test.sh` | 防火墙集成测试：验证 killswitch / DNS 保护的 nftables 规则在 split-tunnel 下是否正确拦截 | 需 root + nftables |
+| `firewall_integration_test.sh` | **已废弃（直接跳过）**：原用于验证全局 killswitch / DNS 保护开关的 nftables 规则；该开关已移除，仅保留按隧道 System DNS 的强制能力 | 无需执行 |
 | `full_tunnel_integration_test.sh` | **破坏性**全隧道测试：`AllowedIPs=0.0.0.0/0,::/0` 接管全部流量，验证公网 IP/DNS 均走隧道；失败时走紧急恢复 | 需 root，**会中断宿主机网络**，建议远程会话防锁死 |
 | `healthcheck_integration_test.sh` | 健康检查集成测试：验证对端不可达时健康检查触发重连，以及 nftables 恢复规则 | 需 root + nftables |
 | `resource_stability_test.sh` | 资源稳定性测试：循环连接/断开（默认 30 轮）并高频调用状态查询（默认 100 次），监控内存泄漏 | 可通过 `WIREGUIDEPLUS_RESOURCE_CYCLES`、`WIREGUIDEPLUS_RESOURCE_STATUS_CALLS`、`WIREGUIDEPLUS_RESOURCE_GOGC` 等环境变量调整 |

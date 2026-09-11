@@ -13,20 +13,33 @@ import (
 
 // Settings holds application-wide settings.
 type Settings struct {
-	Language      string `json:"language"`        // "auto", "en", "ko", "ja", "zh"
-	Theme         string `json:"theme"`           // "dark", "light", "system"
-	TrayIconStyle string `json:"tray_icon_style"` // "color" (MVP: color only)
-	AutoStart     bool   `json:"auto_start"`      // launch GUI on OS login
-	StartMinimized bool  `json:"start_minimized"` // start hidden in the tray
+	Language       string `json:"language"`        // "auto", "en", "ko", "ja", "zh"
+	Theme          string `json:"theme"`           // "dark", "light", "system"
+	TrayIconStyle  string `json:"tray_icon_style"` // "color" (MVP: color only)
+	AutoStart      bool   `json:"auto_start"`      // launch GUI on OS login
+	StartMinimized bool   `json:"start_minimized"` // start hidden in the tray
 	// NotifyDurationMs is how long the connection-status notification
 	// bubble stays on screen (ms). 0 means the default (10s).
 	NotifyDurationMs int `json:"notify_duration_ms,omitempty"`
-	KillSwitch       bool `json:"kill_switch"`
-	DNSProtection bool   `json:"dns_protection"`
-	HealthCheck   bool   `json:"health_check"`  // periodic handshake age monitoring
-	PinInterface  bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
-	LogLevel      string `json:"log_level"`     // "debug", "info", "warn", "error"
-	CompactList   bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
+	// Legacy keys "kill_switch" and "dns_protection" were global toggles
+	// and are GONE: a machine-wide kill switch cannot express intent when
+	// several tunnels run at once, and a single "force DNS through the
+	// VPN" switch cannot say WHICH of several connected tunnels the
+	// system resolver should use. Both are now per-tunnel policies in the
+	// .meta.json sidecar (TrafficProtect and DNSResolvePath). Unknown keys in
+	// an existing config.json are simply ignored on load, so a user who
+	// had them enabled keeps working — the rules they installed are torn
+	// down with the helper that installed them.
+	// DNSResolvePath is the MASTER switch for the per-tunnel "DNS resolve
+	// path" policy (principle 33). Off means the feature does not exist:
+	// no per-tunnel toggle is shown, nothing is enforced, and no conflict
+	// is reported. Turning it on only reveals the per-tunnel switches —
+	// each tunnel still has to opt in on its own.
+	DNSResolvePath bool   `json:"dns_resolve_path"`
+	HealthCheck    bool   `json:"health_check"`  // periodic handshake age monitoring
+	PinInterface   bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
+	LogLevel       string `json:"log_level"`     // "debug", "info", "warn", "error"
+	CompactList    bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
 	// LogRetentionDays is how many days of daily log files to keep.
 	// 0 means the default (7). Files older than this are removed at
 	// startup and whenever settings are saved.
@@ -229,22 +242,20 @@ func (s *Settings) DeleteTunnelRules(name string) {
 func DefaultSettings() *Settings {
 	on := true
 	return &Settings{
-		Language:        "auto",
-		Theme:           "system", // follows OS dark/light mode
-		TrayIconStyle:   "color",
-		NotifyDurationMs: 10000, // 10s default notification duration
-		KillSwitch:      false,
-		DNSProtection:   false,
-		HealthCheck:     false,
-		PinInterface:    false, // off by default — enable for dual-network setups
-		EnableAWG:       true,  // AWG support is on by default
-		LogLevel:            "info",
+		Language:             "auto",
+		Theme:                "system", // follows OS dark/light mode
+		TrayIconStyle:        "color",
+		NotifyDurationMs:     10000, // 10s default notification duration
+		HealthCheck:          false,
+		PinInterface:         false, // off by default — enable for dual-network setups
+		EnableAWG:            true,  // AWG support is on by default
+		LogLevel:             "info",
 		LogRetentionDays:     logging.DefaultRetentionDays,
 		HistoryRetentionDays: DefaultHistoryRetentionDays,
-		AutoUpdateCheck: &on,
-		ListSort:        "name_asc",
-		ListActiveOnTop: true,
-		ListPaneWidth:   240,
+		AutoUpdateCheck:      &on,
+		ListSort:             "name_asc",
+		ListActiveOnTop:      true,
+		ListPaneWidth:        240,
 		WifiRules: wifi.Rules{
 			// Initialize the map so JSON serialization round-trips
 			// produce {} rather than null for an empty mapping.
@@ -325,9 +336,8 @@ func (s *SettingsStore) loadLocked() (*Settings, error) {
 // Update runs a read-modify-write of the settings file that is atomic
 // ACROSS PROCESSES: it holds an exclusive file lock across the whole
 // load → mutate → save, so a `wireguideplus ctl` edit and a GUI edit can't
-// clobber each other (e.g. a CLI automation edit reverting a GUI
-// kill-switch change). Field-level mutators (the CLI, tunnel rename/
-// delete) should use this rather than Load-then-Save. mutate sees the
+// clobber each other (e.g. a CLI automation edit reverting a GUI health-check
+// change). Field-level mutators (the CLI, tunnel rename/delete) should use this rather than Load-then-Save. mutate sees the
 // freshest on-disk state.
 func (s *SettingsStore) Update(mutate func(*Settings) error) error {
 	s.mu.Lock()

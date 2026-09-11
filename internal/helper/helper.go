@@ -139,9 +139,23 @@ type Helper struct {
 	mu         sync.Mutex
 	activeCfgs map[string]*domain.WireGuardConfig // cached for reconnect, keyed by tunnel name
 
-	// Firewall state saved during reconnect suspend/resume cycle.
-	// These track what was active before suspend so resume can restore it.
-	fwSavedKillSwitch    bool
+	// dnsPathOwner is the connected tunnel currently enforcing the
+	// per-tunnel DNS resolve path policy (port 53 dropped everywhere except
+	// through its interface). Guarded by mu. Empty when no tunnel holds the
+	// role — and then DNS simply behaves as the OS configured it.
+	dnsPathOwner string
+
+	// dnsPathWaits holds the decision channel of every connect parked
+	// behind another tunnel's DNS resolve path; dnsPathWaived the tunnels
+	// whose claim the user waived for the current connect. See
+	// internal/helper/dns_path.go.
+	dnsPathMu     sync.Mutex
+	dnsPathWaits  map[string]chan dnsPathDecision
+	dnsPathWaived map[string]bool
+
+	// Firewall state saved during reconnect suspend/resume cycle. Only the
+	// per-tunnel DNS resolve path enforcement can be active here since the
+	// global kill switch and DNS-protection toggles were removed.
 	fwSavedDNSProtection bool
 	fwSavedDNSServers    []string // DNS servers to re-enable on resume
 
@@ -200,6 +214,14 @@ type Helper struct {
 	// trigger goroutine), read by automationEvalLoop. Guarded by
 	// atomic.Value.
 	evalReason atomic.Value
+
+	// evalMailboxOnce guards the lazy make of evalRequests (see
+	// ensureEvalMailbox). Regression guard: a release shipped with this
+	// field never initialised — a nil channel makes every
+	// requestAutomationEval hit the select's default (request silently
+	// dropped) and leaves automationEvalLoop blocked on its select
+	// forever, silently disabling the whole automation engine.
+	evalMailboxOnce sync.Once
 
 	// userTunnelStore reads .conf files from the user's home dir
 	// (derived from the uid passed at launch). Needed so wifi rules
@@ -264,6 +286,13 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		done:            make(chan struct{}),
 		startedAt:       time.Now(),
 	}
+
+	// The eval mailbox MUST exist before anything can post into it (the
+	// startup evaluation fires seconds after Run begins). ensureEvalMailbox
+	// is also called by requestAutomationEval, so even a future refactor
+	// that drops this line degrades to "mailbox created on first use"
+	// instead of a silently dead engine.
+	h.ensureEvalMailbox()
 
 	// Pinned-egress loss reporter: when a tunnel's manually pinned
 	// physical interface disappears, tell the GUI so it can raise the
@@ -380,11 +409,10 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// them in Settings (plus log level once at GUI startup), so without
 	// this a freshly-restarted headless helper ran with defaults — health
 	// check off, pin-interface off, log level Info — regardless of
-	// config.json. Kill switch / DNS protection are deliberately NOT
-	// auto-applied here: they are firewall state transitions tied to the
-	// connect path (see applyPostConnectFirewall); enabling them at boot
-	// with no tunnel up would block all traffic, which is a product
-	// decision, not a restore.
+	// config.json. The per-tunnel DNS resolve path enforcement is deliberately
+	// NOT auto-applied here: it is a firewall state transition tied to the
+	// connect path of a specific tunnel (see applyPostConnectFirewall), so
+	// there is nothing to apply until that tunnel is up.
 	if settings, err := h.loadUserSettings(); err == nil {
 		h.monitor.SetHealthCheck(settings.HealthCheck)
 		if settings.PinInterface {
@@ -680,12 +708,11 @@ func (h *Helper) shutdown() {
 // rules. Called by the reconnect monitor before Disconnect so that old pf rules
 // referencing the previous utun interface name don't block the new connection.
 func (h *Helper) suspendFirewall() error {
-	ksEnabled := h.firewall.IsKillSwitchEnabled()
 	dnsEnabled := h.firewall.IsDNSProtectionEnabled()
 
 	h.mu.Lock()
-	h.fwSavedKillSwitch = ksEnabled
 	h.fwSavedDNSProtection = dnsEnabled
+	h.fwSavedDNSServers = nil
 	// DNS servers are stored from any active config's Interface.DNS
 	for _, cfg := range h.activeCfgs {
 		if len(cfg.Interface.DNS) > 0 {
@@ -695,72 +722,31 @@ func (h *Helper) suspendFirewall() error {
 	}
 	h.mu.Unlock()
 
-	if !ksEnabled && !dnsEnabled {
+	if !dnsEnabled {
 		slog.Debug("suspendFirewall: no firewall rules active, nothing to suspend")
 		return nil
 	}
 
-	slog.Info("suspending firewall rules for reconnect",
-		"kill_switch", ksEnabled, "dns_protection", dnsEnabled)
-
-	// Disable DNS protection first (it may be a sub-anchor of the kill switch).
-	dnsDisabled := false
-	if dnsEnabled {
-		if err := h.firewall.DisableDNSProtection(); err != nil {
-			slog.Warn("suspendFirewall: failed to disable DNS protection", "error", err)
-		} else {
-			dnsDisabled = true
-		}
+	slog.Info("suspending firewall rules for reconnect", "dns_protection", dnsEnabled)
+	if err := h.firewall.DisableDNSProtection(); err != nil {
+		return fmt.Errorf("suspendFirewall: disable DNS protection: %w", err)
 	}
-	if ksEnabled {
-		if err := h.firewall.DisableKillSwitch(); err != nil {
-			// We just turned DNS protection off but the kill switch
-			// is still on — that's an inconsistent state. Try to
-			// re-enable DNS protection so the system goes back to
-			// where it was, and surface the error to the caller so
-			// resumeFirewall isn't called against a state that
-			// already half-resumed.
-			if dnsDisabled {
-				h.mu.Lock()
-				dnsServers := h.fwSavedDNSServers
-				h.mu.Unlock()
-				ifaceName := ""
-				if status := h.manager.Status(); status != nil {
-					ifaceName = status.InterfaceName
-				}
-				if ifaceName != "" && len(dnsServers) > 0 {
-					if rollbackErr := h.firewall.EnableDNSProtection(ifaceName, dnsServers); rollbackErr != nil {
-						slog.Error("suspendFirewall: DNS protection rollback ALSO failed",
-							"error", rollbackErr)
-					}
-				}
-			}
-			return fmt.Errorf("suspendFirewall: disable kill switch: %w", err)
-		}
-	}
-
 	return nil
 }
 
 // resumeFirewall re-enables firewall rules that were active before the
-// reconnect suspend. It reads the NEW interface name and endpoints from the
-// tunnel manager so the pf rules match the newly created utun interface.
+// reconnect suspend. It reads the NEW interface name from the tunnel manager
+// so the pf rules match the newly created utun interface.
 func (h *Helper) resumeFirewall() error {
 	h.mu.Lock()
-	restoreKS := h.fwSavedKillSwitch
 	restoreDNS := h.fwSavedDNSProtection
 	savedDNSServers := h.fwSavedDNSServers
-	var ifaceAddresses []string
-	for _, cfg := range h.activeCfgs {
-		ifaceAddresses = append(ifaceAddresses, cfg.Interface.Address...)
-	}
 	// Clear saved state so a second resume is a no-op.
-	h.fwSavedKillSwitch = false
 	h.fwSavedDNSProtection = false
 	h.fwSavedDNSServers = nil
 	h.mu.Unlock()
 
-	if !restoreKS && !restoreDNS {
+	if !restoreDNS {
 		slog.Debug("resumeFirewall: no firewall rules to restore")
 		return nil
 	}
@@ -772,38 +758,20 @@ func (h *Helper) resumeFirewall() error {
 	}
 
 	slog.Info("resuming firewall rules after reconnect",
-		"kill_switch", restoreKS, "dns_protection", restoreDNS,
-		"new_interface", ifaceName)
+		"dns_protection", restoreDNS, "new_interface", ifaceName)
 
-	if restoreKS {
-		if ifaceName == "" {
-			slog.Warn("resumeFirewall: no interface name available, cannot re-enable kill switch")
-		} else {
-			endpoints := h.manager.ResolvedEndpoints()
-			if len(endpoints) == 0 {
-				slog.Warn("resumeFirewall: no resolved endpoints, cannot re-enable kill switch")
-			} else {
-				if err := h.firewall.EnableKillSwitch(ifaceName, ifaceAddresses, endpoints); err != nil {
-					slog.Error("resumeFirewall: failed to re-enable kill switch", "error", err)
-					return fmt.Errorf("resumeFirewall: enable kill switch: %w", err)
-				}
-			}
-		}
+	if ifaceName == "" {
+		slog.Warn("resumeFirewall: no interface name available, cannot re-enable DNS protection")
+		return nil
 	}
-
-	if restoreDNS {
-		if ifaceName == "" {
-			slog.Warn("resumeFirewall: no interface name available, cannot re-enable DNS protection")
-		} else if len(savedDNSServers) == 0 {
-			slog.Warn("resumeFirewall: no DNS servers saved, cannot re-enable DNS protection")
-		} else {
-			if err := h.firewall.EnableDNSProtection(ifaceName, savedDNSServers); err != nil {
-				slog.Error("resumeFirewall: failed to re-enable DNS protection", "error", err)
-				return fmt.Errorf("resumeFirewall: enable DNS protection: %w", err)
-			}
-		}
+	if len(savedDNSServers) == 0 {
+		slog.Warn("resumeFirewall: no DNS servers saved, cannot re-enable DNS protection")
+		return nil
 	}
-
+	if err := h.firewall.EnableDNSProtection(ifaceName, savedDNSServers); err != nil {
+		slog.Error("resumeFirewall: failed to re-enable DNS protection", "error", err)
+		return fmt.Errorf("resumeFirewall: enable DNS protection: %w", err)
+	}
 	return nil
 }
 
@@ -825,7 +793,7 @@ func (h *Helper) cleanup() {
 		}
 		network.UnsubscribeNetworkChange("automation")
 		h.monitor.Stop()
-		// Tear down tunnels BEFORE removing kill-switch / pf rules.
+		// Tear down tunnels BEFORE removing pf / DNS resolve path rules.
 		// Doing it the other way around — flushing pf first — leaves
 		// a small but real window where the user's traffic flows
 		// over the underlying network unprotected while utun*

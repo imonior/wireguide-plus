@@ -430,9 +430,14 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		shutdownOnce sync.Once
 		doShutdown   func()
 	)
+	// Tripped by doShutdown before the helper is asked to exit, so the
+	// health monitor stands down instead of treating the expected socket
+	// disconnect as a crash. See shutdownGate for the deadlock it prevents.
+	recoveryGate := newShutdownGate()
 	doShutdown = func() {
 		shutdownOnce.Do(func() {
 			slog.Info("shutting down GUI + helper")
+			recoveryGate.Trip()
 			// Persist window geometry (covers "Quit" from the tray while
 			// the window is hidden — close-to-tray already saved it).
 			saveWindowState()
@@ -507,7 +512,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	healthDone := make(chan struct{})
 	var healthWg sync.WaitGroup
 	healthWg.Add(1)
-	startHelperHealthMonitor(app, clients, dataDir, bridge, healthDone, &healthWg)
+	startHelperHealthMonitor(app, clients, dataDir, bridge, healthDone, recoveryGate, &healthWg)
 	// SSID reporter shares the same shutdown channel + WaitGroup so app
 	// quit waits for it to exit before returning, instead of leaking the
 	// goroutine until process death.
@@ -565,6 +570,9 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// 9. Run (blocks)
 	err = app.Run()
 	close(healthDone)
-	healthWg.Wait()
+	// Bounded: a goroutine stuck in an un-cancellable child process (the
+	// elevation dialog) must not hold the app open forever. The gate above
+	// normally prevents us from ever getting here with something stuck.
+	waitForShutdown(&healthWg, 5*time.Second)
 	return err
 }

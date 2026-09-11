@@ -255,24 +255,22 @@
   .scripts-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 10px 16px;
     border-top: 0.5px solid var(--border);
     background: var(--bg-secondary);
-    /* Shrinkable: when the conf/fields editor needs the room, the script
-       panel compresses first (its own overflow takes over) instead of
-       squeezing the CodeMirror area. */
-    flex: 0 1 auto;
-    min-height: 88px;
-    max-height: 170px;
-    overflow-y: auto;
+    /* Grows to its natural height — the whole editor-stack scrolls, so the
+       script panel is never compressed into its own scroll and always shows
+       every hook row in full. */
+    flex: 0 0 auto;
+    min-height: 0;
   }
   /* Two hooks per row: halving the stacked rows keeps the scripts panel
      compact so the conf/fields editor above keeps the vertical space. */
   .hooks-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 6px;
   }
   @media (max-width: 860px) {
     .hooks-grid { grid-template-columns: 1fr; }
@@ -290,7 +288,7 @@
   }
   .scripts-hint {
     margin: 0;
-    font: 11.5px/15px var(--font-sans);
+    font: 11.5px/14px var(--font-sans);
     color: var(--text-secondary);
   }
   .hook-row {
@@ -298,7 +296,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 7px 10px;
+    padding: 5px 10px;
     border: 0.5px solid var(--border);
     border-radius: 10px;
     background: var(--bg-card);

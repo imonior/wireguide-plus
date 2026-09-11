@@ -23,6 +23,9 @@ import * as diag$0 from "../diag/models.js";
 import * as domain$0 from "../domain/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as policy$0 from "../policy/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as storage$0 from "../storage/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -445,12 +448,23 @@ export function GetTunnelFields(content) {
 }
 
 /**
+ * GetTunnelPolicies returns the private policies of a tunnel.
+ * @param {string} name
+ * @returns {$CancellablePromise<$models.TunnelPolicies | null>}
+ */
+export function GetTunnelPolicies(name) {
+    return $Call.ByID(688340561, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType26($result);
+    }));
+}
+
+/**
  * GetUpdateState returns persisted state for the About tab UI.
  * @returns {$CancellablePromise<$models.UpdateState>}
  */
 export function GetUpdateState() {
     return $Call.ByID(1422034669).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType25($result);
+        return $$createType27($result);
     }));
 }
 
@@ -471,7 +485,7 @@ export function GetVersion() {
  */
 export function ImportConfig(name, content) {
     return $Call.ByID(3041138216, name, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
+        return $$createType29($result);
     }));
 }
 
@@ -485,7 +499,7 @@ export function ImportConfig(name, content) {
  */
 export function ImportQRFromBytes(data, name) {
     return $Call.ByID(3697630092, data, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
+        return $$createType29($result);
     }));
 }
 
@@ -498,7 +512,7 @@ export function ImportQRFromBytes(data, name) {
  */
 export function ImportQRFromPath(path, name) {
     return $Call.ByID(1276410894, path, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
+        return $$createType29($result);
     }));
 }
 
@@ -512,7 +526,7 @@ export function ImportQRFromPath(path, name) {
  */
 export function ImportSettings() {
     return $Call.ByID(3314465931).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType29($result);
+        return $$createType31($result);
     }));
 }
 
@@ -524,7 +538,7 @@ export function ImportSettings() {
  */
 export function ImportZip(path) {
     return $Call.ByID(4220907101, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -536,7 +550,7 @@ export function ImportZip(path) {
  */
 export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -548,7 +562,7 @@ export function ImportZipData(data) {
  */
 export function ListPhysicalInterfaces() {
     return $Call.ByID(682080878).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType33($result);
+        return $$createType35($result);
     }));
 }
 
@@ -566,7 +580,7 @@ export function ListPhysicalInterfaces() {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType34($result);
+        return $$createType36($result);
     }));
 }
 
@@ -581,7 +595,7 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType34($result);
+        return $$createType36($result);
     }));
 }
 
@@ -594,7 +608,7 @@ export function ListTunnelsLocal() {
  */
 export function MigrateLegacyData(opts) {
     return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType36($result);
+        return $$createType38($result);
     }));
 }
 
@@ -648,6 +662,38 @@ export function OpenScriptFile() {
  */
 export function OpenURL(url) {
     return $Call.ByID(2510819300, url);
+}
+
+/**
+ * PolicyReport returns the conflicts involving one tunnel ("" = all
+ * tunnels) across the routing, DNS and traffic-protection domains.
+ * 
+ * This is the window the frontend uses for BOTH halves of the manual
+ * Conflict Policy (principles 22-24):
+ *   - Save:            always allowed, warnings surfaced in the editor.
+ *   - Manual connect:  blocked by default when the report is blocking;
+ *     the user can override with "Connect Anyway".
+ * 
+ * The call is a pure read — it never connects or disconnects anything and
+ * never rewrites configuration (principle 26/30).
+ * @param {string} name
+ * @returns {$CancellablePromise<policy$0.Report>}
+ */
+export function PolicyReport(name) {
+    return $Call.ByID(1901060591, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType39($result);
+    }));
+}
+
+/**
+ * PolicyReportAll is the unfiltered report, used by the settings/tunnels
+ * overview to show every conflict at once.
+ * @returns {$CancellablePromise<policy$0.Report>}
+ */
+export function PolicyReportAll() {
+    return $Call.ByID(3331289786).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType39($result);
+    }));
 }
 
 /**
@@ -711,7 +757,7 @@ export function ReconcileHistoryFromStatus(activeNames, rxByTunnel, txByTunnel, 
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType38($result);
+        return $$createType41($result);
     }));
 }
 
@@ -745,13 +791,28 @@ export function ResetPublicDNSServers() {
 }
 
 /**
+ * ResolveDNSPathConflict answers a connect that the helper parked because
+ * another connected tunnel already owns the system's DNS resolve path.
+ * action is "disable" (waive this tunnel's claim, let it connect) or
+ * "cancel" (abandon the parked connect). The GUI calls this while the
+ * original Connect RPC is still in flight — the IPC client multiplexes
+ * requests by ID, so answering never blocks behind the parked connect.
+ * @param {string} tunnel
+ * @param {string} action
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResolveDNSPathConflict(tunnel, action) {
+    return $Call.ByID(2597437229, tunnel, action);
+}
+
+/**
  * ResolveScriptRef classifies a hook command as file-backed or inline.
  * @param {string} command
  * @returns {$CancellablePromise<$models.ScriptRef | null>}
  */
 export function ResolveScriptRef(command) {
     return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType43($result);
     }));
 }
 
@@ -769,7 +830,7 @@ export function ResolveScriptRef(command) {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType42($result);
+        return $$createType45($result);
     }));
 }
 
@@ -886,17 +947,6 @@ export function SetApp(app) {
 }
 
 /**
- * SetDNSProtection asks the helper to lock DNS to the active tunnel's servers.
- * When enabling, we look up the active tunnel's DNS list from local storage
- * and pass it along (the helper never touches user-space storage).
- * @param {boolean} enabled
- * @returns {$CancellablePromise<void>}
- */
-export function SetDNSProtection(enabled) {
-    return $Call.ByID(3648403095, enabled);
-}
-
-/**
  * SetHealthCheck enables or disables the tunnel health check monitor.
  * @param {boolean} enabled
  * @returns {$CancellablePromise<void>}
@@ -916,15 +966,6 @@ export function SetHealthCheck(enabled) {
  */
 export function SetHookInText(content, hook, command) {
     return $Call.ByID(1992207518, content, hook, command);
-}
-
-/**
- * SetKillSwitch asks the helper to enable or disable the firewall kill switch.
- * @param {boolean} enabled
- * @returns {$CancellablePromise<void>}
- */
-export function SetKillSwitch(enabled) {
-    return $Call.ByID(721087701, enabled);
 }
 
 /**
@@ -1005,6 +1046,22 @@ export function SetTunnelNotes(name, notes) {
 }
 
 /**
+ * SetTunnelPolicies persists the private policies and re-runs the analyzers.
+ * 
+ * Saving is always allowed (principle 22) — a conflicting policy is a legal
+ * configuration, not an invalid one. What the save does do is log what the
+ * analyzers found, so "why won't my tunnel auto-connect" is answerable from
+ * the log rather than guessed at. Nothing here rewrites AllowedIPs
+ * (principle 26).
+ * @param {string} name
+ * @param {$models.TunnelPolicies} policies
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetTunnelPolicies(name, policies) {
+    return $Call.ByID(2734913173, name, policies);
+}
+
+/**
  * SetUpdateScheduler injects the periodic update-check scheduler and its
  * persistent state store. Called once from gui.Run() after the Wails app
  * is constructed. The frontend's "Check now" / dismiss / last-checked
@@ -1038,7 +1095,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType43($result);
+        return $$createType46($result);
     }));
 }
 
@@ -1111,22 +1168,25 @@ const $$createType21 = domain$0.WireGuardConfig.createFrom;
 const $$createType22 = $Create.Nullable($$createType21);
 const $$createType23 = $models.TunnelFields.createFrom;
 const $$createType24 = $Create.Nullable($$createType23);
-const $$createType25 = $models.UpdateState.createFrom;
-const $$createType26 = $models.TunnelInfo.createFrom;
-const $$createType27 = $Create.Nullable($$createType26);
-const $$createType28 = $models.SettingsImportResult.createFrom;
+const $$createType25 = $models.TunnelPolicies.createFrom;
+const $$createType26 = $Create.Nullable($$createType25);
+const $$createType27 = $models.UpdateState.createFrom;
+const $$createType28 = $models.TunnelInfo.createFrom;
 const $$createType29 = $Create.Nullable($$createType28);
-const $$createType30 = $models.ZipImportResult.createFrom;
-const $$createType31 = $Create.Array($$createType30);
-const $$createType32 = $models.PhysicalInterface.createFrom;
+const $$createType30 = $models.SettingsImportResult.createFrom;
+const $$createType31 = $Create.Nullable($$createType30);
+const $$createType32 = $models.ZipImportResult.createFrom;
 const $$createType33 = $Create.Array($$createType32);
-const $$createType34 = $Create.Array($$createType26);
-const $$createType35 = storage$0.MigrateResult.createFrom;
-const $$createType36 = $Create.Nullable($$createType35);
-const $$createType37 = $models.PublicDNSRefresh.createFrom;
+const $$createType34 = $models.PhysicalInterface.createFrom;
+const $$createType35 = $Create.Array($$createType34);
+const $$createType36 = $Create.Array($$createType28);
+const $$createType37 = storage$0.MigrateResult.createFrom;
 const $$createType38 = $Create.Nullable($$createType37);
-const $$createType39 = $models.ScriptRef.createFrom;
-const $$createType40 = $Create.Nullable($$createType39);
-const $$createType41 = $models.DNSLeakResult.createFrom;
-const $$createType42 = $Create.Nullable($$createType41);
-const $$createType43 = $models.TestProxyResult.createFrom;
+const $$createType39 = policy$0.Report.createFrom;
+const $$createType40 = $models.PublicDNSRefresh.createFrom;
+const $$createType41 = $Create.Nullable($$createType40);
+const $$createType42 = $models.ScriptRef.createFrom;
+const $$createType43 = $Create.Nullable($$createType42);
+const $$createType44 = $models.DNSLeakResult.createFrom;
+const $$createType45 = $Create.Nullable($$createType44);
+const $$createType46 = $models.TestProxyResult.createFrom;

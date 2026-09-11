@@ -16,7 +16,7 @@ type Handler func(params json.RawMessage) (interface{}, error)
 // maxConcurrentConns caps simultaneous IPC connections so a misbehaving
 // or compromised same-UID process can't open thousands of conns and
 // exhaust the helper's goroutine + memory budget — which would in
-// practice take down the kill switch with the helper.
+// practice take the per-tunnel System DNS enforcement down with it.
 //
 // We intentionally do NOT add per-method rate limiting. The threat model
 // is "same-UID local process" — that attacker already has access to far

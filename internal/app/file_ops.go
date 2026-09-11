@@ -279,6 +279,10 @@ func (s *TunnelService) UpdateConfig(name, content string) error {
 		return err
 	}
 	slog.Info("tunnel: config saved", "category", "tunnel", "tunnel", name, "bytes", len(content))
+	// Conflict Policy — Save: always allowed, warnings logged (principle
+	// 22). A conflicting config is legal; the analyzer never rewrites
+	// AllowedIPs and never refuses the save (principle 26).
+	s.logPolicyWarnings(name)
 	return nil
 }
 

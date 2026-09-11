@@ -168,6 +168,19 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 		} else {
 			b.app.Event.Emit("auto_connected", payload)
 		}
+	case ipc.EventPolicyBlocked:
+		// Automation refused to connect a tunnel because its policies
+		// conflict with another tunnel (principle 25). The helper already
+		// logged it; the frontend raises a passive notification — never a
+		// modal, because automation runs unattended and must not wait.
+		var payload ipc.PolicyBlockedPayload
+		if err := json.Unmarshal(params, &payload); err != nil {
+			slog.Debug("event bridge: unmarshal policy_blocked failed", "error", err)
+		} else {
+			slog.Warn("automation connect blocked by policy",
+				"category", "policy", "tunnel", payload.Tunnel, "reason", payload.Reason)
+			b.app.Event.Emit("policy_blocked", payload)
+		}
 	case ipc.EventQuit:
 		// `wireguideplus ctl stop` — the user asked for the whole app to go
 		// away. Run the same teardown the tray's Quit item does.

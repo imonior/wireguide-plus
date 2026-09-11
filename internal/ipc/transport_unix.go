@@ -75,7 +75,7 @@ func Listen(addr string, ownerUID int, ownerSID string) (net.Listener, error) {
 		// reasons but never returns negative on Unix; gosec's G115 flag
 		// on these conversions is a false positive. We still guard
 		// ownerUID >= 0 because callers pass -1 to mean "no chown".
-		dirUID := uint32(st.Uid) //nolint:gosec // G115: kernel-supplied UID, always non-negative
+		dirUID := uint32(st.Uid)     //nolint:gosec // G115: kernel-supplied UID, always non-negative
 		euid := uint32(os.Geteuid()) //nolint:gosec // G115: os.Geteuid never negative on Unix
 		trusted := dirUID == euid
 		if !trusted && ownerUID >= 0 && dirUID == uint32(ownerUID) { //nolint:gosec // G115: ownerUID >= 0 checked

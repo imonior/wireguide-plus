@@ -24,6 +24,7 @@ export {
     TunnelFields,
     TunnelInfo,
     TunnelMetaBinding,
+    TunnelPolicies,
     UpdateState,
     ZipImportResult
 } from "./models.js";

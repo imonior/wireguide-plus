@@ -17,7 +17,7 @@ They communicate over **JSON-RPC 2.0** on a Unix domain socket (`/var/run/wiregu
 │  Config editor (CodeMirror)  │────▶│  TUN device (utunN)          │
 │  System tray                 │◀────│  DNS (networksetup)          │
 │  Diagnostics                 │     │  Routes (route cmd)          │
-│  Settings                    │ UDS │  Kill switch (pf)            │
+│  Settings                    │ UDS │  System DNS enforcement (pf) │
 │  Update checker              │     │  Reconnect monitor           │
 │                              │     │  Route monitor               │
 └──────────────────────────────┘     └──────────────────────────────┘
@@ -33,6 +33,19 @@ WireGuard requires root to create TUN devices and modify routing tables. Rather 
 - **LaunchDaemon KeepAlive (crash-only)** — helper auto-restarts on crash, but never runs at boot and exits on its own once no GUI and no tunnels remain
 
 This mirrors the architecture of `wg-quick` (which also runs as root) but wraps it in a persistent daemon with IPC.
+
+## Policy Principles (authoritative)
+
+All policy-layer work — routing / DNS / traffic protection / conflict handling —
+is governed by the numbered baseline in
+[docs/POLICY_PRINCIPLES.md](POLICY_PRINCIPLES.md). Highlights: standard
+`.conf` stays portable and never receives WireGuide Plus private policies;
+AllowedIPs are compared as parsed prefix sets (never strings); identical
+prefixes are a true tie while containment is deterministic under longest-prefix
+match; route, DNS and protection conflicts are separate analyzer domains;
+analyzers are pure and side-effect free; automation Desired State → Reconcile
+is untouched and policy validation sits between the desired action and the
+actual tunnel operation.
 
 ## Multi-Tunnel Architecture
 
@@ -173,20 +186,31 @@ Equivalent to wg-quick's `monitor_daemon`. The change source is OS-specific — 
 
 **Anti-loop protection**: caches `lastGatewayV4/V6` to skip spurious RTM events. Without this, our own `route add` commands trigger reapply in a tight loop.
 
-## Kill Switch
+## Per-tunnel System DNS enforcement (replaced the global Kill Switch)
 
-Per-platform backends, all driven by the same `Firewall.SetKillSwitch` IPC method:
+The machine-wide Kill Switch and DNS Protection toggles were **removed**
+(see `docs/POLICY_PRINCIPLES.md` principles 8/9/33): with several tunnels
+connected at once neither toggle can say which tunnel is authoritative.
+What remains is the per-tunnel `SystemDNS` policy — while that tunnel is
+up, the system's DNS resolution egresses through it, enforced by the same
+per-platform backends (previously driven by `Firewall.SetKillSwitch`):
 
 - **macOS** — `pf` rules in the `com.apple/wireguide` anchor (details below)
-- **Linux** — `nftables` table `wireguide_killswitch`, output chain `policy drop` with allow rules for loopback/tunnel/endpoint/DHCP. Input chain is strict (`policy drop`) — see [issue note](#linux-input-chain-strict)
-- **Windows** — WFP (Filtering Platform) provider + sublayer at weight `0xFFFF`, `ALE_AUTH_CONNECT_V4/V6` block filters plus allow exceptions for the tunnel LUID, loopback, DHCP/NDP, and the resolved peer endpoint. No `netsh advfirewall` is touched, matching the official wireguard-windows behavior
+- **Linux** — `nftables`
+- **Windows** — WFP (Filtering Platform) provider + sublayer at weight `0xFFFF`
+
+Trigger: `helper.applyPostConnectFirewall` after a successful connect when
+`TunnelMeta.SystemDNS` is set; teardown: `clearSystemDNSIfOwner` when the
+owning tunnel disconnects. Conflicts (two System DNS claims, or a System
+DNS claim vs a "Use as default DNS" claim) are detected by
+`internal/policy` at save time and again at connect time.
 
 ### macOS pf
 
 Rules are loaded into the `com.apple/wireguide` anchor (slash, not dot — pf's `*` wildcard doesn't cross the `/` path separator, so a dot-named anchor would never match the system wildcard). macOS ships with `anchor "com.apple/*" all` in pf.conf, so our anchor is automatically evaluated — **we never modify the main ruleset**.
 
 ```
-# WireGuide Plus kill switch rules (loaded into anchor)
+# WireGuide Plus System DNS rules (loaded into anchor)
 pass quick on lo0 all                           # loopback
 pass out quick proto udp to 1.2.3.4 port 443   # WG endpoint
 pass out quick proto udp from any port 68 to any port 67  # DHCP
@@ -201,17 +225,13 @@ block drop in all
 
 ### Lifecycle: applied at connect time, not at boot
 
-The kill switch is a **connect-path state transition**, deliberately NOT
-restored when the helper (re)starts. With `kill_switch: true` in
-config.json, a reboot leaves the firewall open until the first tunnel
-comes up — at which point the connect path (GUI `applyFirewallSettings`,
-or helper-side `applyPostConnectFirewall` for automation connects)
-re-enables it. Auto-applying at boot would block ALL traffic on a machine
-with no tunnel up, which is "always-on VPN" semantics — a separate,
-opt-in feature if ever wanted, not a restore. (Other persisted
-helper-side settings — health check, pin-interface, log level — ARE
-restored at helper startup, because they only change behaviour while
-tunnels are up.)
+The enforcement is a **connect-path state transition**, deliberately NOT
+restored when the helper (re)starts: it is scoped to a tunnel, so there is
+nothing to restore until that tunnel is up again — at which point the
+connect path (`applyPostConnectFirewall`, used by both GUI and automation
+connects) re-enables it. (Other persisted helper-side settings — health
+check, pin-interface, log level — ARE restored at helper startup, because
+they only change behaviour while tunnels are up.)
 
 ## Automation (per-tunnel connect/disconnect rules, issue #12)
 
@@ -328,9 +348,9 @@ paths (legacy config migration, CLI, GUI) land the same normalized model;
 ### Post-Connect Refresh
 
 After a rule connects a tunnel the helper broadcasts `event.auto_connect`;
-the GUI runs `applyFirewallSettings()` (same as a manual connect) to
-re-apply kill switch / DNS protection, and the 1 Hz `event.status`
-broadcast drives the UI state update.
+per-tunnel policies (System DNS etc.) are enforced helper-side in
+`applyPostConnectFirewall`, and the 1 Hz `event.status` broadcast drives
+the UI state update.
 
 ### Lock Ordering
 
@@ -382,7 +402,7 @@ In the helper, `reconnectFn(name)` looks up the cached config from `activeCfgs m
 ```
 Health check detects stale handshake on tunnel "work"
   → triggerReconnectTunnel("work")
-    → suspendFirewall()            # disable kill switch (old utun rules)
+    → suspendFirewall()            # drop System DNS enforcement (old utun rules)
     → manager.DisconnectTunnel("work")
     → reconnectFn("work")         # manager.Connect(cachedCfgs["work"])
     → resumeFirewall()            # re-enable with NEW utun + endpoints
@@ -394,7 +414,7 @@ Wake detected (all tunnels)
 
 **Exponential backoff**: 5s initial, 60s max, unlimited attempts.
 
-**Firewall suspend/resume**: on reconnect, utun name changes (utun4->utun5). Old kill switch rules block the new interface. Suspending before disconnect and resuming after connect with fresh interface/endpoints prevents this deadlock.
+**Firewall suspend/resume**: on reconnect, utun name changes (utun4->utun5). Old System DNS rules reference the stale interface. Suspending before disconnect and resuming after connect with the fresh interface prevents this deadlock.
 
 ## Helper Version Sync
 
@@ -424,8 +444,6 @@ JSON-RPC 2.0 over a Unix domain socket (macOS/Linux; permissions `0600`, peer UI
 | `Tunnel.IsConnected` | GUI->Helper | Boolean connected check |
 | `Tunnel.ActiveName` | GUI->Helper | Name of first active tunnel |
 | `Tunnel.ActiveTunnels` | GUI->Helper | List all active tunnel names (`ActiveTunnelsResponse`) |
-| `Firewall.SetKillSwitch` | GUI->Helper | Enable/disable pf rules |
-| `Firewall.SetDNSProtection` | GUI->Helper | Enable/disable DNS-only pf rules |
 | `Monitor.SetHealthCheck` | GUI->Helper | Toggle per-tunnel health check |
 | `Network.SetPinInterface` | GUI->Helper | Toggle `-ifscope` route pinning |
 | `Wifi.ReportSSID` | GUI->Helper | Forward current SSID from GUI (macOS 14+ Location Services workaround) |
@@ -507,7 +525,7 @@ Homebrew cask `uninstall` block only quits the app (no sudo). Helper cleanup is 
 | | wireguard-go | NetworkExtension |
 |---|---|---|
 | Platforms | macOS, Windows, Linux | Apple only |
-| Kill switch | Full control (pf/nftables) | Limited (on-demand rules) |
+| Firewall control | Full control (pf/nftables) | Limited (on-demand rules) |
 | Sleep/wake | Custom handler | Commented out in Passepartout |
 | App Store | Not possible | Required |
 | Root required | Yes (TUN device) | No (sandboxed) |

@@ -27,17 +27,6 @@ type ConnectRequest struct {
 // the frontend. Unifying on the domain type prevents that class of bug.
 type ConnectionStatus = domain.ConnectionStatus
 
-// KillSwitchRequest is the parameter for Firewall.SetKillSwitch.
-type KillSwitchRequest struct {
-	Enabled bool `json:"enabled"`
-}
-
-// DNSProtectionRequest is the parameter for Firewall.SetDNSProtection.
-type DNSProtectionRequest struct {
-	Enabled    bool     `json:"enabled"`
-	DNSServers []string `json:"dns_servers,omitempty"`
-}
-
 // ReconnectStateDTO describes ongoing reconnection.
 type ReconnectStateDTO struct {
 	Reconnecting bool   `json:"reconnecting"`
@@ -50,11 +39,11 @@ type ReconnectStateDTO struct {
 // to the GUI (and from the GUI to the frontend LogViewer). We keep it flat
 // — no nested attrs — because the viewer just renders a one-line per entry.
 type LogEntry struct {
-	Time     string `json:"time"`    // RFC3339
-	Level    string `json:"level"`   // "debug" | "info" | "warn" | "error"
-	Source   string `json:"source"`  // "helper" | "gui"
+	Time     string `json:"time"`     // RFC3339
+	Level    string `json:"level"`    // "debug" | "info" | "warn" | "error"
+	Source   string `json:"source"`   // "helper" | "gui"
 	Category string `json:"category"` // one of logging.ValidCategories ("app" when unset)
-	Message  string `json:"message"` // human-readable text (already includes attrs)
+	Message  string `json:"message"`  // human-readable text (already includes attrs)
 }
 
 // SetPinInterfaceRequest is the parameter for Network.SetPinInterface.
@@ -86,6 +75,29 @@ type RenameRequest struct {
 	OldName string `json:"old_name"`
 	NewName string `json:"new_name"`
 }
+
+// DNSPathConflictPayload is broadcast (EventDNSPathConflict) when a manual
+// connect is parked behind another tunnel that already owns the system's
+// DNS resolve path. Blockers lists the connected tunnels holding it.
+type DNSPathConflictPayload struct {
+	Tunnel   string   `json:"tunnel"`
+	Blockers []string `json:"blockers"`
+}
+
+// DNSPathResolveRequest is the answer to a parked connect
+// (Tunnel.ResolveDNSPathConflict). Action is "disable" (waive this tunnel's
+// DNS resolve path claim and let the connect through — the GUI has already
+// persisted the switch change) or "cancel" (abort the connect).
+type DNSPathResolveRequest struct {
+	Tunnel string `json:"tunnel"`
+	Action string `json:"action"`
+}
+
+// DNSPathResolveAction values for DNSPathResolveRequest.Action.
+const (
+	DNSPathResolveDisable = "disable"
+	DNSPathResolveCancel  = "cancel"
+)
 
 // ActiveTunnelsResponse lists all currently active tunnel names.
 type ActiveTunnelsResponse struct {
@@ -144,11 +156,9 @@ type CriticalErrorPayload struct {
 // GUI can reflect a change made through another client (the CLI). Only
 // the field for the changed setting is non-nil.
 type SettingsChangedPayload struct {
-	KillSwitch    *bool   `json:"kill_switch,omitempty"`
-	DNSProtection *bool   `json:"dns_protection,omitempty"`
-	HealthCheck   *bool   `json:"health_check,omitempty"`
-	PinInterface  *bool   `json:"pin_interface,omitempty"`
-	LogLevel      *string `json:"log_level,omitempty"`
+	HealthCheck  *bool   `json:"health_check,omitempty"`
+	PinInterface *bool   `json:"pin_interface,omitempty"`
+	LogLevel     *string `json:"log_level,omitempty"`
 }
 
 // AutomationPreviewResponse is the read-only result of Automation.Preview:
@@ -173,4 +183,3 @@ type AutomationTunnelDecision struct {
 	// while latched, a matching "connect" rule is suppressed.
 	ManualOff bool `json:"manual_off"`
 }
-

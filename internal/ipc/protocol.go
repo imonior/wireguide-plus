@@ -93,13 +93,13 @@ const (
 	ErrCodeMethodNotFound = -32601
 	ErrCodeInvalidParams  = -32602
 	ErrCodeInternalError  = -32603
-	ErrCodeAppError = -32000
+	ErrCodeAppError       = -32000
 )
 
 // RPC method names
 const (
-	MethodPing             = "Helper.Ping"
-	MethodShutdown         = "Helper.Shutdown"
+	MethodPing     = "Helper.Ping"
+	MethodShutdown = "Helper.Shutdown"
 	// MethodForceShutdown is the escalation when MethodShutdown is ignored
 	// or replied to with an error. The helper handler immediately
 	// terminates the process (os.Exit) without running the graceful
@@ -107,15 +107,15 @@ const (
 	// must be cleared. The GUI cannot kill the helper from outside
 	// because the helper runs as root/SYSTEM and the GUI is a normal
 	// user, so cross-privilege kill is the helper's job.
-	MethodForceShutdown    = "Helper.ForceShutdown"
-	MethodSubscribe        = "Helper.Subscribe"
-	MethodSetLogLevel      = "Helper.SetLogLevel"
-	MethodConnect          = "Tunnel.Connect"
-	MethodDisconnect       = "Tunnel.Disconnect"
-	MethodStatus           = "Tunnel.Status"
-	MethodIsConnected      = "Tunnel.IsConnected"
-	MethodActiveName       = "Tunnel.ActiveName"
-	MethodActiveTunnels    = "Tunnel.ActiveTunnels"
+	MethodForceShutdown = "Helper.ForceShutdown"
+	MethodSubscribe     = "Helper.Subscribe"
+	MethodSetLogLevel   = "Helper.SetLogLevel"
+	MethodConnect       = "Tunnel.Connect"
+	MethodDisconnect    = "Tunnel.Disconnect"
+	MethodStatus        = "Tunnel.Status"
+	MethodIsConnected   = "Tunnel.IsConnected"
+	MethodActiveName    = "Tunnel.ActiveName"
+	MethodActiveTunnels = "Tunnel.ActiveTunnels"
 	// MethodRename runs inside the helper because it has to take connectMu
 	// to make "is the tunnel active?" + file rename atomic with respect to
 	// Connect / Disconnect / wifi-rule auto-connect. Splitting it into
@@ -124,11 +124,22 @@ const (
 	// (helper imports storage) is accepted; the helper's storage usage is
 	// confined to this single method + read-only Load for wifi rules.
 	MethodRename = "Tunnel.Rename"
-	MethodSetKillSwitch    = "Firewall.SetKillSwitch"
-	MethodSetDNSProtection = "Firewall.SetDNSProtection"
-	MethodSetHealthCheck   = "Monitor.SetHealthCheck"
-	MethodSetPinInterface  = "Network.SetPinInterface"
-	MethodReportSSID       = "Wifi.ReportSSID"
+	// MethodResolveDNSPathConflict is how the GUI answers a held connect.
+	// The helper parks a manual connect when the tunnel asks for the DNS
+	// resolve path while another connected tunnel already owns it, and
+	// waits for this call: action "disable" waives this tunnel's claim and
+	// lets the connect through, action "cancel" aborts it.
+	MethodResolveDNSPathConflict = "Tunnel.ResolveDNSPathConflict"
+	// MethodClearDNSPathEnforcement tears down any LIVE DNS resolve path
+	// enforcement immediately. The GUI calls it when the master switch
+	// turns OFF: with the feature off the per-tunnel enforcement a still-
+	// connected tunnel installed must not outlive the toggle (the
+	// per-tunnel switches are hidden and gated, but firewall rules are
+	// runtime state, not config). A no-op when nothing is enforcing.
+	MethodClearDNSPathEnforcement = "Tunnel.ClearDNSPathEnforcement"
+	MethodSetHealthCheck         = "Monitor.SetHealthCheck"
+	MethodSetPinInterface        = "Network.SetPinInterface"
+	MethodReportSSID             = "Wifi.ReportSSID"
 	// MethodAutomationPreview is a read-only dry-run: it evaluates the
 	// current Automation rules against the current network context and
 	// returns each tunnel's decision WITHOUT connecting/disconnecting.
@@ -167,11 +178,10 @@ const (
 	// The GUI is expected to surface this via a banner/toast so the user
 	// knows tunnels may no longer reflect real state.
 	EventCriticalError = "event.critical_error"
-	// EventSettingsChanged is broadcast when a firewall/monitor setting is
-	// applied via IPC (kill switch, DNS protection, health check, pin
-	// interface, log level) — usually from the CLI. It carries the changed
-	// value so a running GUI can update its toggle without racing a
-	// re-read of config.json.
+	// EventSettingsChanged is broadcast when a monitor/network setting is
+	// applied via IPC (health check, pin interface, log level) — usually
+	// from the CLI. It carries the changed value so a running GUI can
+	// update its toggle without racing a re-read of config.json.
 	EventSettingsChanged = "event.settings_changed"
 	// EventEgressInterfaceLost is broadcast when a tunnel that has a
 	// manually pinned physical egress interface loses that interface
@@ -184,14 +194,44 @@ const (
 	// keep waiting on the pinned NIC, switch to auto-selection, or pick
 	// a different interface by hand.
 	EventEgressInterfaceLost = "event.egress_interface_lost"
+	// EventPolicyBlocked is broadcast when the policy layer refuses an
+	// AUTOMATIC connection (automation rule / default state) because the
+	// tunnel's policies conflict with another tunnel — typically an
+	// identical AllowedIPs prefix, which longest-prefix match cannot
+	// break (policy principle 25).
+	//
+	// Automation never opens a dialog and never waits: it skips the
+	// connect, logs it, and notifies through the tray. A manual connect
+	// goes through a different path — the GUI asks the user with a
+	// "Connect Anyway" confirmation instead (principle 24).
+	EventPolicyBlocked = "event.policy_blocked"
+
+	// EventDNSPathConflict is broadcast when a MANUAL connect is parked
+	// because the tunnel asks to be the system's DNS resolve path while
+	// another connected tunnel already is. The connect is held (not
+	// refused) until the GUI answers with
+	// MethodResolveDNSPathConflict — "turn the switch off and connect" or
+	// "stop connecting". Automation never emits this: it has nobody to
+	// answer, so it skips and notifies instead.
+	EventDNSPathConflict = "event.dns_path_conflict"
 )
+
+// PolicyBlockedPayload describes a refused automatic connection.
+type PolicyBlockedPayload struct {
+	Tunnel string `json:"tunnel"`
+	// Reason is machine-readable: "route", "dns" or "protection".
+	Reason string `json:"reason"`
+	// Summary is a short human-readable explanation (English) intended
+	// for the log and as a fallback in the notification body.
+	Summary string `json:"summary"`
+}
 
 // EgressInterfaceLostPayload describes a lost pinned egress interface.
 type EgressInterfaceLostPayload struct {
-	Tunnel    string `json:"tunnel"`
-	IfIndex   int    `json:"if_index"`
-	IfName    string `json:"if_name"`
-	LostUnix  int64  `json:"lost_unix"`
+	Tunnel   string `json:"tunnel"`
+	IfIndex  int    `json:"if_index"`
+	IfName   string `json:"if_name"`
+	LostUnix int64  `json:"lost_unix"`
 	// Reason is a short machine-readable cause: "down" (NIC present but
 	// link down), "missing" (interface no longer exists), or "invalid"
 	// (resolved to the tunnel itself / unusable).

@@ -32,8 +32,8 @@ public_ip() { curl --connect-timeout 6 --max-time 15 --silent --fail https://api
 cleanup() {
   rc=$?
   trap - EXIT INT TERM
-  cli set dns-protection off >>"$test_log" 2>&1 || true
-  cli set killswitch off >>"$test_log" 2>&1 || true
+  # The global kill-switch / DNS-protection toggles (`ctl set killswitch`,
+  # `ctl set dns-protection`) were removed — see below.
   sudo -n "$recover" "$backup_resolv" "$helper_pidfile" "$recovery_log" || true
   sudo -n systemctl stop wireguideplus-network-recovery.timer wireguideplus-network-recovery.service 2>/dev/null || true
   if (( rc == 0 )); then

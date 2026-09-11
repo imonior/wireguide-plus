@@ -15,7 +15,7 @@ import (
 // user's other instructions.
 const skillFrontmatter = `---
 name: wireguideplus-ctl
-description: Control the WireGuide Plus VPN client from the command line (the ` + "`wireguideplus ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle kill switch / DNS protection, and run diagnostics. Use when the user wants to script WireGuide Plus, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
+description: Control the WireGuide Plus VPN client from the command line (the ` + "`wireguideplus ctl`" + ` command) — connect/disconnect WireGuard tunnels, edit per-tunnel Automation rules (connect/disconnect by Wi-Fi SSID, subnet, or gateway MAC), toggle health check / interface pinning / log level, and run diagnostics. Use when the user wants to script WireGuide Plus, manage tunnels from a terminal, or set up network-based auto-connect/disconnect.
 ---
 `
 
@@ -62,8 +62,6 @@ wireguideplus ctl automation add work connect else
 
 ## Settings & diagnostics
 ` + "```" + `
-wireguideplus ctl set killswitch <on|off>       # block non-VPN traffic if the tunnel drops
-wireguideplus ctl set dns-protection <on|off>   # pin DNS to the tunnel
 wireguideplus ctl set healthcheck <on|off>
 wireguideplus ctl set pin-interface <on|off>
 wireguideplus ctl set loglevel <debug|info|warn|error>

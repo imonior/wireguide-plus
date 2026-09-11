@@ -453,19 +453,26 @@ export class Settings {
              */
             this["notify_duration_ms"] = undefined;
         }
-        if (!("kill_switch" in $$source)) {
+        if (!("dns_resolve_path" in $$source)) {
             /**
+             * Legacy keys "kill_switch" and "dns_protection" were global toggles
+             * and are GONE: a machine-wide kill switch cannot express intent when
+             * several tunnels run at once, and a single "force DNS through the
+             * VPN" switch cannot say WHICH of several connected tunnels the
+             * system resolver should use. Both are now per-tunnel policies in the
+             * .meta.json sidecar (TrafficProtect and DNSResolvePath). Unknown keys in
+             * an existing config.json are simply ignored on load, so a user who
+             * had them enabled keeps working — the rules they installed are torn
+             * down with the helper that installed them.
+             * DNSResolvePath is the MASTER switch for the per-tunnel "DNS resolve
+             * path" policy (principle 33). Off means the feature does not exist:
+             * no per-tunnel toggle is shown, nothing is enforced, and no conflict
+             * is reported. Turning it on only reveals the per-tunnel switches —
+             * each tunnel still has to opt in on its own.
              * @member
              * @type {boolean}
              */
-            this["kill_switch"] = false;
-        }
-        if (!("dns_protection" in $$source)) {
-            /**
-             * @member
-             * @type {boolean}
-             */
-            this["dns_protection"] = false;
+            this["dns_resolve_path"] = false;
         }
         if (!("health_check" in $$source)) {
             /**
@@ -688,26 +695,26 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField20_0 = $$createType3;
-        const $$createField21_0 = $$createType5;
-        const $$createField22_0 = $$createType2;
+        const $$createField19_0 = $$createType3;
+        const $$createField20_0 = $$createType5;
+        const $$createField21_0 = $$createType2;
+        const $$createField24_0 = $$createType2;
         const $$createField25_0 = $$createType2;
-        const $$createField26_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField20_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField21_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField20_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField22_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField25_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField24_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField26_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField25_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

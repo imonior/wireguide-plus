@@ -158,9 +158,8 @@
     auto_start: false,
     start_minimized: false,
     notify_duration_ms: DEFAULT_NOTIFY_DURATION,
-    kill_switch: false,
-    dns_protection: false,
     health_check: false,
+    dns_resolve_path: false,
     pin_interface: false,
     log_level: 'info',
     tray_icon_style: 'color',
@@ -196,9 +195,8 @@
         settings.notify_duration_ms = VALID_NOTIFY_DURATIONS.includes(Number(s.notify_duration_ms))
           ? Number(s.notify_duration_ms)
           : DEFAULT_NOTIFY_DURATION;
-        settings.kill_switch = s.kill_switch ?? false;
-        settings.dns_protection = s.dns_protection ?? false;
         settings.health_check = s.health_check ?? false;
+        settings.dns_resolve_path = s.dns_resolve_path ?? false;
         settings.pin_interface = s.pin_interface ?? false;
         settings.log_level = s.log_level || 'info';
         settings.tray_icon_style = s.tray_icon_style || 'color';
@@ -272,9 +270,8 @@
         auto_start: settings.auto_start,
         start_minimized: settings.start_minimized,
         notify_duration_ms: settings.notify_duration_ms,
-        kill_switch: settings.kill_switch,
-        dns_protection: settings.dns_protection,
         health_check: settings.health_check,
+        dns_resolve_path: settings.dns_resolve_path,
         pin_interface: settings.pin_interface,
         log_level: settings.log_level,
         auto_update_check: settings.auto_update_check,
@@ -342,6 +339,15 @@
 
   function onAutoStartChange(e) {
     settings.auto_start = e.target.checked;
+    scheduleSave();
+  }
+
+  // Master switch for the per-tunnel "DNS resolve path" policy. It gates the
+  // feature itself: off means no per-tunnel switch is shown, nothing is
+  // enforced and no conflict is reported. No live IPC — the helper reads the
+  // setting when it evaluates a connect.
+  function onDnsResolvePathChange(e) {
+    settings.dns_resolve_path = e.target.checked;
     scheduleSave();
   }
 
@@ -536,33 +542,6 @@
     return applyLiveChange({ stateKey, domValue: domChecked, friendlyName, call });
   }
 
-  function onKillSwitchChange(e) {
-    // Always forward to the helper, regardless of connection state.
-    // The previous `if connected` gate meant that toggling off while
-    // the tunnel was already disconnected updated settings.json but
-    // left the WFP filters in place — internet stayed blocked until
-    // a reboot. The helper itself decides what to do based on its
-    // current tunnel set.
-    applyLiveToggle({
-      stateKey: 'kill_switch',
-      domChecked: e.target.checked,
-      friendlyName: $t('settings.kill_switch'),
-      call: (v) => TunnelService.SetKillSwitch(v),
-    });
-  }
-
-  function onDnsProtectionChange(e) {
-    // Same rationale as the kill-switch toggle: always send the IPC so
-    // that a "disable while disconnected" doesn't leave stale WFP
-    // DNS block filters in place.
-    applyLiveToggle({
-      stateKey: 'dns_protection',
-      domChecked: e.target.checked,
-      friendlyName: $t('settings.dns_protection'),
-      call: (v) => TunnelService.SetDNSProtection(v),
-    });
-  }
-
   function onPinInterfaceChange(e) {
     applyLiveToggle({
       stateKey: 'pin_interface',
@@ -654,8 +633,6 @@
   let settingsChangedUnsub = null;
   function onSettingsChanged(event) {
     const p = event?.data || {};
-    if (p.kill_switch != null) settings.kill_switch = p.kill_switch;
-    if (p.dns_protection != null) settings.dns_protection = p.dns_protection;
     if (p.health_check != null) settings.health_check = p.health_check;
     if (p.pin_interface != null) settings.pin_interface = p.pin_interface;
     if (p.log_level != null) settings.log_level = p.log_level;
@@ -893,29 +870,17 @@
 
         {:else if activeTab === 'advanced'}
           <div class="settings-section">
-            <h4 class="section-title">{$t('settings.section_security')}</h4>
+            <h4 class="section-title">{$t('settings.section_dns')}</h4>
             <div class="settings-card">
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
-                  <label class="setting-label" for="kill-switch">{$t('settings.kill_switch')}</label>
-                  <p class="setting-desc">{$t('settings.kill_switch_hint')}</p>
+                  <label class="setting-label" for="dns-resolve-path">{$t('settings.dns_resolve_path')}</label>
+                  <p class="setting-desc">{$t('settings.dns_resolve_path_hint')}</p>
                 </div>
                 <label class="toggle">
-                  <input id="kill-switch" type="checkbox"
-                    checked={settings.kill_switch}
-                    on:change={onKillSwitchChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="dns-protection">{$t('settings.dns_protection')}</label>
-                  <p class="setting-desc">{$t('settings.dns_protection_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="dns-protection" type="checkbox"
-                    checked={settings.dns_protection}
-                    on:change={onDnsProtectionChange} />
+                  <input id="dns-resolve-path" type="checkbox"
+                    checked={settings.dns_resolve_path}
+                    on:change={onDnsResolvePathChange} />
                   <span class="toggle-track"></span>
                 </label>
               </div>

@@ -3,7 +3,8 @@
 // vs `tailscaled`, it's a thin third IPC client alongside the GUI: it talks
 // to the already-elevated helper over the same local socket, so unlike
 // wg-quick it needs no per-command sudo, works on every supported OS, and
-// inherits the app's kill switch / DNS protection / loop protection / automation.
+// inherits the app's per-tunnel policies (System DNS, Traffic Protect), loop
+// protection and automation.
 package cli
 
 import (
@@ -112,8 +113,6 @@ Automation (per-tunnel connect/disconnect rules):
                                           no rule matches
 
 Settings & diagnostics:
-  wireguideplus ctl set killswitch <on|off>       block non-VPN traffic if the tunnel drops
-  wireguideplus ctl set dns-protection <on|off>   pin DNS to the tunnel
   wireguideplus ctl set healthcheck <on|off>      handshake monitor + auto-reconnect
   wireguideplus ctl set pin-interface <on|off>    bind sockets to the upstream interface
   wireguideplus ctl set loglevel <debug|info|warn|error>
@@ -927,7 +926,7 @@ func parseOnOff(v string) (bool, bool) {
 
 func cmdSet(args []string) int {
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl set <killswitch|dns-protection|healthcheck|pin-interface|loglevel> <value>")
+		fmt.Fprintln(os.Stderr, "usage: wireguideplus ctl set <healthcheck|pin-interface|loglevel> <value>")
 		return 2
 	}
 	setting, value := strings.ToLower(args[0]), args[1]
@@ -943,7 +942,7 @@ func cmdSet(args []string) int {
 	// next launch" (exit 0 — nothing is live to be wrong). But if the
 	// helper IS running and the live apply fails, we return nonzero: the
 	// value is on disk yet NOT actually in effect, and a script that just
-	// ran `set killswitch on` must not believe traffic is being blocked
+	// ran `set healthcheck on` must not believe monitoring is active
 	// when it isn't (issue #10).
 	liveRC := 0
 	applyIPC := func(method string, params interface{}) int {
@@ -961,39 +960,6 @@ func cmdSet(args []string) int {
 	}
 
 	switch setting {
-	case "killswitch", "kill-switch", "kill_switch":
-		v, ok := parseOnOff(value)
-		if !ok {
-			fmt.Fprintln(os.Stderr, "value must be on/off")
-			return 2
-		}
-		if err := ss.Update(func(s *storage.Settings) error { s.KillSwitch = v; return nil }); err != nil {
-			fmt.Fprintln(os.Stderr, "set:", err)
-			return 1
-		}
-		liveRC = applyIPC(ipc.MethodSetKillSwitch, ipc.KillSwitchRequest{Enabled: v})
-	case "dns-protection", "dnsprotection", "dns_protection":
-		v, ok := parseOnOff(value)
-		if !ok {
-			fmt.Fprintln(os.Stderr, "value must be on/off")
-			return 2
-		}
-		if err := ss.Update(func(s *storage.Settings) error { s.DNSProtection = v; return nil }); err != nil {
-			fmt.Fprintln(os.Stderr, "set:", err)
-			return 1
-		}
-		// When enabling, the helper needs the active tunnel's DNS servers.
-		var servers []string
-		if v {
-			if name := activeTunnelName(); name != "" {
-				if store, e := tunnelStore(); e == nil {
-					if cfg, e := store.Load(name); e == nil {
-						servers = cfg.Interface.DNS
-					}
-				}
-			}
-		}
-		liveRC = applyIPC(ipc.MethodSetDNSProtection, ipc.DNSProtectionRequest{Enabled: v, DNSServers: servers})
 	case "healthcheck", "health-check", "health_check":
 		v, ok := parseOnOff(value)
 		if !ok {
@@ -1030,7 +996,7 @@ func cmdSet(args []string) int {
 		}
 		liveRC = applyIPC(ipc.MethodSetLogLevel, ipc.SetLogLevelRequest{Level: lvl})
 	default:
-		fmt.Fprintf(os.Stderr, "unknown setting %q (killswitch, dns-protection, healthcheck, pin-interface, loglevel)\n", setting)
+		fmt.Fprintf(os.Stderr, "unknown setting %q (healthcheck, pin-interface, loglevel)\n", setting)
 		return 2
 	}
 	if liveRC != 0 {

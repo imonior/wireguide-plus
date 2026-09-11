@@ -29,27 +29,39 @@
     return iface.startsWith('utun') || iface.startsWith('wg') || iface.startsWith('tun');
   }
 
-  // macOS prints link-layer gateways as "link#<ifindex>" (no IP at all —
-  // the destination is reachable directly on that interface). Rendering
-  // the raw token in a column headed "Gateway" reads like garbage, so
-  // show "on-link" and keep the raw value in the tooltip.
+  // The backend only ever sends a real L3 next-hop IP in the Gateway field,
+  // or an empty string for on-link routes (link#N / bare interface name /
+  // MAC neighbor entries are all normalized away). Empty renders as "—".
+  // IPv6 gateways arrive zone-stripped already; this frontend pass is
+  // belt-and-suspenders for stale data.
   function gwLabel(gw) {
     if (!gw) return '-';
-    return /^link#\d+$/.test(gw) ? $t('tools.route_gateway_onlink') : gw;
+    return stripZone(gw);
   }
 
-  // IPv6 addresses carry a zone id ("fe80::1%utun2"). The interface is
-  // already its own column, so the "%utun2" suffix only adds noise — and
-  // at these widths it overflowed into the next column, which is what
-  // made the table look like "IP mixed with utun". Raw value stays in
-  // the tooltip.
+  // IPv6 addresses carry a zone id ("fe80::1%utun2"). The backend strips
+  // it before sending, and this frontend-side pass is belt-and-suspenders
+  // for stale data: only the zone token is removed, a trailing prefix
+  // length ("fe80::%lo0/64" → "fe80::/64") survives.
   function stripZone(v) {
-    if (typeof v !== 'string') return v;
-    const i = v.indexOf('%');
-    return i > 0 ? v.slice(0, i) : v;
+    if (typeof v !== 'string' || !v.includes('%')) return v;
+    const slash = v.indexOf('/');
+    const addr = slash >= 0 ? v.slice(0, slash) : v;
+    const pct = addr.indexOf('%');
+    const clean = pct > 0 ? addr.slice(0, pct) : addr;
+    return slash >= 0 ? clean + v.slice(slash) : clean;
   }
 
   onMount(loadRoutes);
+
+  // Interface kind → i18n key. The backend only ever sends the stable
+  // kinds classifyIface produces; unknown kinds render as-is.
+  const IFACE_TYPE_KEYS = new Set([
+    'wifi', 'ethernet', 'vpn', 'loopback', 'bridge', 'virtual', 'cellular',
+  ]);
+  function ifaceTypeLabel(kind) {
+    return IFACE_TYPE_KEYS.has(kind) ? $t(`tools.route_iface_type_${kind}`) : kind;
+  }
 </script>
 
 <div class="route-viz">
@@ -86,6 +98,18 @@
             <span class="gw" title={route.gateway || ''}>{gwLabel(route.gateway)}</span>
             <span class="iface" class:vpn-iface={isVPN(route)}>
               {route.interface}
+              {#if route.interface_detail || route.interface_type}
+                <!-- Badge text: the specific label wins — the macOS
+                     hardware port name ("Wi-Fi", identical to the tunnel
+                     editor's egress dropdown) or the creator software
+                     ("Tailscale"). The generic kind is the fallback and
+                     stays in the tooltip. -->
+                <span
+                  class="iface-type"
+                  title={[route.interface_type && ifaceTypeLabel(route.interface_type), route.interface_detail].filter(Boolean).join(' · ')}>
+                  {route.interface_detail || ifaceTypeLabel(route.interface_type)}
+                </span>
+              {/if}
               {#if isVPN(route)}
                 <span class="vpn-badge">{$t('tools.route_vpn_badge')}</span>
               {:else}
@@ -217,6 +241,15 @@
   .dest { color: var(--text-primary); }
   .gw { color: var(--text-secondary); }
   .iface { color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-1); }
+  .iface-type {
+    flex-shrink: 0;
+    padding: 0 4px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg-card);
+    color: var(--text-tertiary);
+    font: var(--text-footnote);
+  }
   .vpn-iface { color: var(--green); }
   .vpn-badge {
     padding: 1px var(--space-1);

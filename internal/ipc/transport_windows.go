@@ -35,7 +35,7 @@ func Listen(addr string, ownerUID int, ownerSID string) (net.Listener, error) {
 // lets the unprivileged GUI connect is scoped to the spawning user's SID
 // — the previous grant to Interactive Users (IU / S-1-5-4) let EVERY
 // logged-on account on a multi-user machine drive a SYSTEM helper:
-// disconnect tunnels, disable the kill switch, forge SSIDs into the
+// disconnect tunnels, drop per-tunnel System DNS enforcement, forge SSIDs into the
 // automation engine, force shutdown (issue #20).
 //
 // An empty or malformed SID falls back to the historical IU grant so a

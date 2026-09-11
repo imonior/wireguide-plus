@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
+# OBSOLETE — the global "kill switch" and "DNS protection" toggles were
+# removed from the product (policy principles 8/9/33): a machine-wide
+# blockade cannot say which of several simultaneously connected tunnels is
+# authoritative. Their nftables plumbing lives on in internal/firewall only
+# as the enforcement primitive for the PER-TUNNEL System DNS policy
+# (TunnelMeta.SystemDNS), which this script does not exercise.
+#
+# Kept for reference; superseded by a per-tunnel System DNS integration
+# test. It exits 0 without touching the host's firewall.
 set -Eeuo pipefail
+
+echo "skipped: kill switch / global DNS protection toggles no longer exist"
+exit 0
 
 binary=${1:?wireguideplus binary required}
 vpn_config=${2:?VPN config required}

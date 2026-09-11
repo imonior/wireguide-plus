@@ -51,7 +51,21 @@ const evalReasonMailboxCap = 1
 // or the post-connect timer. reason is recorded for the log line of the
 // evaluation that eventually runs; when the request is dropped the
 // reason only survives in this log line.
+// ensureEvalMailbox creates the one-slot eval mailbox exactly once. Both
+// Run() and requestAutomationEval call it: the field must never be left
+// nil, because on a nil channel a send inside a select always takes the
+// default branch (request dropped, no error anywhere) and a receive
+// blocks forever — the automation engine dies without a single log line.
+func (h *Helper) ensureEvalMailbox() {
+	h.evalMailboxOnce.Do(func() {
+		h.evalRequests = make(chan struct{}, evalReasonMailboxCap)
+	})
+}
+
 func (h *Helper) requestAutomationEval(reason string) {
+	// Regression guard: never post into a nil mailbox.
+	h.ensureEvalMailbox()
+
 	// Capture the pending request's reason BEFORE overwriting it, so the
 	// drop log can name both the discarded event and the one still queued.
 	pending := h.latestEvalReason()

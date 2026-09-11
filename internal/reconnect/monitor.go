@@ -65,9 +65,9 @@ type ReconnectFunc func(ctx context.Context, name string) error
 type StatusChangedFunc func(state State)
 
 // FirewallSuspendFunc is called before disconnect during reconnection to
-// temporarily disable firewall rules (kill switch / DNS protection). This
-// prevents a deadlock when the utun interface name changes (e.g. utun4->utun5)
-// and old pf rules block the new interface's traffic.
+// temporarily disable firewall rules (per-tunnel System DNS enforcement).
+// This prevents a deadlock when the utun interface name changes (e.g.
+// utun4->utun5) and old pf rules block the new interface's traffic.
 type FirewallSuspendFunc func() error
 
 // FirewallResumeFunc is called after a successful reconnect to re-enable

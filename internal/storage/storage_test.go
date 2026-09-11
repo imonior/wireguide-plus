@@ -352,7 +352,7 @@ func TestSettingsUpdateRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	st := NewSettingsStore(dir)
 	if err := st.Update(func(s *Settings) error {
-		s.KillSwitch = true
+		s.HealthCheck = true
 		s.LogLevel = "debug"
 		return nil
 	}); err != nil {
@@ -362,7 +362,7 @@ func TestSettingsUpdateRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !got.KillSwitch || got.LogLevel != "debug" {
+	if !got.HealthCheck || got.LogLevel != "debug" {
 		t.Fatalf("Update did not persist: %+v", got)
 	}
 }

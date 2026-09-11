@@ -237,9 +237,9 @@ func RecoverFromCrash(dataDir string, fw FirewallCleaner) []string {
 	}
 
 	// Firewall: clean up any leftover PF/nftables/netsh rules from the
-	// crashed tunnel's kill switch or DNS protection. Uses the caller's
-	// firewall instance so in-memory state stays consistent with the
-	// post-recovery helper view.
+	// crashed tunnel's System DNS enforcement. Uses the caller's firewall
+	// instance so in-memory state stays consistent with the post-recovery
+	// helper view.
 	if fw != nil {
 		if err := fw.Cleanup(); err != nil {
 			slog.Warn("crash recovery: firewall cleanup failed", "error", err)

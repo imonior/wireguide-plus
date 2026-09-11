@@ -107,8 +107,8 @@ type Manager struct {
 //
 // Implementations are expected to be safe across the disconnect ordering
 // already used by disconnectPhases (DisableEndpointProtection runs
-// AFTER RemoveRoutes but BEFORE engine.Close, matching the
-// kill-switch's RemoveKillSwitchTunnel semantics).
+// AFTER RemoveRoutes but BEFORE engine.Close, matching the per-tunnel
+// teardown semantics).
 type EndpointProtector interface {
 	EnableEndpointProtection(tunnelInterfaceName string, endpoints []string) error
 	DisableEndpointProtection(tunnelInterfaceName string) error

@@ -610,6 +610,27 @@ export class RouteEntry {
              */
             this["is_vpn"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * InterfaceType is the stable kind label (wifi/ethernet/vpn/…), and
+             * InterfaceDetail the creator-app name (Tailscale/Docker/…, not
+             * localised) — both produced by diag.classifyIface. The UI renders
+             * them as the iface column's "kind · source" badge. They MUST be
+             * copied here: this DTO is what actually crosses the IPC boundary,
+             * and mirroring diag.RouteEntry field-by-field is easy to forget
+             * when a new column is added upstream.
+             * @member
+             * @type {string | undefined}
+             */
+            this["interface_type"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["interface_detail"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -932,6 +953,65 @@ export class TunnelMetaBinding {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new TunnelMetaBinding(/** @type {Partial<TunnelMetaBinding>} */($$parsedSource));
+    }
+}
+
+/**
+ * TunnelPolicies is the wire form of a tunnel's WireGuide Plus private
+ * policies. Like the egress binding, all three live in the .meta.json
+ * sidecar and NEVER in the .conf (policy principle 1/2) so the config file
+ * stays a portable standard WireGuard/AWG document.
+ */
+export class TunnelPolicies {
+    /**
+     * Creates a new TunnelPolicies instance.
+     * @param {Partial<TunnelPolicies>} [$$source = {}] - The source object to create the TunnelPolicies.
+     */
+    constructor($$source = {}) {
+        if (!("traffic_protect" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["traffic_protect"] = false;
+        }
+        if (!("domains" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["domains"] = [];
+        }
+        if (!("use_as_default_dns" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["use_as_default_dns"] = false;
+        }
+        if (!("dns_resolve_path" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["dns_resolve_path"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelPolicies instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelPolicies}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("domains" in $$parsedSource) {
+            $$parsedSource["domains"] = $$createField1_0($$parsedSource["domains"]);
+        }
+        return new TunnelPolicies(/** @type {Partial<TunnelPolicies>} */($$parsedSource));
     }
 }
 

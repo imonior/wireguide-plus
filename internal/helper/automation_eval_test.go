@@ -227,3 +227,25 @@ func TestReconcileAction_Outcomes(t *testing.T) {
 		}
 	}
 }
+
+// Regression (v1.8.0): Run() shipped without initialising evalRequests.
+// A nil channel silently drops every requestAutomationEval (send takes
+// the select default) and parks automationEvalLoop on its select forever
+// — the automation engine dies with zero log lines. The lazy
+// ensureEvalMailbox inside requestAutomationEval must make this test pass
+// even on a zero-value Helper.
+func TestRequestEvalOnUninitialisedMailbox(t *testing.T) {
+	h := &Helper{done: make(chan struct{})} // deliberately NO evalRequests
+
+	if h.evalRequests != nil {
+		t.Fatal("precondition: mailbox must start nil to exercise the guard")
+	}
+	h.requestAutomationEval("regression")
+
+	select {
+	case <-h.evalRequests:
+		// delivered — the engine will run
+	case <-time.After(time.Second):
+		t.Fatal("request lost: evalRequests was never initialised")
+	}
+}

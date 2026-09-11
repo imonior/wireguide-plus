@@ -90,9 +90,51 @@ func listPhysicalInterfaces(requireUp bool) []InterfaceInfo {
 		if requireUp && !active {
 			continue
 		}
-		out = append(out, InterfaceInfo{Name: ifi.Name, IsWiFi: ifaceIsWiFi(ifi.Name), Active: active})
+		out = append(out, InterfaceInfo{
+			Name:   ifi.Name,
+			IsWiFi: ifaceIsWiFi(ifi.Name),
+			Active: active,
+			Type:   classifyInterfaceType(ifi.Name, ifaceIsWiFi(ifi.Name)),
+		})
 	}
 	return out
+}
+
+// classifyInterfaceType maps an interface name (plus the Wi-Fi flag) to a
+// stable kind label for display: wifi / ethernet / bridge / virtual /
+// loopback / cellular / vpn / "". It mirrors diag.classifyIface's name
+// heuristics but lives in the wifi package so no cross-package import is
+// needed; the hardware-port detail is intentionally omitted because the
+// automation board only needs the generic short name, and the Wi-Fi flag
+// (exact on macOS/Linux, heuristic elsewhere) wins over the name prefix so a
+// laptop's en0 reports wifi rather than ethernet.
+func classifyInterfaceType(name string, isWiFi bool) string {
+	if isWiFi {
+		return "wifi"
+	}
+	lower := strings.ToLower(name)
+	switch {
+	case strings.HasPrefix(lower, "lo"):
+		return "loopback"
+	case strings.HasPrefix(lower, "en"), strings.HasPrefix(lower, "eth"), strings.HasPrefix(lower, "enp"):
+		return "ethernet"
+	case strings.HasPrefix(lower, "wlan"), strings.HasPrefix(lower, "wl"):
+		return "wifi"
+	case strings.HasPrefix(lower, "bridge"), strings.HasPrefix(lower, "br-"):
+		return "bridge"
+	case strings.HasPrefix(lower, "awdl"), strings.HasPrefix(lower, "llw"),
+		strings.HasPrefix(lower, "p2p"), strings.HasPrefix(lower, "veth"),
+		strings.HasPrefix(lower, "docker"), strings.HasPrefix(lower, "vethernet"),
+		strings.Contains(lower, "hyper-v"), strings.Contains(lower, "virtualbox"),
+		strings.Contains(lower, "vmware"), strings.Contains(lower, "orbstack"):
+		return "virtual"
+	case strings.Contains(lower, "wwan"), strings.Contains(lower, "cellular"):
+		return "cellular"
+	case strings.HasPrefix(lower, "utun"), strings.HasPrefix(lower, "wg"),
+		strings.HasPrefix(lower, "tun"), strings.HasPrefix(lower, "tap"):
+		return "vpn"
+	}
+	return ""
 }
 
 func interfaceHasRoutableAddress(ifi net.Interface) bool {

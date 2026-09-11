@@ -373,7 +373,7 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 	}
 
 	// Audit log: record what changed so the log file answers "who turned
-	// on the proxy / kill switch / …" without diffing config.json by hand.
+	// on the proxy / health check / …" without diffing config.json by hand.
 	// The proxy URL is redacted so credentials never hit the log.
 	changed := changedSettingsFields(prev, settings)
 	if len(changed) > 0 {
@@ -389,8 +389,6 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 			"auto_update_check", settings.AutoUpdateCheckEnabled(),
 			"notify_duration_ms", settings.NotifyDurationMs,
 			"enable_wg_scripts", settings.EnableWgScripts,
-			"kill_switch", settings.KillSwitch,
-			"dns_protection", settings.DNSProtection,
 			"health_check", settings.HealthCheck,
 			"pin_interface", settings.PinInterface,
 			"enable_awg", settings.EnableAWG,
@@ -439,6 +437,18 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		_ = s.call(ipc.MethodSetLogLevel, ipc.SetLogLevelRequest{Level: settings.LogLevel}, nil)
 	}
 
+	// DNS resolve path master switch OFF→ turned OFF: the feature must not
+	// exist while it is off. A still-connected tunnel may be enforcing the
+	// path right now (firewall rules + owner state in the helper); teardown
+	// there happens on disconnect, which is too late — clear it now.
+	// Best-effort, same reasoning as the log-level call above.
+	if prev != nil && prev.DNSResolvePath && !settings.DNSResolvePath {
+		if err := s.call(ipc.MethodClearDNSPathEnforcement, ipc.Empty{}, nil); err != nil {
+			slog.Warn("failed to clear DNS resolve path enforcement after master switch off",
+				"category", "settings", "error", err)
+		}
+	}
+
 	// Auto-update toggle OFF→ON: nudge the scheduler so the user doesn't
 	// have to wait up to 24 h for the next regular tick. The force flag
 	// on Kick bypasses the focusRecheckThreshold gate (we *want* to
@@ -475,12 +485,6 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	}
 	if prev.NotifyDurationMs != next.NotifyDurationMs {
 		out = append(out, "notify_duration_ms")
-	}
-	if prev.KillSwitch != next.KillSwitch {
-		out = append(out, "kill_switch")
-	}
-	if prev.DNSProtection != next.DNSProtection {
-		out = append(out, "dns_protection")
 	}
 	if prev.HealthCheck != next.HealthCheck {
 		out = append(out, "health_check")
@@ -726,35 +730,6 @@ func (s *TunnelService) SetLogLevel(level string) error {
 	return s.call(ipc.MethodSetLogLevel, ipc.SetLogLevelRequest{Level: level}, nil)
 }
 
-// --- Firewall toggles (go through helper) ---
-
-// SetKillSwitch asks the helper to enable or disable the firewall kill switch.
-func (s *TunnelService) SetKillSwitch(enabled bool) error {
-	return s.call(ipc.MethodSetKillSwitch, ipc.KillSwitchRequest{Enabled: enabled}, nil)
-}
-
-// SetDNSProtection asks the helper to lock DNS to the active tunnel's servers.
-// When enabling, we look up the active tunnel's DNS list from local storage
-// and pass it along (the helper never touches user-space storage).
-func (s *TunnelService) SetDNSProtection(enabled bool) error {
-	var dnsServers []string
-	if enabled {
-		var active ipc.StringResponse
-		if err := s.call(ipc.MethodActiveName, nil, &active); err != nil {
-			return fmt.Errorf("cannot verify tunnel state: %w", err)
-		}
-		if active.Value != "" {
-			if cfg, err := s.tunnelStore.Load(active.Value); err == nil {
-				dnsServers = cfg.Interface.DNS
-			}
-		}
-	}
-	return s.call(ipc.MethodSetDNSProtection, ipc.DNSProtectionRequest{
-		Enabled:    enabled,
-		DNSServers: dnsServers,
-	}, nil)
-}
-
 // --- Auto-update ---
 
 // SetPinInterface enables or disables -ifscope bypass route pinning.
@@ -765,6 +740,19 @@ func (s *TunnelService) SetPinInterface(enabled bool) error {
 // SetHealthCheck enables or disables the tunnel health check monitor.
 func (s *TunnelService) SetHealthCheck(enabled bool) error {
 	return s.call(ipc.MethodSetHealthCheck, ipc.SetHealthCheckRequest{Enabled: enabled}, nil)
+}
+
+// ResolveDNSPathConflict answers a connect that the helper parked because
+// another connected tunnel already owns the system's DNS resolve path.
+// action is "disable" (waive this tunnel's claim, let it connect) or
+// "cancel" (abandon the parked connect). The GUI calls this while the
+// original Connect RPC is still in flight — the IPC client multiplexes
+// requests by ID, so answering never blocks behind the parked connect.
+func (s *TunnelService) ResolveDNSPathConflict(tunnel, action string) error {
+	return s.call(ipc.MethodResolveDNSPathConflict, ipc.DNSPathResolveRequest{
+		Tunnel: tunnel,
+		Action: action,
+	}, nil)
 }
 
 // OpenURL opens a URL in the default browser. Only HTTPS URLs on

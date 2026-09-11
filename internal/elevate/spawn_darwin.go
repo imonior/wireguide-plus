@@ -18,6 +18,12 @@ const (
 	daemonLabel  = "com.wireguideplus.helper"
 	daemonPlist  = "/Library/LaunchDaemons/" + daemonLabel + ".plist"
 	daemonBinary = "/Library/PrivilegedHelperTools/" + daemonLabel
+	// stagingBinary is the temp copy of the helper binary used for atomic
+	// replacement. It MUST live in the same directory as daemonBinary:
+	// rename(2) is atomic only within a filesystem, and a cross-device
+	// rename would silently degrade to copy+truncate — exactly the
+	// in-place rewrite we are trying to avoid.
+	stagingBinary = "/Library/PrivilegedHelperTools/." + daemonLabel + ".new"
 )
 
 // SpawnHelper starts the privileged helper process.
@@ -179,10 +185,12 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 
 	// Single shell script that does everything as root:
 	// 1. Create target directory
-	// 2. Copy binary
-	// 3. Copy plist (from our validated temp file)
-	// 4. Set ownership/permissions
-	// 5. Bootout old daemon (ignore errors — may not exist)
+	// 2. Boot out the OLD daemon (must happen before the binary is
+	//    replaced — see the atomic-replace note below)
+	// 3. Copy the binary to a temp path in the SAME directory, then
+	//    `mv` it into place
+	// 4. Copy plist (from our validated temp file)
+	// 5. Set ownership/permissions
 	// 6. Bootstrap new daemon
 	// 7. Kickstart it — REQUIRED, because the plist sets RunAtLoad=false.
 	//    bootstrap alone only registers the job with launchd; without the
@@ -190,6 +198,21 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 	//    below would time out with "daemon installed but socket not live".
 	//    -k replaces a survivor from a torn-down previous instance rather
 	//    than leaving it running.
+	//
+	// WHY THE BINARY IS REPLACED WITH mv AND NOT cp:
+	// The helper binary at /Library/PrivilegedHelperTools/… is a copy of
+	// this very executable, and it is what the running helper process is
+	// executing. `cp -f` truncates and rewrites that file in place, so an
+	// install performed while a helper is live rewrites the text pages of
+	// a running process: the helper then dies with a fatal Go runtime
+	// error (observed as `runtime.findfunc: index out of range`, i.e.
+	// corruption inside the runtime itself, not in our code), launchd
+	// restarts it, the GUI sees the helper as dead and reinstalls —
+	// and the machine spirals into a crash/reinstall loop that spams an
+	// admin prompt every ~30s and leaves the app unquittable.
+	// Writing to a temp file and renaming is atomic at the directory
+	// level: a still-running helper keeps its old (now unlinked) inode
+	// intact, and only fresh starts see the new binary.
 	// xattr -d strips com.apple.quarantine from the freshly copied helper
 	// binary. macOS adds this attr to anything downloaded (e.g. inside a
 	// dmg/zip release) and Gatekeeper blocks quarantined binaries from
@@ -207,30 +230,30 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 	// finding the service, then bootstrap races no longer occur.
 	shellScript := fmt.Sprintf(
 		`mkdir -p /Library/PrivilegedHelperTools && `+
-			`cp -f %s %s && `+
-			`xattr -d com.apple.quarantine %s 2>/dev/null; `+
-			`chown root:wheel %s && `+
-			`chmod 755 %s && `+
-			`cp -f %s %s && `+
-			`chown root:wheel %s && `+
-			`chmod 644 %s && `+
+			// Stop the old daemon BEFORE touching its binary.
 			`launchctl bootout system/com.wireguide.helper 2>/dev/null; `+
 			`rm -f /Library/LaunchDaemons/com.wireguide.helper.plist /Library/PrivilegedHelperTools/com.wireguide.helper 2>/dev/null; `+
-			`launchctl bootout system/%s 2>/dev/null; `+
-			`i=0; while [ $i -lt 20 ] && launchctl print system/%s >/dev/null 2>&1; do sleep 0.1; i=$((i+1)); done; `+
-			`launchctl bootstrap system %s && `+
-			`launchctl kickstart -k system/%s`,
-		shellQuote(exe), shellQuote(daemonBinary),
-		shellQuote(daemonBinary),
-		shellQuote(daemonBinary),
-		shellQuote(daemonBinary),
-		shellQuote(tmpPlist), shellQuote(daemonPlist),
-		shellQuote(daemonPlist),
-		shellQuote(daemonPlist),
-		daemonLabel,
-		daemonLabel,
-		shellQuote(daemonPlist),
-		daemonLabel,
+			`launchctl bootout system/%[3]s 2>/dev/null; `+
+			`i=0; while [ $i -lt 20 ] && launchctl print system/%[3]s >/dev/null 2>&1; do sleep 0.1; i=$((i+1)); done; `+
+			// Atomic replace: copy to a temp file in the same directory,
+			// then rename. Never truncate the running binary in place.
+			`rm -f %[4]s && `+
+			`cp -f %[1]s %[4]s && `+
+			`xattr -d com.apple.quarantine %[4]s 2>/dev/null; `+
+			`chown root:wheel %[4]s && `+
+			`chmod 755 %[4]s && `+
+			`mv -f %[4]s %[2]s && `+
+			`cp -f %[5]s %[6]s && `+
+			`chown root:wheel %[6]s && `+
+			`chmod 644 %[6]s && `+
+			`launchctl bootstrap system %[6]s && `+
+			`launchctl kickstart -k system/%[3]s`,
+		shellQuote(exe),           // %[1]s — source: this executable
+		shellQuote(daemonBinary),  // %[2]s — destination helper binary
+		daemonLabel,               // %[3]s
+		shellQuote(stagingBinary), // %[4]s — temp copy, same directory
+		shellQuote(tmpPlist),      // %[5]s
+		shellQuote(daemonPlist),   // %[6]s
 	)
 
 	escaped := strings.ReplaceAll(shellScript, `\`, `\\`)

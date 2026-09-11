@@ -759,8 +759,17 @@
     }
     return count;
   }
+  // Stable interface-kind labels, reused from the Routes view so the
+  // automation board and the routing table speak the same short vocabulary
+  // ("Wi-Fi", "Ethernet", …). Falls back to the raw kind when unknown.
+  const IFACE_TYPE_KEYS = new Set([
+    'wifi', 'ethernet', 'bridge', 'virtual', 'loopback', 'cellular', 'vpn',
+  ]);
+  function ifaceTypeLabel(type) {
+    return type && IFACE_TYPE_KEYS.has(type) ? $t(`tools.route_iface_type_${type}`) : (type || '');
+  }
   $: networkFacts = [
-    { key: 'interface', label: $t('automation.network_interface'), value: (preview?.interfaces || []).map(x => `${x.name} (${x.active ? $t('automation.interface_in_use') : $t('automation.interface_not_in_use')})`).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('interface') },
+    { key: 'interface', label: $t('automation.network_interface'), value: (preview?.interfaces || []).map(x => `${x.name}${x.type ? ' - ' + ifaceTypeLabel(x.type) : ''} (${x.active ? $t('automation.interface_in_use') : $t('automation.interface_not_in_use')})`).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('interface') },
     { key: 'ssid', label: $t('automation.network_ssid'), value: preview?.on_wifi && preview?.ssid ? preview.ssid : $t('automation.wifi_not_connected'), count: conditionMatchCount('ssid') },
     { key: 'gateway_mac', label: $t('automation.network_gateway_mac'), value: preview?.gateway_mac || $t('automation.network_unavailable'), count: conditionMatchCount('network') },
     { key: 'gateway_ip', label: $t('automation.network_gateway_ip'), value: preview?.gateway_ip || $t('automation.network_unavailable'), count: conditionMatchCount('gateway_ip') },

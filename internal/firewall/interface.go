@@ -1,4 +1,16 @@
-// Package firewall provides OS-specific kill switch and DNS leak protection.
+// Package firewall provides OS-specific DNS (port 53) enforcement and the
+// underlying platform primitives it is built on (pf anchors on macOS,
+// nftables on Linux, WFP on Windows).
+//
+// The product-level global toggles are GONE (see
+// docs/POLICY_PRINCIPLES.md): the machine-wide kill switch was removed
+// because, with several tunnels connected at once, a single switch cannot
+// say which tunnel is authoritative; the global DNS protection toggle was
+// replaced by the per-tunnel DNSResolvePath ("DNS resolve path") policy,
+// which is what EnableDNSProtection / DisableDNSProtection now serve (helper-side, at
+// connect/disconnect of the owning tunnel). The Enable/Add/Remove/
+// DisableKillSwitch primitives below are kept as platform capability but
+// are no longer reachable from any setting, IPC method or CLI command.
 package firewall
 
 // FirewallManager controls kill switch and DNS leak protection.

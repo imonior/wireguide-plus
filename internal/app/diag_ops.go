@@ -38,6 +38,15 @@ type RouteEntry struct {
 	Interface   string `json:"interface"`
 	Flags       string `json:"flags"`
 	IsVPN       bool   `json:"is_vpn,omitempty"`
+	// InterfaceType is the stable kind label (wifi/ethernet/vpn/…), and
+	// InterfaceDetail the creator-app name (Tailscale/Docker/…, not
+	// localised) — both produced by diag.classifyIface. The UI renders
+	// them as the iface column's "kind · source" badge. They MUST be
+	// copied here: this DTO is what actually crosses the IPC boundary,
+	// and mirroring diag.RouteEntry field-by-field is easy to forget
+	// when a new column is added upstream.
+	InterfaceType   string `json:"interface_type,omitempty"`
+	InterfaceDetail string `json:"interface_detail,omitempty"`
 }
 
 // effectivePublicResolvers returns the public-resolver cross-check list the
@@ -253,11 +262,13 @@ func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 	out := make([]RouteEntry, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, RouteEntry{
-			Destination: e.Destination,
-			Gateway:     e.Gateway,
-			Interface:   e.Interface,
-			Flags:       e.Flags,
-			IsVPN:       vpnIfaces[e.Interface],
+			Destination:     e.Destination,
+			Gateway:         e.Gateway,
+			Interface:       e.Interface,
+			Flags:           e.Flags,
+			IsVPN:           vpnIfaces[e.Interface],
+			InterfaceType:   e.InterfaceType,
+			InterfaceDetail: e.InterfaceDetail,
 		})
 	}
 	return out, nil
