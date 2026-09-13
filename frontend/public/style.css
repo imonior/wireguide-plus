@@ -1,16 +1,17 @@
 /* WireGuide Plus Theme System
  *
- * Color palette: "Midnight Slate" (dark) / "Cloud Slate" (light).
+ * Color palette: "Crimson Slate" (dark) / "Crimson Cloud" (light).
  * Grounded in color psychology research:
- *   - Indigo accent (~245° HSL) — research-backed for security/trust UIs
- *     (Sinclair & Vickery 2019; used by Stripe, Linear, Cloudflare)
- *   - Emerald success (#34d399/#059669) — reads as "operational" vs. gamified
+ *   - Brand-red accent (#EF4444 / #A01D21, logo-derived) — high salience for
+ *     primary actions & connection state against the cool blue-slate chrome
+ *   - Emerald success (#22c55e/#059669) — reads as "operational" vs. gamified
  *   - Near-black surface (#13141a) — avoids halation/Cornsweet illusion
  *     from pure black (physiological glare on cone cells)
  *   - Near-white surface (#f0f2f8) — avoids iris constriction fatigue from #FFF
- *   - Blue-slate surface tint — perceptual coherence with indigo accent
+ *   - Blue-slate surface tint — keeps the chrome calm so the warm red accent pops
  *   - Hue-matched shadows — physically correct (sky-lit ambient shadows)
- * All text/accent contrast ratios verified against WCAG 2.2 AA (4.5:1).
+ * Primary & secondary text/accent contrast verified against WCAG 2.2 AA
+ * (4.5:1); `--text-muted` is the dimmest readable step (≥4.5:1).
  *
  * Token naming kept compatible with existing components.
  * Three theme roots:
@@ -42,7 +43,7 @@
     /* --- Text (absolute hex — reliable for WCAG calculations) --- */
     --text-primary:   #e8eaf6;   /* ~11:1 on --bg-primary ✓ AAA */
     --text-secondary: #9ea3c0;   /* ~4.9:1 on --bg-primary ✓ AA  */
-    --text-muted:     #5c6080;   /* ~2.6:1 — use only for non-text elements */
+    --text-muted:     #7c829c;   /* ~4.8:1 ✓ AA — dimmest readable text step */
     --text-inverse:   #fff5f5;   /* warm-white text on red accent buttons */
 
     /* --- Accent — WireGuide brand red (derived from logo: #A01D21 → #5E1012)
@@ -54,14 +55,13 @@
     --accent-darker: #5E1012;   /* logo bottom — for deeper shadows */
     --blue:          #60a5fa;   /* blue-400 — reserved for "info" semantics (logs) */
     /* Alias tokens for components that reference explicit --accent-* names */
-    --accent-blue:   #EF4444;   /* alias of --accent (legacy naming) */
     --accent-green:  #34d399;
     --accent-red:    #f87171;
     --accent-yellow: #fbbf24;
     --accent-orange: #fb923c;
 
     /* --- Semantic status colors --- */
-    --green:   #34d399;   /* emerald-400. ~7.1:1 ✓ AAA — "connected / healthy" */
+    --green:   #22c55e;   /* emerald-500. ~8.1:1 ✓ AAA — "connected" status, aligned with app-icon medical green */
     --yellow:  #fbbf24;   /* amber-400.   ~8.9:1 ✓ AAA — "connecting / warning" */
     --red:     #f87171;   /* red-400.     ~5.8:1 ✓ AA  — "error / disconnect"   */
     --orange:  #fb923c;   /* orange-400.  ~6.2:1 ✓ AA  — "no-handshake caution" */
@@ -70,8 +70,7 @@
     /* --- Semantic state tints --- */
     --green-tint:  rgba(52, 211, 153, 0.16);
     --yellow-tint: rgba(251, 191, 36, 0.16);
-    --blue-tint:   rgba(239, 68, 68, 0.18);   /* focus-ring tint = accent-red */
-    --accent-tint: rgba(239, 68, 68, 0.18);   /* explicit accent tint alias */
+    --accent-tint: rgba(239, 68, 68, 0.18);   /* explicit accent tint (focus ring, highlights) */
     --orange-tint: rgba(251, 146, 60, 0.15);
 
     --error-bg:    rgba(248, 113, 113, 0.14);
@@ -100,7 +99,7 @@
        Kept distinct from accent red so RX/TX bars remain visually
        distinguishable from connection state and brand chrome. */
     --graph-bg:      #1c1d26;
-    --stats-rx:      #34d399;   /* emerald */
+    --stats-rx:      #22c55e;   /* emerald — matches --green */
     --stats-tx:      #818cf8;   /* indigo  */
     --stats-rx-fill: rgba(52, 211, 153, 0.20);
     --stats-tx-fill: rgba(129, 140, 248, 0.20);
@@ -210,7 +209,6 @@
     --accent-deep:   #5E1012;   /* logo bottom — gradient endpoint */
     --accent-darker: #3d0a0c;   /* deeper still — shadows */
     --blue:          #3b82f6;   /* blue-500 — reserved for "info" semantics */
-    --accent-blue:   #A01D21;   /* alias of --accent (legacy naming) */
     --accent-green:  #059669;
     --accent-red:    #dc2626;
     --accent-yellow: #b45309;
@@ -226,8 +224,7 @@
     /* --- Semantic state tints --- */
     --green-tint:  rgba(5, 150, 105, 0.12);
     --yellow-tint: rgba(180, 83, 9, 0.12);
-    --blue-tint:   rgba(160, 29, 33, 0.14);   /* focus-ring tint = accent-red */
-    --accent-tint: rgba(160, 29, 33, 0.14);   /* explicit accent tint alias */
+    --accent-tint: rgba(160, 29, 33, 0.14);   /* explicit accent tint (focus ring, highlights) */
     --orange-tint: rgba(234, 88, 12, 0.12);
 
     --error-bg:    rgba(220, 38, 38, 0.08);
@@ -291,7 +288,6 @@
         --accent-deep:   #5E1012;
         --accent-darker: #3d0a0c;
         --blue:          #3b82f6;
-        --accent-blue:   #A01D21;
         --accent-green:  #059669;
         --accent-red:    #dc2626;
         --accent-yellow: #b45309;
@@ -304,7 +300,6 @@
 
         --green-tint:  rgba(5, 150, 105, 0.12);
         --yellow-tint: rgba(180, 83, 9, 0.12);
-        --blue-tint:   rgba(160, 29, 33, 0.14);
         --accent-tint: rgba(160, 29, 33, 0.14);
         --orange-tint: rgba(234, 88, 12, 0.12);
 

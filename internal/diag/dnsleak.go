@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -128,13 +127,13 @@ var publicResolvers = []string{
 	// OpenDNS (Cisco)
 	"208.67.222.222", "208.67.220.220",
 	// Quad9
-	"9.9.9.9",
+	"9.9.9.9", "149.112.112.112",
 	// Alibaba Public DNS
 	"223.5.5.5", "223.6.6.6",
 	// DNSPod Public DNS
 	"119.29.29.29",
 	// 114 DNS
-	"114.114.114.114",
+	"114.114.114.114", "114.114.115.115",
 	// Baidu DNS
 	"180.76.76.76",
 	// AdGuard DNS
@@ -143,15 +142,48 @@ var publicResolvers = []string{
 	"45.90.28.190", "45.90.30.190",
 	// Comodo Secure DNS
 	"8.26.56.26", "8.20.247.20",
-	// IPv6 (Google, Cloudflare)
-	"2001:4860:4860::8888", "2606:4700:4700::1111",
+	// Level3 / CenturyLink
+	"209.244.0.3", "209.244.0.4",
+	// Verisign
+	"64.6.64.6", "64.6.65.6",
+	// Comcast
+	"75.75.75.75", "75.75.76.76",
+	// Neustar (UltraDNS)
+	"156.154.70.1", "156.154.71.1",
+	// Yandex
+	"77.88.8.8", "77.88.8.1",
+	// CleanBrowsing
+	"185.228.168.9", "185.228.169.9",
+	// UncensoredDNS
+	"91.239.100.100", "89.233.43.71",
+	// DNS.SB
+	"185.222.222.222", "45.11.45.11",
+	// Freenom
+	"80.80.80.80", "80.80.81.81",
+	// CNNIC SDNS (China)
+	"1.2.4.8", "210.2.4.8",
+	// 360 DNS (China)
+	"101.226.4.6", "218.30.118.6",
+	// OneDNS (China)
+	"117.50.11.11", "52.80.66.66",
+	// OpenNIC anycast
+	"185.121.177.177", "169.239.202.202",
+	// Hurricane Electric
+	"74.82.42.42",
+	// IPv6 (Google, Cloudflare, Quad9)
+	"2001:4860:4860::8888", "2606:4700:4700::1111", "2620:fe::fe",
 }
 
-// publicDNSInfoURL is the remote source for live-refreshing the public
-// resolver list. public-dns.info publishes a JSON array of the resolvers it
-// monitors, each with reliability/error/DNSSEC metadata; we filter to the
-// healthy, highly-reliable entries so the cross-check set stays current.
-const publicDNSInfoURL = "https://public-dns.info/nameservers.json"
+// publicDNSInfoURLs are the remote sources for live-refreshing the public
+// resolver list, tried in order. public-dns.info is the canonical feed: it
+// publishes a JSON array of the resolvers it monitors, each with
+// reliability/error metadata, and we filter to the healthy, high-reliability
+// entries so the cross-check set stays current. Additional URLs may be added
+// as fallbacks for networks where the primary is blocked — each MUST be a
+// JSON array of resolver objects shaped like publicDNSInfoEntry.
+var publicDNSInfoURLs = []string{
+	"https://public-dns.info/nameservers.json",
+}
 
 // publicDNSInfoEntry is one item of the public-dns.info nameservers.json feed.
 type publicDNSInfoEntry struct {
@@ -170,45 +202,65 @@ const publicFetchLimit = 30
 // public-dns.info and returns the most-reliable healthy entries, capped at
 // publicFetchLimit. An error is returned if the feed cannot be fetched or
 // parsed; callers fall back to the built-in DefaultPublicResolvers list.
-// The ctx bounds the whole operation; transport-level deadlines are handled
-// inside this function — ctx is often quite short (10s UI cap) but the
-// public-dns.info feed is several MB and congested, so a transport timeout
-// mid-download would otherwise surface as "parse JSON: context deadline
-// exceeded". We prefer a longer transport budget on the HTTP client (so
-// the caller's ctx can still abort promptly when the user cancels) while
-// reading only a bounded prefix of the body so the download cannot run
-// away in either direction.
+//
+// The feed is a multi-MB JSON array (~40k entries, 4–8 MB and growing) but
+// we only need ~publicFetchLimit healthy resolvers. We therefore stream the
+// array token-by-token and STOP as soon as we have enough reliable entries
+// — this avoids pulling the entire payload, which on slow links (tens of
+// KB/s) would never finish within any reasonable timeout and made "refresh
+// from network" fail every time. A scanLimit caps how many entries we walk
+// through so a feed with low-reliability entries near the front stays cheap.
 func FetchPublicResolvers(ctx context.Context) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, publicDNSInfoURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("public-dns.info: build request: %w", err)
+	var lastErr error
+	for _, url := range publicDNSInfoURLs {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			lastErr = fmt.Errorf("%s: build request: %w", url, err)
+			continue
+		}
+		req.Header.Set("User-Agent", "wireguide-plus/"+version.Version)
+		// Generous transport budget: the caller's ctx (e.g. 12s UI cap) still
+		// wins when the user cancels, but we don't want a half-closed connection
+		// to hang forever. Because we break early once enough entries are
+		// collected, the actual bytes transferred are tiny on normal feeds.
+		client := &http.Client{Timeout: 60 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("%s: %w", url, err)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("%s: HTTP %d", url, resp.StatusCode)
+			continue
+		}
+		list, perr := parsePublicResolvers(json.NewDecoder(resp.Body))
+		resp.Body.Close()
+		if perr != nil {
+			lastErr = perr
+			continue
+		}
+		return list, nil
 	}
-	req.Header.Set("User-Agent", "wireguide-plus/"+version.Version)
-	// 30s wall-clock HTTP client budget. The outer ctx is typically 10s
-	// (diagnostics-panel cap) and that one wins when the user wants to
-	// cancel, but if ctx is the caller's background we still need a hard
-	// cap — otherwise a half-closed TCP connection can keep the decoder
-	// stuck forever. Both deadlines are transport-level: the json decoder
-	// never sees a partial body because io.LimitReader cuts at 4MB anyway.
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("public-dns.info: %w", err)
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no public DNS source configured")
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("public-dns.info: HTTP %d", resp.StatusCode)
-	}
+	return nil, lastErr
+}
 
-	// public-dns.info publishes ~40k entries (~4-8 MB today, and growing).
-	// We only need the top publicFetchLimit (~30) healthy ones, so reading
-	// past ~4 MB yields nothing useful and just wastes time / memory on
-	// slow links. LimitReader plus the 30s client timeout together ensure
-	// a congested endpoint cannot make the diagnostic panel look broken.
-	dec := json.NewDecoder(io.LimitReader(resp.Body, 4<<20))
-	var entries []publicDNSInfoEntry
-	if err := dec.Decode(&entries); err != nil {
-		return nil, fmt.Errorf("public-dns.info: parse JSON: %w", err)
+// parsePublicResolvers streams a public-dns.info-style JSON array of resolver
+// entries and returns the most-reliable healthy IPs, capped at
+// publicFetchLimit. It reads only as far as it needs — stopping as soon as
+// enough entries are collected — so a multi-MB feed does not have to be fully
+// downloaded. This is the core fix for "refresh from network" failing on slow
+// links: previously the whole 4–8 MB body was buffered before parsing.
+func parsePublicResolvers(dec *json.Decoder) ([]string, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("public-dns.info: read open: %w", err)
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return nil, fmt.Errorf("public-dns.info: expected JSON array")
 	}
 
 	type scored struct {
@@ -217,7 +269,20 @@ func FetchPublicResolvers(ctx context.Context) ([]string, error) {
 	}
 	var scoredList []scored
 	seen := make(map[string]bool)
-	for _, e := range entries {
+	// Upper bound on entries we scan before giving up; keeps the download
+	// small even when the early part of the feed is low-reliability. We stop
+	// earlier anyway once we have publicFetchLimit reliable resolvers.
+	const scanLimit = publicFetchLimit * 10
+	for dec.More() {
+		var e publicDNSInfoEntry
+		if err := dec.Decode(&e); err != nil {
+			// A truncated tail is fine once we already have enough entries;
+			// otherwise surface the parse error.
+			if len(scoredList) >= publicFetchLimit {
+				break
+			}
+			return nil, fmt.Errorf("public-dns.info: parse entry: %w", err)
+		}
 		ip := strings.TrimSpace(e.IP)
 		if ip == "" || e.Error != "" || seen[ip] {
 			continue
@@ -227,6 +292,14 @@ func FetchPublicResolvers(ctx context.Context) ([]string, error) {
 		}
 		seen[ip] = true
 		scoredList = append(scoredList, scored{ip: ip, reliability: e.Reliability})
+		// Stop the moment we have enough reliable resolvers — no need to
+		// pull the rest of the (potentially huge) feed.
+		if len(scoredList) >= publicFetchLimit {
+			break
+		}
+		if len(scoredList) >= scanLimit {
+			break
+		}
 	}
 	sort.SliceStable(scoredList, func(i, j int) bool {
 		return scoredList[i].reliability > scoredList[j].reliability

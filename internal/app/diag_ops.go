@@ -156,7 +156,7 @@ func (s *TunnelService) ResetPublicDNSServers() error {
 // result reports the fetched list, the list now in effect, the fetch
 // timestamp, and whether the fetch itself succeeded.
 func (s *TunnelService) RefreshPublicDNSServers() (*PublicDNSRefresh, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	list, err := diag.FetchPublicResolvers(ctx)
 	if err != nil {
@@ -247,8 +247,11 @@ func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 		return nil, err
 	}
 	// Collect the interface names of every currently active tunnel
-	// (primary + multi-tunnel members).
+	// (primary + multi-tunnel members), and map each to the tunnel that
+	// created it so we can attribute anonymous macOS utun* routes to a
+	// concrete owner in the UI (the OS route output carries no creator).
 	vpnIfaces := map[string]bool{}
+	ownerByIface := map[string]string{}
 	if st, err := s.GetStatus(); err == nil && st != nil {
 		all := make([]ConnectionStatus, 0, 1+len(st.Tunnels))
 		all = append(all, *st)
@@ -256,11 +259,26 @@ func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 		for _, t := range all {
 			if t.InterfaceName != "" {
 				vpnIfaces[t.InterfaceName] = true
+				if t.TunnelName != "" {
+					ownerByIface[t.InterfaceName] = t.TunnelName
+				}
 			}
 		}
 	}
 	out := make([]RouteEntry, 0, len(entries))
 	for _, e := range entries {
+		detail := e.InterfaceDetail
+		// macOS utun* interfaces are anonymous in user space — classifyIface
+		// can only name them when the interface string itself hints at a
+		// product (e.g. "tailscale0"). For a utun that belongs to one of
+		// this app's own tunnels we DO know the owner, so surface the
+		// tunnel name here. Third-party VPN utun keep their own software
+		// label (or none); we never overwrite a real detail with a guess.
+		if detail == "" {
+			if owner, ok := ownerByIface[e.Interface]; ok {
+				detail = owner
+			}
+		}
 		out = append(out, RouteEntry{
 			Destination:     e.Destination,
 			Gateway:         e.Gateway,
@@ -268,7 +286,7 @@ func (s *TunnelService) GetRoutingTable() ([]RouteEntry, error) {
 			Flags:           e.Flags,
 			IsVPN:           vpnIfaces[e.Interface],
 			InterfaceType:   e.InterfaceType,
-			InterfaceDetail: e.InterfaceDetail,
+			InterfaceDetail: detail,
 		})
 	}
 	return out, nil

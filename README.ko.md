@@ -102,13 +102,9 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 | 플랫폼 | 상태 |
 | --- | --- |
 | Windows 10 / 11(x64, x86 32비트, ARM64) | ✅ 완전 지원 (멀티 터널 동시 연결 + SSID 자동 연결, AmneziaWG 포함) |
-| macOS(Apple Silicon / arm64) | ✅ 완전 지원 — Apple Silicon 실기기에서 충분히 검증됨; 다른 WireGuard 앱 [WireTunnels](https://github.com/FMDigitech/WireTunnels)도 사용해 볼 수 있습니다 |
+| macOS(Apple Silicon / arm64) | ✅ 완전 지원 — Apple Silicon 실기기에서 충분히 검증됨 |
 | Linux(x64, arm64) | 🚧 실험적 — CI에서 빌드되지만 아직 실기기에서 테스트되지 않음 |
 | Android / iOS | ❌ **지원 안 함** (터널 동시 실행 불가, Wi-Fi SSID 자동 전환 불가) |
-
-> **macOS 대안: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — 멀티
-> 터널, 모니터링, 제어를 지원하는 네이티브 macOS 메뉴바 WireGuard 클라이언트로,
-> 업스트림 `wireguide`를 보완합니다.
 
 ### 모바일 버전이 없는 이유
 
@@ -118,11 +114,6 @@ Android / iOS에서는 시스템 커널과 권한 체계 때문에 WireGuard 구
 목표 모두 모바일에서 달성할 수 없으므로, 이 프로젝트는 **모바일을 명시적으로
 지원하지 않습니다.** 모바일 단일 터널 용도는 공식 WireGuard 앱의 On-Demand 기능을
 사용하세요.
-
-## 로드맵
-
-- **v2.0(계획)**: **Windows 시스템 서비스**로 실행 — 사용자 로그인 없이 자동 연결,
-  더 안정적인 네트워크 스택과 권한 제어.
 
 ## 다운로드 & 설치
 

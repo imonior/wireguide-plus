@@ -190,9 +190,10 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 
 	// 3. Wails service
 	tunnelService := wgapp.NewTunnelService(tunnelStore, settingsStore, historyStore, clients)
-	// Fresh app session: release every manual-off latch so automation rules
-	// resume ("manual off only lasts until the app is reopened").
-	tunnelService.ClearManualOffAll()
+	// Fresh app session: release every manual latch (off and on) so
+	// automation rules resume ("manual override only lasts until the app is
+	// reopened").
+	tunnelService.ClearAllManualOverrides()
 
 	// 4. Wails app
 	app := application.New(application.Options{

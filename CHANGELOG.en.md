@@ -4,6 +4,42 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.0.0] - 2026-09-13
+
+### ✨ Added
+
+- **Manual connect / disconnect with override latch**: the primary action is now explicitly a manual action that force-connects / force-disconnects and ignores any automation rule; the tunnel detail shows a "control source" chip — Auto (rule / default fallback), Manual Disconnect (rules paused), Manual Connect (latched) — with a tooltip explaining the full semantics.
+- **Default-fallback indicator**: when no rule matches and the tunnel converges to its default state, the default-state row's outer ring highlights like a matched rule and is labelled "In effect: default fallback executed".
+- **Tunnel state terminology clarified**: distinguishes "Connected" (interface up + handshake complete, data flows), "Connecting" (interface up but handshake not yet done — half-open), "Disconnected" (no interface), with a detailed tooltip.
+- **Route visualization enhancements**: new toggle to filter on-link LAN routes (gateway `-`); Cellular interface-type label; a help popover explaining `-`, automatic hiding of ARP/neighbor entries, and virtual/third-party adapters showing their creator app name.
+- **DNS leak test resilience**: when the public DNS list source (public-dns.info) fails to fetch, automatically fall back to the built-in public DNS list — the test is unaffected — with a clear hint.
+- **Automation "in-effect" criteria explained**: a tooltip detailing the 4 conditions a match must satisfy (conditions match current network, it is the first match, the engine actually executes the action, and the tunnel's real state matches the action), and clarifying that a correctly-executed disconnect leaves the tunnel down (which is "in effect") while a half-open state is not claimed as in-effect.
+
+### 🔧 Changed
+
+- **Tunnel detail primary action redesign**: the Connect button gains a brand crimson left bar (#A01D21, echoing the app icon); the CTA is enlarged with a heavier shadow; the Disconnect button keeps a persistent light-red outline; the primary action is sticky so it never scrolls out of view in long panels; the two-line subtitle moves into a tooltip.
+- **Theme & contrast**: dark-mode `--text-muted` contrast raised to AA (~4.8:1); dark-mode `--green` aligned to the icon's medical green (#22c55e, AAA); removed redundant tokens (`--blue-tint`, `--accent-blue`) in favour of `--accent-tint`.
+- **Docs**: README no longer recommends WireTunnels; removed the 2.0 "Windows system service" roadmap (that goal is no longer planned).
+
+### 🛠 Internal
+
+- **New tests**: manual override latch, interface ownership, DNS-leak public-list fetch; updated automation-evaluation tests for the new semantics and default fallback.
+- **i18n files aligned to 515 keys** (zh / en / ja / ko / zh-TW).
+
+## [1.8.5] - 2026-09-12
+
+### ✨ Added
+
+- **Policy layer**: pure-function analyzers over tunnel snapshots — prefix classification, route severity, DNS and protection checks.
+- **Conflict policy**: allow + log on save; block + ConflictWarning on manual connect; block + notify on automation; never rewrites AllowedIPs.
+- **Per-tunnel policies** (stored in the `.meta` sidecar): traffic_protect, domains, use_as_default_dns, dns_resolve_path, system_dns, with a new TunnelPolicies UI.
+- **Routes data contract**: L3-next-hop-only Gateway (`—` for on-link; MAC and ARP/neighbor entries filtered), canonical Destination, unicast only.
+- **Diagnostics**: interface-type label on the automation network board; richer connect/disconnect logs; compact tunnel editor layout.
+
+### 🔧 Changed
+
+- **Removed the global Kill Switch** from Settings / IPC / CLI / helper; related protection is now handled per-tunnel by the policy layer.
+
 ## [1.8.0] - 2026-09-09
 
 ### ✨ Added

@@ -307,10 +307,8 @@
       {/if}
       {#if publicFetchError}
         <div class="public-error">
-          {$t('tools.dns_public_fetch_failed')}: {publicFetchError}
-          {#if isFetchTimeout(publicFetchError)}
-            <span class="public-error-hint">{$t('tools.dns_public_fetch_timeout')}</span>
-          {/if}
+          {$t('tools.dns_public_fetch_unavailable')}
+          <span class="public-error-hint">{$t('tools.dns_public_fetch_hint')}</span>
         </div>
       {/if}
     </div>
@@ -616,6 +614,10 @@
     border: 0.5px solid var(--border);
     border-radius: var(--radius-sm);
     font: var(--text-body);
+    /* Allow DNS resolver rows to be selected and copied. */
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
   .server-ip { font-family: var(--font-mono); }
   .server-host { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

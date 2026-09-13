@@ -168,10 +168,15 @@ func TestReconcileAction_Idempotent(t *testing.T) {
 	}
 
 	for _, tc := range policies {
-		for _, manualOff := range []bool{false, true} {
+		// The two manual latches are mutually exclusive in reality, so the
+		// three reachable combos are: none, manual-off, manual-on.
+		for _, latch := range []struct{ off, on bool }{
+			{false, false}, {true, false}, {false, true},
+		} {
+			manualOff, manualOn := latch.off, latch.on
 			active := tc.active
 
-			first := reconcileAction(wifi.EvaluatePolicy(tc.rules, tc.def, tc.ctx), active, manualOff)
+			first := reconcileAction(wifi.EvaluatePolicy(tc.rules, tc.def, tc.ctx), active, manualOff, manualOn)
 			// Apply the decision exactly like the engine does.
 			switch first {
 			case "connect":
@@ -183,18 +188,23 @@ func TestReconcileAction_Idempotent(t *testing.T) {
 			// Invariant 1: one pass reaches the fixpoint — a second
 			// evaluation against the SAME context must not change tunnel
 			// state again (no connect/disconnect oscillation).
-			// "skip-manual-off" is a deliberate no-op, so repeating it is
+			// "skip-manual-*" is a deliberate no-op, so repeating it is
 			// stable rather than a second action.
-			second := reconcileAction(wifi.EvaluatePolicy(tc.rules, tc.def, tc.ctx), active, manualOff)
+			second := reconcileAction(wifi.EvaluatePolicy(tc.rules, tc.def, tc.ctx), active, manualOff, manualOn)
 			if second == "connect" || second == "disconnect" {
-				t.Errorf("%s (manualOff=%v): not idempotent — after %q another state change %q followed",
-					tc.name, manualOff, first, second)
+				t.Errorf("%s (manualOff=%v manualOn=%v): not idempotent — after %q another state change %q followed",
+					tc.name, manualOff, manualOn, first, second)
 			}
 
 			// Invariant 2: while the manual-off latch is set, the engine
 			// never decides to connect, at any step.
 			if manualOff && first == "connect" {
 				t.Errorf("%s (manualOff=%v): connect decided despite manual-off latch", tc.name, manualOff)
+			}
+			// Invariant 3: while the manual-on latch is set, the engine
+			// never decides to disconnect, at any step.
+			if manualOn && first == "disconnect" {
+				t.Errorf("%s (manualOn=%v): disconnect decided despite manual-on latch", tc.name, manualOn)
 			}
 		}
 	}
@@ -207,23 +217,26 @@ func TestReconcileAction_Outcomes(t *testing.T) {
 		state     wifi.DesiredState
 		active    bool
 		manualOff bool
+		manualOn  bool
 		want      string
 	}{
-		{wifi.StateConnect, false, false, "connect"},
-		{wifi.StateConnect, true, false, ""},                // already where it should be
-		{wifi.StateConnect, false, true, "skip-manual-off"}, // latch wins
-		{wifi.StateConnect, true, true, "skip-manual-off"},
-		{wifi.StateDisconnect, true, false, "disconnect"},
-		{wifi.StateDisconnect, false, false, ""},         // nothing to tear down
-		{wifi.StateDisconnect, true, true, "disconnect"}, // latch never blocks a teardown
-		{wifi.StateDisconnect, false, true, ""},
-		{wifi.StateUnmanaged, true, false, ""}, // no policy → never touched
-		{wifi.StateUnmanaged, false, false, ""},
+		{wifi.StateConnect, false, false, false, "connect"},
+		{wifi.StateConnect, true, false, false, ""},                // already where it should be
+		{wifi.StateConnect, false, true, false, "skip-manual-off"}, // latch wins
+		{wifi.StateConnect, true, true, false, "skip-manual-off"},
+		{wifi.StateDisconnect, true, false, false, "disconnect"},
+		{wifi.StateDisconnect, false, false, false, ""},              // nothing to tear down
+		{wifi.StateDisconnect, true, false, true, "skip-manual-on"},  // manual-on blocks teardown
+		{wifi.StateDisconnect, false, false, true, "skip-manual-on"}, // latch checked first (mirrors manual-off)
+		{wifi.StateDisconnect, true, true, false, "disconnect"},      // off-latch never blocks a teardown
+		{wifi.StateDisconnect, false, true, false, ""},
+		{wifi.StateUnmanaged, true, false, false, ""}, // no policy → never touched
+		{wifi.StateUnmanaged, false, false, false, ""},
 	}
 	for i, tc := range cases {
-		if got := reconcileAction(tc.state, tc.active, tc.manualOff); got != tc.want {
-			t.Errorf("case %d (state=%v active=%v manualOff=%v): got %q, want %q",
-				i, tc.state, tc.active, tc.manualOff, got, tc.want)
+		if got := reconcileAction(tc.state, tc.active, tc.manualOff, tc.manualOn); got != tc.want {
+			t.Errorf("case %d (state=%v active=%v manualOff=%v manualOn=%v): got %q, want %q",
+				i, tc.state, tc.active, tc.manualOff, tc.manualOn, got, tc.want)
 		}
 	}
 }

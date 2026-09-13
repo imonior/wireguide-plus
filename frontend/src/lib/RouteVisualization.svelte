@@ -6,6 +6,10 @@
   let routes = [];
   let loading = false;
   let error = '';
+  // When true (default) all routes are shown. When false, locally on-link
+  // subnets (gateway is "—", interface is a physical/local NIC, not a VPN
+  // tunnel) are hidden so the table focuses on the interesting routes.
+  let showLan = true;
 
   async function loadRoutes() {
     loading = true;
@@ -52,6 +56,13 @@
     return slash >= 0 ? clean + v.slice(slash) : clean;
   }
 
+  // Routes shown in the table. Hiding LAN direct routes drops the locally
+  // on-link subnets (gateway is "—" and the interface is NOT a VPN tunnel);
+  // VPN on-link routes (e.g. a tunnel's own interface-local route) stay.
+  $: displayedRoutes = showLan
+    ? routes
+    : routes.filter((r) => isVPN(r) || gwLabel(r.gateway) !== '-');
+
   onMount(loadRoutes);
 
   // Interface kind → i18n key. The backend only ever sends the stable
@@ -78,21 +89,37 @@
     </div>
   </div>
 
-  <div class="page-body">
+    <div class="page-body">
     <p class="page-description">{$t('tools.route_desc')}</p>
+
+    <div class="route-notes">
+      <div class="notes-title">{$t('tools.route_help_title')}</div>
+      <ul class="notes-list">
+        <li>{$t('tools.route_help_dash')}</li>
+        <li>{$t('tools.route_help_lan_hidden')}</li>
+        <li>{$t('tools.route_help_virtual')}</li>
+      </ul>
+    </div>
+
+    <label class="route-filter">
+      <input type="checkbox" bind:checked={showLan} />
+      <span class="filter-label">{$t('tools.route_filter_lan')}</span>
+      <span class="filter-desc">{$t('tools.route_filter_lan_desc')}</span>
+    </label>
 
     {#if error}
       <div class="error-msg">{error}</div>
     {/if}
 
     {#if routes.length > 0}
+      {#if displayedRoutes.length > 0}
       <div class="route-table">
         <div class="route-header">
           <span>{$t('tools.route_header_dest')}</span>
           <span>{$t('tools.route_header_gateway')}</span>
           <span>{$t('tools.route_header_iface')}</span>
         </div>
-        {#each routes as route}
+        {#each displayedRoutes as route}
           <div class="route-row" class:vpn={isVPN(route)}>
             <span class="dest" title={route.destination}>{stripZone(route.destination)}</span>
             <span class="gw" title={route.gateway || ''}>{gwLabel(route.gateway)}</span>
@@ -119,6 +146,11 @@
           </div>
         {/each}
       </div>
+      {:else}
+        <div class="empty-note">{$t('tools.route_filtered_empty')}</div>
+      {/if}
+    {:else}
+      <div class="empty-note">{$t('tools.route_empty')}</div>
     {/if}
   </div>
 </div>
@@ -192,6 +224,67 @@
     max-width: 640px;
   }
 
+  /* Explanatory notes block — what the columns mean, why some rows are
+     hidden, and that virtual NICs show their creator app. */
+  .route-notes {
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-width: 640px;
+  }
+  .notes-title {
+    font: var(--text-footnote);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .notes-list {
+    margin: 0;
+    padding-left: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font: var(--text-footnote);
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  /* "Show LAN direct routes" filter toggle. */
+  .route-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    cursor: pointer;
+    max-width: 640px;
+  }
+  .route-filter input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .filter-label {
+    font: var(--text-footnote);
+    font-weight: 600;
+    color: var(--text-primary);
+    user-select: none;
+  }
+  .filter-desc {
+    font: var(--text-footnote);
+    color: var(--text-tertiary);
+  }
+  .empty-note {
+    padding: var(--space-4);
+    text-align: center;
+    font: var(--text-body);
+    color: var(--text-tertiary);
+  }
+
   .route-table {
     background: var(--bg-card);
     border: 0.5px solid var(--border);
@@ -227,6 +320,10 @@
     font: var(--text-body);
     font-family: var(--font-mono);
     border-bottom: 0.5px solid var(--border);
+    /* Allow the route text to be selected and copied. */
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
   .route-row:last-child { border-bottom: 0; }
   .route-row.vpn { background: color-mix(in srgb, var(--green) 6%, transparent); }

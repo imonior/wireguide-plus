@@ -105,13 +105,9 @@ WireGuide Plus はオープンソースプロジェクト
 | プラットフォーム | 状態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32ビット、ARM64） | ✅ 完全サポート（マルチトンネル同時接続 + SSID 自動接続、AmneziaWG 含む） |
-| macOS（Apple Silicon / arm64） | ✅ 完全サポート — Apple Silicon 実機で十分に検証済み; 別の WireGuard アプリ [WireTunnels](https://github.com/FMDigitech/WireTunnels) も試せます |
+| macOS（Apple Silicon / arm64） | ✅ 完全サポート — Apple Silicon 実機で十分に検証済み |
 | Linux（x64、arm64） | 🚧 実験的 — CI でビルド済みだが実機テスト未実施 |
 | Android / iOS | ❌ **非対応**（トンネルを同時に実行できず、Wi-Fi SSID による自動切替も不可） |
-
-> **macOS の代替: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — マルチトンネル・
-> 監視・制御に対応するネイティブ macOS メニューバー WireGuard クライアントで、
-> アップストリームの `wireguide` を補完します。
 
 ### モバイル版がない理由
 
@@ -121,11 +117,6 @@ WireGuard 実装が**複数トンネルの同時実行**や**Wi-Fi SSID によ�
 モバイルではどちらの核となる目標も達成できません。そのため本プロジェクトは**明示的に
 モバイルを対象外**としています。モバイルユーザーは、単一トンネルの用途には公式 WireGuard
 アプリのオンデマンド機能を利用してください。
-
-## ロードマップ
-
-- **v2.0（予定）**: **Windows システムサービス**として実行 — ユーザーログインなしでの
-  自動接続、より安定したネットワークスタック、優れた権限制御。
 
 ## ダウンロードとインストール
 

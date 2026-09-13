@@ -460,22 +460,34 @@
       </div>
     </div>
 
-    <!-- PRIMARY ACTION: big full-width button -->
+    <!-- PRIMARY ACTION: big full-width button.
+         These are MANUAL controls: pressing them is a user act, not a rule
+         match, and it latches the tunnel against automation (connect →
+         manual-on, disconnect → manual-off) until the user acts again or the
+         app restarts. The caption says so out loud. Color coding: the button
+         is brand-RED (the action you take), while GREEN is reserved for the
+         live "connected" status — so a red button never reads as "already up". -->
     <div class="primary-action">
       {#if isConnected}
-        <button class="btn-primary-large btn-disconnect-lg" on:click={disconnect} disabled={loading}>
-          <Icon name="lock" size={16} strokeWidth={2.25} />
-          <span>{$t('tunnel.disconnect')}</span>
+        <button class="btn-primary-large btn-disconnect-lg" on:click={disconnect} disabled={loading}
+          title={$t('tunnel.manual_disconnect_tip')}>
+          <span class="pa-line">
+            <Icon name="lock" size={16} strokeWidth={2.25} />
+            <span>{$t('tunnel.disconnect')}</span>
+          </span>
         </button>
       {:else}
-        <button class="btn-primary-large btn-connect-lg" on:click={connect} disabled={loading || isConnecting}>
-          {#if loading || isConnecting}
-            <span class="spinner"></span>
-            <span>{$t('app.connecting')}</span>
-          {:else}
-            <Icon name="zap" size={16} strokeWidth={2.25} />
-            <span>{$t('tunnel.connect')}</span>
-          {/if}
+        <button class="btn-primary-large btn-connect-lg" on:click={connect} disabled={loading || isConnecting}
+          title={$t('tunnel.manual_connect_tip')}>
+          <span class="pa-line">
+            {#if loading || isConnecting}
+              <span class="spinner"></span>
+              <span>{$t('app.connecting')}</span>
+            {:else}
+              <Icon name="zap" size={16} strokeWidth={2.25} />
+              <span>{$t('tunnel.connect')}</span>
+            {/if}
+          </span>
         </button>
       {/if}
     </div>
@@ -821,7 +833,7 @@
     outline: none;
     flex: 1;
     max-width: 320px;
-    box-shadow: 0 0 0 3px var(--blue-tint);
+    box-shadow: 0 0 0 3px var(--accent-tint);
   }
 
   .hero-status-line {
@@ -896,25 +908,43 @@
 
   /* ========== PRIMARY ACTION ==========
      Big full-width gradient button below the hero card. */
+  /* Sticky so the manual Connect/Disconnect control never scrolls out of
+     reach in a short window (hero + stats + info + notes can overflow).
+     Solid panel bg covers the hero as it scrolls under; a soft downward
+     shadow reads as a persistent action bar. */
   .primary-action {
+    position: sticky;
+    top: 0;
+    z-index: 6;
     margin-bottom: 18px;
+    padding: 6px 0 8px;
+    background: var(--bg-primary);
+    box-shadow: 0 10px 10px -10px color-mix(in srgb, #000 45%, transparent);
   }
   .btn-primary-large {
     width: 100%;
-    height: 48px;
-    padding: 0 20px;
+    min-height: 52px;
+    padding: 8px 20px;
     border: 0;
     border-radius: 12px;
-    font: 600 14px/20px var(--font-sans);
+    font: 600 15px/22px var(--font-sans);
     letter-spacing: -0.01em;
     cursor: pointer;
     color: #fff;
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 1px;
     position: relative;
     overflow: hidden;
+  }
+  /* Single line: icon + the action itself ("Connect"). The full manual/
+     enforcement explanation lives in the native title tooltip. */
+  .btn-primary-large .pa-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   @media (prefers-reduced-motion: no-preference) {
     .btn-primary-large {
@@ -922,35 +952,54 @@
     }
   }
   .btn-primary-large:disabled { opacity: 0.55; cursor: not-allowed; }
+  /* Connect = brand red: the manual-action CTA. Green is now reserved for the
+     "connected" STATE (hero dot/icon), so the button no longer collides with
+     the live-status color. A 4px burgundy strip on the left ties the button to
+     the app icon's wine-red ring, so it reads as "this app's action" rather
+     than a generic danger button. */
   .btn-connect-lg {
-    background: var(--green);
-    box-shadow: 0 2px 6px color-mix(in srgb, var(--green) 28%, transparent),
-                0 1px 2px rgba(0,0,0,0.08);
+    background: var(--accent);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent),
+                0 2px 4px rgba(0,0,0,0.10);
+  }
+  .btn-connect-lg::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: #A01D21;   /* matches app icon ring */
+    border-radius: 12px 0 0 12px;
   }
   .btn-connect-lg:hover:not(:disabled) {
-    background: color-mix(in srgb, #fff 8%, var(--green));
+    background: color-mix(in srgb, #fff 8%, var(--accent));
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--green) 36%, transparent),
-                0 1px 2px rgba(0,0,0,0.10);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 48%, transparent),
+                0 2px 4px rgba(0,0,0,0.12);
   }
   .btn-connect-lg:active:not(:disabled) {
-    background: color-mix(in srgb, #000 8%, var(--green));
+    background: color-mix(in srgb, #000 8%, var(--accent));
     transform: translateY(0);
   }
 
+  /* Disconnect = quiet neutral "stop": the inverse of the red CTA, so the only
+     filled-colored button is Connect. A persistent faint-red border keeps it
+     visibly "active" (not disabled) and pre-echoes the red it turns on hover,
+     without reusing the CTA's green or competing for attention. */
   .btn-disconnect-lg {
-    background: var(--red);
-    box-shadow: 0 2px 6px color-mix(in srgb, var(--red) 28%, transparent),
-                0 1px 2px rgba(0,0,0,0.08);
+    background: var(--bg-input, var(--bg-card));
+    color: var(--text-secondary);
+    border: 1px solid color-mix(in srgb, var(--red) 35%, var(--border));
+    box-shadow: none;
   }
+  .btn-disconnect-lg .pa-line { color: var(--text-secondary); }
   .btn-disconnect-lg:hover:not(:disabled) {
-    background: color-mix(in srgb, #fff 8%, var(--red));
+    background: color-mix(in srgb, var(--red) 12%, var(--bg-input, var(--bg-card)));
+    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+    color: var(--red);
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--red) 34%, transparent),
-                0 1px 2px rgba(0,0,0,0.10);
   }
+  .btn-disconnect-lg:hover:not(:disabled) .pa-line { color: var(--red); }
   .btn-disconnect-lg:active:not(:disabled) {
-    background: color-mix(in srgb, #000 8%, var(--red));
     transform: translateY(0);
   }
 
@@ -1163,7 +1212,7 @@
   }
   .latency-target-input:focus-visible {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--blue-tint);
+    box-shadow: 0 0 0 3px var(--accent-tint);
     background: var(--bg-primary);
   }
   .latency-target-input::placeholder {
@@ -1203,7 +1252,7 @@
   }
   .notes-textarea:focus-visible {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--blue-tint);
+    box-shadow: 0 0 0 3px var(--accent-tint);
   }
   .notes-textarea::placeholder { color: var(--text-muted); }
   .notes-error {

@@ -144,6 +144,25 @@ default                                 fe80::1%en0                     UGcIg   
 	}
 }
 
+// Reproduces a real macOS table: directly-connected LAN hosts print the
+// resolved MAC as the gateway and are flagged 'H'. macOS elides the leading
+// zero of a single-digit octet ("52:54:0:…"), so isMAC must accept 1–2 hex
+// digits per octet or these neighbor rows leak into the routing table.
+func TestParseDarwinRouteOutputDropsLanNeighbors(t *testing.T) {
+	in := `Internet:
+Destination        Gateway            Flags        Netif Expire
+10.20.20.20        52:54:0:25:1a:7d   UHLWIir      en0   1190
+10.20.20.25        52:54:0:61:61:a0   UHLWIi       en0   1151
+10.20.20.26        52:54:0:ac:4:5e    UHLWIi       en0   1174
+10.20.20.30        a4:fc:77:1:50:2a   UHLWI        en0      !
+`
+	addrs := map[string]ifaceAddr{"en0": {v4: "10.20.20.168"}}
+	routes := parseDarwinRouteOutput(in, 4, addrs, nil)
+	if len(routes) != 0 {
+		t.Fatalf("LAN neighbor entries not filtered: got %d routes:\n%+v", len(routes), routes)
+	}
+}
+
 // The Gateway column shows a genuine L3 next-hop IP and nothing else: a real
 // IP passes through (zone stripped); link tokens / interface names / MAC
 // addresses / the Windows unspecified sentinel all map to empty (UI → "—").

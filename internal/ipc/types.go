@@ -177,9 +177,12 @@ type AutomationPreviewResponse struct {
 type AutomationTunnelDecision struct {
 	Name      string `json:"name"`
 	RuleCount int    `json:"rule_count"`
-	Decision  string `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off"
+	Decision  string `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off" | "manual-on"
 	Active    bool   `json:"active"`
 	// ManualOff reports that the user manually switched the tunnel off;
 	// while latched, a matching "connect" rule is suppressed.
 	ManualOff bool `json:"manual_off"`
+	// ManualOn reports that the user manually switched the tunnel on;
+	// while latched, a matching "disconnect" rule is suppressed.
+	ManualOn bool `json:"manual_on"`
 }

@@ -96,13 +96,9 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 | 平台 | 状态 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32 位、ARM64） | ✅ 完全支持（多隧道并发 + SSID 自动连接，含 AmneziaWG） |
-| macOS（Apple Silicon / arm64） | ✅ 完全支持 — 已在 Apple Silicon 真机充分验证；你同样可以尝试另外一款名叫 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
+| macOS（Apple Silicon / arm64） | ✅ 完全支持 — 已在 Apple Silicon 真机充分验证 |
 | Linux（x64、arm64） | 🚧 实验性 — 经 CI 构建，尚未在真机测试 |
 | Android / iOS | ❌ **不支持**（无法并发运行隧道，也无法按 Wi-Fi SSID 自动切换隧道） |
-
-> **macOS 替代方案：[WireTunnels](https://github.com/FMDigitech/WireTunnels)** — 原生
-> macOS 菜单栏 WireGuard 客户端，支持多隧道、监控与控制，可作为上游 `wireguide`
-> 的补充。
 
 ### 为什么没有移动版？
 
@@ -110,11 +106,6 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 Android / iOS 上，系统内核与权限机制使 WireGuard 实现**无法同时运行多条隧道**，
 也无法**按 Wi-Fi SSID 自动切换隧道**——两大核心目标在移动端都不可实现。因此本项目
 **明确不做移动版**；移动端单隧道需求请使用官方 WireGuard App 的 On-Demand 能力。
-
-## 路线图
-
-- **v2.0（规划中）**：以 **Windows 系统服务**方式运行 — 无需用户登录即可自动连接，
-  网络栈更稳定、权限控制更完善。
 
 ## 下载与安装
 

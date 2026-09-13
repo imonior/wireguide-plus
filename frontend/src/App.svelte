@@ -1109,7 +1109,7 @@
                 <div class="empty-icon-wrap">
                   <Icon name="shield" size={48} strokeWidth={1.25} className="empty-shield" />
                 </div>
-                <p class="empty-title">{$t('tunnel.no_selection')}</p>
+                <p class="empty-title">{#if $tunnels.length === 0}{$t('tunnel.no_tunnels')}{:else}{$t('tunnel.no_selection')}{/if}</p>
                 <div class="empty-actions">
                   <button class="btn-primary" on:click={handleNewTunnelOpen}>
                     <Icon name="plus" size={13} strokeWidth={2} />

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/autostart"
+	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/imonior/wireguide-plus/internal/storage"
@@ -123,8 +124,19 @@ type AutomationPreviewResponse struct {
 type AutomationTunnelPreview struct {
 	Name     string            `json:"name"`
 	Rules    []wifi.RuleDetail `json:"rules"`
-	Decision string            `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off"
-	Active   bool              `json:"active"`   // tunnel is actually up in the helper
+	Decision string            `json:"decision"` // "connect" | "disconnect" | "unmanaged" | "manual-off" | "manual-on"
+	Active   bool              `json:"active"`   // tunnel is actually up/connecting in the helper
+	// State is the tunnel's real connection state reported by the helper:
+	// "connected" (NIC up + handshake done, can carry traffic),
+	// "connecting" (NIC exists, engine running, still handshaking — the
+	// half-open state), "disconnected" (no NIC), "error", or "" when
+	// unknown. The automation editor uses it to judge "in effect" precisely:
+	// a connect rule is ONLY in effect when State=="connected" (a half-open
+	// tunnel is NOT yet effective); a disconnect rule is ONLY in effect when
+	// State=="disconnected". This replaces the old boolean-only check that
+	// wrongly treated a half-open tunnel as fully up (connect) or wrongly
+	// flagged a correctly-executed disconnect as not in effect.
+	State string `json:"state"`
 }
 
 // AutomationPreview evaluates every tunnel's Automation rules against the
@@ -145,7 +157,9 @@ func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
 		return resp
 	}
 	manualOff := manualOffSet(st)
+	manualOn := manualOnSet(st)
 	active := activeTunnelSet(s)
+	stateMap := tunnelStateMap(s)
 
 	for _, name := range st.Automation.TunnelNames() {
 		rules := st.Automation.PerTunnel[name]
@@ -153,8 +167,9 @@ func (s *TunnelService) AutomationPreview() AutomationPreviewResponse {
 		resp.Tunnels = append(resp.Tunnels, AutomationTunnelPreview{
 			Name:     name,
 			Rules:    details,
-			Decision: decisionFor(state, name, manualOff),
+			Decision: decisionFor(state, name, manualOff, manualOn),
 			Active:   active[name],
+			State:    string(stateMap[name]),
 		})
 	}
 	return resp
@@ -191,19 +206,23 @@ func (s *TunnelService) AutomationEvaluate(tunnel string, rules []wifi.Rule, def
 	// draft being edited. Read just that bit; a load failure degrades to
 	// "no manual-off", still a valid evaluation for the markers.
 	manualOff := map[string]bool{}
+	manualOn := map[string]bool{}
 	if st, err := s.settingsStore.Load(); err == nil {
 		manualOff = manualOffSet(st)
+		manualOn = manualOnSet(st)
 	}
 
 	// EvaluateDetail internally skips rules that fail Validate, so a
 	// half-typed draft condition simply yields fewer RuleDetail entries
 	// than cards — the frontend already maps by persisted-rule order.
 	state, details := wifi.EvaluatePolicyDetail(rules, wifi.Action(strings.ToLower(strings.TrimSpace(defaultState))), ctx)
+	stateMap := tunnelStateMap(s)
 	resp.Tunnels = []AutomationTunnelPreview{{
 		Name:     tunnel,
 		Rules:    details,
-		Decision: decisionFor(state, tunnel, manualOff),
+		Decision: decisionFor(state, tunnel, manualOff, manualOn),
 		Active:   activeTunnel(s, tunnel),
+		State:    string(stateMap[tunnel]),
 	}}
 	return resp
 }
@@ -257,6 +276,32 @@ func activeTunnelSet(s *TunnelService) map[string]bool {
 	return result
 }
 
+// tunnelStateMap returns the per-tunnel connection state (connected /
+// connecting / disconnected / error) for every tunnel the status call
+// reports. It is used by the automation editor so the "in effect" marker can
+// distinguish a fully-up tunnel (handshake done, can carry traffic) from a
+// half-open one (interface exists but still connecting, no handshake yet) —
+// the latter must NOT be reported as "in effect" for a connect rule, nor as
+// "not in effect" for a disconnect rule. The primary tunnel (single-tunnel
+// setup) reports under ConnectionStatus.TunnelName; multi-tunnel members
+// report under ConnectionStatus.Tunnels[].TunnelName.
+func tunnelStateMap(s *TunnelService) map[string]domain.State {
+	m := map[string]domain.State{}
+	st, err := s.GetStatus()
+	if err != nil || st == nil {
+		return m
+	}
+	if st.TunnelName != "" && st.State != "" {
+		m[st.TunnelName] = st.State
+	}
+	for _, t := range st.Tunnels {
+		if t.TunnelName != "" && t.State != "" {
+			m[t.TunnelName] = t.State
+		}
+	}
+	return m
+}
+
 // manualOffSet indexes the tunnels latched off by a manual disconnect.
 func manualOffSet(st *storage.Settings) map[string]bool {
 	manualOff := make(map[string]bool, len(st.ManualOffTunnels))
@@ -266,9 +311,18 @@ func manualOffSet(st *storage.Settings) map[string]bool {
 	return manualOff
 }
 
+// manualOnSet indexes the tunnels latched on by a manual connect.
+func manualOnSet(st *storage.Settings) map[string]bool {
+	manualOn := make(map[string]bool, len(st.ManualOnTunnels))
+	for _, n := range st.ManualOnTunnels {
+		manualOn[n] = true
+	}
+	return manualOn
+}
+
 // decisionFor maps an evaluated state to the decision string the editor
-// shows, honouring the manual-off latch the same way the helper does.
-func decisionFor(state wifi.DesiredState, name string, manualOff map[string]bool) string {
+// shows, honouring the manual latches the same way the helper does.
+func decisionFor(state wifi.DesiredState, name string, manualOff, manualOn map[string]bool) string {
 	switch state {
 	case wifi.StateConnect:
 		if manualOff[name] {
@@ -276,6 +330,9 @@ func decisionFor(state wifi.DesiredState, name string, manualOff map[string]bool
 		}
 		return "connect"
 	case wifi.StateDisconnect:
+		if manualOn[name] {
+			return "manual-on" // suppressed by the manual-on latch
+		}
 		return "disconnect"
 	default:
 		return "unmanaged"
@@ -360,12 +417,17 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		settings.LogRetentionDays = 90
 	}
 
-	// Preserve the manual-off latch: the frontend's settings object never
-	// edits that list, and saving a stale in-memory copy must not silently
-	// drop tunnels the user switched off by hand (manual off wins over
-	// automation until they reconnect or the app restarts).
-	if prev != nil && len(prev.ManualOffTunnels) > 0 {
-		settings.ManualOffTunnels = append([]string(nil), prev.ManualOffTunnels...)
+	// Preserve the manual latches: the frontend's settings object never
+	// edits those lists, and saving a stale in-memory copy must not silently
+	// drop tunnels the user switched off/on by hand (a manual override wins
+	// over automation until they act again or the app restarts).
+	if prev != nil {
+		if len(prev.ManualOffTunnels) > 0 {
+			settings.ManualOffTunnels = append([]string(nil), prev.ManualOffTunnels...)
+		}
+		if len(prev.ManualOnTunnels) > 0 {
+			settings.ManualOnTunnels = append([]string(nil), prev.ManualOnTunnels...)
+		}
 	}
 
 	if err := s.settingsStore.Save(settings); err != nil {

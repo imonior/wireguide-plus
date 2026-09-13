@@ -261,10 +261,14 @@ func (s *TunnelService) Connect(name string) error {
 		}
 	}
 
-	// A manual reconnect releases the manual-off latch: the user has
-	// spoken, so this tunnel's automation rules resume. Done before the
-	// IPC so a failed attempt still leaves automation free to act.
-	s.clearManualOff(name)
+	// A manual connect latches the tunnel ON: the user has spoken, so the
+	// automation engine must not silently tear it back down until they
+	// disconnect it by hand once or the app restarts. This also clears any
+	// manual-off latch (the two are mutually exclusive), so a manual
+	// reconnect after a manual disconnect restores normal automation.
+	// Done before the IPC so a failed attempt still leaves the latch set
+	// consistently with the user's intent.
+	s.setManualOn(name)
 
 	slog.Info("tunnel: connect requested",
 		"category", "tunnel",
@@ -404,8 +408,9 @@ func (s *TunnelService) clearUserDisconnect(name string) {
 // setManualOff records in settings that the user manually switched a
 // tunnel off. The automation engine (helper) reads this list fresh on
 // every evaluation, so once it's persisted no rule can reconnect the
-// tunnel until the user reconnects it by hand (Connect clears the latch)
-// or the app restarts (ClearManualOffAll).
+// tunnel until the user reconnects it by hand (a manual Connect sets the
+// mirror manual-on latch, which clears this one) or the app restarts
+// (ClearAllManualOverrides).
 func (s *TunnelService) setManualOff(name string) {
 	if name == "" || s.settingsStore == nil {
 		return
@@ -442,19 +447,41 @@ func (s *TunnelService) clearManualOff(name string) {
 		"tunnel", name)
 }
 
-// ClearManualOffAll releases every manually-off tunnel, restoring full
-// automation. The GUI calls this on startup so a fresh app session
-// resumes automatic rule enforcement ("manual off until the app is
-// reopened").
-func (s *TunnelService) ClearManualOffAll() {
+// setManualOn records in settings that the user manually switched a tunnel
+// on. It is the mirror of setManualOff: while the latch holds, the helper's
+// automation engine refuses to auto-disconnect the tunnel no matter what the
+// rules say — the manual on wins until the user disconnects it by hand once
+// or the app restarts. Setting it also clears any manual-off latch (the two
+// are mutually exclusive).
+func (s *TunnelService) setManualOn(name string) {
+	if name == "" || s.settingsStore == nil {
+		return
+	}
+	if err := s.settingsStore.Update(func(cfg *storage.Settings) error {
+		cfg.SetManualOn(name)
+		return nil
+	}); err != nil {
+		slog.Warn("failed to record manual-on latch", "tunnel", name, "error", err)
+		return
+	}
+	slog.Info("automation: manual-on latch set — auto-disconnect suppressed until a manual disconnect",
+		"category", "network",
+		"tunnel", name)
+}
+
+// ClearAllManualOverrides releases every manual latch (both off and on),
+// restoring full automation. The GUI calls this on startup so a fresh app
+// session resumes automatic rule enforcement ("manual override only lasts
+// until the app is reopened").
+func (s *TunnelService) ClearAllManualOverrides() {
 	if s.settingsStore == nil {
 		return
 	}
 	if err := s.settingsStore.Update(func(cfg *storage.Settings) error {
-		cfg.ClearAllManualOff()
+		cfg.ClearAllManualOverrides()
 		return nil
 	}); err != nil {
-		slog.Warn("failed to clear manual-off latches", "error", err)
+		slog.Warn("failed to clear manual latches", "error", err)
 	}
 }
 

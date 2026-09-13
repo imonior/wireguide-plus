@@ -96,12 +96,9 @@ WireGuide Plus 是對開源專案 [`korjwl1/wireguide`](https://github.com/korjw
 | 平台 | 狀態 |
 | --- | --- |
 | Windows 10 / 11（x64、x86 32 位元、ARM64） | ✅ 完全支援（多隧道並發 + SSID 自動連接，含 AmneziaWG） |
-| macOS（Apple Silicon / arm64） | ✅ 完全支援 — 已在 Apple Silicon 實機充分驗證；你同樣可以嘗試另一款名為 [WireTunnels](https://github.com/FMDigitech/WireTunnels) 的 app |
+| macOS（Apple Silicon / arm64） | ✅ 完全支援 — 已在 Apple Silicon 實機充分驗證 |
 | Linux（x64、arm64） | 🚧 實驗性 — 經 CI 建置，尚未在實機測試 |
 | Android / iOS | ❌ **不支援**（無法同時執行多條隧道，也無法依 Wi-Fi SSID 自動切換隧道） |
-
-> **macOS 替代方案：[WireTunnels](https://github.com/FMDigitech/WireTunnels)** — 原生
-> macOS 選單列 WireGuard 用戶端，支援多隧道、監控與控制，可補足上游 `wireguide` 的不足。
 
 ### 為何沒有行動版？
 
@@ -110,11 +107,6 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 **依 Wi-Fi SSID 自動切換隧道** — 行動平台上兩項核心目標皆無法達成。因此本專案**明確
 不鎖定行動裝置**；行動用戶若只需單一隧道，請使用官方 WireGuard App 及其隨選（On-Demand）
 功能。
-
-## 路線圖
-
-- **v2.0（規劃中）**：以 **Windows 系統服務**方式執行 — 無需使用者登入即可自動連接，
-  更穩定的網路堆疊與更好的權限控制。
 
 ## 下載與安裝
 

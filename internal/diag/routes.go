@@ -53,11 +53,23 @@ type RouteEntry struct {
 func GetRoutingTable() ([]RouteEntry, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		return getRoutesDarwinFull()
+		r, err := getRoutesDarwinFull()
+		if err != nil {
+			return nil, err
+		}
+		return EnrichInterfaceOwners(r), nil
 	case "linux":
-		return getRoutesLinuxFull()
+		r, err := getRoutesLinuxFull()
+		if err != nil {
+			return nil, err
+		}
+		return EnrichInterfaceOwners(r), nil
 	case "windows":
-		return getRoutesWindowsFull()
+		r, err := getRoutesWindowsFull()
+		if err != nil {
+			return nil, err
+		}
+		return EnrichInterfaceOwners(r), nil
 	default:
 		return nil, nil
 	}

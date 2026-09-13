@@ -565,6 +565,7 @@
         decision: t ? t.decision : 'unmanaged',
         rules: t ? t.rules : [],
         active: !!t?.active,
+        state: t?.state || '',
         interfaces: pv?.interfaces || [],
       };
     } catch (e) {
@@ -593,6 +594,46 @@
     }
     return -1;
   })();
+  // The Default State row carries the SAME outer ring a winning rule card
+  // gets — but the two mark different winners. A rule's ring means "that rule
+  // matched and its action ran"; the Default row's ring means "NOTHING
+  // matched, so the engine fell back to the Default State and executed it".
+  // So the ring lights iff (a) no rule matched at all (winningRuleIndex < 0)
+  // and (b) the final decision is really the selected default — i.e. no
+  // manual latch swallowed it. A rule that matched and merely happens to do
+  // the same action lights its OWN ring, never the default's, so the two
+  // markers are mutually exclusive and always point at the real decision
+  // source. This is NOT the tunnel's physical up/down state — that is a
+  // tunnel-level fact shown in the status row below.
+  $: defaultRuleWon = winningRuleIndex < 0 && !!defaultState && preview?.decision === defaultState;
+  // The tunnel's REAL state (connected / connecting / disconnected) is a
+  // tunnel-level fact shown once as a chip after the Default State buttons —
+  // it belongs to the tunnel, not to a condition or rule. "connecting" is the
+  // half-open state (NIC created, engine running, handshake not yet done); it
+  // is shown neutrally — neither claiming "in effect" nor "not in effect".
+  $: tunnelStateKey = preview?.state === 'connected' ? 'connected'
+    : preview?.state === 'connecting' ? 'connecting'
+    : preview?.state === 'disconnected' ? 'disconnected'
+    : '';
+  // Control source: WHO is deciding this tunnel right now — automation, or a
+  // manual override that outranks it. A manual latch takes precedence over
+  // the rules (manual-off suppresses connect, manual-on suppresses
+  // disconnect) until the user acts again or the app restarts.
+  $: controlKey = preview?.decision === 'manual-off' ? 'manual_off'
+    : preview?.decision === 'manual-on' ? 'manual_on'
+    : preview?.decision === 'connect' ? 'auto_connect'
+    : preview?.decision === 'disconnect' ? 'auto_disconnect'
+    : 'auto_none';
+  $: controlLabelKey = 'automation.override_' + controlKey;
+  $: controlClass = controlKey === 'manual_off' ? 'off' : controlKey === 'manual_on' ? 'on' : 'auto';
+  // Human label for the live decision strip ("this network will connect /
+  // disconnect / ..."), taken from the draft's evaluated decision.
+  $: decisionLabelKey = ({
+    connect: 'automation.decision_connect',
+    disconnect: 'automation.decision_disconnect',
+    'manual-off': 'automation.decision_manual_off',
+    'manual-on': 'automation.decision_manual_on',
+  })[decisionKey()] || 'automation.decision_unmanaged';
   // Build one marker snapshot from the same ordered draft/details pair used
   // by the backend. Keying condition markers by the editor row id avoids
   // stale deep lookups when Svelte updates nested bind:value fields.
@@ -617,10 +658,16 @@
         const c = rule.conds[i];
         const idx = condIndexInRule(rule, i);
         const conditionMatched = !!rd?.conditions?.[idx]?.matched;
+        // Two markers only, and both are about the CONDITION/rule itself —
+        // never about whether the tunnel is physically up:
+        //   - match   —— 本条件与当前网络是否匹配（纯匹配判定）
+        //   - active  —— 「使用中」：本条件所属规则是首个匹配的规则，且引擎
+        //                实际执行了它的动作（connect/disconnect）。这是"引用/
+        //                采用"状态，与隧道是否已连接无关（隧道状态另有状态芯片）。
+        const inUse = conditionMatched && winning && actionExecuted();
         result.conditions[c._id] = {
           match: conditionMatched,
-          active: conditionMatched && winning && actionExecuted(),
-          tunnelActive: conditionMatched && !!preview?.active,
+          active: inUse,
         };
       }
     }
@@ -800,7 +847,7 @@
         <div class="am-live">
           <span class="am-live-dot am-live-dot-{preview?.on_wifi ? 'wifi' : 'wired'}"></span>
           <span class="am-live-label">{$t('automation.live_matching')}</span>
-          <span class="am-live-decision">{preview?.active ? $t('automation.tunnel_active') : $t('automation.tunnel_inactive')}</span>
+          <span class="am-live-decision">{$t(decisionLabelKey)}</span>
         </div>
         <div class="am-network-facts">
           {#each networkFacts as fact}
@@ -813,15 +860,28 @@
           {/each}
         </div>
       </details>
-      <div class="am-default-state">
+      <div class="am-default-state" class:am-default-won={defaultRuleWon}>
         <span class="am-default-label">{$t('automation.default_state')}</span>
         <div class="am-default-opts" role="radiogroup" aria-label={$t('automation.default_state')}>
-          <button type="button" role="radio" class="am-default-opt am-default-opt-connect" class:on={defaultState === 'connect'}
+          <button type="button" role="radio" class="am-default-opt am-default-opt-connect"
+            class:on={defaultState === 'connect'}
+            class:am-effective={defaultRuleWon && defaultState === 'connect'}
+            title={defaultRuleWon && defaultState === 'connect' ? $t('automation.default_in_effect') : ''}
             aria-checked={defaultState === 'connect'} on:click={() => setDefaultState('connect')}>{$t('automation.action_connect')}</button>
-          <button type="button" role="radio" class="am-default-opt am-default-opt-disconnect" class:on={defaultState === 'disconnect'}
+          <button type="button" role="radio" class="am-default-opt am-default-opt-disconnect"
+            class:on={defaultState === 'disconnect'}
+            class:am-effective={defaultRuleWon && defaultState === 'disconnect'}
+            title={defaultRuleWon && defaultState === 'disconnect' ? $t('automation.default_in_effect') : ''}
             aria-checked={defaultState === 'disconnect'} on:click={() => setDefaultState('disconnect')}>{$t('automation.action_disconnect')}</button>
         </div>
         <span class="am-default-hint">{$t('automation.default_when_no_match', { state: $t(defaultState === 'connect' ? 'automation.action_connect' : 'automation.action_disconnect') })}</span>
+      </div>
+      <div class="am-tunnel-status">
+        <span class="am-default-label">{$t('automation.status_row_label')}</span>
+        {#if tunnelStateKey}
+          <span class="am-tunnel-state am-tunnel-state-{tunnelStateKey}" title={$t('automation.state_tooltip')}>{$t('automation.state_' + tunnelStateKey)}</span>
+        {/if}
+        <span class="am-override am-override-{controlClass}" title={$t('automation.override_tooltip')}>{$t(controlLabelKey)}</span>
       </div>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
@@ -847,7 +907,7 @@
                     <span class="am-handle am-rule-handle" draggable="true" title={$t('automation.rule_drag_hint')}
                       on:dragstart={(e) => onRuleDragStart(e, ruleIdx)}>⋮⋮</span>
                     <span class="am-rule-num">{$t('automation.rule')} {ruleIdx + 1}</span>
-                    <button type="button" class="am-do-badge am-do-{rule.do}" on:click={() => toggleRuleDo(rule)}
+                    <button type="button" class="am-do-badge am-do-{rule.do}" class:am-do-won={markerSnapshot.rules[rule._gid] === true} on:click={() => toggleRuleDo(rule)}
                       title={$t('automation.action_toggle_hint')}>{$t(rule.do === 'connect' ? 'automation.action_connect' : 'automation.action_disconnect')}</button>
                     <span class="am-match-badge" title={$t('automation.group_all_hint')}>{$t('automation.match_all')}</span>
                     <button class="am-remove-rule" on:click={() => removeRule(ruleIdx)} title={$t('automation.remove_rule')} aria-label="remove rule"><Icon name="x" size={13} strokeWidth={2} /></button>
@@ -859,7 +919,6 @@
                       {@const marker = markerSnapshot.conditions[c._id] || { match: false, active: false }}
                       {@const net = marker.match}
                       {@const use = marker.active}
-                      {@const tunnelActive = marker.tunnelActive}
                       <div class="am-cond" class:am-dragging={dragIndex === i && dragRule === ruleIdx}
                         on:dragover={(e) => onCondDragOver(e, ruleIdx, i)}
                         on:dragend={onDragEnd}>
@@ -940,7 +999,6 @@
                           title={net ? (use ? $t('automation.status_active') : $t('automation.status_shadowed')) : $t('automation.status_nomatch')}>
                           <span class="am-badge am-badge-match" class:am-yes={net} class:am-no={!net}>{$t(net ? 'automation.label_match' : 'automation.label_no_match')}</span>
                           <span class="am-badge am-badge-use" class:am-yes={use} class:am-no={!use}>{$t(use ? 'automation.label_in_use' : 'automation.label_not_in_use')}</span>
-                          <span class="am-badge am-badge-active" class:am-yes={tunnelActive} class:am-no={!tunnelActive}>{$t(tunnelActive ? 'automation.label_active' : 'automation.label_inactive')}</span>
                         </span>
                         <button class="am-remove" on:click={() => removeCond(ruleIdx, i)} aria-label="remove condition"><Icon name="x" size={12} strokeWidth={2} /></button>
                       </div>
@@ -1142,6 +1200,54 @@
   .am-default-opt + .am-default-opt { border-left: 1px solid var(--border); }
   .am-default-opt-connect.on { background: color-mix(in srgb, var(--green, #34c759) 22%, transparent); color: var(--green, #34c759); font-weight: 600; }
   .am-default-opt-disconnect.on { background: color-mix(in srgb, var(--orange, #ff9f0a) 22%, transparent); color: var(--orange, #ff9f0a); font-weight: 600; }
+  /* Outer ring = "the Default State is what actually ran". It reuses the very
+     frame a winning rule card gets (.am-rule-won), so the default and the
+     rules speak one visual language. It lives on the ROW, not on the option
+     buttons: the option row is a segmented control with overflow:hidden,
+     which clips any outward box-shadow — that is why the marker could never
+     be seen. It lights only on a true fallback (no rule matched), so a rule
+     that matched and happens to do the same action lights its own card
+     instead; the two rings are never on at once. */
+  .am-default-state.am-default-won {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  /* Inner ring on the option that is in effect, drawn in that option's OWN
+     colour (green connect / orange disconnect). Inset, because the segmented
+     control clips anything drawn outside the button. */
+  .am-default-opt.am-effective {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 50%, transparent);
+  }
+  /* Tunnel actual-state chip — a TUNNEL-level fact (connected / connecting /
+     disconnected), placed after the Default State buttons, independent of any
+     single rule/condition. "connecting" is the half-open state, shown amber &
+     neutral (neither "in effect" nor "not in effect"). */
+  .am-tunnel-state {
+    flex-shrink: 0; font: 600 10px/1 var(--font-sans);
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);
+  }
+  .am-tunnel-state-connected { color: var(--green, #34c759); background: color-mix(in srgb, var(--green, #34c759) 14%, transparent); border-color: color-mix(in srgb, var(--green, #34c759) 40%, var(--border)); }
+  .am-tunnel-state-connecting { color: var(--orange, #ff9f0a); background: color-mix(in srgb, var(--orange, #ff9f0a) 14%, transparent); border-color: color-mix(in srgb, var(--orange, #ff9f0a) 40%, var(--border)); }
+  .am-tunnel-state-disconnected { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 12%, transparent); }
+  /* Tunnel status row — its own line: the link fact on the left, the control
+     source on the right, so physical state and "who is deciding" never crowd
+     the Default State control. */
+  .am-tunnel-status {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 6px 0 0; padding: 7px 10px;
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .am-override {
+    flex-shrink: 0; font: 600 10px/1 var(--font-sans);
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);
+  }
+  .am-override-auto { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 10%, transparent); }
+  /* Manual latches outrank automation — colour them so a paused/reversed
+     automation is impossible to miss (this is the #1 "my rule didn't fire"
+     cause). */
+  .am-override-off { color: var(--red, #ff3b30); background: color-mix(in srgb, var(--red, #ff3b30) 12%, transparent); border-color: color-mix(in srgb, var(--red, #ff3b30) 40%, var(--border)); }
+  .am-override-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
   .am-default-hint { font: 400 10px/1.3 var(--font-sans); color: var(--text-muted); margin-left: auto; text-align: right; }
   /* Rule-level drag affordances */
   .am-rule-handle { flex-shrink: 0; cursor: grab; }
@@ -1152,6 +1258,9 @@
   }
   .am-do-connect { color: var(--green, #34c759); background: color-mix(in srgb, var(--green, #34c759) 12%, transparent); }
   .am-do-disconnect { color: var(--orange, #ff9f0a); background: color-mix(in srgb, var(--orange, #ff9f0a) 12%, transparent); }
+  /* Outer ring on the winning rule's action button, matching the badge's own
+     color, to emphasize which rule is currently in effect. */
+  .am-do-badge.am-do-won { box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent); }
   .am-rule-or {
     text-align: center; font: 600 10px/1 var(--font-sans); color: var(--text-muted);
     letter-spacing: 0.08em; margin: 0; flex-shrink: 0;
@@ -1218,6 +1327,11 @@
   }
   .am-badge.am-yes { color: #fff; background: var(--green, #34c759); }
   .am-badge.am-no { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
+  /* "使用中" uses the accent colour so it reads differently from the green
+     "匹配" badge when both are lit: match = the condition fits the network
+     now; in-use = this condition's rule is the one the engine is applying.
+     Neither depends on the tunnel being physically up. */
+  .am-badge-use.am-yes { color: #fff; background: var(--accent); }
   .am-badge-match.am-no { color: #fff; background: color-mix(in srgb, var(--red, #ff3b30) 72%, transparent); }
   .am-remove { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0; }
   .am-remove:hover { background: color-mix(in srgb, var(--red, #ff3b30) 18%, transparent); color: var(--red, #ff3b30); }

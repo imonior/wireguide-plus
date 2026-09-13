@@ -101,6 +101,15 @@ type Settings struct {
 	// the app restarts (the GUI clears the list on startup).
 	ManualOffTunnels []string `json:"manual_off_tunnels,omitempty"`
 
+	// ManualOnTunnels is the mirror of ManualOffTunnels: tunnels the user
+	// has manually switched ON. While a tunnel is listed, the automation
+	// engine refuses to auto-DISCONNECT it even when rules match — the
+	// user's manual on wins until they manually disconnect that tunnel
+	// once or the app restarts (the GUI clears the list on startup).
+	// The two latches are mutually exclusive: a tunnel appears in at most
+	// one of the lists.
+	ManualOnTunnels []string `json:"manual_on_tunnels,omitempty"`
+
 	// ProxyMode controls outbound proxying for update checks: "direct"
 	// (default, no proxy), "mirror" (rewrite the API URL through a GitHub
 	// accelerator prefix stored in ProxyURL) or "manual" (use ProxyURL as
@@ -147,9 +156,11 @@ func (s *Settings) IsManualOff(name string) bool {
 	return false
 }
 
-// SetManualOff marks a tunnel as manually switched off. Call inside a
+// SetManualOff marks a tunnel as manually switched off. The two latches
+// are mutually exclusive, so setting "off" clears any "on". Call inside a
 // SettingsStore.Update (or on a freshly loaded object before Save).
 func (s *Settings) SetManualOff(name string) {
+	s.ClearManualOn(name)
 	if s.IsManualOff(name) {
 		return
 	}
@@ -168,11 +179,51 @@ func (s *Settings) ClearManualOff(name string) {
 	}
 }
 
-// ClearAllManualOff releases every manually-off tunnel, restoring full
-// automation. The GUI calls this on startup so a fresh app session
-// resumes automatic rule enforcement.
-func (s *Settings) ClearAllManualOff() {
+// IsManualOn reports whether the user has manually switched the tunnel on,
+// suspending its automation rules (auto-disconnect) until it is disconnected
+// by hand or the app restarts.
+func (s *Settings) IsManualOn(name string) bool {
+	if s == nil {
+		return false
+	}
+	for _, n := range s.ManualOnTunnels {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// SetManualOn marks a tunnel as manually switched on (the mirror of
+// SetManualOff). The two latches are mutually exclusive, so setting "on"
+// clears any "off". Call inside a SettingsStore.Update (or on a freshly
+// loaded object before Save).
+func (s *Settings) SetManualOn(name string) {
+	s.ClearManualOff(name)
+	if s.IsManualOn(name) {
+		return
+	}
+	s.ManualOnTunnels = append(s.ManualOnTunnels, name)
+}
+
+// ClearManualOn removes a tunnel from the manual-on list — a manual
+// disconnect releases it back to automation. Call inside a
+// SettingsStore.Update (or on a freshly loaded object before Save).
+func (s *Settings) ClearManualOn(name string) {
+	for i, n := range s.ManualOnTunnels {
+		if n == name {
+			s.ManualOnTunnels = append(s.ManualOnTunnels[:i], s.ManualOnTunnels[i+1:]...)
+			return
+		}
+	}
+}
+
+// ClearAllManualOverrides releases every manual latch (both off and on),
+// restoring full automation. The GUI calls this on startup so a fresh app
+// session resumes automatic rule enforcement.
+func (s *Settings) ClearAllManualOverrides() {
 	s.ManualOffTunnels = nil
+	s.ManualOnTunnels = nil
 }
 
 // EnsureAutomation lazily migrates the legacy WifiRules into the
@@ -220,6 +271,10 @@ func (s *Settings) RenameTunnelRules(oldName, newName string) {
 		s.ClearManualOff(oldName)
 		s.SetManualOff(newName)
 	}
+	if s.IsManualOn(oldName) {
+		s.ClearManualOn(oldName)
+		s.SetManualOn(newName)
+	}
 }
 
 // DeleteTunnelRules drops a tunnel's Automation (and legacy WifiRules)
@@ -236,6 +291,7 @@ func (s *Settings) DeleteTunnelRules(name string) {
 		delete(s.WifiRules.PerTunnel, name)
 	}
 	s.ClearManualOff(name)
+	s.ClearManualOn(name)
 }
 
 // DefaultSettings returns settings with sensible defaults.

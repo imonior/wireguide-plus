@@ -90,7 +90,7 @@ PersistentKeepalive = 25
       '.cm-activeLine': { backgroundColor: 'var(--bg-hover)' },
       '.cm-activeLineGutter': { backgroundColor: 'var(--bg-hover)' },
       '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'var(--blue-tint)',
+        backgroundColor: 'var(--accent-tint)',
       },
     },
     { dark: false }

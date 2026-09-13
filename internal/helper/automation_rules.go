@@ -161,13 +161,18 @@ func (h *Helper) scheduleRuleCheck() {
 //	"skip-manual-off" → the policy wants connect but the user switched the
 //	                    tunnel off by hand; the latch wins until they
 //	                    reconnect manually or the app restarts
+//	"skip-manual-on"  → the policy wants disconnect but the user switched
+//	                    the tunnel on by hand; the latch wins until they
+//	                    disconnect manually or the app restarts
 //	""                → leave the tunnel alone (policy agrees with reality,
 //	                    the tunnel is unmanaged, or a wanted disconnect has
 //	                    nothing to tear down)
 //
+// The two manual latches are mutually exclusive (a tunnel is at most one of
+// off/on): manual-off suppresses connect, manual-on suppresses disconnect.
 // Pure and side-effect free so the reconcile invariants (idempotency,
-// manual-off supremacy) are testable without a live tunnel manager.
-func reconcileAction(state wifi.DesiredState, active, manualOff bool) string {
+// manual-latch supremacy) are testable without a live tunnel manager.
+func reconcileAction(state wifi.DesiredState, active, manualOff, manualOn bool) string {
 	switch state {
 	case wifi.StateConnect:
 		if manualOff {
@@ -177,6 +182,9 @@ func reconcileAction(state wifi.DesiredState, active, manualOff bool) string {
 			return "connect"
 		}
 	case wifi.StateDisconnect:
+		if manualOn {
+			return "skip-manual-on"
+		}
 		if active {
 			return "disconnect"
 		}
@@ -265,6 +273,13 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	for _, n := range settings.ManualOffTunnels {
 		manualOff[n] = true
 	}
+	// The mirror latch: a tunnel the user has manually switched ON must not
+	// be silently torn down by its rules until they disconnect it by hand
+	// once or the app restarts — the manual on wins over automation.
+	manualOn := make(map[string]bool, len(settings.ManualOnTunnels))
+	for _, n := range settings.ManualOnTunnels {
+		manualOn[n] = true
+	}
 
 	active := make(map[string]bool)
 	for _, n := range h.manager.ActiveTunnels() {
@@ -274,7 +289,7 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	for _, name := range auto.PolicyTunnelNames() {
 		rules := auto.PerTunnel[name]
 		state := wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx)
-		switch reconcileAction(state, active[name], manualOff[name]) {
+		switch reconcileAction(state, active[name], manualOff[name], manualOn[name]) {
 		case "connect":
 			h.automationConnect(name, reason, ctx.SSID)
 		case "disconnect":
@@ -286,6 +301,10 @@ func (h *Helper) reevaluateAutomation(reason string) {
 			slog.Info("automation: skip connect (manually switched off)",
 				"category", "network",
 				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
+		case "skip-manual-on":
+			slog.Info("automation: skip disconnect (manually switched on)",
+				"category", "network",
+				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
 		default:
 			// No action — log it anyway. Without this line an evaluation
 			// that leaves everything alone is invisible in the log viewer,
@@ -294,7 +313,7 @@ func (h *Helper) reevaluateAutomation(reason string) {
 				"category", "network",
 				"tunnel", name,
 				"reason", reason,
-				"decision", decisionLabel(state, manualOff[name]),
+				"decision", decisionLabel(state, manualOff[name], manualOn[name]),
 				"rules", len(rules),
 				"default", auto.Defaults[name],
 				"active", active[name],
@@ -303,10 +322,10 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 }
 
-// decisionLabel renders an evaluated desired state (plus the manual-off
-// latch) as the word the log viewer and the CLI preview both use, so the
-// same vocabulary appears everywhere.
-func decisionLabel(state wifi.DesiredState, manualOff bool) string {
+// decisionLabel renders an evaluated desired state (plus the manual latches)
+// as the word the log viewer and the CLI preview both use, so the same
+// vocabulary appears everywhere.
+func decisionLabel(state wifi.DesiredState, manualOff, manualOn bool) string {
 	switch state {
 	case wifi.StateConnect:
 		if manualOff {
@@ -314,6 +333,9 @@ func decisionLabel(state wifi.DesiredState, manualOff bool) string {
 		}
 		return "connect"
 	case wifi.StateDisconnect:
+		if manualOn {
+			return "manual-on"
+		}
 		return "disconnect"
 	}
 	return "unmanaged"
@@ -348,6 +370,10 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 	for _, n := range settings.ManualOffTunnels {
 		manualOff[n] = true
 	}
+	manualOn := make(map[string]bool, len(settings.ManualOnTunnels))
+	for _, n := range settings.ManualOnTunnels {
+		manualOn[n] = true
+	}
 
 	resp := ipc.AutomationPreviewResponse{
 		SSID:        ctx.SSID,
@@ -368,7 +394,11 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 					decision = "connect"
 				}
 			case wifi.StateDisconnect:
-				decision = "disconnect"
+				if manualOn[name] {
+					decision = "manual-on" // suppressed by the manual-on latch
+				} else {
+					decision = "disconnect"
+				}
 			}
 			resp.Tunnels = append(resp.Tunnels, ipc.AutomationTunnelDecision{
 				Name:      name,
@@ -376,6 +406,7 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 				Decision:  decision,
 				Active:    active[name],
 				ManualOff: manualOff[name],
+				ManualOn:  manualOn[name],
 			})
 		}
 	}

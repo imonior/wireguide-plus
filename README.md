@@ -134,13 +134,9 @@ A single rule can combine any of the above: e.g. **SSID = Office AND Time = Mo�
 | Platform | Status |
 | --- | --- |
 | Windows 10 / 11 (x64, x86 32-bit, ARM64) | ✅ Fully supported (multi-tunnel concurrency + SSID auto-connect, incl. AmneziaWG) |
-| macOS (Apple Silicon / arm64) | ✅ Fully supported — thoroughly verified on real Apple Silicon hardware; you may also try [WireTunnels](https://github.com/FMDigitech/WireTunnels), another WireGuard app |
+| macOS (Apple Silicon / arm64) | ✅ Fully supported — thoroughly verified on real Apple Silicon hardware |
 | Linux (x64, arm64) | 🚧 Experimental — CI-built but not yet tested on real hardware |
 | Android / iOS | ❌ **Not supported** (cannot run tunnels concurrently, nor auto-connect different tunnels by Wi-Fi SSID) |
-
-> **macOS alternative: [WireTunnels](https://github.com/FMDigitech/WireTunnels)** — a
-> native macOS menu-bar WireGuard client with multi-tunnel support, monitoring and
-> control, complementing upstream `wireguide`.
 
 ### Why no mobile edition?
 
@@ -151,11 +147,6 @@ prevent WireGuard implementations from **running multiple tunnels at once** or
 mobile. This project therefore **explicitly does not target mobile devices**; mobile
 users should use the official WireGuard app with its On-Demand capability for
 single-tunnel needs.
-
-## Roadmap
-
-- **v2.0 (planned)**: run as a **Windows system service** — auto-connect without a user
-  login, with a more stable network stack and better privilege control.
 
 ## Download & Install
 
