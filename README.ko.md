@@ -124,6 +124,8 @@ Android / iOS에서는 시스템 커널과 권한 체계 때문에 WireGuard 구
 
 각 릴리스에서는 지원하는 플랫폼별로 **설치 프로그램**(권장)과 **포터블 버전**을 배포합니다 — 사용 중인 OS를 아래에서 선택하세요. macOS는 `.dmg`/`.zip`, Linux는 `.deb`/`.tar.gz`, Windows는 아래 설치 프로그램/포터블 버전입니다. 모든 릴리스에는 Ed25519 서명된 `SHA256SUMS`(및 `SHA256SUMS.sig`)도 첨부되며, 앱 내 업데이터가 업데이트 적용 전에 검증합니다.
 
+### Windows
+
 **설치 프로그램(권장)**
 
 - Windows x64 설치 프로그램: `wireguideplus-amd64-installer.exe`

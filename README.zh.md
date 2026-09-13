@@ -116,6 +116,8 @@ Android / iOS 上，系统内核与权限机制使 WireGuard 实现**无法同�
 
 每个 Release 都会为每个受支持的平台发布**安装包（推荐）**与**免安装版**：下方按操作系统说明。macOS 提供 `.dmg`/`.zip`，Linux 提供 `.deb`/`.tar.gz`，Windows 即下文的安装包/绿色版。所有 Release 还会附带一份 Ed25519 签名的 `SHA256SUMS`（及 `SHA256SUMS.sig`），应用内更新器在应用任何更新前都会校验它。
 
+### Windows
+
 **安装包（推荐）**
 
 - Windows x64 安装包：`wireguideplus-amd64-installer.exe`

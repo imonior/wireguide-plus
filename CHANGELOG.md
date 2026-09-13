@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.1] - 2026-09-13
+
+### 🐛 修复
+
+- **自动化「on interface」下拉列表不完整** — 该条件原复用实时网络预览（`AutomationPreview`）返回的网口，仅含当前 UP 且带路由地址的网口，单 Wi-Fi 环境下只剩 `en0` 并会被默认预填。现改为与隧道配置「绑定物理网卡」共用同一数据源（`TunnelService.ListPhysicalInterfaces()`），列出**全部物理网卡**（含未连接的 Wi-Fi / 有线），标签格式（友好名 · 硬件型号 · 序号 · 下线状态）也完全对齐。
+
+### 📝 文档
+
+- **README 安装章节结构** — 为「下载与安装」补充分平台子章节（`### Windows` / `### macOS` / `### Linux`）总纲，使 Windows 不再占据顶层、与其他平台平级（5 语言 README 同步修正）。
+
 ## [2.1.0] - 2026-09-13
 
 ### 🔧 变更

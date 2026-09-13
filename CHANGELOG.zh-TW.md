@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.1] - 2026-09-13
+
+### 🐛 修復
+
+- **自動化「on interface」下拉清單不完整** — 此條件原本複用即時網路預覽（`AutomationPreview`）回傳的網口，僅含目前 UP 且帶路由位址的網口；單一 Wi-Fi 環境下只剩 `en0` 並會被預設預填。現改為與隧道設定「綁定實體網卡」共用同一資料來源（`TunnelService.ListPhysicalInterfaces()`），列出**全部實體網卡**（含未連線的 Wi-Fi / 有線），標籤格式（友好名稱 · 硬體型號 · 序號 · 離線狀態）也完全對齊。
+
+### 📝 文件
+
+- **README 安裝章節結構** — 為「下載與安裝」補充分平台子章節（`### Windows` / `### macOS` / `### Linux`）總綱，使 Windows 不再佔據頂層、與其他平台平級（5 語言 README 同步修正）。
+
 ## [2.1.0] - 2026-09-13
 
 ### 🔧 變更

@@ -20,6 +20,7 @@
   import { errText } from './errors.js';
   import SSIDPermissionBanner from './SSIDPermissionBanner.svelte';
   import { modalDrag } from './actions/modal-drag.js';
+  import { loadPhysicalInterfaces, ifaceLabel } from './interface-utils.js';
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
@@ -37,6 +38,12 @@
   let currentGatewayMAC = '';   // autocomplete suggestion for the MAC field
   // Live network context + per-rule decision from AutomationEvaluate().
   let preview = null;           // AutomationPreviewResponse
+  // Full physical-interface list (same source as the per-tunnel egress
+  // binding dropdown) — used to populate the "on interface" condition's
+  // selector. Kept separate from `preview.interfaces`, which only lists the
+  // currently-UP adapters and would pre-fill the active Wi-Fi (e.g. en0) and
+  // hide every other NIC.
+  let physicalInterfaces = [];
   let previewTimer = null;
   // Epoch of the current preview "session". Increased every time the modal
   // re-opens (and on close → null). refreshPreview carries the session id
@@ -56,10 +63,10 @@
   // Combobox suggestions for the SSID field: every WiFi profile the OS has
   // saved (pre-filled), plus the current network in case it isn't saved yet.
   $: ssidSuggestions = [...new Set([...(knownSSIDs || []), ...(currentSSID ? [currentSSID] : [])])];
-  // Physical interface names from the live AutomationPreview — used as
-  // autocomplete suggestions for the interface condition.
-  $: interfaceSuggestions = [...new Set((preview?.interfaces || []).map(x => x.name))];
-  $: allInterfaces = (preview?.interfaces || []).filter(x => x.type && x.type !== 'loopback');
+  // Physical interface names from the full enumeration (same list the
+  // per-tunnel egress binding uses) — autocomplete suggestions for the
+  // interface condition.
+  $: interfaceSuggestions = [...new Set(physicalInterfaces.map(x => x.name))];
   let saveError = '';
   // loadGen tags each async load so a slow in-flight load(A) can't clobber
   // the rules after the user has already switched to load(B).
@@ -128,6 +135,15 @@
       if (gen !== loadGen) return;
       currentGatewayMAC = mac;
     } catch (_) { if (gen === loadGen) currentGatewayMAC = ''; }
+    // Full physical-interface list for the "on interface" selector. Uses the
+    // same source as the per-tunnel egress binding dropdown so the two
+    // selectors are driven by one enumeration. (preview.interfaces only lists
+    // UP adapters and would pre-fill the active Wi-Fi, hiding other NICs.)
+    try {
+      const pis = await loadPhysicalInterfaces(TunnelService);
+      if (gen !== loadGen) return;
+      physicalInterfaces = pis;
+    } catch (_) { if (gen === loadGen) physicalInterfaces = []; }
   }
   // Convert the persisted rule array into the editor model, PRESERVING the
   // stored order (position = priority — the engine evaluates top to bottom,
@@ -282,7 +298,7 @@
   function onTypeChange(c, v) {
     c.type = v;
     c.ssid = ''; c.subnet = ''; c.gateway_mac = ''; c.gateway_ip = ''; c.interface_name = '';
-    if (v === 'interface') { c.type = 'interface'; c.interface_name = (allInterfaces[0] && allInterfaces[0].name) || ''; }
+    if (v === 'interface') { c.type = 'interface'; c.interface_name = (physicalInterfaces[0] && physicalInterfaces[0].name) || ''; }
     rules = rules;
     save();
     schedulePreviewRefresh();
@@ -987,7 +1003,7 @@
                           <select class="am-val" value={c.interface_name}
                             on:change={(e) => { c.type = 'interface'; c.interface_name = e.target.value; rules = rules; save(); schedulePreviewRefresh(); }}
                             aria-label={$t('automation.cond_interface')}>
-                            {#each allInterfaces as i}<option value={i.name}>{i.name}{i.type ? ' · ' + ifaceTypeLabel(i.type) : ''}</option>{/each}
+                            {#each physicalInterfaces as i (i.index)}<option value={i.name}>{ifaceLabel(i, $t)}</option>{/each}
                           </select>
                         {:else if c.type === 'time'}
                           <div class="am-time">

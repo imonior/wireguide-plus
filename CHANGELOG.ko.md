@@ -4,6 +4,16 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.1.1] - 2026-09-13
+
+### 🐛 수정
+
+- **자동화 "on interface" 드롭다운이 불완전했음** — 이 조건은 이전에 실시간 네트워크 미리보기(`AutomationPreview`)가 반환하는 인터페이스를 재사용했으며, 현재 UP 상태이고 라우팅 주소가 있는 인터페이스만 포함했습니다. Wi-Fi 전용 환경에서는 `en0` 하나만 표시되고 기본값으로 미리 채워졌습니다. 이제 터널 설정의 "물리적 인터페이스 바인딩"과 동일한 데이터 소스(`TunnelService.ListPhysicalInterfaces()`)를 공유하도록 변경하여 **모든 물리적 어댑터**(연결되지 않은 Wi-Fi / 유선 포함)를 나열하고 라벨 형식(친숙한 이름 · 하드웨어 모델 · 인덱스 · 오프라인 상태)도 완전히 통일했습니다.
+
+### 📝 문서
+
+- **README 설치 섹션 구조** — "다운로드 및 설치" 아래에 플랫폼별 하위 섹션(`### Windows` / `### macOS` / `### Linux`) 총칙을 추가하여 Windows가 최상위를 차지하지 않고 다른 플랫폼과 형제 관계가 되도록 했습니다(5개 언어 README 동시 수정).
+
 ## [2.1.0] - 2026-09-13
 
 ### 🔧 변경

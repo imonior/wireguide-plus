@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.1] - 2026-09-13
+
+### 🐛 修正
+
+- **自動化「on interface」ドロップダウンが不完全だった** — この条件はこれまでリアルタイムネットワークプレビュー（`AutomationPreview`）が返すインターフェースを流用しており、現在 UP でルーティングアドレスを持つものだけが含まれていました。Wi-Fi のみの環境では `en0` だけが表示され、既定で事前入力されていました。これをトンネル設定の「物理インターフェースのバインド」と同じデータソース（`TunnelService.ListPhysicalInterfaces()`）に変更し、**すべての物理アダプタ**（未接続の Wi-Fi / 有線を含む）をリストし、ラベル形式（フレンドリ名 · ハードウェア型番 · インデックス · ダウン状態）も完全に統一しました。
+
+### 📝 ドキュメント
+
+- **README インストール章の構造** — 「ダウンロードとインストール」にプラットフォーム別サブセクション（`### Windows` / `### macOS` / `### Linux`）の総綱を追加し、Windows がトップレベルに居座らないよう、すべてのプラットフォームを同列にしました（5 言語 README で同時修正）。
+
 ## [2.1.0] - 2026-09-13
 
 ### 🔧 変更

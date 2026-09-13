@@ -15,6 +15,7 @@
   import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
   import { appSettings } from '../stores/settings.js';
   import { t } from '../i18n/index.js';
+  import { loadPhysicalInterfaces, ifaceLabel } from './interface-utils.js';
 
   export let name = ''; // SAVED tunnel name — the meta sidecar key
   export let isNew = false;
@@ -50,7 +51,7 @@
   async function load() {
     if (!TunnelService) return;
     try {
-      ifaces = (await TunnelService.ListPhysicalInterfaces()) || [];
+      ifaces = await loadPhysicalInterfaces(TunnelService);
       if (isNew) {
         bindIfIndex = 0;
         bindIfName = '';
@@ -66,11 +67,7 @@
   }
 
   function ifcLabel(ifc) {
-    const generic = ifc.friendly || ifc.name;
-    const hw = ifc.hardware && ifc.hardware !== generic ? ` — ${ifc.hardware}` : '';
-    const idx = ifc.index > 0 ? ` (#${ifc.index})` : '';
-    const state = !ifc.is_up ? ` · ${$t('fields.bind_down')}` : '';
-    return `${generic}${hw}${idx}${state}`;
+    return ifaceLabel(ifc, $t);
   }
 
   const dispatch = createEventDispatcher();

@@ -166,6 +166,8 @@ and Windows the installer / portable described here. All releases also attach an
 signed `SHA256SUMS` (with `SHA256SUMS.sig`) that the in-app updater verifies before
 applying any update.
 
+### Windows
+
 **Installers (recommended)**
 
 - Windows x64 installer: `wireguideplus-amd64-installer.exe`

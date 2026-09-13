@@ -127,6 +127,8 @@ WireGuard 実装が**複数トンネルの同時実行**や**Wi-Fi SSID によ�
 
 各リリースでは対応プラットフォームごとに**インストーラー**（推奨）と**ポータブル版**を公開しています — お使いの OS を選んでください。macOS は `.dmg`/`.zip`、Linux は `.deb`/`.tar.gz`、Windows は以下のインストーラー/ポータブル版です。すべてのリリースには Ed25519 署名付きの `SHA256SUMS`（および `SHA256SUMS.sig`）も同梱され、アプリ内アップデーターは更新適用前に検証します。
 
+### Windows
+
 **インストーラー（推奨）**
 
 - Windows x64 インストーラー: `wireguideplus-amd64-installer.exe`

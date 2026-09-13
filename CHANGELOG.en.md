@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.1] - 2026-09-13
+
+### 🐛 Fixed
+
+- **Automation "on interface" dropdown was incomplete** — this condition previously reused the live network preview (`AutomationPreview`), which only returns interfaces currently UP with a routed address; on a Wi-Fi-only machine it listed just `en0` and pre-filled it by default. It now shares the same data source as the tunnel "Bind physical interface" field (`TunnelService.ListPhysicalInterfaces()`), listing **every physical adapter** (including disconnected Wi-Fi / Ethernet) with the same label format (friendly name · hardware model · index · down state).
+
+### 📝 Docs
+
+- **README install section structure** — added per-platform subsections (`### Windows` / `### macOS` / `### Linux`) under "Download & Install" so Windows no longer sits at the top level; all platforms are now siblings (fixed in all 5 language READMEs).
+
 ## [2.1.0] - 2026-09-13
 
 ### 🔧 Changed
