@@ -117,8 +117,7 @@ Android / iOS에서는 시스템 커널과 권한 체계 때문에 WireGuard 구
 
 ## 다운로드 & 설치
 
-각 릴리스에서는 Windows 빌드를 **설치 프로그램**과 **포터블 버전** 두 종류로 나누어
-배포합니다.
+각 릴리스에서는 지원하는 플랫폼별로 **설치 프로그램**(권장)과 **포터블 버전**을 배포합니다 — 사용 중인 OS를 아래에서 선택하세요. macOS는 `.dmg`/`.zip`, Linux는 `.deb`/`.tar.gz`, Windows는 아래 설치 프로그램/포터블 버전입니다. 모든 릴리스에는 Ed25519 서명된 `SHA256SUMS`(및 `SHA256SUMS.sig`)도 첨부되며, 앱 내 업데이터가 업데이트 적용 전에 검증합니다.
 
 **설치 프로그램(권장)**
 
@@ -161,18 +160,51 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
 더 이상 개별 DLL을 첨부하지 않습니다(포터블 zip 또는 설치 프로그램을 사용하세요).
 일치하는 드라이버 DLL이 exe 옆에 없으면 터널을 만들 수 없습니다.
 
+
+
+### macOS（Apple Silicon）
+
+릴리스마다 두 가지 아티팩트를 제공합니다：
+
+- `WireGuidePlus-darwin-arm64.dmg` — 응용 프로그램 폴더로 드래그하는 설치 프로그램.
+- `WireGuidePlus-darwin-arm64.zip` — 포터블 `.app` 번들.
+
+`.dmg`를 열고 **WireGuide Plus**를「응용 프로그램」으로 드래그한 뒤 Spotlight 또는 Launchpad에서 실행합니다. 포터블 `.zip`은 압축을 풀면 `wireguideplus.app`이 되며 바로 실행할 수 있습니다.
+
+참고：
+
+- **Apple Silicon 전용.** CI는 `arm64` 단일 아티팩트만 빌드합니다. Intel Mac은[소스에서 빌드](docs/DEVELOPMENT.md)해야 합니다.
+- **Ad-hoc 서명만 해당(공증 없음).** 첫 실행 시 macOS Gatekeeper가 경고합니다. 우클릭 → **열기**를 선택하거나, 다음 명령으로 격리 속성을 한 번 제거하세요：
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/wireguideplus.app
+  ```
+- arm64 빌드용 Homebrew cask도 제공합니다 — `brew install --cask wireguideplus`도 동일한 `WireGuidePlus-darwin-arm64.zip`을 받습니다.
+
+### Linux（실험적）
+
+각 아키텍처(`amd64`, `arm64`)마다 두 가지 아티팩트를 제공합니다：
+
+- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu 설치 패키지.
+- `WireGuidePlus-linux-<arch>-portable.tar.gz` — 포터블 바이너리.
+
+`.deb`는 패키지 관리자로 설치합니다(예： `sudo apt install ./WireGuidePlus-linux-amd64.deb`). 포터블 tarball은 압축을 풀고 `./wireguideplus`를 실행합니다. 포터블 버전에는 GTK3 / WebKitGTK 런타임이 필요하며(`.deb`이 자동 설치), 최소 구성 시스템에서는 먼저 설치하세요：
+
+```sh
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+```
+
+> Linux 빌드는**실험적**입니다 — CI 빌드만 되어 실기 테스트는 아직 미완료이며, 데스크톱 세션이 필요합니다(헤드리스 서버 미지원).
+
 ## 코드 서명
 
-게시되는 모든 Windows **설치 프로그램**은 Authenticode 서명이 적용되어 **무결성**(서명
-이후 변조되지 않음)을 검증할 수 있습니다. 서명된 바이너리는 최초 실행 시 Windows
-SmartScreen 경고도 덜 표시됩니다.
+코드 서명은 플랫폼마다 다릅니다. **Windows**에서는 게시되는 모든 **설치 프로그램**에 Authenticode 서명( SignPath 서명이 활성화된 경우)이 적용되어 **무결성**(서명 이후 변조되지 않음)을 검증할 수 있고, 최초 실행 시 SmartScreen 경고도 줄어듭니다. **macOS**에서는 `.app`이 **Ad-hoc 서명만**(Apple 개발자 서명 없음) 되어 있어 첫 실행 시 Gatekeeper가 경고합니다(macOS 설치 안내 참조). **Linux**의 `.deb` 및 포터블 버전은 **서명되지 않았습니다**.
 
 서명이 증명하는 것은 **누가 서명했는지**이며, 그 자체로 **설치 프로그램이 어떻게 빌드
 되었는지**까지 증명하지는 않습니다. 빌드 출처, 승인 워크플로, 계정 보안, 재현성, 그리고
 릴리스마다 제공되는 SHA-256 체크섬은 [SIGNING-POLICY.md](SIGNING-POLICY.md)에
 정리되어 있습니다.
 
-참고: **설치 프로그램만** 서명됩니다. 포터블 zip 안의 exe는 서명되지 않은 빌드 산출물입니다.
+참고: 모든 플랫폼 중 코드 서명이 있는 것은 Windows 설치 프로그램뿐입니다. macOS의 `.app`은 Ad-hoc 서명, Linux 아티팩트는 서명되지 않았으므로, 각 릴리스에 첨부된 Ed25519 서명 `SHA256SUMS`가 범용 무결성 검증 수단입니다.
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).
@@ -187,17 +219,26 @@ NSIS 설치 프로그램 설명, 버전 리소스 및 릴리스 워크플로는 
 
 ## 데이터 & 로그
 
-| 항목 | 위치 |
-| --- | --- |
-| 설정 / 기록 | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
-| 터널 설정 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
-| 터널 스크립트 | `%APPDATA%\wireguideplus\scripts\` |
-| 로그 | `%APPDATA%\wireguideplus\logs\` |
+| 플랫폼 | 항목 | 위치 |
+| --- | --- | --- |
+| Windows | 설정 / 기록 | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
+| Windows | 터널 설정 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Windows | 터널 스크립트 | `%APPDATA%\wireguideplus\scripts\` |
+| Windows | 로그 | `%APPDATA%\wireguideplus\logs\` |
+| macOS | 설정 / 기록 | `~/Library/Application Support/wireguideplus/` |
+| macOS | 터널 설정 | `~/Library/Application Support/wireguideplus/tunnels/*.conf` |
+| macOS | 터널 스크립트 | `~/Library/Application Support/wireguideplus/scripts/` |
+| macOS | 로그 | `~/Library/Logs/wireguideplus/` |
+| Linux | 설정 / 기록 | `~/.config/wireguideplus/` (`$XDG_CONFIG_HOME/wireguideplus/`) |
+| Linux | 터널 설정 | `~/.config/wireguideplus/tunnels/*.conf` |
+| Linux | 터널 스크립트 | `~/.config/wireguideplus/scripts/` |
+| Linux | 로그 | `~/.local/share/wireguideplus/` (`$XDG_DATA_HOME/wireguideplus/`) |
 
 ## 제거
 
-**제어판 → 프로그램 및 기능 → WireGuide Plus**에서 제거하거나, 설치 폴더의 제거
-프로그램을 실행하세요.
+- **Windows** — **제어판 → 프로그램 및 기능 → WireGuide Plus**에서 제거하거나, 설치 폴더의 제거 프로그램을 실행하세요.
+- **macOS** — **WireGuide Plus**를「응용 프로그램」에서 휴지통으로 드래그합니다. 필요하면 `~/Library/Application Support/wireguideplus`와 `~/Library/Preferences/com.imonior.wireguide-plus.plist`도 삭제하세요.
+- **Linux** — `sudo apt remove wireguideplus`(`.deb`), 또는 포터블 바이너리와 `~/.config/wireguideplus`를 삭제하세요.
 
 ## 감사의 말
 

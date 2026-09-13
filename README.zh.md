@@ -109,7 +109,7 @@ Android / iOS 上，系统内核与权限机制使 WireGuard 实现**无法同�
 
 ## 下载与安装
 
-每个 Release 将 Windows 构建分为两类分别发布：**安装包**与**绿色版（便携版）**。
+每个 Release 都会为每个受支持的平台发布**安装包（推荐）**与**免安装版**：下方按操作系统说明。macOS 提供 `.dmg`/`.zip`，Linux 提供 `.deb`/`.tar.gz`，Windows 即下文的安装包/绿色版。所有 Release 还会附带一份 Ed25519 签名的 `SHA256SUMS`（及 `SHA256SUMS.sig`），应用内更新器在应用任何更新前都会校验它。
 
 **安装包（推荐）**
 
@@ -149,16 +149,50 @@ zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 即可运行。Release 不再单独附驱动 DLL（请使用便携 zip 或安装包）。缺少匹配的驱动 DLL
 时无法创建隧道。
 
+
+
+### macOS（Apple Silicon）
+
+每个 Release 提供两个产物：
+
+- `WireGuidePlus-darwin-arm64.dmg` — 拖拽到「应用程序」的安装器。
+- `WireGuidePlus-darwin-arm64.zip` — 免安装 `.app` 包。
+
+打开 `.dmg`，将 **WireGuide Plus** 拖入「应用程序」，再从聚焦或启动台打开。便携版 `.zip` 解压后即为 `wireguideplus.app`，可直接运行。
+
+注意：
+
+- **仅支持 Apple Silicon。** CI 只构建 `arm64` 单一架构；Intel Mac 需自行[从源码构建](docs/DEVELOPMENT.md)。
+- **仅本地临时签名（ad-hoc），未经过 Apple 公证。** 首次打开时 macOS Gatekeeper 会拦截。可右键 →「打开」，或执行一次以下命令清除隔离属性：
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/wireguideplus.app
+  ```
+- 同时提供 Homebrew cask（arm64 版）：`brew install --cask wireguideplus` 拉取的也是同一个 `WireGuidePlus-darwin-arm64.zip`。
+
+### Linux（实验性）
+
+每个架构（`amd64`、`arm64`）提供两个产物：
+
+- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu 安装包。
+- `WireGuidePlus-linux-<arch>-portable.tar.gz` — 免安装二进制。
+
+用包管理器安装 `.deb`，例如 `sudo apt install ./WireGuidePlus-linux-amd64.deb`；或解压便携包后运行 `./wireguideplus`。便携版需要 GTK3 / WebKitGTK 运行库，`.deb` 会自动安装；裸系统请先安装：
+
+```sh
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+```
+
+> Linux 构建为**实验性**——仅经 CI 构建、尚未在真机验证，且需要桌面会话（不支持无头服务器）。
+
 ## 代码签名
 
-所有发布的 Windows **安装包**均经过 Authenticode 签名，可用于验证**完整性**（二进制自签名
-之后未被修改）。已签名的二进制在首次运行时也会触发更少的 Windows SmartScreen 警告。
+代码签名因平台而异。在 **Windows** 上，每个发布的**安装包**都经过 Authenticode 签名（启用 SignPath 签名时），可验证**完整性**——二进制自签名后未被修改，且首次运行触发的 Windows SmartScreen 警告更少。在 **macOS** 上，`.app` 为**本地临时签名（ad-hoc）**（无 Apple 开发者签名），故首次启动会被 Gatekeeper 拦截（见上方 macOS 安装说明）。在 **Linux** 上，`.deb` 与免安装版均为**未签名**。
 
 签名本身证明的是**由谁签署**，并不能单独证明**安装包是如何构建出来的**。构建来源、审批
 流程、账户安全与可复现性等信息，以及随每个 Release 提供的 SHA-256 校验和，均记录在
 [SIGNING-POLICY.md](SIGNING-POLICY.md)。
 
-注意：**仅安装包**经过签名；便携版 zip 内为未签名的构建产物。
+注意：所有平台中，只有 Windows 安装包带有代码签名；macOS 的 `.app` 为本地临时签名、Linux 产物均未签名，因此每个 Release 附带的 Ed25519 签名 `SHA256SUMS` 才是通用的完整性校验方式。
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).
@@ -172,16 +206,26 @@ zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
 
 ## 数据与日志
 
-| 项目 | 位置 |
-| --- | --- |
-| 设置 / 历史 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
-| 隧道配置 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
-| 隧道脚本 | `%APPDATA%\wireguideplus\scripts\` |
-| 日志 | `%APPDATA%\wireguideplus\logs\` |
+| 平台 | 项目 | 位置 |
+| --- | --- | --- |
+| Windows | 设置 / 历史 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
+| Windows | 隧道配置 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Windows | 隧道脚本 | `%APPDATA%\wireguideplus\scripts\` |
+| Windows | 日志 | `%APPDATA%\wireguideplus\logs\` |
+| macOS | 设置 / 历史 | `~/Library/Application Support/wireguideplus/` |
+| macOS | 隧道配置 | `~/Library/Application Support/wireguideplus/tunnels/*.conf` |
+| macOS | 隧道脚本 | `~/Library/Application Support/wireguideplus/scripts/` |
+| macOS | 日志 | `~/Library/Logs/wireguideplus/` |
+| Linux | 设置 / 历史 | `~/.config/wireguideplus/`（`$XDG_CONFIG_HOME/wireguideplus/`） |
+| Linux | 隧道配置 | `~/.config/wireguideplus/tunnels/*.conf` |
+| Linux | 隧道脚本 | `~/.config/wireguideplus/scripts/` |
+| Linux | 日志 | `~/.local/share/wireguideplus/`（`$XDG_DATA_HOME/wireguideplus/`） |
 
 ## 卸载
 
-通过 **控制面板 → 程序和功能 → WireGuide Plus** 卸载，或运行安装目录下的卸载程序。
+- **Windows** — 通过 **控制面板 → 程序和功能 → WireGuide Plus** 卸载，或运行安装目录下的卸载程序。
+- **macOS** — 将 **WireGuide Plus** 从「应用程序」拖入废纸篓；如需可一并删除 `~/Library/Application Support/wireguideplus` 与 `~/Library/Preferences/com.imonior.wireguide-plus.plist`。
+- **Linux** — `sudo apt remove wireguideplus`（`.deb`），或删除免安装二进制与 `~/.config/wireguideplus`。
 
 ## 致谢
 

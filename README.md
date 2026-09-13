@@ -150,8 +150,11 @@ single-tunnel needs.
 
 ## Download & Install
 
-Each release publishes two kinds of Windows builds separately: **installers** and a
-**portable build**.
+Every release publishes an **installer** (recommended) and a **portable build** for each
+platform — pick your OS below. macOS ships a `.dmg` / `.zip`, Linux a `.deb` / `.tar.gz`,
+and Windows the installer / portable described here. All releases also attach an Ed25519-
+signed `SHA256SUMS` (with `SHA256SUMS.sig`) that the in-app updater verifies before
+applying any update.
 
 **Installers (recommended)**
 
@@ -194,11 +197,58 @@ containing the exe **and** the matching driver DLL — download one zip, extract
 Releases no longer attach bare DLLs (use the portable zip or the installer above). Without
 the matching driver DLL, tunnels cannot be created.
 
+
+
+### macOS (Apple Silicon)
+
+Two artifacts per release:
+
+- `WireGuidePlus-darwin-arm64.dmg` — drag-to-Applications installer.
+- `WireGuidePlus-darwin-arm64.zip` — portable `.app` bundle.
+
+Open the `.dmg`, drag **WireGuide Plus** to `Applications`, then launch it from
+Spotlight or Launchpad. The portable `.zip` extracts straight to `wireguideplus.app`
+— run it directly.
+
+Notes:
+
+- **Apple Silicon only.** CI builds a single `arm64` artifact; Intel Macs must
+  build from source (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
+- **Ad-hoc signed, not notarized.** macOS Gatekeeper flags the `.app` on first launch.
+  Right-click → **Open**, or clear the quarantine attribute once:
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/wireguideplus.app
+  ```
+- A Homebrew cask ships the arm64 build too — `brew install --cask wireguideplus` pulls
+  the same `WireGuidePlus-darwin-arm64.zip`.
+
+### Linux (experimental)
+
+Two artifacts per architecture (`amd64`, `arm64`):
+
+- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu installer.
+- `WireGuidePlus-linux-<arch>-portable.tar.gz` — portable binary.
+
+Install the `.deb` with your package manager, e.g.
+`sudo apt install ./WireGuidePlus-linux-amd64.deb`, or extract the portable tarball and
+run `./wireguideplus`. The portable build needs the GTK3 / WebKitGTK runtime, which the
+`.deb` installs automatically; on a bare system install them first:
+
+```sh
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+```
+
+> Linux builds are **experimental** — CI-built but not yet tested on real hardware, and
+> they require a desktop session (no headless server support).
+
 ## Code Signing
 
-Every published Windows **installer** is Authenticode-signed, which lets you verify
-**integrity** — the binary has not been modified since it was signed. Signed
-binaries also trigger fewer Windows SmartScreen warnings on first run.
+Code signing differs by platform. On **Windows**, every published **installer** is
+Authenticode-signed (when SignPath signing is enabled), which lets you verify **integrity**
+— the binary has not been modified since it was signed, and triggers fewer SmartScreen
+warnings on first run. On **macOS**, the `.app` is **ad-hoc signed** (no Apple Developer
+signature), so Gatekeeper warns on first launch (see the macOS install notes). On **Linux**,
+the `.deb` and portable build are **unsigned**.
 
 A signature proves *who signed the file*, not on its own *how it was built*.
 Provenance (which pipeline produced the installer, approval workflow, account
@@ -206,8 +256,9 @@ security and reproducibility) is documented separately in
 [SIGNING-POLICY.md](SIGNING-POLICY.md), together with the SHA-256 checksums that
 ship with every release.
 
-Note: only the installers are signed; the portable zips contain the unsigned build
-output.
+Note: across all platforms, only the Windows installers carry a code-signature; the
+macOS `.app` is ad-hoc signed and the Linux artifacts are unsigned, so the Ed25519-signed
+`SHA256SUMS` (attached to every release) is the universal integrity check.
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).
@@ -222,17 +273,30 @@ the release automatically (see [docs/release.md](docs/release.md)).
 
 ## Data & Logs
 
-| Item | Location |
-| --- | --- |
-| Settings / history | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
-| Tunnel configs | `%APPDATA%\wireguideplus\tunnels\*.conf` |
-| Tunnel scripts | `%APPDATA%\wireguideplus\scripts\` |
-| Logs | `%APPDATA%\wireguideplus\logs\` |
+| Platform | Item | Location |
+| --- | --- | --- |
+| Windows | Settings / history | `%APPDATA%\wireguideplus\` (`config.json`, `history.json`) |
+| Windows | Tunnel configs | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Windows | Tunnel scripts | `%APPDATA%\wireguideplus\scripts\` |
+| Windows | Logs | `%APPDATA%\wireguideplus\logs\` |
+| macOS | Settings / history | `~/Library/Application Support/wireguideplus/` |
+| macOS | Tunnel configs | `~/Library/Application Support/wireguideplus/tunnels/*.conf` |
+| macOS | Tunnel scripts | `~/Library/Application Support/wireguideplus/scripts/` |
+| macOS | Logs | `~/Library/Logs/wireguideplus/` |
+| Linux | Settings / history | `~/.config/wireguideplus/` (`$XDG_CONFIG_HOME/wireguideplus/`) |
+| Linux | Tunnel configs | `~/.config/wireguideplus/tunnels/*.conf` |
+| Linux | Tunnel scripts | `~/.config/wireguideplus/scripts/` |
+| Linux | Logs | `~/.local/share/wireguideplus/` (`$XDG_DATA_HOME/wireguideplus/`) |
 
 ## Uninstall
 
-Uninstall via **Control Panel → Programs and Features → WireGuide Plus**, or run the
-uninstaller in the install directory.
+- **Windows** — via **Control Panel → Programs and Features → WireGuide Plus**, or run the
+  uninstaller in the install directory.
+- **macOS** — drag **WireGuide Plus** from `Applications` to Trash; optionally remove
+  `~/Library/Application Support/wireguideplus` and
+  `~/Library/Preferences/com.imonior.wireguide-plus.plist`.
+- **Linux** — `sudo apt remove wireguideplus` (`.deb`), or delete the portable binary and
+  `~/.config/wireguideplus`.
 
 ## Acknowledgements
 

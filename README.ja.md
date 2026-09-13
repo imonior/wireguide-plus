@@ -120,8 +120,7 @@ WireGuard 実装が**複数トンネルの同時実行**や**Wi-Fi SSID によ�
 
 ## ダウンロードとインストール
 
-各リリースでは Windows ビルドを**インストーラー**と**ポータブル版**の2種類に分けて
-公開しています。
+各リリースでは対応プラットフォームごとに**インストーラー**（推奨）と**ポータブル版**を公開しています — お使いの OS を選んでください。macOS は `.dmg`/`.zip`、Linux は `.deb`/`.tar.gz`、Windows は以下のインストーラー/ポータブル版です。すべてのリリースには Ed25519 署名付きの `SHA256SUMS`（および `SHA256SUMS.sig`）も同梱され、アプリ内アップデーターは更新適用前に検証します。
 
 **インストーラー（推奨）**
 
@@ -164,19 +163,55 @@ exe と対応するドライバー DLL が**同梱**されており、解凍す�
 リリースで個別 DLL の添付は廃止しました（ポータブル zip またはインストーラーを
 ご利用ください）。対応するドライバー DLL が exe の隣にない場合、トンネルを作成できません。
 
+
+
+### macOS（Apple Silicon）
+
+リリースごとに 2 種類のアーティファクトを提供しています：
+
+- `WireGuidePlus-darwin-arm64.dmg` — アプリケーションフォルダへドラッグするインストーラー。
+- `WireGuidePlus-darwin-arm64.zip` — ポータブル `.app` バンドル。
+
+`.dmg` を開き、**WireGuide Plus** を「アプリケーション」へドラッグし、Spotlight または Launchpad から起動します。ポータブル `.zip` は展開すると `wireguideplus.app` になり、そのまま実行できます。
+
+注意：
+
+- **Apple Silicon のみ。** CI は `arm64` の単一アーティファクトをビルドします。Intel Mac は[ソースからビルド](docs/DEVELOPMENT.md)する必要があります。
+- **Ad-hoc 署名のみ（Notarization なし）。** 初回起動時に macOS Gatekeeper が警告します。右クリック → **開く**、または次のコマンドで隔離属性を一度クリアしてください：
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/wireguideplus.app
+  ```
+- arm64 ビルドの Homebrew cask も提供しています — `brew install --cask wireguideplus` でも同じ `WireGuidePlus-darwin-arm64.zip` を取得できます。
+
+### Linux（実験的）
+
+各アーキテクチャ（`amd64`、`arm64`）ごとに 2 種類のアーティファクトを提供しています：
+
+- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu インストーラー。
+- `WireGuidePlus-linux-<arch>-portable.tar.gz` — ポータブルバイナリ。
+
+`.deb` はパッケージマネージャーでインストールします（例：
+`sudo apt install ./WireGuidePlus-linux-amd64.deb`）。ポータブル tarball は展開して
+`./wireguideplus` を実行します。ポータブル版には GTK3 / WebKitGTK ランタイムが必要です
+（`.deb` は自動でインストールします）。最小構成のシステムでは先にインストールしてください：
+
+```sh
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+```
+
+> Linux ビルドは**実験的**です — CI でのビルドのみで実機テストはまだ行われておらず、
+> デスクトップセッションが必要です（ヘッドレスサーバーには非対応）。
+
 ## コード署名
 
-公開されるすべての Windows **インストーラー**には Authenticode 署名が施されており、
-**整合性**（署名後に改ざんされていないこと）を検証できます。署名済みバイナリは、
-初回実行時の Windows SmartScreen 警告も少なくなります。
+コード署名はプラットフォームごとに異なります。**Windows** では公開されるすべての**インストーラー**に Authenticode 署名（SignPath 署名が有効な場合）が施され、**整合性**（署名後に改ざんされていないこと）を検証でき、初回実行時の SmartScreen 警告も減ります。**macOS** では `.app` は**Ad-hoc 署名のみ**（Apple 開発者署名なし）のため、初回起動時に Gatekeeper が警告します（macOS インストール手順を参照）。**Linux** の `.deb` とポータブル版は**未署名**です。
 
 署名が証明するのは**誰が署名したか**であり、それ単体では**インストーラーがどのように
 ビルドされたか**までは証明しません。ビルドの出所、承認ワークフロー、アカウント
 セキュリティ、再現性、および各リリースに同梱される SHA-256 チェックサムについては
 [SIGNING-POLICY.md](SIGNING-POLICY.md) に記載しています。
 
-注: 署名されているのは**インストーラーのみ**です。ポータブル zip 内の exe は
-未署名のビルド成果物です。
+注: すべてのプラットフォームでコード署名があるのは Windows インストーラーのみです。macOS の `.app` は Ad-hoc 署名、Linux のアーティファクトは未署名のため、各リリースに同梱される Ed25519 署名付き `SHA256SUMS` が汎用的な整合性チェックとなります。
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).
@@ -191,17 +226,26 @@ exe と対応するドライバー DLL が**同梱**されており、解凍す�
 
 ## データとログ
 
-| 項目 | 場所 |
-| --- | --- |
-| 設定 / 履歴 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
-| トンネル設定 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
-| トンネルスクリプト | `%APPDATA%\wireguideplus\scripts\` |
-| ログ | `%APPDATA%\wireguideplus\logs\` |
+| プラットフォーム | 項目 | 場所 |
+| --- | --- | --- |
+| Windows | 設定 / 履歴 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
+| Windows | トンネル設定 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Windows | トンネルスクリプト | `%APPDATA%\wireguideplus\scripts\` |
+| Windows | ログ | `%APPDATA%\wireguideplus\logs\` |
+| macOS | 設定 / 履歴 | `~/Library/Application Support/wireguideplus/` |
+| macOS | トンネル設定 | `~/Library/Application Support/wireguideplus/tunnels/*.conf` |
+| macOS | トンネルスクリプト | `~/Library/Application Support/wireguideplus/scripts/` |
+| macOS | ログ | `~/Library/Logs/wireguideplus/` |
+| Linux | 設定 / 履歴 | `~/.config/wireguideplus/`（`$XDG_CONFIG_HOME/wireguideplus/`） |
+| Linux | トンネル設定 | `~/.config/wireguideplus/tunnels/*.conf` |
+| Linux | トンネルスクリプト | `~/.config/wireguideplus/scripts/` |
+| Linux | ログ | `~/.local/share/wireguideplus/`（`$XDG_DATA_HOME/wireguideplus/`） |
 
 ## アンインストール
 
-**コントロールパネル → プログラムと機能 → WireGuide Plus** からアンインストールするか、
-インストール先のアンインストーラーを実行します。
+- **Windows** — **コントロールパネル → プログラムと機能 → WireGuide Plus** からアンインストールするか、インストール先のアンインストーラーを実行します。
+- **macOS** — **WireGuide Plus** を「アプリケーション」からゴミ箱へドラッグします。必要に応じて `~/Library/Application Support/wireguideplus` と `~/Library/Preferences/com.imonior.wireguide-plus.plist` も削除してください。
+- **Linux** — `sudo apt remove wireguideplus`（`.deb`）、またはポータブルバイナリと `~/.config/wireguideplus` を削除します。
 
 ## 謝辞
 

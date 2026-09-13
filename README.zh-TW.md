@@ -110,7 +110,7 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 
 ## 下載與安裝
 
-每個 Release 將 Windows 建置分為兩類分別發布：**安裝程式**與**免安裝版（攜帶版）**。
+每個 Release 都會為每個受支援的平台發布**安裝程式（建議）**與**免安裝版**：下方依作業系統說明。macOS 提供 `.dmg`/`.zip`，Linux 提供 `.deb`/`.tar.gz`，Windows 即下文的安裝程式/免安裝版。所有 Release 還會附帶一份 Ed25519 簽署的 `SHA256SUMS`（及 `SHA256SUMS.sig`），應用程式內更新器在套用任何更新前都會校驗它。
 
 **安裝程式（建議）**
 
@@ -149,17 +149,50 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 即可執行。Release 不再單獨附驅動 DLL（請使用免安裝 zip 或安裝程式）。缺少相符的驅動
 DLL 時無法建立隧道。
 
+
+
+### macOS（Apple Silicon）
+
+每個 Release 提供兩個產物：
+
+- `WireGuidePlus-darwin-arm64.dmg` — 拖曳至「應用程式」的安裝器。
+- `WireGuidePlus-darwin-arm64.zip` — 免安裝 `.app` 套件。
+
+開啟 `.dmg`，將 **WireGuide Plus** 拖入「應用程式」，再從聚焦或啟動台開啟。免安裝版 `.zip` 解壓後即為 `wireguideplus.app`，可直接執行。
+
+注意：
+
+- **僅支援 Apple Silicon。** CI 只建置 `arm64` 單一架構；Intel Mac 需自行[從原始碼建置](docs/DEVELOPMENT.md)。
+- **僅本地臨時簽章（ad-hoc），未經 Apple 公證。** 首次開啟時 macOS Gatekeeper 會攔截。可右鍵 →「開啟」，或執行一次以下指令清除隔離屬性：
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/wireguideplus.app
+  ```
+- 同時提供 Homebrew cask（arm64 版）：`brew install --cask wireguideplus` 取得的也是同一個 `WireGuidePlus-darwin-arm64.zip`。
+
+### Linux（實驗性）
+
+每個架構（`amd64`、`arm64`）提供兩個產物：
+
+- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu 安裝套件。
+- `WireGuidePlus-linux-<arch>-portable.tar.gz` — 免安裝二進位。
+
+用套件管理員安裝 `.deb`，例如 `sudo apt install ./WireGuidePlus-linux-amd64.deb`；或解壓免安裝包後執行 `./wireguideplus`。免安裝版需要 GTK3 / WebKitGTK 執行期函式庫，`.deb` 會自動安裝；裸系統請先安裝：
+
+```sh
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+```
+
+> Linux 建置為**實驗性**——僅經 CI 建置、尚未在實機驗證，且需要桌面工作階段（不支援無頭伺服器）。
+
 ## 程式碼簽署
 
-所有發布的 Windows **安裝程式**均經 Authenticode 簽署，可用於驗證**完整性**（二進位檔自
-簽署之後未被修改）。已簽署的二進位檔在首次執行時也會觸發較少的 Windows SmartScreen
-警告。
+程式碼簽署因平台而異。在 **Windows** 上，每個發布的**安裝程式**都經過 Authenticode 簽署（啟用 SignPath 簽署時），可驗證**完整性**——二進位檔自簽署後未被修改，且首次執行觸發的 Windows SmartScreen 警告更少。在 **macOS** 上，`.app` 為**本地臨時簽章（ad-hoc）**（無 Apple 開發者簽章），故首次啟動會被 Gatekeeper 攔截（見上方 macOS 安裝說明）。在 **Linux** 上，`.deb` 與免安裝版均為**未簽章**。
 
 簽章本身證明的是**由誰簽署**，並不能單獨證明**安裝程式是如何建置出來的**。建置來源、核准
 流程、帳戶安全與可重現性等資訊，以及隨每個 Release 提供的 SHA-256 校驗和，均記錄在
 [SIGNING-POLICY.md](SIGNING-POLICY.md)。
 
-注意：**僅安裝程式**經過簽署；免安裝版 zip 內為未簽署的建置產物。
+注意：所有平台中，只有 Windows 安裝程式帶有程式碼簽章；macOS 的 `.app` 為本地臨時簽章、Linux 產物均未簽章，因此每個 Release 附帶的 Ed25519 簽署 `SHA256SUMS` 才是通用的完整性校驗方式。
 
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 > [SignPath Foundation](https://signpath.org).
@@ -172,17 +205,26 @@ DLL 時無法建立隧道。
 
 ## 資料與日誌
 
-| 項目 | 位置 |
-| --- | --- |
-| 設定 / 歷史 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
-| 隧道設定 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
-| 隧道腳本 | `%APPDATA%\wireguideplus\scripts\` |
-| 日誌 | `%APPDATA%\wireguideplus\logs\` |
+| 平台 | 項目 | 位置 |
+| --- | --- | --- |
+| Windows | 設定 / 歷史 | `%APPDATA%\wireguideplus\`（`config.json`、`history.json`） |
+| Windows | 隧道設定 | `%APPDATA%\wireguideplus\tunnels\*.conf` |
+| Windows | 隧道腳本 | `%APPDATA%\wireguideplus\scripts\` |
+| Windows | 日誌 | `%APPDATA%\wireguideplus\logs\` |
+| macOS | 設定 / 歷史 | `~/Library/Application Support/wireguideplus/` |
+| macOS | 隧道設定 | `~/Library/Application Support/wireguideplus/tunnels/*.conf` |
+| macOS | 隧道腳本 | `~/Library/Application Support/wireguideplus/scripts/` |
+| macOS | 日誌 | `~/Library/Logs/wireguideplus/` |
+| Linux | 設定 / 歷史 | `~/.config/wireguideplus/`（`$XDG_CONFIG_HOME/wireguideplus/`） |
+| Linux | 隧道設定 | `~/.config/wireguideplus/tunnels/*.conf` |
+| Linux | 隧道腳本 | `~/.config/wireguideplus/scripts/` |
+| Linux | 日誌 | `~/.local/share/wireguideplus/`（`$XDG_DATA_HOME/wireguideplus/`） |
 
 ## 解除安裝
 
-透過**控制台 → 程式和功能 → WireGuide Plus** 解除安裝，或執行安裝目錄中的解除安裝程式。
-
+- **Windows** — 透過**控制台 → 程式和功能 → WireGuide Plus** 解除安裝，或執行安裝目錄中的解除安裝程式。
+- **macOS** — 將 **WireGuide Plus** 從「應用程式」拖入垃圾桶；如需可一併刪除 `~/Library/Application Support/wireguideplus` 與 `~/Library/Preferences/com.imonior.wireguide-plus.plist`。
+- **Linux** — `sudo apt remove wireguideplus`（`.deb`），或刪除免安裝二進位與 `~/.config/wireguideplus`。
 ## 致謝
 
 - [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — 上游開源專案
