@@ -564,13 +564,15 @@
   // Two distinct outbound paths, both for networks that cannot reach
   // api.github.com directly (e.g. mainland China):
   //   - mirror: the API URL is rewritten through a public accelerator
-  //     prefix (https://ghfast.top/https://api.github.com/...) and fetched
+  //     prefix (https://ghproxy.net/https://api.github.com/...) and fetched
   //     directly. No local proxy software needed.
   //   - manual: requests still go to api.github.com but tunnel through a
   //     locally running HTTP/SOCKS5 proxy (Clash etc.).
   const MIRROR_PRESETS = [
     { value: 'https://ghfast.top', label: 'ghfast.top' },
     { value: 'https://gh-proxy.com', label: 'gh-proxy.com' },
+    { value: 'https://ghproxy.net', label: 'ghproxy.net' },
+    { value: 'https://mirror.ghproxy.com', label: 'mirror.ghproxy.com' },
   ];
 
   // Current <select> value: 'direct', one of the mirror presets,

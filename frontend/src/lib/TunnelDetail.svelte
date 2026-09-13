@@ -952,14 +952,14 @@
     }
   }
   .btn-primary-large:disabled { opacity: 0.55; cursor: not-allowed; }
-  /* Connect = brand red: the manual-action CTA. Green is now reserved for the
-     "connected" STATE (hero dot/icon), so the button no longer collides with
-     the live-status color. A 4px burgundy strip on the left ties the button to
-     the app icon's wine-red ring, so it reads as "this app's action" rather
-     than a generic danger button. */
+  /* Connect = green ("go"): a filled, saturated action button. Green is the
+     universal "connect / start" cue and now also doubles as the connected
+     STATE color, so the button and the live-status dot agree. A 4px deep-green
+     strip on the left ties it to the app icon's medical green. */
   .btn-connect-lg {
-    background: var(--accent);
-    box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent),
+    background: linear-gradient(180deg, color-mix(in srgb, #15803d 88%, #fff) 0%, #15803d 100%);
+    color: #fff;
+    box-shadow: 0 8px 24px color-mix(in srgb, #15803d 42%, transparent),
                 0 2px 4px rgba(0,0,0,0.10);
   }
   .btn-connect-lg::before {
@@ -967,39 +967,41 @@
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 4px;
-    background: #A01D21;   /* matches app icon ring */
+    background: #047857;   /* deep green — matches app icon green */
     border-radius: 12px 0 0 12px;
   }
   .btn-connect-lg:hover:not(:disabled) {
-    background: color-mix(in srgb, #fff 8%, var(--accent));
+    background: linear-gradient(180deg, color-mix(in srgb, #15803d 80%, #fff) 0%, color-mix(in srgb, #15803d 92%, #000) 100%);
     transform: translateY(-1px);
-    box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 48%, transparent),
+    box-shadow: 0 10px 28px color-mix(in srgb, #15803d 50%, transparent),
                 0 2px 4px rgba(0,0,0,0.12);
   }
   .btn-connect-lg:active:not(:disabled) {
-    background: color-mix(in srgb, #000 8%, var(--accent));
+    background: color-mix(in srgb, #000 8%, #15803d);
     transform: translateY(0);
   }
 
-  /* Disconnect = quiet neutral "stop": the inverse of the red CTA, so the only
-     filled-colored button is Connect. A persistent faint-red border keeps it
-     visibly "active" (not disabled) and pre-echoes the red it turns on hover,
-     without reusing the CTA's green or competing for attention. */
+  /* Disconnect = red ("stop"): a filled, saturated button that clearly reads as
+     the inverse of the green Connect. Now BOTH buttons are filled and colorful,
+     so the two manual actions are immediately distinguishable by hue — green =
+     bring the tunnel up, red = tear it down. */
   .btn-disconnect-lg {
-    background: var(--bg-input, var(--bg-card));
-    color: var(--text-secondary);
-    border: 1px solid color-mix(in srgb, var(--red) 35%, var(--border));
-    box-shadow: none;
+    background: linear-gradient(180deg, color-mix(in srgb, #dc2626 88%, #fff) 0%, #dc2626 100%);
+    color: #fff;
+    border: 1px solid color-mix(in srgb, #dc2626 60%, #000);
+    box-shadow: 0 8px 24px color-mix(in srgb, #dc2626 38%, transparent),
+                0 2px 4px rgba(0,0,0,0.10);
   }
-  .btn-disconnect-lg .pa-line { color: var(--text-secondary); }
+  .btn-disconnect-lg .pa-line { color: #fff; }
   .btn-disconnect-lg:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--red) 12%, var(--bg-input, var(--bg-card)));
-    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
-    color: var(--red);
+    background: linear-gradient(180deg, color-mix(in srgb, #dc2626 80%, #fff) 0%, color-mix(in srgb, #dc2626 92%, #000) 100%);
+    border-color: color-mix(in srgb, #dc2626 70%, #000);
+    color: #fff;
     transform: translateY(-1px);
   }
-  .btn-disconnect-lg:hover:not(:disabled) .pa-line { color: var(--red); }
+  .btn-disconnect-lg:hover:not(:disabled) .pa-line { color: #fff; }
   .btn-disconnect-lg:active:not(:disabled) {
+    background: color-mix(in srgb, #000 8%, #dc2626);
     transform: translateY(0);
   }
 

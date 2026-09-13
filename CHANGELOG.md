@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.0] - 2026-09-13
+
+### 🔧 变更
+
+- **代理镜像预设更新** — 设置 → 更新 中的 GitHub 加速镜像预设调整为 `ghfast.top` / `gh-proxy.com` / `ghproxy.net` / `mirror.ghproxy.com` 四项，原有的「自定义镜像」与「本地代理」输入框保留不变。
+- **隧道主界面连接 / 断开按钮配色** — 连接按钮改用绿色（go），断开按钮改用红色（stop），两者均为实色填充、仅靠色相区分，连接 / 断开一眼可辨。
+- **自动化条件 UI 重构**：
+  - 「在此网络」条件更名为 **「在网关 MAC」**，明确其按网关（路由器）MAC 地址指纹识别网络，辨识度更高；并补「网关 MAC 指纹」说明。
+  - 移除 **「任意 Wi-Fi」** 独立选项 —— Wi-Fi SSID 条件现在必须填写具体 SSID，不再提供「任意 Wi-Fi」快捷项。
+  - 移除 **「在有线网络（Ethernet）」** 独立条件 —— 接口（on interface）下拉现在列出**全部网络接口**（含无线网卡），有线的真正区分维度（网关 IP / 网关 MAC / 子网）已单列。
+  - 默认态语义不变：规则不填任何条件即对所有网络生效（这正是「任意」场景的兜底）。
+
+### 🛠 内部
+
+- 旧的 `ethernet` 自动化规则继续被后台引擎兼容（不丢数据）；新规则无法再创建该条件类型。
+
 ## [2.0.0] - 2026-09-13
 
 ### ✨ 新增

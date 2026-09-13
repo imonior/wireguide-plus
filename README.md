@@ -134,8 +134,7 @@ really driving the connection.
 | **Subnet** | Whether the current local IP falls inside a given CIDR (e.g. `192.168.178.0/24`). | Home routers that use a predictable LAN range, not tied to SSID. |
 | **Gateway MAC** | The MAC address of the current default gateway (router) — identifies a specific network even when SSIDs or subnets are generic. | "Never auto-connect on the café router." |
 | **Gateway IP** | The default gateway IP address of the current physical network. | Detect a specific home / office router when SSIDs are too generic. |
-| **Interface** | The name of the physical network adapter the system is routing through. The dropdown lists every physical adapter on the machine, including currently-disconnected ones, so you can pre-write rules for a laptop dock / USB dongle that isn't plugged in yet. | "Only connect the work VPN when I'm on the docked Ethernet adapter." |
-| **On wired network (Ethernet)** | True whenever the system's upstream routing is through a wired (non-wireless) adapter. No SSID needed — pure wired vs wireless decision. | "At the desk (cable) always connect; on Wi-Fi don't." |
+| **Interface** | The name of the network adapter the system is routing through. The dropdown lists **every** network adapter on the machine — Wi-Fi and wired, including currently-disconnected ones — so you can pre-write rules for a laptop dock / USB dongle / Wi-Fi card that isn't active yet. | "Only connect the work VPN when I'm on the docked Ethernet adapter." |
 | **Time window** | A day-of-week set + a start/end time range (local clock). | "From Monday to Friday 09:00–18:00 the office tunnel stays up." |
 
 A single rule can combine any of the above: e.g. **SSID = Office AND Time = Mo–Fr 09–18** is one rule with two AND conditions. Each tunnel supports any number of AND rules under both the disconnect and connect groups.

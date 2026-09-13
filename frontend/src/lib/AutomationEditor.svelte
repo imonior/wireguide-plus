@@ -59,6 +59,7 @@
   // Physical interface names from the live AutomationPreview — used as
   // autocomplete suggestions for the interface condition.
   $: interfaceSuggestions = [...new Set((preview?.interfaces || []).map(x => x.name))];
+  $: allInterfaces = (preview?.interfaces || []).filter(x => x.type && x.type !== 'loopback');
   let saveError = '';
   // loadGen tags each async load so a slow in-flight load(A) can't clobber
   // the rules after the user has already switched to load(B).
@@ -271,6 +272,20 @@
     c.gateway_mac = macCanon(c.gateway_mac);
     rules = rules;
     save();
+  }
+  // Type switch from the condition's outer <select>. Switching families clears
+  // every value field so no stale data carries across. The Wi-Fi SSID family
+  // requires a concrete SSID (there is no "any Wi-Fi" — an empty rule set is the
+  // default "all" state); the interface family defaults to the first detected NIC
+  // (all network ports are listed, including Wi-Fi cards — gateway IP/MAC/subnet
+  // already cover wired-network distinction).
+  function onTypeChange(c, v) {
+    c.type = v;
+    c.ssid = ''; c.subnet = ''; c.gateway_mac = ''; c.gateway_ip = ''; c.interface_name = '';
+    if (v === 'interface') { c.type = 'interface'; c.interface_name = (allInterfaces[0] && allInterfaces[0].name) || ''; }
+    rules = rules;
+    save();
+    schedulePreviewRefresh();
   }
   // Toggle one weekday (0=Sunday … 6=Saturday) on a time condition row.
   function toggleDay(c, d) {
@@ -924,14 +939,12 @@
                         on:dragend={onDragEnd}>
                         <span class="am-handle" draggable="true" title={$t('automation.drag_hint')}
                           on:dragstart={(e) => onDragStart(e, ruleIdx, i)}>⋮⋮</span>
-                          <select class="am-type" bind:value={c.type} on:change={() => { save(); schedulePreviewRefresh(); }} aria-label={$t('automation.condition')}>
+                          <select class="am-type" value={c.type === 'wifi' ? 'ssid' : (c.type === 'ethernet' ? 'interface' : c.type)} on:change={(e) => onTypeChange(c, e.target.value)} aria-label={$t('automation.condition')}>
                           <option value="network">{$t('automation.cond_network')}</option>
                           <option value="subnet">{$t('automation.cond_subnet')}</option>
                           <option value="ssid">{$t('automation.cond_ssid')}</option>
-                          <option value="wifi">{$t('automation.cond_wifi')}</option>
                           <option value="gateway_ip">{$t('automation.cond_gateway_ip')}</option>
                           <option value="interface">{$t('automation.cond_interface')}</option>
-                          <option value="ethernet">{$t('automation.cond_ethernet')}</option>
                           <option value="time">{$t('automation.cond_time')}</option>
                         </select>
                         {#if c.type === 'network'}
@@ -942,6 +955,7 @@
                             title={macInvalid(c.gateway_mac) ? $t('automation.mac_invalid') : ''}
                             bind:value={c.gateway_mac}
                             on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { onMacChange(c); schedulePreviewRefresh(); }} />
+                          <span class="am-cond-note">{$t('automation.cond_network_desc')}</span>
                         {:else if c.type === 'subnet'}
                           <input
                             class="am-val" class:am-invalid={cidrInvalid(c.subnet)}
@@ -950,15 +964,15 @@
                             title={cidrInvalid(c.subnet) ? $t('automation.subnet_invalid') : ''}
                             bind:value={c.subnet}
                             on:input={() => { save(); schedulePreviewRefresh(); }} on:change={() => { save(); schedulePreviewRefresh(); }} />
-                        {:else if c.type === 'ssid'}
+                        {:else if c.type === 'ssid' || c.type === 'wifi'}
                           <input
                             class="am-val"
                             list="am-ssid-list"
                             placeholder={$t('automation.ssid_select_hint')}
                             bind:value={c.ssid}
-                            on:input={() => { save(); schedulePreviewRefresh(); }}
-                            on:change={() => { save(); schedulePreviewRefresh(); }}
-                          />
+                            on:input={() => { c.type = 'ssid'; save(); schedulePreviewRefresh(); }}
+                            on:change={() => { c.type = 'ssid'; save(); schedulePreviewRefresh(); }}
+                            aria-label={$t('automation.cond_ssid')} />
                         {:else if c.type === 'gateway_ip'}
                           <input
                             class="am-val" class:am-invalid={gatewayIPInvalid(c.gateway_ip)}
@@ -969,17 +983,12 @@
                             on:input={() => { save(); schedulePreviewRefresh(); }}
                             on:change={() => { save(); schedulePreviewRefresh(); }}
                           />
-                        {:else if c.type === 'interface'}
-                          <input
-                            class="am-val"
-                            list="am-iface-list"
-                            placeholder={$t('automation.interface_placeholder')}
-                            bind:value={c.interface_name}
-                            on:input={() => { save(); schedulePreviewRefresh(); }}
-                            on:change={() => { save(); schedulePreviewRefresh(); }}
-                          />
-                        {:else if c.type === 'ethernet'}
-                          <span class="am-val am-val-none">{$t('automation.cond_ethernet_desc')}</span>
+                        {:else if c.type === 'interface' || c.type === 'ethernet'}
+                          <select class="am-val" value={c.interface_name}
+                            on:change={(e) => { c.type = 'interface'; c.interface_name = e.target.value; rules = rules; save(); schedulePreviewRefresh(); }}
+                            aria-label={$t('automation.cond_interface')}>
+                            {#each allInterfaces as i}<option value={i.name}>{i.name}{i.type ? ' · ' + ifaceTypeLabel(i.type) : ''}</option>{/each}
+                          </select>
                         {:else if c.type === 'time'}
                           <div class="am-time">
                             <input type="time" class="am-clock" aria-label={$t('automation.time_start')} bind:value={c.start} on:change={() => { save(); schedulePreviewRefresh(); }} />
@@ -992,7 +1001,7 @@
                             </div>
                           </div>
                         {:else}
-                          <span class="am-val am-val-none">{c.type === 'wifi' ? $t('automation.cond_wifi_desc') : ''}</span>
+                          <span class="am-val am-val-none"></span>
                         {/if}
                         <span
                           class="am-live-cond"
@@ -1289,6 +1298,7 @@
   }
   .am-val { flex: 1; min-width: 120px; }
   .am-val-none { color: var(--text-muted); border: 0 !important; background: transparent !important; }
+  .am-cond-note { display: block; margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--text-muted); }
   .am-time {
     flex: 1; min-width: 120px;
     display: flex; align-items: center; gap: 4px; flex-wrap: wrap;

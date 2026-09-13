@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.0] - 2026-09-13
+
+### 🔧 Changed
+
+- **Proxy mirror presets updated** — the GitHub acceleration mirror presets in Settings -> Update are now `ghfast.top` / `gh-proxy.com` / `ghproxy.net` / `mirror.ghproxy.com`; the existing "custom mirror" and "local proxy" input fields are unchanged.
+- **Tunnel connect / disconnect button colors** — the Connect button is now green (go) and the Disconnect button is red (stop); both are solid-filled and distinguished purely by hue, so connect vs. disconnect is obvious at a glance.
+- **Automation condition UI rework**:
+  - The "on this network" condition is renamed to **"on gateway MAC"**, making clear it fingerprints the network by the gateway (router) MAC address and is far more recognizable; a "gateway MAC fingerprint" note is added.
+  - Removed the **"Any Wi-Fi"** standalone option — the Wi-Fi SSID condition now requires a concrete SSID; the "any Wi-Fi" shortcut is gone.
+  - Removed the **"On wired network (Ethernet)"** standalone condition — the interface (on interface) dropdown now lists **every network adapter** (including Wi-Fi cards); the real wired-network discriminators (gateway IP / gateway MAC / subnet) are already separate conditions.
+  - Default-state semantics are unchanged: a rule with no conditions applies to all networks (this is exactly the "any" fallback).
+
+### 🛠 Internal
+
+- Legacy `ethernet` automation rules remain compatible with the backend engine (no data loss); new rules can no longer create that condition type.
+
 ## [2.0.0] - 2026-09-13
 
 ### ✨ Added
