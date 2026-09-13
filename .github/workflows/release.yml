@@ -489,7 +489,7 @@ jobs:
           OUTPUT: CHANGELOG.md
 
       - name: Publish release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: artifacts/*
           draft: false
