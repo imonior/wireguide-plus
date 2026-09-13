@@ -45,6 +45,8 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear).
 - **Per-tunnel physical egress binding** — with Pin Interface enabled, each tunnel's encrypted traffic can be pinned to a specific physical NIC (Windows / Linux / macOS); if the bound NIC disappears, a dialog offers wait / auto-switch / manual pick.
 - **Settings export & import** — bundles tunnels, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
+- **Tools tab** — a built-in **DNS Leak Test** checks whether your traffic actually exits through the configured DNS servers, and **Route Visualization** shows the active routing table with per-route VPN / Direct badges, a LAN on-link filter, and Cellular interface labelling.
+- **Tunnel policies** — per-tunnel DNS resolution paths, force specific domains through the tunnel, traffic protection, default DNS, and deterministic conflict resolution.
 
 ## Fixes & enhancements over upstream wireguide
 
@@ -114,6 +116,15 @@ pick the NIC manually.
   enforces the rules in the background helper, so UI and real behaviour are
   always identical). The same engine is reachable from the command line via
   `wireguideplus automation` — useful for headless checks.
+
+### Manual override
+
+The **Connect** / **Disconnect** buttons in a tunnel's detail view are manual controls. A
+manual connect **forces a connect and ignores every automation rule**; a manual disconnect
+**forces a disconnect and ignores every automation rule** — until the next automation
+decision re-evaluates the network. A latch indicator in the UI shows whether the current
+tunnel action came from a manual override or from automation, so you always know what is
+really driving the connection.
 
 ### Condition types
 
@@ -221,6 +232,10 @@ Notes:
   ```
 - A Homebrew cask ships the arm64 build too — `brew install --cask wireguideplus` pulls
   the same `WireGuidePlus-darwin-arm64.zip`.
+- **Location Services permission (for per-SSID automation).** Per-SSID auto-connect reads the
+  current Wi-Fi SSID, which on macOS requires **Location Services** access. Grant it in
+  **System Settings → Privacy & Security → Location Services** (enable it, then allow
+  WireGuide Plus); without it the SSID condition can't evaluate and SSID-based rules won't fire.
 
 ### Linux (experimental)
 
