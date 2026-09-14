@@ -16,6 +16,10 @@ on:
 
 permissions:
   contents: write  # needed by softprops/action-gh-release to upload assets
+  # Needed by the `gh run download` calls below. actions/download-artifact
+  # uses the run-scoped runtime token instead, so this scope is new — it
+  # only grants reading this repo's own run/artifact metadata.
+  actions: read
 
 env:
   # Hex Ed25519 PUBLIC key baked into every release binary (via
@@ -24,6 +28,21 @@ env:
   # signs SHA256SUMS in the release job; the sign step verifies the pair
   # actually match before publishing. Rotation: docs/release.md.
   UPDATE_SIGNING_PUBKEY: 13eebaa615d8f7a4e177cdf284cc38c31eb678e65136a12557b7950aa0489bc7
+
+# Serialise release pipelines across the whole repository.
+#
+# Root cause of the v2.1.2 cask failure: pushing two tags back to back (or
+# re-running a failed job while a fresh tag was building) started two
+# pipelines at once, and the resulting burst of artifact-API calls tripped
+# GitHub's *secondary* rate limit — the download answered HTTP 403 "You
+# have exceeded a secondary rate limit" and the job died.
+#
+# A single constant group makes overlapping runs queue instead of pile up.
+# cancel-in-progress is false because a release must never be killed
+# half-way through publishing: worse a late release than a broken one.
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
 
 jobs:
   build-macos:
@@ -430,16 +449,49 @@ jobs:
           # out empty.
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v7
-        with:
-          path: artifacts
-          merge-multiple: true  # flattens platform sub-dirs into one folder
-          # Exclude the transient unsigned-windows-* artifacts that the
-          # build-windows job uploads only to feed SignPath. Without
-          # this exclusion, the unsigned and signed .exes share the
-          # same filename (wireguideplus-<arch>-installer.exe) and one
-          # silently overwrites the other under merge-multiple.
-          pattern: '!unsigned-*'
+      - name: Download artifacts
+        # `actions/download-artifact` has no retry hook, and the artifact
+        # API intermittently answers HTTP 403 ("secondary rate limit")
+        # when several runs fetch artifacts within the same minute — that
+        # is what killed the v2.1.2 cask step and would have killed this
+        # one. Pull the artifacts through `gh` in a backoff loop so a
+        # transient 403/5xx costs a wait instead of the whole release.
+        # Waits grow 30s -> 2min; GitHub asks for at least ~1min of quiet
+        # after answering a secondary-limit 403.
+        #
+        # Same semantics as the previous action:
+        #   - merge-multiple: true  -> every artifact flattened into one
+        #     folder (the inner loop copies each artifact dir's contents),
+        #   - pattern: '!unsigned-*' -> the transient unsigned-windows-*
+        #     artifacts are skipped. The build-windows job uploads those
+        #     only to feed SignPath; their installer filenames collide
+        #     with the signed ones, so including them would let one
+        #     silently overwrite the other.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          for attempt in 1 2 3 4 5; do
+            rm -rf _dl && mkdir -p _dl
+            if gh run download "$RUN_ID" --dir _dl; then
+              for dir in _dl/*/; do
+                case "$(basename "$dir")" in unsigned-*) continue;; esac
+                cp -R "$dir". artifacts/
+              done
+              echo "downloaded $(ls -1 artifacts | wc -l | tr -d ' ') file(s):"
+              ls -1 artifacts
+              rm -rf _dl
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              echo "::warning::artifact download attempt ${attempt}/5 failed; backing off $((attempt * 30))s"
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::could not download the run's artifacts after 5 attempts (artifact API rate-limited?)"
+          exit 1
 
       - name: Generate SHA256SUMS
         # Matches the format internal/update/checker.go expects (GNU
@@ -527,11 +579,28 @@ jobs:
           path: tap
 
       - name: Download arm64 artifact
+        # Exactly the step that failed on v2.1.2: the artifact API answered
+        # HTTP 403 "secondary rate limit". See the release job's download
+        # step — we go through `gh` purely to get a retry loop around it.
         if: steps.check_token.outputs.skip == 'false'
-        uses: actions/download-artifact@v7
-        with:
-          name: macos-arm64
-          path: dl
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p dl
+          for attempt in 1 2 3 4 5; do
+            if gh run download "$RUN_ID" --name macos-arm64 --dir dl; then
+              echo "downloaded macos-arm64 on attempt ${attempt}/5"
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              echo "::warning::artifact download attempt ${attempt}/5 failed; backing off $((attempt * 30))s"
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::could not download the macos-arm64 artifact after 5 attempts (artifact API rate-limited?)"
+          exit 1
 
       - name: Compute sha256 + rewrite cask
         if: steps.check_token.outputs.skip == 'false'
