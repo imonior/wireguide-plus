@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.2] - 2026-09-14
+
+### 🐛 Fixed
+
+- **macOS: paste / copy / cut broken in all text fields** — the custom menu bar (`installCustomMenuBar`) previously kept only the App and Help menus and dropped the Edit menu. On macOS, text editing inside the WebView (config, field and script editors, and every input) routes Cmd+X/C/V through the Edit menu's responder chain; without it, paste / copy / cut silently failed everywhere. `application.EditMenu` is now re-added, restoring paste in all text fields (macOS only; Windows / Linux unaffected).
+
 ## [2.1.1] - 2026-09-13
 
 ### 🐛 Fixed

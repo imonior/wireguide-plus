@@ -17,9 +17,11 @@ import (
 //
 // We rebuild the bar explicitly instead:
 //   - App is mandatory on macOS (About/Hide/Quit) and kept as-is.
-//   - File, Edit, View and Window are dropped: the app has no
-//     file/edit operations, and zoom, fullscreen and minimise are all
-//     available in the app's own UI or on the window's title bar.
+//   - File, View and Window are dropped: there are no file operations and
+//     zoom/fullscreen/minimise live in the app UI or the window title bar.
+//   - Edit is KEPT (see the AddRole call below) — the WebView's text
+//     editing (paste/copy/cut in the config/field/script editors) depends
+//     on it; without it those fields silently lose paste.
 //   - Help opens the GitHub project page in the system default browser
 //     (the WebView is never touched).
 //
@@ -33,9 +35,14 @@ func installCustomMenuBar(app *application.App) {
 	}
 	menu := application.NewMenu()
 	menu.AddRole(application.AppMenu)
-	// File/Edit/View/Window menus omitted: nothing useful left to offer —
-	// see doc comment above.
-	// Our Help menu: opens the GitHub project page in the system browser.
+	// Edit is deliberately KEPT: on macOS the WebView routes text-editing
+	// commands (Cut/Copy/Paste/Select All/Undo/Redo → Cmd+X/C/V/⌘Z) through
+	// the Edit menu's responder chain. Dropping it silently breaks paste,
+	// copy and cut in EVERY text field — the config/field/script editors
+	// included — because no menu item validates/answers the paste: selector.
+	menu.AddRole(application.EditMenu)
+	// Help opens the GitHub project page in the system default browser
+	// (the WebView is never touched).
 	help := menu.AddSubmenu("Help")
 	help.Add("Learn More").OnClick(func(*application.Context) {
 		if err := app.Browser.OpenURL(update.GitHubRepoURL); err != nil {

@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.1.2] - 2026-09-14
+
+### 🐛 수정
+
+- **macOS에서 모든 텍스트 입력란의 붙여넣기 / 복사 / 잘라내기 불가** — 이전 사용자 정의 메뉴 막대(`installCustomMenuBar`)는 App과 Help만 남기고 Edit 메뉴를 제거했습니다. macOS에서는 WebView 내 텍스트 편집(설정·필드·스크립트 편집기 및 모든 입력란)의 Cmd+X/C/V 명령이 Edit 메뉴의 responder 체인을 통해 WebView로 라우팅되므로, 이 메뉴가 없으면 붙여넣기 / 복사 / 잘라내기가 모두 조용히 실패합니다. `application.EditMenu` 역할을 다시 추가하여 모든 텍스트 입력란의 붙여넣기를 복원했습니다(macOS만 영향; Windows / Linux는 영향 없음).
+
 ## [2.1.1] - 2026-09-13
 
 ### 🐛 수정

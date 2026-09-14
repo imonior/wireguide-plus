@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.1.2] - 2026-09-14
+
+### 🐛 修復
+
+- **macOS 下所有文字輸入框無法貼上 / 複製 / 剪下** — 先前的自訂選單列（`installCustomMenuBar`）只保留了 App 與 Help，捨棄了 Edit 選單。在 macOS 上，WebView 內的文字編輯（設定、欄位、腳本編輯器及一切輸入框）的 Cmd+X/C/V 等指令是經由選單列 Edit 選單的 responder 鏈路由到 WebView，缺少該選單會導致貼上 / 複製 / 剪下全部靜默失效。現已補回 `application.EditMenu` 角色，恢復全部文字欄位的貼上能力（僅影響 macOS；Windows / Linux 不受影響）。
+
 ## [2.1.1] - 2026-09-13
 
 ### 🐛 修復
