@@ -83,7 +83,17 @@
     "zip_result_title": "Import Results",
     "zip_ok": "Done",
     "zip_summary": "{ok} imported, {fail} failed",
-    "zip_summary_ok": "{ok} imported"
+    "zip_summary_ok": "{ok} imported",
+    "imported": "Imported \"{name}\"",
+    "name_adjusted": "Imported as \"{name}\" — unsupported characters in the file name were replaced."
+  },
+  "name": {
+    "auto_fixed": "\"{from}\" was adjusted to \"{new}\" — only letters, digits, spaces, \"-\" and \"_\" are supported.",
+    "empty": "Name has no usable characters — use letters, digits, spaces, \"-\" or \"_\".",
+    "reserved": "\"{name}\" is a reserved device name and cannot be used — pick another name.",
+    "too_long": "Name is too long (max {max} characters).",
+    "edge_space": "Name cannot start or end with a space.",
+    "invalid_chars": "\"{name}\" contains unsupported characters."
   },
   "editor": {
     "title": "Edit Tunnel: {name}",

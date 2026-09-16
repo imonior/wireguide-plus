@@ -378,24 +378,23 @@
     toastTimer = setTimeout(() => { toast = ''; toastTimer = null; }, 3000);
   }
 
-  // sanitizeImportName maps an arbitrary filename stem to something
-  // ValidateTunnelName will accept — letters, digits, '-', '_', spaces only.
-  // Phone screenshots and shared QR images often have names like
-  // "Some QR (1).png" or "WG · backup.png" that the validator would reject;
-  // refusing the import outright is worse UX than auto-cleaning the name.
-  function sanitizeImportName(raw) {
-    if (!raw) return 'tunnel';
-    let s = raw.replace(/[^A-Za-z0-9\-_ ]+/g, '-')
-               .replace(/-{2,}/g, '-')
-               .replace(/^[-\s]+|[-\s]+$/g, '');
-    if (s.length > 64) s = s.slice(0, 64).replace(/[-\s]+$/g, '');
-    return s || 'tunnel';
+  // Toast text for a finished import. When sanitisation would have changed
+  // the name (phone screenshots and shared QR images are often called
+  // things like "WG · backup.png"), say so — otherwise the user is looking
+  // at a tunnel they never typed with no idea where the name came from.
+  function importToast(baseName, name) {
+    const cleaned = sanitizeTunnelName(baseName).name;
+    const adjusted = cleaned && cleaned !== (baseName ?? '').trim();
+    return adjusted
+      ? $t('import.name_adjusted', { name })
+      : $t('import.imported', { name });
   }
 
   // Generate a unique tunnel name by appending -1, -2, etc. if needed.
-  // The base is sanitised first so callers can pass a raw filename stem.
+  // The base is sanitised first (same rules as a hand-typed name) so
+  // callers can pass a raw filename stem.
   async function uniqueName(baseName) {
-    const cleaned = sanitizeImportName(baseName);
+    const cleaned = sanitizeTunnelName(baseName).name || 'tunnel';
     if (!(await TunnelService.TunnelExists(cleaned))) return cleaned;
     for (let i = 1; i < 1000; i++) {
       const candidate = `${cleaned}-${i}`;
@@ -458,7 +457,7 @@
       gateAWGReminder(content, async () => {
         try {
           await TunnelService.ImportConfig(name, content);
-          showToast(`Imported "${name}"`);
+          showToast(importToast(baseName, name));
           await refreshTunnels(TunnelService);
         } catch (e) {
           showToast("Import failed: " + errText(e));
@@ -477,7 +476,7 @@
       const baseName = await TunnelService.BaseName(path);
       const name = await uniqueName(baseName || 'tunnel');
       await TunnelService.ImportQRFromPath(path, name);
-      showToast(`Imported "${name}"`);
+      showToast(importToast(baseName, name));
       await refreshTunnels(TunnelService);
     } catch (e) {
       showToast('QR import failed: ' + errText(e));
@@ -500,7 +499,7 @@
       const baseName = file.name.replace(/\.[^.]+$/, '') || 'tunnel';
       const name = await uniqueName(baseName);
       await TunnelService.ImportQRFromBytes(btoa(binary), name);
-      showToast(`Imported "${name}"`);
+      showToast(importToast(baseName, name));
       await refreshTunnels(TunnelService);
     } catch (e) {
       showToast('QR import failed: ' + errText(e));
@@ -522,7 +521,7 @@
       gateAWGReminder(content, async () => {
         try {
           await TunnelService.ImportConfig(name, content);
-          showToast(`Imported "${name}"`);
+          showToast(importToast(baseName, name));
           await refreshTunnels(TunnelService);
         } catch (e) {
           showToast("Import failed: " + errText(e));
@@ -699,7 +698,7 @@
   }
 
   async function doSave(e) {
-    const { name: saveName, content: saveContent } = e.detail;
+    const { name: rawName, content: saveContent } = e.detail;
     // Capture the original name into a local at the top of doSave —
     // editorOriginalName is reset by handleEdit on every Edit click,
     // and an Edit on a *different* tunnel arriving while UpdateConfig
@@ -709,9 +708,32 @@
     const wasNew = editorIsNew;
     editorErrors = [];
 
-    if (!saveName) {
+    if (!rawName || !rawName.trim()) {
       editorErrors = [$t('editor.name_required')];
       return;
+    }
+
+    // A hand-typed name gets the same treatment as an imported file name:
+    // unsupported characters are replaced instead of the save being
+    // rejected with a raw English error from Go. Anything left that the
+    // backend would still refuse (a reserved device name) is reported via
+    // a localised message.
+    const fix = sanitizeTunnelName(rawName);
+    if (!fix.name) {
+      editorErrors = [$t('name.empty')];
+      return;
+    }
+    const invalid = validateTunnelName(fix.name);
+    if (invalid) {
+      editorErrors = [$t(invalid.key, invalid.params)];
+      return;
+    }
+    const saveName = fix.name;
+    if (fix.changed) {
+      // Reflect what will actually be saved back into the editor's name
+      // field, and tell the user why the name is not what they typed.
+      editName = fix.name;
+      showToast($t('name.auto_fixed', { from: fix.original, to: fix.name }));
     }
 
     try {
@@ -1098,7 +1120,8 @@
                 on:edit={handleEdit}
                 on:export={handleExport}
                 on:connect={handleConnect}
-                on:refresh={handleRefresh} />
+                on:refresh={handleRefresh}
+                on:notify={(e) => showToast(e.detail)} />
               {#if $connectionStatus?.state === 'connected' && $connectionStatus?.tunnel_name === $selectedTunnel?.name}
                 <div class="stats-section">
                   <StatsDashboard />

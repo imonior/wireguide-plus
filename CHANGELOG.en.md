@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.0] - 2026-09-16
+
+### ✨ Added
+
+- **Tunnel-name validation and sanitising (shared module)**: a new frontend module `tunnel-name.js` mirrors every rule of the backend `ValidateTunnelName()` (allowed characters `A-Za-z0-9-_ `, 64-char limit, no leading/trailing spaces, no Windows reserved device names) and is shared by all three entry points — **import**, the **config editor's name field** and **rename on the detail page** — so their behaviour is now identical.
+- **Notice when a name is auto-corrected**: illegal characters (`.`, `()`, `·`, non-ASCII, etc.) are replaced with `-` and a toast reports "original → saved name", so the change can no longer look like a silent failure.
+
+### 🔧 Changed
+
+- **Manual rename now behaves like import**: renaming previously surfaced the backend's raw English error on an illegal character while import silently sanitised — the two disagreed. Now **illegal characters are always auto-replaced, with a notice**. Only two cases survive sanitising and raise an explicit error: a name made up entirely of illegal characters (empty afterwards) and a Windows reserved device name (`CON` / `NUL` / `COM1`, ...).
+- **The editor's name field shows the name that will actually be saved**, so it can no longer read "A" while storing "B".
+- **Localised prompts**: the import success toast was hardcoded English (`Imported "x"`); it now goes through i18n, and a dedicated message explains when the file name had to be adjusted (all 5 languages).
+
+### 🛠 Internal
+
+- **Reserved device names extended**: `reservedDeviceNames` gains `CONIN$` / `CONOUT$` (defensive entries — `$` is already outside the allowed character set) plus a new `TestReservedDeviceNamesCoverage` that pins the map itself, so a dropped entry can no longer go unnoticed.
+
 ## [2.1.2] - 2026-09-14
 
 ### 🐛 Fixed

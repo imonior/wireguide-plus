@@ -83,7 +83,17 @@
     "zip_result_title": "匯入結果",
     "zip_ok": "完成",
     "zip_summary": "{ok} 成功，{fail} 失敗",
-    "zip_summary_ok": "{ok} 已匯入"
+    "zip_summary_ok": "{ok} 已匯入",
+    "imported": "已匯入 \"{name}\"",
+    "name_adjusted": "已匯入為 \"{name}\" —— 檔名中不支援的字元已被取代。"
+  },
+  "name": {
+    "auto_fixed": "\"{from}\" 已自動調整為 \"{new}\" —— 僅支援字母、數字、空格、\"-\" 與 \"_\"。",
+    "empty": "名稱中沒有可用字元 —— 請使用字母、數字、空格、\"-\" 或 \"_\"。",
+    "reserved": "\"{name}\" 是系統保留裝置名稱，無法使用 —— 請改用其他名稱。",
+    "too_long": "名稱過長（最多 {max} 個字元）。",
+    "edge_space": "名稱不能以空格開頭或結尾。",
+    "invalid_chars": "\"{name}\" 含有不支援的字元。"
   },
   "editor": {
     "title": "編輯隧道：{name}",

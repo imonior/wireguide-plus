@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · English: [CHANGELOG.en.md](CHANGELOG.en.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.0] - 2026-09-16
+
+### ✨ 新增
+
+- **隧道名稱校驗與淨化（共享模組）**：新增前端模組 `tunnel-name.js`，鏡像後端 `ValidateTunnelName()` 的全部規則（允許字元 `A-Za-z0-9-_ `、≤64 字元、禁首尾空格、禁 Windows 保留裝置名稱），供**匯入**、**設定編輯器名稱欄**、**詳情頁重新命名**三處錄入點共用，行為完全一致。
+- **名稱自動修正提示**：名稱中的非法字元（如 `.`、`()`、`·`、中文等）會自動替換為 `-`，並以 toast 告知「原名 → 實際儲存名」，不再讓使用者誤以為寫入失敗。
+
+### 🔧 變更
+
+- **手動改名行為與匯入統一**：此前手動改名遇到非法字元會直接彈出後端英文報錯，而匯入則靜默改名，兩者行為不一致；現在**一律自動替換非法字元並提示**。淨化後仍無法成立的僅剩兩種情況，會明確報錯：輸入全為非法字元（改後為空）與 Windows 保留裝置名稱（`CON`/`NUL`/`COM1` 等）。
+- **編輯器名稱欄回顯實際儲存名**：儲存後名稱欄顯示的是真正落盤的名字，避免「以為叫 A、實際存成 B」。
+- **提示文案多語言化**：匯入成功的提示此前是硬編碼英文（`Imported "x"`），現統一走 i18n；檔名被修正時改用專門文案說明原因（5 語言齊備）。
+
+### 🛠 內部
+
+- **保留裝置名稱補充**：`reservedDeviceNames` 補入 `CONIN$` / `CONOUT$`（防禦性條目，`$` 本不在允許字元集內），並新增 `TestReservedDeviceNamesCoverage` 直接釘住該表，防止條目被誤刪而無測試報警。
+
 ## [2.1.2] - 2026-09-14
 
 ### 🐛 修復

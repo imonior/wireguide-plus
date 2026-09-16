@@ -9,8 +9,14 @@ import (
 // as a file's base name regardless of extension (CON.conf still resolves to
 // the console device). Rejected on every platform for portability — a config
 // synced from macOS/Linux to Windows must not become unusable.
+//
+// CONIN$ / CONOUT$ are part of the documented Windows list. They are kept
+// here for parity with that list even though the character check below
+// already rejects '$', so they cannot currently be reached — see
+// TestReservedDeviceNamesCoverage.
 var reservedDeviceNames = map[string]bool{
 	"CON": true, "PRN": true, "AUX": true, "NUL": true,
+	"CONIN$": true, "CONOUT$": true,
 	"COM1": true, "COM2": true, "COM3": true, "COM4": true, "COM5": true,
 	"COM6": true, "COM7": true, "COM8": true, "COM9": true,
 	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true, "LPT5": true,

@@ -83,7 +83,17 @@
     "zip_result_title": "导入结果",
     "zip_ok": "完成",
     "zip_summary": "{ok} 成功，{fail} 失败",
-    "zip_summary_ok": "{ok} 已导入"
+    "zip_summary_ok": "{ok} 已导入",
+    "imported": "已导入 \"{name}\"",
+    "name_adjusted": "已导入为 \"{name}\" —— 文件名中的不支持字符已被替换。"
+  },
+  "name": {
+    "auto_fixed": "\"{from}\" 已自动调整为 \"{new}\" —— 仅支持字母、数字、空格、\"-\" 和 \"_\"。",
+    "empty": "名称中没有可用字符 —— 请使用字母、数字、空格、\"-\" 或 \"_\"。",
+    "reserved": "\"{name}\" 是系统保留设备名，无法使用 —— 请换一个名称。",
+    "too_long": "名称过长（最多 {max} 个字符）。",
+    "edge_space": "名称不能以空格开头或结尾。",
+    "invalid_chars": "\"{name}\" 含有不支持的字符。"
   },
   "editor": {
     "title": "编辑隧道：{name}",

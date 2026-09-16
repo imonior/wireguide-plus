@@ -4,6 +4,7 @@
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
+  import { sanitizeTunnelName, validateTunnelName } from './tunnel-name.js';
   import { createEventDispatcher, tick, onDestroy } from 'svelte';
   import AutomationEditor from './AutomationEditor.svelte';
 
@@ -360,12 +361,27 @@
       return;
     }
     const oldName = $selectedTunnel.name;
-    const newName = renameValue.trim();
     renaming = false;
-    if (!newName || newName === oldName) return;
+
+    // Same treatment as an imported file name: unsupported characters are
+    // replaced rather than rejected, so the user is never stuck guessing
+    // which character the backend dislikes. They are told what the name
+    // became (toast via the parent) instead of being met with a raw
+    // English error from Go.
+    const fix = sanitizeTunnelName(renameValue);
+    if (!fix.name || fix.name === oldName) return;
+    const invalid = validateTunnelName(fix.name);
+    if (invalid) {
+      error = $t(invalid.key, invalid.params);
+      return;
+    }
+    error = '';
+    if (fix.changed) {
+      dispatch('notify', $t('name.auto_fixed', { from: fix.original, to: fix.name }));
+    }
     try {
-      await TunnelService.RenameTunnel(oldName, newName);
-      selectedTunnel.set({ ...$selectedTunnel, name: newName });
+      await TunnelService.RenameTunnel(oldName, fix.name);
+      selectedTunnel.set({ ...$selectedTunnel, name: fix.name });
       dispatch('refresh');
     } catch (e) {
       error = errText(e);
