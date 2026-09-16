@@ -440,6 +440,8 @@ jobs:
     name: Publish GitHub Release
     needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
+    outputs:
+      macos_sha: ${{ steps.gen.outputs.macos_sha }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -494,13 +496,20 @@ jobs:
           exit 1
 
       - name: Generate SHA256SUMS
+        id: gen
         # Matches the format internal/update/checker.go expects (GNU
         # coreutils two-space layout). Signed below — the checker
         # downloads SHA256SUMS.sig from next to this file.
+        #
+        # Expose the macOS zip's SHA256 as a job output so the cask bump
+        # job never has to hit the GitHub *artifact* API (which rate-limits
+        # and broke the cask step on v2.1.2 and v2.2.0). The hash is
+        # handed straight from this job instead.
         run: |
           cd artifacts
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+          echo "macos_sha=$(awk '/WireGuidePlus-darwin-arm64\.zip$/ {print $1; exit}' SHA256SUMS)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6
         with:
@@ -578,40 +587,25 @@ jobs:
           token: ${{ secrets.TAP_PUSH_TOKEN }}
           path: tap
 
-      - name: Download arm64 artifact
-        # Exactly the step that failed on v2.1.2: the artifact API answered
-        # HTTP 403 "secondary rate limit". See the release job's download
-        # step — we go through `gh` purely to get a retry loop around it.
-        if: steps.check_token.outputs.skip == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          mkdir -p dl
-          for attempt in 1 2 3 4 5; do
-            if gh run download "$RUN_ID" --name macos-arm64 --dir dl; then
-              echo "downloaded macos-arm64 on attempt ${attempt}/5"
-              exit 0
-            fi
-            if [ "$attempt" -lt 5 ]; then
-              echo "::warning::artifact download attempt ${attempt}/5 failed; backing off $((attempt * 30))s"
-              sleep $((attempt * 30))
-            fi
-          done
-          echo "::error::could not download the macos-arm64 artifact after 5 attempts (artifact API rate-limited?)"
-          exit 1
-
       - name: Compute sha256 + rewrite cask
+        # No artifact download here any more — the macOS zip's SHA256 is
+        # passed straight from the release job's `macos_sha` output, so this
+        # job never touches the rate-limited GitHub artifact API (that's
+        # what failed on v2.1.2 and v2.2.0).
         if: steps.check_token.outputs.skip == 'false'
         env:
           TAG: ${{ github.ref_name }}
+          MACOS_SHA: ${{ needs.release.outputs.macos_sha }}
         run: |
           set -e
           # Strip the leading 'v' from vX.Y.Z so the cask `version` line
           # matches Homebrew convention.
           version="${TAG#v}"
-          sha256=$(sha256sum dl/WireGuidePlus-darwin-arm64.zip | awk '{print $1}')
+          sha256="$MACOS_SHA"
+          if [ -z "$sha256" ]; then
+            echo "::error::macOS SHA256 was not provided by the release job; refusing to write an empty cask."
+            exit 1
+          fi
           cask="tap/Casks/wireguideplus.rb"
 
           # Heredoc-rewrite the whole cask in one shot. Doing it via sed
