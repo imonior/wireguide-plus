@@ -16,7 +16,7 @@ jobs:
     name: Linux (test + package)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-go@v6.5.0
         with:
@@ -100,7 +100,7 @@ jobs:
     name: macOS (test)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-go@v6.5.0
         with:
@@ -127,7 +127,7 @@ jobs:
     name: Windows (test)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-go@v6.5.0
         with:
