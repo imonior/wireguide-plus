@@ -121,6 +121,7 @@
     "cancel": "취소",
     "name_placeholder": "터널 이름",
     "name_required": "터널 이름을 입력하세요",
+    "saving": "저장 중…",
     "tab_conf": "conf 편집기",
     "tab_fields": "필드 편집",
     "close": "닫기"

@@ -64,15 +64,33 @@
   }
 
   onMount(load);
-  $: if (reloadKey !== undefined && reloadKey > 0 && typeof content === 'string') {
+
+  // Re-parse when the PARENT asks for it (the fields tab becoming visible,
+  // or the conf text having been edited elsewhere), and not because `content`
+  // changed. This component rewrites `content` itself on every flush, so
+  // depending on it would make each keystroke reload the model underneath
+  // the user — the value they just typed gets replaced mid-edit.
+  let seenReloadKey = 0;
+  $: if (reloadKey !== undefined && reloadKey !== seenReloadKey) {
+    seenReloadKey = reloadKey;
     load();
   }
 
-  // Apply the working model back onto the conf text. Fired on every input
-  // change (blur) so the parent's bind:content is always current by the
-  // time Save runs.
-  async function apply() {
-    if (!TunnelService) return;
+  // Serialize every rewrite. Two in flight at once race each other: RPCs are
+  // not ordered by issue time, so a slow first call can land after a fast
+  // second one and quietly restore the older body.
+  let applyChain = Promise.resolve();
+
+  // Apply the working model back onto the conf text. Returns whether the
+  // rewrite succeeded, because the caller decides what a failure means: a
+  // blur can shrug and keep going, a Save must not.
+  function apply() {
+    applyChain = applyChain.then(applyOnce, applyOnce);
+    return applyChain;
+  }
+
+  async function applyOnce() {
+    if (!TunnelService) return true;
     const model = {
       interface: pick(iface, [...IFACE_STD, ...(awgOn ? IFACE_AWG : [])]),
       peers: peers.map((p, i) => pick(p, PEER_KEYS)),
@@ -82,8 +100,10 @@
       if (typeof updated === 'string') {
         content = updated;
       }
+      return true;
     } catch (e) {
       loadErr = e?.message || String(e);
+      return false;
     }
   }
 
@@ -102,7 +122,26 @@
   }
 
   function onNameInput(e) { name = e.target.value; }
-  function doSave() { dispatch('save', { name, content }); }
+
+  // Save has to flush before it dispatches. The last keystroke's own
+  // blur-apply is an async RPC that may still be in flight by the time the
+  // user reaches for the button, and `content` is only rewritten when it
+  // resolves — dispatching immediately hands the parent the body as it was
+  // BEFORE those edits, so the tunnel saves and nothing changes.
+  let saving = false;
+  async function doSave() {
+    if (saving) return;
+    saving = true;
+    try {
+      const ok = await apply();
+      // Refuse to save on a failed rewrite rather than dispatching a stale
+      // body: silently writing the old text is worse than not writing at all.
+      if (!ok) return;
+      dispatch('save', { name, content });
+    } finally {
+      saving = false;
+    }
+  }
   function doCancel() { dispatch('cancel'); }
 </script>
 
@@ -117,8 +156,10 @@
       <span class="fe-title">{name}</span>
     {/if}
     <div class="fe-actions">
-      <button class="fe-btn fe-btn-ghost" on:click={doCancel}>{$t('editor.cancel')}</button>
-      <button class="fe-btn fe-btn-primary" on:click={doSave}>{$t('editor.save')}</button>
+      <button class="fe-btn fe-btn-ghost" on:click={doCancel} disabled={saving}>{$t('editor.cancel')}</button>
+      <button class="fe-btn fe-btn-primary" on:click={doSave} disabled={saving}>
+        {saving ? $t('editor.saving') : $t('editor.save')}
+      </button>
     </div>
   </div>
 

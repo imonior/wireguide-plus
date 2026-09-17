@@ -121,6 +121,7 @@
     "cancel": "取消",
     "name_placeholder": "隧道名稱",
     "name_required": "隧道名稱必填",
+    "saving": "儲存中…",
     "tab_conf": "conf 編輯器",
     "tab_fields": "欄位編輯",
     "close": "關閉"

@@ -121,6 +121,7 @@
     "cancel": "キャンセル",
     "name_placeholder": "トンネル名",
     "name_required": "トンネル名を入力してください",
+    "saving": "保存中…",
     "tab_conf": "conf エディタ",
     "tab_fields": "フィールド編集",
     "close": "閉じる"

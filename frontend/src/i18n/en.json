@@ -121,6 +121,7 @@
     "cancel": "Cancel",
     "name_placeholder": "Tunnel name",
     "name_required": "Tunnel name is required",
+    "saving": "Saving…",
     "tab_conf": "conf editor",
     "tab_fields": "field editor",
     "close": "Close"
