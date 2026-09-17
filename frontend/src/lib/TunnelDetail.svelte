@@ -318,14 +318,35 @@
   // the name alone hides the one thing worth knowing when a tunnel suddenly
   // misbehaves: which address it is actually dialling.
   //
-  // The value comes off the probe stream rather than a fresh DNS lookup:
-  // the endpoint is probed every cycle, so this is the address the helper
-  // measured against, not a second opinion that could disagree.
+  // Primary source is the UAPI connection address (status.endpoint): once the
+  // link is up WireGuard reports the actual peer endpoint it handshook with, so
+  // the hero shows the resolved IP from the first status tick — no waiting for
+  // the next probe cycle. A fresh DNS lookup is avoided on purpose: the helper
+  // also hands the probe the same UAPI address, so resolving it yields nothing
+  // (it is already an IP) and used to leave the hero permanently blank.
   $: endpointLiveIP = (() => {
     const ep = ($selectedTunnel?.endpoint || '').trim();
     if (!ep) return '';
     // A literal address has nothing to resolve — printing it twice is noise.
     if (parseIP(stripPort(ep))) return '';
+
+    // Best source: the address WireGuard is ACTUALLY talking to. When the link
+    // is up, status.endpoint is read from the UAPI peer entry, i.e. the
+    // endpoint chosen at handshake time — authoritative, and present from the
+    // first status tick rather than after the next probe cycle.
+    //
+    // This deliberately does not rely on probing alone: the helper hands the
+    // probe candidates `status.endpoint` too, so once connected the endpoint
+    // row carries the resolved IP already, which resolves to nothing (it is an
+    // address, not a name) and used to leave the hero permanently blank.
+    if (isConnected) {
+      const actual = (status?.endpoint || '').trim();
+      const actualIP = actual ? stripPort(actual) : '';
+      if (actualIP && parseIP(actualIP)) return actualIP;
+    }
+
+    // Fallback: the probe stream's own resolution of the endpoint name, for
+    // the window before the link settles.
     const rows = probeResults;
     const byKind = rows.find(r => r.kind === 'endpoint' && r.resolved_ip);
     if (byKind) return byKind.resolved_ip;
@@ -1037,30 +1058,6 @@
       </div>
     {/if}
 
-    <!-- DETAIL CARD: peers + DNS (snake_case fields off the IPC payload). -->
-    {#if detail}
-      <div class="info-section">
-        <div class="info-card detail-info-card">
-          {#each detail.peers || [] as peer}
-            <div class="info-row">
-              <span class="info-label">{$t('tunnel.allowed_ips')}</span>
-              <span class="info-value">{(peer.allowed_ips || []).join(', ') || '—'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">{$t('tunnel.public_key')}</span>
-              <span class="info-value mono">{peer.public_key?.substring(0, 20)}…</span>
-            </div>
-          {/each}
-          {#if detail.interface?.dns?.length}
-            <div class="info-row">
-              <span class="info-label">DNS</span>
-              <span class="info-value">{detail.interface.dns.join(', ')}</span>
-            </div>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
     <!-- NOTES -->
     <div class="info-section">
       <h3 class="section-label">{$t('tunnel.notes')}</h3>
@@ -1583,10 +1580,13 @@
     margin-bottom: 6px;
   }
   /* Latency display + target editor on ONE row: the reading and the input
-     that drives it share a line so they are obviously the same thing. */
+     that drives it share a line so they are obviously the same thing.
+     The reading column is the narrower one: a headline RTT plus a few rows
+     need far less room than the editor, whose values are IP/hostname strings
+     that should not be clipped mid-domain. */
   .latency-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
     gap: 12px;
     margin-bottom: 6px;
     align-items: stretch;
@@ -1718,6 +1718,10 @@
   .probe-resolved {
     color: var(--text-muted);
     font-size: 10px;
+    /* Without this a flex item refuses to shrink below its content width and
+       pushes the row past the card edge — exactly what happens now that the
+       latency column is the narrow one. */
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1782,36 +1786,6 @@
     border: 0.5px solid var(--border);
     border-radius: 12px;
     overflow: hidden;
-  }
-  .detail-info-card {
-    border: 0;
-    background: transparent;
-    border-radius: 0;
-  }
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    padding: 11px 14px;
-    font: 13px/18px var(--font-sans);
-  }
-  .info-label { color: var(--text-secondary); flex-shrink: 0; }
-  .info-value {
-    color: var(--text-primary);
-    text-align: right;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    /* Public key / DNS / AllowedIPs are values a user lifts out of the app
-       to paste somewhere else; the global opt-out would block that. */
-    user-select: text;
-    -webkit-user-select: text;
-    cursor: text;
-  }
-  .info-value.mono {
-    font-family: var(--font-mono);
-    font-size: 11px;
   }
   .endpoint-card {
     min-height: 50px;
