@@ -6,6 +6,7 @@ export {
     ConnectionStatus,
     InterfaceConfig,
     PeerConfig,
+    ProbeResult,
     State,
     WireGuardConfig
 } from "./models.js";

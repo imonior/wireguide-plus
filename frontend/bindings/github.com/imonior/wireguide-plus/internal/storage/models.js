@@ -628,6 +628,20 @@ export class Settings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * ManualOnTunnels is the mirror of ManualOffTunnels: tunnels the user
+             * has manually switched ON. While a tunnel is listed, the automation
+             * engine refuses to auto-DISCONNECT it even when rules match — the
+             * user's manual on wins until they manually disconnect that tunnel
+             * once or the app restarts (the GUI clears the list on startup).
+             * The two latches are mutually exclusive: a tunnel appears in at most
+             * one of the lists.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["manual_on_tunnels"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * ProxyMode controls outbound proxying for update checks: "direct"
              * (default, no proxy), "mirror" (rewrite the API URL through a GitHub
              * accelerator prefix stored in ProxyURL) or "manual" (use ProxyURL as
@@ -698,8 +712,9 @@ export class Settings {
         const $$createField19_0 = $$createType3;
         const $$createField20_0 = $$createType5;
         const $$createField21_0 = $$createType2;
-        const $$createField24_0 = $$createType2;
+        const $$createField22_0 = $$createType2;
         const $$createField25_0 = $$createType2;
+        const $$createField26_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
             $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
@@ -710,11 +725,14 @@ export class Settings {
         if ("manual_off_tunnels" in $$parsedSource) {
             $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
         }
+        if ("manual_on_tunnels" in $$parsedSource) {
+            $$parsedSource["manual_on_tunnels"] = $$createField22_0($$parsedSource["manual_on_tunnels"]);
+        }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField24_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField25_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField25_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField26_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

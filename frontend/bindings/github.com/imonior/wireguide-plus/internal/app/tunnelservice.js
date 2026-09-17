@@ -150,22 +150,22 @@ export function CheckSSIDPermission() {
 }
 
 /**
+ * ClearAllManualOverrides releases every manual latch (both off and on),
+ * restoring full automation. The GUI calls this on startup so a fresh app
+ * session resumes automatic rule enforcement ("manual override only lasts
+ * until the app is reopened").
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearAllManualOverrides() {
+    return $Call.ByID(995783802);
+}
+
+/**
  * ClearConnectionHistory wipes the history file.
  * @returns {$CancellablePromise<void>}
  */
 export function ClearConnectionHistory() {
     return $Call.ByID(1265921728);
-}
-
-/**
- * ClearManualOffAll releases every manually-off tunnel, restoring full
- * automation. The GUI calls this on startup so a fresh app session
- * resumes automatic rule enforcement ("manual off until the app is
- * reopened").
- * @returns {$CancellablePromise<void>}
- */
-export function ClearManualOffAll() {
-    return $Call.ByID(533549758);
 }
 
 /**
@@ -574,8 +574,8 @@ export function ListPhysicalInterfaces() {
  * the status event stream. The frontend now learns the active tunnel from
  * the status event itself, and the tray caches it internally — so this
  * function stays fully local (disk-only, no IPC) and returns IsConnected
- * purely as a best-effort flag based on a single active-name probe that is
- * safe to skip entirely on slow paths.
+ * purely as a best-effort flag based on a single established-tunnels probe
+ * that is safe to skip entirely on slow paths.
  * @returns {$CancellablePromise<$models.TunnelInfo[]>}
  */
 export function ListTunnels() {
@@ -732,18 +732,31 @@ export function ReadScriptFile(path) {
  * user-initiated Disconnect / DisconnectTunnel are preserved across cache
  * refreshes — only LoadAndDelete on close clears them.
  * 
- * Fast-path: if the sorted active set hasn't changed since the prior call
- * (the steady-state case at 1 Hz), we skip the activeSessions Range and the
- * open-session loop. The stats cache still gets updated so the eventual
- * disappear-close uses fresh counters.
+ * Fast-path: if the sorted active set — including each tunnel's handshake
+ * state — hasn't changed since the prior call (the steady-state case at 1 Hz),
+ * we skip the activeSessions Range and the open-session loop. The stats cache
+ * still gets updated so the eventual disappear-close uses fresh counters.
+ * 
+ * Handshake gating: a session is opened only once the tunnel has actually
+ * completed a handshake. `ActiveTunnels` also reports StateConnecting, so a
+ * failed attempt (DNS lookup failure, adapter creation error, rejected
+ * handshake) used to produce a "connected then immediately disconnected"
+ * history row even though the tunnel never carried traffic. Those attempts
+ * are now held in pendingSessions and simply dropped when they disappear —
+ * or promoted to a real session the moment a handshake lands.
+ * 
+ * handshakeMap may be nil (older/non-GUI callers, CLI). In that case the
+ * handshake state is unknown and we keep the previous behaviour of opening
+ * the session immediately, so history is never silently lost.
  * @param {string[]} activeNames
+ * @param {{ [_ in string]?: boolean }} handshakeMap
  * @param {{ [_ in string]?: number }} rxByTunnel
  * @param {{ [_ in string]?: number }} txByTunnel
  * @param {string} disappearReason
  * @returns {$CancellablePromise<void>}
  */
-export function ReconcileHistoryFromStatus(activeNames, rxByTunnel, txByTunnel, disappearReason) {
-    return $Call.ByID(467549465, activeNames, rxByTunnel, txByTunnel, disappearReason);
+export function ReconcileHistoryFromStatus(activeNames, handshakeMap, rxByTunnel, txByTunnel, disappearReason) {
+    return $Call.ByID(467549465, activeNames, handshakeMap, rxByTunnel, txByTunnel, disappearReason);
 }
 
 /**
@@ -1016,15 +1029,30 @@ export function SetTunnelFields(content, fields) {
 }
 
 /**
- * SetTunnelLatencyProbeTarget persists the optional per-tunnel ICMP target
- * used only for latency display. The value is deliberately stored outside the
+ * SetTunnelLatencyProbeTargets persists the four-slot probe-target list used
+ * only for latency display. The values are deliberately stored outside the
  * WireGuard .conf so exports remain compatible with other clients.
+ * 
+ * Returns the address each slot resolved to ("" for an empty slot or a
+ * literal IP), so the editor can show what a hostname points at the moment
+ * it is saved. Resolving on load instead would mean a DNS lookup per tunnel
+ * just to open the panel — the live value is refreshed by the helper's probe
+ * cycle anyway.
+ * 
+ * Slots 0/1 are the positional public-probe overrides. On a split tunnel
+ * they are hidden by the editor and ignored by the probe planner, so their
+ * validation is skipped too: rejecting 8.8.8.8 there would make the stored
+ * default unsaveable the moment the tunnel stops being a full tunnel. The
+ * editor sends the stored values back unchanged for those rows, so hiding
+ * them never wipes them.
  * @param {string} name
- * @param {string} target
- * @returns {$CancellablePromise<void>}
+ * @param {string[]} targets
+ * @returns {$CancellablePromise<string[]>}
  */
-export function SetTunnelLatencyProbeTarget(name, target) {
-    return $Call.ByID(1451294038, name, target);
+export function SetTunnelLatencyProbeTargets(name, targets) {
+    return $Call.ByID(1376682303, name, targets).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType11($result);
+    }));
 }
 
 /**

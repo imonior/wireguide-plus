@@ -98,13 +98,65 @@ export class ConnectionStatus {
         }
         if (/** @type {any} */(false)) {
             /**
+             * LatencyProbeTarget is the address that actually produced LatencyMs
+             * (one of the configured candidates), so the UI can show what the
+             * number refers to instead of an unattributed figure.
+             * @member
+             * @type {string | undefined}
+             */
+            this["latency_probe_target"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LatencyProbeState reports the outcome of the last probe cycle:
+             *   "ok"          — a candidate answered; LatencyMs is its RTT.
+             *   "unreachable" — every candidate failed. The tunnel may still be up
+             *                   (ICMP is commonly filtered), but from the user's
+             *                   point of view nothing behind it answers.
+             *   ""            — not measured yet.
+             * Distinct from LatencyMs == 0, which is ambiguous between "no
+             * measurement" and "nothing reachable".
+             * @member
+             * @type {string | undefined}
+             */
+            this["latency_probe_state"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LatencyProbeResults carries the per-candidate breakdown behind
+             * LatencyMs: every candidate is probed every cycle, so the UI can
+             * render one row per target with its own health colour instead of a
+             * single unattributed number. Empty until the first probe completes.
+             * @member
+             * @type {ProbeResult[] | undefined}
+             */
+            this["latency_probe_results"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * ActiveTunnels lists the names of all currently connected (or connecting)
              * tunnels. Populated by the multi-tunnel manager so the frontend can show
              * which tunnels are active.
+             * 
+             * "Active" here means *transitioning or up*: it includes a tunnel that is
+             * still connecting and may yet fail. Use EstablishedTunnels for anything
+             * that must not lie to the user (green badge, tray icon, tray bubble).
              * @member
              * @type {string[] | undefined}
              */
             this["active_tunnels"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * EstablishedTunnels lists the names of tunnels that have finished
+             * setup and reached StateConnected — the subset of ActiveTunnels that
+             * genuinely carries traffic. Rendered states (badge, icon, "Connected"
+             * popup) key off this list, so a tunnel whose connect attempt fails is
+             * never advertised as connected for the duration of its attempt.
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["established_tunnels"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**
@@ -125,14 +177,22 @@ export class ConnectionStatus {
      * @returns {ConnectionStatus}
      */
     static createFrom($$source = {}) {
-        const $$createField10_0 = $$createType0;
-        const $$createField11_0 = $$createType2;
+        const $$createField12_0 = $$createType1;
+        const $$createField13_0 = $$createType2;
+        const $$createField14_0 = $$createType2;
+        const $$createField15_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("latency_probe_results" in $$parsedSource) {
+            $$parsedSource["latency_probe_results"] = $$createField12_0($$parsedSource["latency_probe_results"]);
+        }
         if ("active_tunnels" in $$parsedSource) {
-            $$parsedSource["active_tunnels"] = $$createField10_0($$parsedSource["active_tunnels"]);
+            $$parsedSource["active_tunnels"] = $$createField13_0($$parsedSource["active_tunnels"]);
+        }
+        if ("established_tunnels" in $$parsedSource) {
+            $$parsedSource["established_tunnels"] = $$createField14_0($$parsedSource["established_tunnels"]);
         }
         if ("tunnels" in $$parsedSource) {
-            $$parsedSource["tunnels"] = $$createField11_0($$parsedSource["tunnels"]);
+            $$parsedSource["tunnels"] = $$createField15_0($$parsedSource["tunnels"]);
         }
         return new ConnectionStatus(/** @type {Partial<ConnectionStatus>} */($$parsedSource));
     }
@@ -346,9 +406,9 @@ export class InterfaceConfig {
      * @returns {InterfaceConfig}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType0;
-        const $$createField2_0 = $$createType0;
-        const $$createField11_0 = $$createType3;
+        const $$createField1_0 = $$createType2;
+        const $$createField2_0 = $$createType2;
+        const $$createField11_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("address" in $$parsedSource) {
             $$parsedSource["address"] = $$createField1_0($$parsedSource["address"]);
@@ -430,8 +490,8 @@ export class PeerConfig {
      * @returns {PeerConfig}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType0;
-        const $$createField5_0 = $$createType3;
+        const $$createField3_0 = $$createType2;
+        const $$createField5_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("allowed_ips" in $$parsedSource) {
             $$parsedSource["allowed_ips"] = $$createField3_0($$parsedSource["allowed_ips"]);
@@ -440,6 +500,111 @@ export class PeerConfig {
             $$parsedSource["extra_keys"] = $$createField5_0($$parsedSource["extra_keys"]);
         }
         return new PeerConfig(/** @type {Partial<PeerConfig>} */($$parsedSource));
+    }
+}
+
+/**
+ * ProbeResult is the outcome of pinging ONE candidate address.
+ * 
+ * Every candidate is probed on every cycle — not "first one that answers
+ * wins" — because each row answers a different question: the public probes
+ * say whether the tunnel path works, the endpoint says whether the peer is
+ * reachable, and a user-pinned target says whether that specific host is up.
+ * Aggregating them into a single number hid exactly the information that
+ * makes the reading useful.
+ */
+export class ProbeResult {
+    /**
+     * Creates a new ProbeResult instance.
+     * @param {Partial<ProbeResult>} [$$source = {}] - The source object to create the ProbeResult.
+     */
+    constructor($$source = {}) {
+        if (!("target" in $$source)) {
+            /**
+             * Target is what was pinged, as displayed (may be a hostname).
+             * @member
+             * @type {string}
+             */
+            this["target"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * ResolvedIP is Target resolved to an address, when it is not already
+             * one. Empty for a literal IP or when resolution failed.
+             * @member
+             * @type {string | undefined}
+             */
+            this["resolved_ip"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Kind classifies the row so the UI can label it:
+             *   "public"   — a built-in public probe (full tunnels only)
+             *   "endpoint" — the peer endpoint
+             *   "custom"   — the address the user typed
+             * @member
+             * @type {string | undefined}
+             */
+            this["kind"] = undefined;
+        }
+        if (!("slot" in $$source)) {
+            /**
+             * Slot is the editor row this probe came from, or -1 for the endpoint
+             * (which is not configurable). It lets the UI show a row's live resolved
+             * address next to the box the user typed it in — the mapping cannot be
+             * done by name, because two slots may hold the same hostname after an
+             * edit and the endpoint appears as a target of its own.
+             * @member
+             * @type {number}
+             */
+            this["slot"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Coverage reports whether the probed address actually travels through
+             * this tunnel:
+             *   "inside"  — inside AllowedIPs (or a full tunnel)
+             *   "outside" — outside AllowedIPs on a split tunnel: the probe never
+             *               enters the tunnel, so its RTT describes the plain
+             *               internet path and the value is meaningless
+             *   ""        — not judgeable (unresolvable, or the config is unreadable)
+             * Re-evaluated every cycle on purpose: AllowedIPs can be edited and a
+             * DDNS name can move to an address outside the tunnel *after* the target
+             * was accepted, and a saved-then-invalid target is exactly the case the
+             * user asked to be told about.
+             * @member
+             * @type {string | undefined}
+             */
+            this["coverage"] = undefined;
+        }
+        if (!("reachable" in $$source)) {
+            /**
+             * Reachable reports whether the target answered ICMP.
+             * @member
+             * @type {boolean}
+             */
+            this["reachable"] = false;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * LatencyMs is the round-trip time; 0 when unreachable.
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ProbeResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ProbeResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ProbeResult(/** @type {Partial<ProbeResult>} */($$parsedSource));
     }
 }
 
@@ -547,8 +712,8 @@ export class WireGuardConfig {
      * @returns {WireGuardConfig}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType4;
-        const $$createField2_0 = $$createType6;
+        const $$createField1_0 = $$createType6;
+        const $$createField2_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("interface" in $$parsedSource) {
             $$parsedSource["interface"] = $$createField1_0($$parsedSource["interface"]);
@@ -561,10 +726,12 @@ export class WireGuardConfig {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = ConnectionStatus.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $Create.Map($Create.Any, $Create.Any);
-const $$createType4 = InterfaceConfig.createFrom;
-const $$createType5 = PeerConfig.createFrom;
-const $$createType6 = $Create.Array($$createType5);
+const $$createType0 = ProbeResult.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = ConnectionStatus.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = InterfaceConfig.createFrom;
+const $$createType7 = PeerConfig.createFrom;
+const $$createType8 = $Create.Array($$createType7);

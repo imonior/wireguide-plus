@@ -277,6 +277,18 @@ export class InterfaceInfo {
              */
             this["active"] = false;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Type is a stable kind label (wifi / ethernet / bridge / virtual /
+             * loopback / cellular / vpn) derived from the interface name and the
+             * Wi-Fi flag. The automation editor's network-status board shows it as a
+             * generic short label next to the raw name (e.g. "en0 · Wi-Fi"), matching
+             * the Routes view's interface column. Empty when the kind can't be told.
+             * @member
+             * @type {string | undefined}
+             */
+            this["type"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

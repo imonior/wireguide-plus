@@ -140,7 +140,7 @@ export class AutomationTunnelPreview {
         }
         if (!("decision" in $$source)) {
             /**
-             * "connect" | "disconnect" | "unmanaged" | "manual-off"
+             * "connect" | "disconnect" | "unmanaged" | "manual-off" | "manual-on"
              * @member
              * @type {string}
              */
@@ -148,11 +148,28 @@ export class AutomationTunnelPreview {
         }
         if (!("active" in $$source)) {
             /**
-             * tunnel is actually up in the helper
+             * tunnel is actually up/connecting in the helper
              * @member
              * @type {boolean}
              */
             this["active"] = false;
+        }
+        if (!("state" in $$source)) {
+            /**
+             * State is the tunnel's real connection state reported by the helper:
+             * "connected" (NIC up + handshake done, can carry traffic),
+             * "connecting" (NIC exists, engine running, still handshaking — the
+             * half-open state), "disconnected" (no NIC), "error", or "" when
+             * unknown. The automation editor uses it to judge "in effect" precisely:
+             * a connect rule is ONLY in effect when State=="connected" (a half-open
+             * tunnel is NOT yet effective); a disconnect rule is ONLY in effect when
+             * State=="disconnected". This replaces the old boolean-only check that
+             * wrongly treated a half-open tunnel as fully up (connect) or wrongly
+             * flagged a correctly-executed disconnect as not in effect.
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
         }
 
         Object.assign(this, $$source);
@@ -870,10 +887,13 @@ export class TunnelInfo {
         }
         if (/** @type {any} */(false)) {
             /**
+             * LatencyProbeTargets is the four-slot probe-target list (see
+             * storage.TunnelMeta.ProbeTargets). Always four entries so the editor can
+             * render its rows positionally; an empty entry means "not configured".
              * @member
-             * @type {string | undefined}
+             * @type {string[] | undefined}
              */
-            this["latency_probe_target"] = undefined;
+            this["latency_probe_targets"] = undefined;
         }
         if (/** @type {any} */(false)) {
             /**
@@ -913,7 +933,11 @@ export class TunnelInfo {
      * @returns {TunnelInfo}
      */
     static createFrom($$source = {}) {
+        const $$createField4_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("latency_probe_targets" in $$parsedSource) {
+            $$parsedSource["latency_probe_targets"] = $$createField4_0($$parsedSource["latency_probe_targets"]);
+        }
         return new TunnelInfo(/** @type {Partial<TunnelInfo>} */($$parsedSource));
     }
 }
