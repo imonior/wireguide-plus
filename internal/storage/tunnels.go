@@ -398,6 +398,26 @@ func (s *TunnelStore) path(name string) string {
 type TunnelMeta struct {
 	Notes              string `json:"notes,omitempty"`
 	LatencyProbeTarget string `json:"latency_probe_target,omitempty"`
+	// LatencyProbeResolved is LatencyProbeTarget resolved to an address at
+	// the moment it was saved — empty for a literal IP or an unset target.
+	// Kept so the probe rows can show what a hostname actually points at
+	// (a DDNS peer moving silently looks like a latency spike otherwise).
+	LatencyProbeResolved string `json:"latency_probe_resolved,omitempty"`
+	// LatencyProbeTargets is the four-slot probe-target list the editor
+	// writes. The slots are positional, not a set:
+	//
+	//	[0] [1]  "public probe" slots. Only meaningful on a full tunnel,
+	//	         where they default to 8.8.8.8 / 223.5.5.5 and answer the
+	//	         question "does this tunnel carry traffic at all". On a
+	//	         split tunnel they are hidden and ignored.
+	//	[2] [3]  free-form slots, offered on every tunnel type.
+	//
+	// An empty slot means "not configured" — and for [0]/[1] that means
+	// "use the built-in default" rather than "probe nothing". Positional
+	// storage is what makes that possible: a cleared slot reverts to the
+	// compiled-in default instead of freezing today's default address into
+	// every user's sidecar forever.
+	LatencyProbeTargets []string `json:"latency_probe_targets,omitempty"`
 	// BindIfIndex/BindIfName pin the tunnel's physical egress to a chosen
 	// interface (Settings → interface binding opt-in). 0/"" = auto-select.
 	BindIfIndex int    `json:"bind_if_index,omitempty"`
@@ -450,6 +470,52 @@ type TunnelMeta struct {
 	// connected tunnel may actually own the path. A second one asking for
 	// it is held at connect time until the user resolves it.
 	DNSResolvePath bool `json:"dns_resolve_path,omitempty"`
+}
+
+// ProbeTargetSlotCount is how many probe-target rows the tunnel editor
+// offers. Exported so the GUI handler, the migration and the frontend's
+// expectations cannot drift apart.
+const ProbeTargetSlotCount = 4
+
+// ProbeTargets returns the probe-target slots normalized to exactly
+// ProbeTargetSlotCount entries, so callers can index them without bounds
+// checks, with the legacy single-target field folded in.
+//
+// Migration: builds predating the four-row editor stored one optional
+// target in LatencyProbeTarget. It maps to slot 2 — the first free-form
+// slot — because that is the role it actually had ("an extra host the user
+// pinned, probed alongside the built-ins"). Dropping it would silently
+// empty the field on upgrade; mapping it to slot 0 would instead redefine a
+// public probe as a user pin and change what the UI shows.
+func (m *TunnelMeta) ProbeTargets() []string {
+	out := make([]string, ProbeTargetSlotCount)
+	if m != nil {
+		for i := range out {
+			if i < len(m.LatencyProbeTargets) {
+				out[i] = strings.TrimSpace(m.LatencyProbeTargets[i])
+			}
+		}
+		if out[2] == "" && out[3] == "" {
+			if legacy := strings.TrimSpace(m.LatencyProbeTarget); legacy != "" {
+				out[2] = legacy
+			}
+		}
+	}
+	return out
+}
+
+// SetProbeTargets writes the slots back, trimmed and padded, and mirrors
+// slot 2 into the legacy single-target field so a reader that predates this
+// field still finds a value instead of an empty box.
+func (m *TunnelMeta) SetProbeTargets(targets []string) {
+	out := make([]string, ProbeTargetSlotCount)
+	for i := range out {
+		if i < len(targets) {
+			out[i] = strings.TrimSpace(targets[i])
+		}
+	}
+	m.LatencyProbeTargets = out
+	m.LatencyProbeTarget = out[2]
 }
 
 // NormalizeDomainEntry canonicalises one "domains through tunnel" entry so

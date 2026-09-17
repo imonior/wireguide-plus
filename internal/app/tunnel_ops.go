@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -39,10 +42,10 @@ func (s *TunnelService) ListTunnelsLocal() ([]TunnelInfo, error) {
 			endpoint = cfg.Peers[0].Endpoint
 		}
 		notes := ""
-		latencyProbeTarget := ""
+		var probeTargets []string
 		if meta != nil {
 			notes = meta.Notes
-			latencyProbeTarget = meta.LatencyProbeTarget
+			probeTargets = meta.ProbeTargets()
 		}
 		// Date-added: the stamped creation time (survives edits, issue #17);
 		// mtime fallback only for tunnels created before stamping existed.
@@ -55,13 +58,13 @@ func (s *TunnelService) ListTunnelsLocal() ([]TunnelInfo, error) {
 			created = s.tunnelStore.ModTimeUnix(name)
 		}
 		result = append(result, TunnelInfo{
-			Name:               name,
-			Endpoint:           endpoint,
-			Notes:              notes,
-			LatencyProbeTarget: latencyProbeTarget,
-			Protocol:           cfg.Protocol,
-			CreatedAtUnix:      created,
-			LastUsedUnix:       lastUsed[name],
+			Name:                name,
+			Endpoint:            endpoint,
+			Notes:               notes,
+			LatencyProbeTargets: probeTargets,
+			Protocol:            cfg.Protocol,
+			CreatedAtUnix:       created,
+			LastUsedUnix:        lastUsed[name],
 		})
 	}
 	return result, nil
@@ -101,20 +104,178 @@ func (s *TunnelService) SetTunnelNotes(name, notes string) error {
 	})
 }
 
-// SetTunnelLatencyProbeTarget persists the optional per-tunnel ICMP target
-// used only for latency display. The value is deliberately stored outside the
+// SetTunnelLatencyProbeTargets persists the four-slot probe-target list used
+// only for latency display. The values are deliberately stored outside the
 // WireGuard .conf so exports remain compatible with other clients.
-func (s *TunnelService) SetTunnelLatencyProbeTarget(name, target string) error {
+//
+// Returns the address each slot resolved to ("" for an empty slot or a
+// literal IP), so the editor can show what a hostname points at the moment
+// it is saved. Resolving on load instead would mean a DNS lookup per tunnel
+// just to open the panel — the live value is refreshed by the helper's probe
+// cycle anyway.
+//
+// Slots 0/1 are the positional public-probe overrides. On a split tunnel
+// they are hidden by the editor and ignored by the probe planner, so their
+// validation is skipped too: rejecting 8.8.8.8 there would make the stored
+// default unsaveable the moment the tunnel stops being a full tunnel. The
+// editor sends the stored values back unchanged for those rows, so hiding
+// them never wipes them.
+func (s *TunnelService) SetTunnelLatencyProbeTargets(name string, targets []string) ([]string, error) {
 	if !s.tunnelStore.Exists(name) {
-		return fmt.Errorf("tunnel %q does not exist", name)
+		return nil, fmt.Errorf("tunnel %q does not exist", name)
 	}
-	target = strings.TrimSpace(target)
-	if target != "" && !config.IsValidHostOrIP(target) {
-		return fmt.Errorf("latency target %q is not a valid IP address or hostname", target)
+	slots := make([]string, storage.ProbeTargetSlotCount)
+	for i := range slots {
+		if i < len(targets) {
+			slots[i] = strings.TrimSpace(targets[i])
+		}
 	}
-	return s.tunnelStore.UpdateMeta(name, func(meta *storage.TunnelMeta) {
-		meta.LatencyProbeTarget = target
-	})
+
+	// Full-tunnel status decides both which slots are meaningful and whether
+	// AllowedIPs has to be honoured. A config that cannot be read is treated
+	// as a full tunnel for validation purposes — the probe planner does the
+	// same, and blocking a save on a read error would be worse than allowing
+	// one that turns out to be unprobeable.
+	fullTunnel := true
+	if cfg, _, err := s.tunnelStore.LoadWithMeta(name); err == nil && cfg != nil {
+		fullTunnel = tunnelIsFullRoute(cfg)
+	}
+
+	resolved := make([]string, storage.ProbeTargetSlotCount)
+	for i, slot := range slots {
+		if slot == "" {
+			continue
+		}
+		if !config.IsValidHostOrIP(slot) {
+			return nil, fmt.Errorf("latency target %q is not a valid IP address or hostname", slot)
+		}
+		// Resolve while the user is still looking at the field: the resolved
+		// address is what a split tunnel can be checked against AllowedIPs
+		// with, and what the probe rows display (a DDNS peer silently moving
+		// otherwise looks like a latency spike).
+		addr, err := resolveProbeTarget(slot)
+		if err != nil {
+			return nil, fmt.Errorf("target %d: %w", i+1, err)
+		}
+		resolved[i] = addr
+		// Slots 0/1 only take effect on a full tunnel (see above).
+		if i < 2 && !fullTunnel {
+			continue
+		}
+		// Enforce before writing: on a split tunnel an address outside
+		// AllowedIPs is not merely misleading, it is meaningless — the probe
+		// never enters the tunnel, so the "tunnel latency" reading would
+		// describe the plain internet path.
+		if err := s.validateProbeTarget(name, slot, addr); err != nil {
+			return nil, fmt.Errorf("target %d: %w", i+1, err)
+		}
+	}
+
+	if err := s.tunnelStore.UpdateMeta(name, func(meta *storage.TunnelMeta) {
+		meta.SetProbeTargets(slots)
+		meta.LatencyProbeResolved = resolved[2]
+	}); err != nil {
+		return nil, err
+	}
+	return resolved, nil
+}
+
+// tunnelIsFullRoute reports whether any peer claims the default route.
+func tunnelIsFullRoute(cfg *domain.WireGuardConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	for _, peer := range cfg.Peers {
+		for _, allowed := range peer.AllowedIPs {
+			if allowed == "0.0.0.0/0" || allowed == "::/0" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// probeResolutionTimeout bounds DNS on the write path. Saving a setting must
+// not hang because a resolver is unreachable — and a probe target that
+// cannot be resolved right now is not a usable probe target anyway.
+const probeResolutionTimeout = 4 * time.Second
+
+// resolveProbeTarget returns the address a probe target points at, or "" when
+// the target is empty or already a literal IP (nothing to resolve).
+//
+// Hostnames are resolved eagerly, on save, so the value the user sees is the
+// value that gets probed and checked. A name with no DNS answer is rejected:
+// an unresolvable target would silently produce a permanent "—" row.
+func resolveProbeTarget(target string) (string, error) {
+	if target == "" {
+		return "", nil
+	}
+	host := target
+	if h, _, err := net.SplitHostPort(target); err == nil && h != "" {
+		host = h
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return "", nil // literal IP — nothing to resolve
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), probeResolutionTimeout)
+	defer cancel()
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err != nil || len(addrs) == 0 {
+		return "", fmt.Errorf("latency target %q could not be resolved: %w", target, err)
+	}
+	return addrs[0], nil
+}
+
+// validateProbeTarget rejects probe addresses that cannot be routed through
+// the tunnel.
+//
+// Rules, matching the UI:
+//   - Full tunnel (some peer claims 0.0.0.0/0 or ::/0): anything goes —
+//     all traffic is routed through the tunnel anyway.
+//   - Split tunnel: the address must fall inside AllowedIPs. Otherwise the
+//     probe bypasses the tunnel entirely and its RTT says nothing about it,
+//     so the value is refused rather than saved.
+//
+// Hostnames are resolved first (see resolveProbeTarget) and judged by the
+// resolved address, which is the only point at which the check is meaningful.
+func (s *TunnelService) validateProbeTarget(name, target, resolved string) error {
+	if target == "" {
+		return nil
+	}
+	addr, err := netip.ParseAddr(target)
+	if err != nil {
+		if resolved == "" {
+			return nil // nothing to judge — resolveProbeTarget already errored
+		}
+		addr, err = netip.ParseAddr(resolved)
+		if err != nil {
+			return nil
+		}
+	}
+	cfg, _, err := s.tunnelStore.LoadWithMeta(name)
+	if err != nil || cfg == nil {
+		return nil // config unreadable: don't block the user on a read error
+	}
+	for _, peer := range cfg.Peers {
+		for _, allowed := range peer.AllowedIPs {
+			if allowed == "0.0.0.0/0" || allowed == "::/0" {
+				return nil
+			}
+			if prefix, perr := netip.ParsePrefix(allowed); perr == nil {
+				if prefix.Contains(addr) {
+					return nil
+				}
+				continue
+			}
+			// Bare address in AllowedIPs means "exactly this host".
+			if host, aerr := netip.ParseAddr(allowed); aerr == nil && host == addr {
+				return nil
+			}
+		}
+	}
+	slog.Warn("rejected latency probe target outside AllowedIPs",
+		"tunnel", name, "target", target, "resolved", resolved)
+	return fmt.Errorf("latency target %s is outside this tunnel's AllowedIPs — probes to it would bypass the tunnel, pick an address inside the tunnel's routed ranges", addr)
 }
 
 // ListTunnels returns every stored tunnel with its summary info.
@@ -124,19 +285,39 @@ func (s *TunnelService) SetTunnelLatencyProbeTarget(name, target string) error {
 // the status event stream. The frontend now learns the active tunnel from
 // the status event itself, and the tray caches it internally — so this
 // function stays fully local (disk-only, no IPC) and returns IsConnected
-// purely as a best-effort flag based on a single active-name probe that is
-// safe to skip entirely on slow paths.
+// purely as a best-effort flag based on a single established-tunnels probe
+// that is safe to skip entirely on slow paths.
 func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 	names, err := s.tunnelStore.List()
 	if err != nil {
 		return nil, err
 	}
 
-	// One cheap probe for the active tunnel — used by the frontend's initial
-	// load before it has received its first status event. The tray no longer
-	// relies on this (it tracks active tunnel via the status stream).
-	var active ipc.StringResponse
-	_ = s.call(ipc.MethodActiveName, nil, &active)
+	// One cheap probe for the established tunnels — used by the frontend's
+	// initial load before it has received its first status event. The tray no
+	// longer relies on this (it tracks active tunnels via the status stream).
+	//
+	// Established (setup completed), not active: ActiveTunnels also contains
+	// tunnels whose connect attempt is still running, and labelling those
+	// connected paints a green badge on a tunnel that is about to fail —
+	// exactly the "it said connected, then dropped" confusion from a
+	// boot-time DNS miss.
+	established := map[string]bool{}
+	var est ipc.ActiveTunnelsResponse
+	if err := s.call(ipc.MethodEstablishedTunnels, nil, &est); err == nil {
+		for _, n := range est.Names {
+			established[n] = true
+		}
+	} else {
+		// Helper older than this method: fall back to the active list
+		// rather than reporting everything as down.
+		var activeTunnels ipc.ActiveTunnelsResponse
+		if err := s.call(ipc.MethodActiveTunnels, nil, &activeTunnels); err == nil {
+			for _, n := range activeTunnels.Names {
+				established[n] = true
+			}
+		}
+	}
 
 	lastUsed := s.lastUsedByTunnel()
 	var result []TunnelInfo
@@ -151,10 +332,10 @@ func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 			endpoint = cfg.Peers[0].Endpoint
 		}
 		notes := ""
-		latencyProbeTarget := ""
+		var probeTargets []string
 		if meta != nil {
 			notes = meta.Notes
-			latencyProbeTarget = meta.LatencyProbeTarget
+			probeTargets = meta.ProbeTargets()
 		}
 		// Date-added: the stamped creation time (survives edits, issue #17);
 		// mtime fallback only for tunnels created before stamping existed.
@@ -167,14 +348,14 @@ func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 			created = s.tunnelStore.ModTimeUnix(name)
 		}
 		result = append(result, TunnelInfo{
-			Name:               name,
-			IsConnected:        name == active.Value,
-			Endpoint:           endpoint,
-			Notes:              notes,
-			LatencyProbeTarget: latencyProbeTarget,
-			Protocol:           cfg.Protocol,
-			CreatedAtUnix:      created,
-			LastUsedUnix:       lastUsed[name],
+			Name:                name,
+			IsConnected:         established[name],
+			Endpoint:            endpoint,
+			Notes:               notes,
+			LatencyProbeTargets: probeTargets,
+			Protocol:            cfg.Protocol,
+			CreatedAtUnix:       created,
+			LastUsedUnix:        lastUsed[name],
 		})
 	}
 	return result, nil
@@ -531,11 +712,23 @@ func (s *TunnelService) snapshotActiveStats(wantName string) (string, int64, int
 // user-initiated Disconnect / DisconnectTunnel are preserved across cache
 // refreshes — only LoadAndDelete on close clears them.
 //
-// Fast-path: if the sorted active set hasn't changed since the prior call
-// (the steady-state case at 1 Hz), we skip the activeSessions Range and the
-// open-session loop. The stats cache still gets updated so the eventual
-// disappear-close uses fresh counters.
-func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, rxByTunnel, txByTunnel map[string]int64, disappearReason string) {
+// Fast-path: if the sorted active set — including each tunnel's handshake
+// state — hasn't changed since the prior call (the steady-state case at 1 Hz),
+// we skip the activeSessions Range and the open-session loop. The stats cache
+// still gets updated so the eventual disappear-close uses fresh counters.
+//
+// Handshake gating: a session is opened only once the tunnel has actually
+// completed a handshake. `ActiveTunnels` also reports StateConnecting, so a
+// failed attempt (DNS lookup failure, adapter creation error, rejected
+// handshake) used to produce a "connected then immediately disconnected"
+// history row even though the tunnel never carried traffic. Those attempts
+// are now held in pendingSessions and simply dropped when they disappear —
+// or promoted to a real session the moment a handshake lands.
+//
+// handshakeMap may be nil (older/non-GUI callers, CLI). In that case the
+// handshake state is unknown and we keep the previous behaviour of opening
+// the session immediately, so history is never silently lost.
+func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, handshakeMap map[string]bool, rxByTunnel, txByTunnel map[string]int64, disappearReason string) {
 	if s.historyStore == nil {
 		return
 	}
@@ -570,11 +763,12 @@ func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, rxByTun
 		s.lastKnownStats.Store(name, lastKnownTunnelStats{rx: rx, tx: tx, reason: reason})
 	}
 
-	// Build a stable signature of the active set and compare to the prior
-	// one. If unchanged, we know there are no new appearances or
-	// disappearances to record. The cache update above handles the steady
-	// state; this skip just avoids the (cheap but constant) diff work at 1 Hz.
-	sig := activeSetSignature(activeNames)
+	// Build a stable signature of the active set *and* its handshake state,
+	// then compare to the prior one. The handshake component matters: a
+	// tunnel that appears and then completes its handshake must change the
+	// signature, otherwise the fast-path skip would swallow the promotion
+	// from pending to a real session.
+	sig := activeSetSignature(activeNames) + "|" + handshakeSignature(activeNames, handshakeMap)
 	s.reconcileMu.Lock()
 	unchanged := sig == s.lastReconcileSig
 	s.lastReconcileSig = sig
@@ -583,6 +777,7 @@ func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, rxByTun
 		return
 	}
 
+	// Close sessions for tunnels that vanished.
 	s.activeSessions.Range(func(k, v any) bool {
 		name, _ := k.(string)
 		id, _ := v.(string)
@@ -610,6 +805,17 @@ func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, rxByTun
 		return true
 	})
 
+	// Drop vanished attempts that never completed a handshake — they never
+	// carried a single packet, so recording them would inflate the history
+	// with phantom seconds-long sessions.
+	s.pendingSessions.Range(func(k, v any) bool {
+		name, _ := k.(string)
+		if _, stillActive := active[name]; !stillActive {
+			s.pendingSessions.Delete(k)
+		}
+		return true
+	})
+
 	for _, name := range activeNames {
 		if name == "" {
 			continue
@@ -617,9 +823,43 @@ func (s *TunnelService) ReconcileHistoryFromStatus(activeNames []string, rxByTun
 		if _, exists := s.activeSessions.Load(name); exists {
 			continue
 		}
+		// Gate on handshake when we know it. Unknown (nil map) ⇒ open now.
+		if handshakeMap != nil && !handshakeMap[name] {
+			if _, pending := s.pendingSessions.Load(name); !pending {
+				slog.Debug("history: connect attempt pending handshake — session not opened yet",
+					"tunnel", name)
+			}
+			s.pendingSessions.Store(name, struct{}{})
+			continue
+		}
 		id := s.historyStore.RecordConnect(name)
 		s.activeSessions.Store(name, id)
+		// Handshake landed: the attempt is no longer pending.
+		s.pendingSessions.Delete(name)
 	}
+}
+
+// handshakeSignature renders "name=0/1" pairs for the active set so the
+// reconcile fast path also reacts to handshake transitions.
+func handshakeSignature(activeNames []string, handshakeMap map[string]bool) string {
+	if handshakeMap == nil {
+		return "-"
+	}
+	var b strings.Builder
+	for _, name := range activeNames {
+		if name == "" {
+			continue
+		}
+		b.WriteString(name)
+		b.WriteByte('=')
+		if handshakeMap[name] {
+			b.WriteByte('1')
+		} else {
+			b.WriteByte('0')
+		}
+		b.WriteByte(';')
+	}
+	return b.String()
 }
 
 // activeSetSignature returns a stable string representation of activeNames

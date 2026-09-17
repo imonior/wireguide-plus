@@ -4,6 +4,11 @@
   import { resolvedTheme } from '../stores/theme.js';
   import { t } from '../i18n/index.js';
 
+  // compact = inline variant sitting next to the RX/TX counters: no
+  // heading, shorter canvas, tighter padding and smaller type. Same drawing
+  // code, just scaled for a ~64px strip instead of a standalone 150px panel.
+  export let compact = false;
+
   let canvas;
   let ctx;
   // Ring buffer of throughput samples. Same pattern as stores/logs.js:
@@ -109,7 +114,7 @@
 
     if (samples.length < 2) {
       ctx.fillStyle = textMuted;
-      ctx.font = '13px sans-serif';
+      ctx.font = compact ? '11px sans-serif' : '13px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText($t('stats.waiting'), cw / 2, ch / 2);
       return;
@@ -133,7 +138,9 @@
       1024 // minimum 1 KB/s scale
     );
 
-    const padding = { top: 10, right: 10, bottom: 20, left: 10 };
+    const padding = compact
+      ? { top: 5, right: 6, bottom: 11, left: 6 }
+      : { top: 10, right: 10, bottom: 20, left: 10 };
     const gw = cw - padding.left - padding.right;
     const gh = ch - padding.top - padding.bottom;
     const step = gw / (maxSamples - 1);
@@ -188,16 +195,18 @@
 
     // Scale label
     ctx.fillStyle = textSecondary;
-    ctx.font = '10px sans-serif';
+    ctx.font = compact ? '9px sans-serif' : '10px sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(formatSpeed(maxSpeed), cw - padding.right, padding.top + 12);
+    ctx.fillText(formatSpeed(maxSpeed), cw - padding.right, padding.top + (compact ? 8 : 12));
 
-    // Legend
+    // Legend — in compact mode it sits inline on the baseline, smaller and
+    // packed closer together, because a 64px strip has no room to spare.
+    ctx.font = compact ? '9px sans-serif' : '10px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillStyle = rxStroke;
-    ctx.fillText('↓ RX', padding.left, ch - 4);
+    ctx.fillText('↓ RX', padding.left, ch - 3);
     ctx.fillStyle = txStroke;
-    ctx.fillText('↑ TX', padding.left + 50, ch - 4);
+    ctx.fillText('↑ TX', padding.left + (compact ? 34 : 50), ch - 3);
   }
 
   function formatSpeed(bytesPerSec) {
@@ -207,8 +216,10 @@
   }
 </script>
 
-<div class="stats-dashboard">
-  <h4>{$t('stats.speed_graph')}</h4>
+<div class="stats-dashboard" class:compact>
+  {#if !compact}
+    <h4>{$t('stats.speed_graph')}</h4>
+  {/if}
   <div class="graph-container">
     <canvas bind:this={canvas}></canvas>
   </div>
@@ -216,6 +227,16 @@
 
 <style>
   .stats-dashboard { padding: 8px 0; }
+  /* Fill the stat card it is dropped into: the card is a column flex
+     container stretched to the grid row height, so the graph grows with it
+     instead of collapsing to the canvas's intrinsic size. */
+  .stats-dashboard.compact {
+    padding: 0;
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    min-height: 54px;
+  }
   h4 {
     font-size: 12px;
     color: var(--text-secondary);
@@ -229,8 +250,15 @@
     height: 150px;
     overflow: hidden;
   }
+  .compact .graph-container {
+    flex: 1;
+    height: auto;
+    min-height: 54px;
+    border-radius: 6px;
+  }
   canvas {
     width: 100%;
     height: 100%;
+    display: block;
   }
 </style>

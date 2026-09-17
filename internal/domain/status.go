@@ -41,14 +41,89 @@ type ConnectionStatus struct {
 	LatencyMs    float64 `json:"latency_ms,omitempty"`
 	ErrorMessage string  `json:"error_message,omitempty"`
 
+	// LatencyProbeTarget is the address that actually produced LatencyMs
+	// (one of the configured candidates), so the UI can show what the
+	// number refers to instead of an unattributed figure.
+	LatencyProbeTarget string `json:"latency_probe_target,omitempty"`
+
+	// LatencyProbeState reports the outcome of the last probe cycle:
+	//   "ok"          — a candidate answered; LatencyMs is its RTT.
+	//   "unreachable" — every candidate failed. The tunnel may still be up
+	//                   (ICMP is commonly filtered), but from the user's
+	//                   point of view nothing behind it answers.
+	//   ""            — not measured yet.
+	// Distinct from LatencyMs == 0, which is ambiguous between "no
+	// measurement" and "nothing reachable".
+	LatencyProbeState string `json:"latency_probe_state,omitempty"`
+
+	// LatencyProbeResults carries the per-candidate breakdown behind
+	// LatencyMs: every candidate is probed every cycle, so the UI can
+	// render one row per target with its own health colour instead of a
+	// single unattributed number. Empty until the first probe completes.
+	LatencyProbeResults []ProbeResult `json:"latency_probe_results,omitempty"`
+
 	// ActiveTunnels lists the names of all currently connected (or connecting)
 	// tunnels. Populated by the multi-tunnel manager so the frontend can show
 	// which tunnels are active.
+	//
+	// "Active" here means *transitioning or up*: it includes a tunnel that is
+	// still connecting and may yet fail. Use EstablishedTunnels for anything
+	// that must not lie to the user (green badge, tray icon, tray bubble).
 	ActiveTunnels []string `json:"active_tunnels,omitempty"`
+
+	// EstablishedTunnels lists the names of tunnels that have finished
+	// setup and reached StateConnected — the subset of ActiveTunnels that
+	// genuinely carries traffic. Rendered states (badge, icon, "Connected"
+	// popup) key off this list, so a tunnel whose connect attempt fails is
+	// never advertised as connected for the duration of its attempt.
+	EstablishedTunnels []string `json:"established_tunnels,omitempty"`
 
 	// Tunnels carries per-tunnel status for multi-tunnel setups. The frontend
 	// uses this to show stats for the selected tunnel rather than the "primary".
 	Tunnels []ConnectionStatus `json:"tunnels,omitempty"`
+}
+
+// ProbeResult is the outcome of pinging ONE candidate address.
+//
+// Every candidate is probed on every cycle — not "first one that answers
+// wins" — because each row answers a different question: the public probes
+// say whether the tunnel path works, the endpoint says whether the peer is
+// reachable, and a user-pinned target says whether that specific host is up.
+// Aggregating them into a single number hid exactly the information that
+// makes the reading useful.
+type ProbeResult struct {
+	// Target is what was pinged, as displayed (may be a hostname).
+	Target string `json:"target"`
+	// ResolvedIP is Target resolved to an address, when it is not already
+	// one. Empty for a literal IP or when resolution failed.
+	ResolvedIP string `json:"resolved_ip,omitempty"`
+	// Kind classifies the row so the UI can label it:
+	//   "public"   — a built-in public probe (full tunnels only)
+	//   "endpoint" — the peer endpoint
+	//   "custom"   — the address the user typed
+	Kind string `json:"kind,omitempty"`
+	// Slot is the editor row this probe came from, or -1 for the endpoint
+	// (which is not configurable). It lets the UI show a row's live resolved
+	// address next to the box the user typed it in — the mapping cannot be
+	// done by name, because two slots may hold the same hostname after an
+	// edit and the endpoint appears as a target of its own.
+	Slot int `json:"slot"`
+	// Coverage reports whether the probed address actually travels through
+	// this tunnel:
+	//   "inside"  — inside AllowedIPs (or a full tunnel)
+	//   "outside" — outside AllowedIPs on a split tunnel: the probe never
+	//               enters the tunnel, so its RTT describes the plain
+	//               internet path and the value is meaningless
+	//   ""        — not judgeable (unresolvable, or the config is unreadable)
+	// Re-evaluated every cycle on purpose: AllowedIPs can be edited and a
+	// DDNS name can move to an address outside the tunnel *after* the target
+	// was accepted, and a saved-then-invalid target is exactly the case the
+	// user asked to be told about.
+	Coverage string `json:"coverage,omitempty"`
+	// Reachable reports whether the target answered ICMP.
+	Reachable bool `json:"reachable"`
+	// LatencyMs is the round-trip time; 0 when unreachable.
+	LatencyMs float64 `json:"latency_ms"`
 }
 
 // FormatDuration renders a duration in a compact "1h 2m 3s" form used by the

@@ -13,8 +13,27 @@
     tun.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Connected indicators from active_tunnels array (multi-tunnel aware).
+  // Connection indicators from the status stream (multi-tunnel aware).
+  //
+  // Two sets, deliberately. activeSet drives *ordering* — a tunnel that is
+  // dialling should still float to the top under "active on top". The
+  // visuals, however, read establishedSet: active also contains a tunnel that
+  // is still connecting and may yet fail (boot-time DNS miss, pending
+  // handshake), and painting that green is exactly what made a failed attempt
+  // look like "connected, then silently dropped".
   $: activeSet = new Set($connectionStatus?.active_tunnels || []);
+  // Older helpers send only active_tunnels; falling back to it there is the
+  // best available answer, and newer ones always send established_tunnels
+  // (possibly empty) so "active but not established" reliably means
+  // "still transitioning".
+  $: establishedSet = new Set(
+    Array.isArray($connectionStatus?.established_tunnels)
+      ? $connectionStatus.established_tunnels
+      : ($connectionStatus?.active_tunnels || [])
+  );
+  // Dialling right now: active but not yet up. Rendered as a hollow ring so
+  // "trying" is visibly neither "up" (solid green) nor "down" (faint grey).
+  $: pendingSet = new Set([...activeSet].filter(name => !establishedSet.has(name)));
 
   // Sorted view. Array.sort is stable, so sorting by the chosen key first
   // and then stably floating active tunnels keeps key order within groups.
@@ -120,13 +139,15 @@
         <button
           class="tunnel-item"
           class:active={$selectedTunnel?.name === tun.name}
-          class:connected={activeSet.has(tun.name)}
+          class:connected={establishedSet.has(tun.name)}
+          class:pending={pendingSet.has(tun.name)}
           aria-current={$selectedTunnel?.name === tun.name ? 'true' : undefined}
           on:click={() => select(tun)}
         >
           <span class="status-dot"
-            class:on={activeSet.has(tun.name) && tunnelHandshakes[tun.name]}
-            class:warning={activeSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
+            class:on={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
+            class:pending={pendingSet.has(tun.name)}
+            class:warning={establishedSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
           <div class="tunnel-text">
             <span class="tunnel-name">{tun.name}</span>
             {#if tun.protocol === 'amneziawg' && $appSettings.loaded}
@@ -350,7 +371,7 @@
     color: var(--text-primary);
   }
 
-  /* Connected left-edge accent pill */
+  /* Claiming-to-be-connected left-edge accent pill */
   .tunnel-item.connected::before {
     content: '';
     position: absolute;
@@ -360,6 +381,21 @@
     width: 3px;
     height: 26px;
     background: var(--green);
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* In-progress left-edge pill: same geometry, drained of colour. A tunnel
+     that is still dialling gets the marker (it is doing something) without
+     borrowing the green that means "carrying traffic". */
+  .tunnel-item.pending::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 26px;
+    background: color-mix(in srgb, var(--text-muted) 45%, transparent);
     border-radius: 0 2px 2px 0;
   }
 
@@ -391,6 +427,14 @@
   .status-dot.warning {
     background: var(--orange, #FF9500);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--orange, #FF9500) 25%, transparent);
+  }
+  /* Dialling: hollow ring, no fill. Distinct at a glance from the solid
+     green ("up"), the solid orange ("up but no handshake") and the faint
+     grey ("down"). */
+  .status-dot.pending {
+    background: transparent;
+    box-sizing: border-box;
+    border: 2px solid color-mix(in srgb, var(--text-muted) 70%, transparent);
   }
 
   /* --- Tunnel text block: name on top, endpoint below --- */
@@ -452,6 +496,9 @@
     display: none;
   }
   .list-items.compact .tunnel-item.connected::before {
+    height: 18px;
+  }
+  .list-items.compact .tunnel-item.pending::before {
     height: 18px;
   }
 

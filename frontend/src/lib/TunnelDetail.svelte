@@ -5,8 +5,10 @@
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './tunnel-name.js';
+  import { classifyIPCoverage, stripPort } from './ip-utils.js';
   import { createEventDispatcher, tick, onDestroy } from 'svelte';
   import AutomationEditor from './AutomationEditor.svelte';
+  import StatsDashboard from './StatsDashboard.svelte';
 
   export let TunnelService;
   const dispatch = createEventDispatcher();
@@ -35,24 +37,22 @@
     if (lastLoadedName && notesValue !== notesSaved) {
       flushNotes(lastLoadedName, notesValue);
     }
-    if (lastLoadedName && latencyTargetValue !== latencyTargetSaved) {
-      flushLatencyTarget(lastLoadedName, latencyTargetValue);
+    if (lastLoadedName && !sameProbeSlots(probeSlots, probeSlotsSaved)) {
+      flushProbeSlots(lastLoadedName, probeSlots);
     }
     if (notesSaveTimer) {
       clearTimeout(notesSaveTimer);
       notesSaveTimer = null;
     }
-    if (latencyTargetSaveTimer) {
-      clearTimeout(latencyTargetSaveTimer);
-      latencyTargetSaveTimer = null;
+    if (probeSlotSaveTimer) {
+      clearTimeout(probeSlotSaveTimer);
+      probeSlotSaveTimer = null;
     }
     lastLoadedName = $selectedTunnel.name;
     notesValue = $selectedTunnel.notes || '';
     notesSaved = notesValue;
     notesError = '';
-    latencyTargetValue = $selectedTunnel.latency_probe_target || '';
-    latencyTargetSaved = latencyTargetValue;
-    latencyTargetError = '';
+    loadProbeSlots($selectedTunnel);
     loadDetail($selectedTunnel.name);
   }
 
@@ -64,12 +64,29 @@
   let notesSaved = '';
   let notesSaveTimer = null;
   let notesError = '';
-  let latencyTargetValue = '';
-  let latencyTargetSaved = '';
-  let latencyTargetSaveTimer = null;
-  let latencyTargetError = '';
-  let latencyTargetEditing = false;
-  let latencyTargetInput = null;
+
+  // Probe targets: four positional slots, matching storage.ProbeTargets.
+  //
+  //   [0] [1]  public-probe overrides — only shown (and only used) on a
+  //            full tunnel, where they default to 8.8.8.8 / 223.5.5.5
+  //   [2] [3]  free-form, offered on every tunnel type
+  //
+  // Always four entries so the markup can index them. An empty slot means
+  // "not configured" — for [0]/[1] that is "use the built-in default", which
+  // is why clearing a row does not delete it from the probe plan.
+  const PROBE_SLOTS = 4;
+  let probeSlots = ['', '', '', ''];
+  // Last values confirmed on disk. The dirty check compares against this, so
+  // a rejected save leaves the row dirty and the error visible instead of
+  // silently pretending the value took.
+  let probeSlotsSaved = ['', '', '', ''];
+  // Address each slot resolved to ("" for a literal IP). Filled from the save
+  // response (immediate) and refreshed from the probe stream (live), so a
+  // hostname that later moves is shown as what it currently points at.
+  let probeSlotResolved = ['', '', '', ''];
+  let probeSlotSaveTimer = null;
+  let probeSlotError = '';
+  let probeInputs = [];
 
   // flushNotes is the single write path used by both the debounce/blur
   // saver and the cross-tunnel-switch flush. It patches BOTH stores —
@@ -113,112 +130,339 @@
     notesSaveTimer = setTimeout(saveNotes, 800);
   }
 
-  async function flushLatencyTarget(name, value) {
+  // What a row currently resolves to, for the text beside the box. The live
+  // value from the probe stream wins — it is the more recent lookup, and a
+  // hostname pointing somewhere new is exactly what the user needs to see —
+  // with the save-time resolution filling the gap until the next cycle.
+  function slotResolved(i) {
+    return probeSlotLive[i] || probeSlotResolved[i] || '';
+  }
+
+  // --- Probe target slots -------------------------------------------------
+  //
+  // The whole list is written in one call rather than per row: the backend
+  // validates every slot together (and resolves hostnames), and a partial
+  // write would leave the sidecar describing a probe plan the user never
+  // asked for.
+
+  function sameProbeSlots(a, b) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+
+  function normalizeSlots(list) {
+    const out = new Array(PROBE_SLOTS).fill('');
+    for (let i = 0; i < PROBE_SLOTS; i++) out[i] = (list?.[i] || '').trim();
+    return out;
+  }
+
+  // loadProbeSlots seeds the editor from the store. It understands the
+  // pre-four-row shape too (a single `latency_probe_target`), mapping it to
+  // slot 2 — the same migration the backend applies, so a tunnel that has
+  // never been touched since the upgrade still shows its target.
+  function loadProbeSlots(tun) {
+    const stored = tun?.latency_probe_targets;
+    if (Array.isArray(stored) && stored.length) {
+      probeSlots = normalizeSlots(stored);
+    } else {
+      const legacy = (tun?.latency_probe_target || '').trim();
+      probeSlots = ['', '', legacy, ''];
+    }
+    probeSlotsSaved = [...probeSlots];
+    probeSlotResolved = ['', '', '', ''];
+    probeSlotError = '';
+  }
+
+  async function flushProbeSlots(name, slots) {
     if (!name) return false;
-    const normalized = (value || '').trim();
+    const payload = normalizeSlots(slots);
     try {
-      await TunnelService.SetTunnelLatencyProbeTarget(name, normalized);
-      tunnels.update(list => list.map(t => t.name === name ? { ...t, latency_probe_target: normalized } : t));
-      selectedTunnel.update(sel => sel && sel.name === name ? { ...sel, latency_probe_target: normalized } : sel);
+      const resolved = await TunnelService.SetTunnelLatencyProbeTargets(name, payload);
+      const resolvedList = normalizeSlots(Array.isArray(resolved) ? resolved : []);
+      tunnels.update(list => list.map(t => t.name === name ? { ...t, latency_probe_targets: payload } : t));
+      selectedTunnel.update(sel => sel && sel.name === name ? { ...sel, latency_probe_targets: payload } : sel);
       if ($selectedTunnel && $selectedTunnel.name === name) {
-        latencyTargetSaved = normalized;
-        latencyTargetValue = normalized;
-        latencyTargetError = '';
+        probeSlotsSaved = [...payload];
+        // Only adopt the normalized text if the user has not typed on since
+        // the request went out — a slow round-trip must not overwrite what
+        // they are in the middle of entering.
+        if (sameProbeSlots(probeSlots, payload)) probeSlots = [...payload];
+        // A literal IP resolves to "" — show the address itself so the row
+        // does not look like resolution failed.
+        probeSlotResolved = resolvedList.map((r, i) => r || payload[i]);
+        probeSlotError = '';
       }
       return true;
     } catch (e) {
       if ($selectedTunnel && $selectedTunnel.name === name) {
-        latencyTargetError = errText(e);
+        // Rejected (out-of-range address on a split tunnel, unresolvable
+        // hostname, ...). Keep the typed text on screen: reverting it would
+        // erase the very value the message is about.
+        probeSlotError = errText(e);
       } else {
-        console.error('flushLatencyTarget for', name, e);
+        console.error('flushProbeSlots for', name, e);
       }
       return false;
     }
   }
 
-  async function saveLatencyTarget() {
+  async function saveProbeSlots() {
     if (!$selectedTunnel) return;
-    if (latencyTargetValue === latencyTargetSaved) return;
-    await flushLatencyTarget($selectedTunnel.name, latencyTargetValue);
+    // Blocked locally: the address is not routed through this tunnel. The
+    // backend enforces the same rule, so saving it would only produce an
+    // error round-trip.
+    if (Object.keys(probeSlotCoverage).length) return;
+    if (sameProbeSlots(probeSlots, probeSlotsSaved)) return;
+    await flushProbeSlots($selectedTunnel.name, probeSlots);
   }
 
-  function onLatencyTargetInput() {
-    if (latencyTargetSaveTimer) clearTimeout(latencyTargetSaveTimer);
-    latencyTargetSaveTimer = setTimeout(saveLatencyTarget, 600);
+  function onProbeSlotInput() {
+    if (probeSlotSaveTimer) clearTimeout(probeSlotSaveTimer);
+    probeSlotSaveTimer = setTimeout(saveProbeSlots, 600);
   }
 
-  // Takes its inputs as parameters (not via closure) so the `$:` below
+  async function onProbeSlotKeydown(e, i) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (probeSlotSaveTimer) clearTimeout(probeSlotSaveTimer);
+      await saveProbeSlots();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      probeSlots = [...probeSlotsSaved];
+      probeSlotError = '';
+    }
+  }
+
+  // "Re-enter a valid value": clear the message and put the caret back in the
+  // row that was refused, with its text selected so the next keystroke
+  // replaces it outright.
+  async function retryProbeSlots() {
+    probeSlotError = '';
+    // Prefer a row the local pre-check rejects; otherwise the first row that
+    // differs from what is on disk — which is the row the backend refused.
+    let offending = probeSlots.findIndex((v, i) => v && probeSlotCoverage[i]);
+    if (offending < 0) offending = probeSlots.findIndex((v, i) => v !== probeSlotsSaved[i]);
+    await tick();
+    const el = probeInputs[offending >= 0 ? offending : 0];
+    el?.focus();
+    el?.select();
+  }
+
+  // Automatic latency probe target — single rule: probe the peer endpoint.
+  //
+  // Previous revisions preferred a /32 host from AllowedIPs, then 8.8.8.8
+  // for full tunnels. Those hosts are frequently offline (a sleeping NAS,
+  // a laptop) or measure something unrelated to this tunnel, whereas the
+  // endpoint is reachable by definition whenever the tunnel is up. The
+  // helper side implements exactly the same rule.
+  //
+  // Takes its input as a parameter (not via closure) so the `$:` below
   // actually re-runs: the compiler only tracks dependencies referenced in
   // the reactive statement itself, and a dep-less statement runs exactly
   // once — which froze this on the first tunnel's endpoint forever.
-  function autoLatencyTarget(det, sel) {
-    if (!det) return { label: sel?.endpoint || '—', fallback: true };
-    for (const peer of det.Peers || []) {
-      for (const allowed of peer.AllowedIPs || []) {
-        if (allowed.endsWith('/32')) return { label: allowed.slice(0, -3), fallback: false };
-        if (allowed.endsWith('/128')) return { label: allowed.slice(0, -4), fallback: false };
-      }
+  function autoLatencyTarget(sel) {
+    return stripPort(sel?.endpoint || '');
+  }
+
+  $: autoLatency = autoLatencyTarget($selectedTunnel);
+
+  // Every row the helper actually pinged, in its own display order. The
+  // headline number below is the best of them; the rows are what make it
+  // readable: a silent public probe next to a healthy endpoint means "tunnel
+  // up, ICMP filtered", which a single blended figure could never express.
+  //
+  // Health bands are deliberately coarse. This is a glanceable indicator,
+  // not an SLA: green = snappy, amber = usable but slow, red = too slow or
+  // not answering at all.
+  const PROBE_OK_MS = 100;
+  const PROBE_WARN_MS = 300;
+
+  function probeHealth(r) {
+    if (!r || !r.reachable) return 'bad';
+    const ms = r.latency_ms || 0;
+    if (ms <= PROBE_OK_MS) return 'ok';
+    if (ms <= PROBE_WARN_MS) return 'warn';
+    return 'bad';
+  }
+
+  function probeKindLabel(kind) {
+    if (kind === 'public') return $t('tunnel.probe_kind_public');
+    if (kind === 'endpoint') return $t('tunnel.probe_kind_endpoint');
+    if (kind === 'custom') return $t('tunnel.probe_kind_custom');
+    return '';
+  }
+
+  $: probeResults = status?.latency_probe_results || [];
+
+  $: probeRows = probeResults.map((r, i) => {
+    const resolved = r.resolved_ip || '';
+    // "outside" — the address does not travel through this tunnel, so its
+    // RTT describes the plain internet path. Flagged on the row itself, not
+    // just in the editor: the marking has to be where the number is read.
+    const outside = r.coverage === 'outside';
+    return {
+      key: `${r.kind || 'probe'}:${r.slot ?? -1}:${r.target}:${i}`,
+      label: r.target,
+      resolved,
+      title: resolved ? `${r.target} → ${resolved}` : r.target,
+      kindLabel: probeKindLabel(r.kind),
+      state: probeHealth(r),
+      outside,
+      display: r.reachable ? `${Math.round(r.latency_ms)} ms` : '—',
+    };
+  });
+
+  // Headline: the best reachable reading, i.e. the one the tunnel path is
+  // actually capable of right now. "—" when nothing answered.
+  $: probeHeadline = (() => {
+    const reachable = probeResults.filter(r => r.reachable);
+    if (!reachable.length) return null;
+    return Math.round(Math.min(...reachable.map(r => r.latency_ms || 0)));
+  })();
+
+  // Live resolution per slot, straight off the probe stream: the row in the
+  // editor shows what the address resolves to *now*, so a DDNS name that
+  // moved (and may have moved out of AllowedIPs) is visible without
+  // re-saving.
+  $: probeSlotLive = (() => {
+    const out = ['', '', '', ''];
+    for (const r of probeResults) {
+      const slot = r.slot ?? -1;
+      if (slot >= 0 && slot < out.length) out[slot] = r.resolved_ip || r.target || '';
     }
-    const fullTunnel = (det.Peers || []).some(peer =>
+    return out;
+  })();
+
+  // Coverage violations reported by the helper for the slots currently on
+  // screen. The helper re-evaluates this every probe cycle, which is the
+  // only way to notice that a target became unroutable after it was saved.
+  $: probeSlotOutside = (() => {
+    const out = {};
+    for (const r of probeResults) {
+      const slot = r.slot ?? -1;
+      if (slot >= 0 && r.coverage === 'outside') out[slot] = true;
+    }
+    return out;
+  })();
+
+  // Probe target validation.
+  //
+  // A split tunnel only routes the addresses listed in AllowedIPs, so an
+  // address outside that set would never enter the WireGuard interface —
+  // its RTT describes the plain internet path, not the tunnel. Such a value
+  // is rejected (not merely flagged): saving it would store a number that
+  // cannot mean what the field claims. Full tunnels accept anything, since
+  // they route everything anyway.
+  //
+  // Only literal IPs can be judged in the browser — a hostname needs a DNS
+  // lookup, which the backend performs on save (resolveProbeTarget) and then
+  // checks with the same coverage rule.
+  function collectAllowedIPs(det) {
+    const out = [];
+    for (const peer of det?.Peers || []) {
+      for (const ip of peer.AllowedIPs || []) out.push(ip);
+    }
+    return out;
+  }
+
+  function isFullTunnel(det) {
+    return (det?.Peers || []).some(peer =>
       (peer.AllowedIPs || []).some(ip => ip === '0.0.0.0/0' || ip === '::/0')
     );
-    if (fullTunnel) return { label: '8.8.8.8', fallback: false };
-    return { label: sel?.endpoint || '—', fallback: true };
   }
 
-  $: autoLatency = autoLatencyTarget(detail, $selectedTunnel);
-  $: latencyTargetDisplay = latencyTargetSaved
-    ? latencyTargetSaved
-    : `${$t('tunnel.latency_target_placeholder')}: ${autoLatency.fallback ? $t('tunnel.endpoint') : autoLatency.label}`;
-  $: latencyTargetTitle = latencyTargetSaved
-    ? latencyTargetSaved
-    : `${$t('tunnel.latency_target_placeholder')}: ${autoLatency.label}`;
+  // Full-tunnel status drives which rows the editor shows: slots 0/1 are
+  // public-probe overrides that only mean anything when everything is routed
+  // through the tunnel. On a split tunnel they are hidden — and left
+  // untouched in the payload rather than blanked, so switching a tunnel
+  // between full and split mode never destroys the values.
+  //
+  // Unknown config (still loading, or unreadable) counts as full: showing
+  // the rows is the safer default, since hiding them from a full tunnel
+  // would make its own public probes uneditable.
+  $: fullTunnel = !detail || isFullTunnel(detail);
 
-  async function editLatencyTarget() {
-    latencyTargetEditing = true;
-    await tick();
-    latencyTargetInput?.focus();
-    latencyTargetInput?.select();
+  // Which rows the editor renders. Split tunnels drop 0/1 entirely rather
+  // than disabling them: a greyed-out box invites the user to try, and the
+  // address would never be probed on that tunnel anyway.
+  $: probeSlotIndexes = fullTunnel ? [0, 1, 2, 3] : [2, 3];
+
+  // The compiled-in defaults for the public-probe slots, shown as
+  // placeholders so an empty (cleared) row still says what will be probed.
+  const PROBE_SLOT_DEFAULTS = ['8.8.8.8', '223.5.5.5', '', ''];
+  function probeSlotDefault(i) {
+    return PROBE_SLOT_DEFAULTS[i] || '';
   }
 
-  async function finishLatencyTargetEdit() {
-    await saveLatencyTarget();
-    latencyTargetEditing = false;
-  }
-
-  function onLatencyTargetKeydown(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      finishLatencyTargetEdit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      latencyTargetValue = latencyTargetSaved;
-      latencyTargetEditing = false;
-      latencyTargetError = '';
+  // Local pre-check: a literal IP typed into a slot that this split tunnel
+  // does not route is caught here so the offending row is marked as the user
+  // types, without a round-trip. Hostnames cannot be judged in the browser
+  // (no DNS), which is why the backend resolves on save and the helper
+  // re-checks every cycle — that is what probeSlotOutside reports.
+  //
+  // Slots 0/1 are skipped on a split tunnel for the same reason the backend
+  // skips them: they are hidden and unused there, so flagging their stored
+  // defaults would paint a warning on a row the user cannot even see.
+  $: probeSlotCoverage = (() => {
+    const out = {};
+    if (!detail || isFullTunnel(detail)) return out;
+    const allowed = collectAllowedIPs(detail);
+    const limit = PROBE_SLOTS;
+    for (let i = 0; i < limit; i++) {
+      if (i < 2) continue;
+      const v = probeSlots[i];
+      if (!v) continue;
+      if (classifyIPCoverage(v, allowed) === 'uncovered') out[i] = true;
     }
+    return out;
+  })();
+
+  // Rows that must be shown as invalid: locally detected (typed) plus
+  // helper-reported (a target that became unroutable after it was saved).
+  function slotInvalid(i) {
+    return !!probeSlotCoverage[i] || !!probeSlotOutside[i];
   }
+
+  // One message line, two sources: the local pre-check (typed value is not
+  // routed here) and the backend's rejection (unresolvable hostname, or a
+  // rule the frontend cannot evaluate). Either way the value was not saved,
+  // so the message is paired with a "re-enter" affordance.
+  $: probeSlotMessage = probeSlotError
+    || (Object.keys(probeSlotCoverage).length ? $t('tunnel.latency_target_outside_error') : '');
 
   onDestroy(() => {
     if (notesSaveTimer) clearTimeout(notesSaveTimer);
-    if (latencyTargetSaveTimer) clearTimeout(latencyTargetSaveTimer);
+    if (probeSlotSaveTimer) clearTimeout(probeSlotSaveTimer);
     // Best-effort flush on unmount (e.g. user deselected the tunnel
     // while a debounce was still pending).
     if (lastLoadedName && notesValue !== notesSaved) {
       flushNotes(lastLoadedName, notesValue);
     }
-    if (lastLoadedName && latencyTargetValue !== latencyTargetSaved) {
-      flushLatencyTarget(lastLoadedName, latencyTargetValue);
+    if (lastLoadedName && !sameProbeSlots(probeSlots, probeSlotsSaved)) {
+      flushProbeSlots(lastLoadedName, probeSlots);
     }
   });
 
   // Single source of truth for "is this tunnel currently active?" —
   // combine the selected-tunnel flag with the live connection status so the
   // UI can't show a stale "connected" chip briefly after disconnect.
-  $: isConnected = $selectedTunnel?.is_connected
-    && ($connectionStatus?.active_tunnels || []).includes($selectedTunnel?.name);
+  // Only ESTABLISHED tunnels count as connected — see Manager.EstablishedTunnels.
+  // `active_tunnels` also contains tunnels that are still dialling and may yet
+  // fail (boot-time DNS miss, pending handshake); treating those as connected
+  // is what made a failed attempt look like "connected, then dropped".
+  $: activeNames = $connectionStatus?.active_tunnels || [];
+  $: establishedNames = Array.isArray($connectionStatus?.established_tunnels)
+    ? $connectionStatus.established_tunnels
+    : activeNames;
+  $: isEstablished = $selectedTunnel?.is_connected
+    && establishedNames.includes($selectedTunnel?.name);
+  $: isConnected = isEstablished;
+  // "Connecting" also covers the multi-tunnel case: the primary may be another
+  // tunnel, so the selected one can be mid-transition without owning
+  // connectionStatus.state.
   $: isConnecting = !isConnected
-    && $connectionStatus?.state === 'connecting'
-    && $connectionStatus?.tunnel_name === $selectedTunnel?.name;
+    && (($connectionStatus?.state === 'connecting'
+      && $connectionStatus?.tunnel_name === $selectedTunnel?.name)
+      || (!$selectedTunnel?.is_connected && activeNames.includes($selectedTunnel?.name)));
   $: noHandshake = isConnected && !status?.last_handshake;
   // Use the primary status if it matches the selected tunnel (has full stats).
   // Otherwise fall back to the lightweight per-tunnel info from the tunnels array
@@ -508,33 +752,80 @@
       {/if}
     </div>
 
-    <!-- STATS HERO: big numbers, colored icons, 3-up grid -->
+    <!-- STATS HERO: counters + throughput graph on ONE row.
+         The graph used to be a separate 150px panel further down the pane;
+         it now sits inline as a compact strip, and RX/TX shrink to the
+         width their numbers actually need — the counters are a few
+         characters, the graph is what benefits from the space. -->
     {#if isConnected && status.state === 'connected'}
       <div class="stats-hero">
         <div class="stat-card stat-rx">
           <div class="stat-card-top">
-            <div class="stat-icon"><Icon name="arrow-down" size={13} strokeWidth={2.5} /></div>
+            <div class="stat-icon"><Icon name="arrow-down" size={12} strokeWidth={2.5} /></div>
             <span class="stat-label">{$t('tunnel.rx')}</span>
           </div>
-          <div class="stat-value">{formatBytes(status.rx_bytes || 0)}</div>
+          <div class="stat-value stat-value-sm">{formatBytes(status.rx_bytes || 0)}</div>
         </div>
         <div class="stat-card stat-tx">
           <div class="stat-card-top">
-            <div class="stat-icon"><Icon name="arrow-up" size={13} strokeWidth={2.5} /></div>
+            <div class="stat-icon"><Icon name="arrow-up" size={12} strokeWidth={2.5} /></div>
             <span class="stat-label">{$t('tunnel.tx')}</span>
           </div>
-          <div class="stat-value">{formatBytes(status.tx_bytes || 0)}</div>
+          <div class="stat-value stat-value-sm">{formatBytes(status.tx_bytes || 0)}</div>
         </div>
-        <div class="stat-card stat-latency">
-          <div class="stat-card-top">
-            <div class="stat-icon"><Icon name="activity" size={13} strokeWidth={2.5} /></div>
-            <span class="stat-label">{$t('tunnel.latency')}</span>
+        <div class="stat-card stat-graph">
+          <StatsDashboard compact />
+        </div>
+      </div>
+
+      <!-- LATENCY CARD — the ONE place latency is shown: the headline value
+           and the per-target breakdown live in the same card because they
+           are the same reading at two resolutions. Rendering them as two
+           blocks meant the aggregate could disagree with the rows beneath
+           it and nothing on screen said which to believe.
+           Every candidate is pinged every cycle (public probes, the
+           endpoint, the user's targets), so the rows answer different
+           questions: a silent public probe beside a healthy endpoint means
+           "the tunnel is up, ICMP is filtered". -->
+      <div class="latency-card">
+        <div class="latency-head">
+          <div class="latency-head-label">
+            <Icon name="activity" size={12} strokeWidth={2.5} />
+            <span>{$t('tunnel.latency')}</span>
           </div>
-          <div class="stat-value">
-            {status.latency_ms ? `${Math.round(status.latency_ms)}` : '—'}
-            {#if status.latency_ms}<span class="stat-unit">ms</span>{/if}
+          <div class="latency-head-value">
+            {#if probeHeadline !== null}
+              {probeHeadline}<span class="stat-unit">ms</span>
+            {:else}
+              —
+            {/if}
           </div>
         </div>
+        {#if probeRows.length}
+          <div class="probe-panel">
+            {#each probeRows as row (row.key)}
+              <div class="probe-row" class:probe-row-outside={row.outside}>
+                <span class="probe-dot" class:dot-ok={row.state === 'ok'}
+                  class:dot-warn={row.state === 'warn'} class:dot-bad={row.state === 'bad'}
+                  class:dot-idle={row.state === 'idle'}></span>
+                <span class="probe-name mono" title={row.title}>{row.label}</span>
+                {#if row.resolved}
+                  <span class="probe-resolved mono" title={row.resolved}>{row.resolved}</span>
+                {/if}
+                <span class="probe-kind" class:probe-kind-outside={row.outside}>
+                  {row.outside ? $t('tunnel.probe_outside') : row.kindLabel}
+                </span>
+                <span class="probe-ms" class:ms-ok={row.state === 'ok'}
+                  class:ms-warn={row.state === 'warn'} class:ms-bad={row.state === 'bad'}>
+                  {row.display}
+                </span>
+              </div>
+            {/each}
+            {#if status.latency_probe_state === 'unreachable'}
+              <div class="probe-summary">{$t('tunnel.probe_unreachable')}</div>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       <div class="stats-meta">
@@ -567,31 +858,42 @@
             </div>
             <div class="endpoint-block">
               <h3 class="section-label">{$t('tunnel.latency_target')}</h3>
-              <div class="info-card endpoint-card">
-                {#if latencyTargetEditing}
-                  <input
-                    bind:this={latencyTargetInput}
-                    id="latency-target"
-                    class="latency-target-input"
-                    type="text"
-                    spellcheck="false"
-                    autocomplete="off"
-                    placeholder={$t('tunnel.latency_target_placeholder')}
-                    bind:value={latencyTargetValue}
-                    on:input={onLatencyTargetInput}
-                    on:blur={finishLatencyTargetEdit}
-                    on:keydown={onLatencyTargetKeydown} />
-                {:else}
-                  <div class="editable-info-value">
-                    <span class="info-value mono endpoint-value" title={latencyTargetTitle}>{latencyTargetDisplay}</span>
-                    <button class="inline-edit-btn" type="button" on:click={editLatencyTarget} aria-label={$t('tunnel.latency_target')}>
-                      <Icon name="pencil" size={13} strokeWidth={1.9} />
-                    </button>
+              <div class="info-card endpoint-card probe-target-card">
+                {#each probeSlotIndexes as i (i)}
+                  <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
+                    <input
+                      bind:this={probeInputs[i]}
+                      class="latency-target-input probe-slot-input"
+                      type="text"
+                      spellcheck="false"
+                      autocomplete="off"
+                      placeholder={i < 2 ? probeSlotDefault(i) : $t('tunnel.latency_target_placeholder')}
+                      bind:value={probeSlots[i]}
+                      on:input={onProbeSlotInput}
+                      on:keydown={(e) => onProbeSlotKeydown(e, i)} />
+                    {#if slotResolved(i)}
+                      <!-- What the value resolves to, right now. Shown for
+                           hostnames so a DDNS target that moved is visible
+                           without re-saving; for a literal IP it is the
+                           address itself, which reads as a confirmation
+                           rather than a duplicate. -->
+                      <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                    {/if}
                   </div>
+                {/each}
+                {#if probeSlotMessage}
+                  <!-- Rejected: the value was not saved, so say so and send
+                       the caret back into the offending row. A red line alone
+                       leaves the user staring at an unsaved, unchangeable
+                       box. -->
+                  <span class="latency-target-error">
+                    {probeSlotMessage}
+                    <button class="latency-retry-btn" type="button" on:click={retryProbeSlots}>
+                      {$t('tunnel.latency_target_retry')}
+                    </button>
+                  </span>
                 {/if}
-                {#if latencyTargetError}
-                  <span class="latency-target-error">{latencyTargetError}</span>
-                {/if}
+                <span class="latency-target-hint">{$t('tunnel.latency_target_hint')}</span>
               </div>
             </div>
           </div>
@@ -711,11 +1013,11 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 20px;
+    padding: 16px 18px;
     border-radius: 16px;
     background: var(--bg-card);
     border: 0.5px solid var(--border);
-    margin-bottom: 14px;
+    margin-bottom: 10px;
     overflow: hidden;
     box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   }
@@ -932,8 +1234,8 @@
     position: sticky;
     top: 0;
     z-index: 6;
-    margin-bottom: 18px;
-    padding: 6px 0 8px;
+    margin-bottom: 10px;
+    padding: 4px 0 6px;
     background: var(--bg-primary);
     box-shadow: 0 10px 10px -10px color-mix(in srgb, #000 45%, transparent);
   }
@@ -1033,21 +1335,30 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ========== STATS HERO ==========
-     3-column grid of stat cards with big numbers and color-coded icons. */
+     One row: RX / TX / latency counters plus the throughput graph.
+     The counters only need room for a few characters, so they are pinned
+     narrow and the graph takes everything left over — the reverse of the
+     old layout, where the graph was a full-width panel further down and
+     pushed the rest of the detail below the fold. */
   .stats-hero {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 8px;
+    /* Three cells now: the latency counter moved into the latency card
+       below, where the per-target breakdown already lives. Keeping a
+       separate aggregate card meant the same reading existed twice and the
+       two could disagree. */
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.7fr) minmax(0, 2.6fr);
+    gap: 8px;
+    margin-bottom: 6px;
   }
   .stat-card {
-    padding: 14px 14px 12px;
+    padding: 10px 11px 9px;
     background: var(--bg-card);
     border: 0.5px solid var(--border);
     border-radius: 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    min-width: 0;
   }
   .stat-card-top {
     display: flex;
@@ -1055,12 +1366,12 @@
     gap: 6px;
   }
   .stat-icon {
-    width: 22px;
-    height: 22px;
+    width: 19px;
+    height: 19px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 5px;
     background: color-mix(in srgb, var(--text-muted) 14%, transparent);
     color: var(--text-muted);
     flex-shrink: 0;
@@ -1073,9 +1384,39 @@
     background: color-mix(in srgb, var(--accent) 22%, transparent);
     color: var(--accent);
   }
-  .stat-card.stat-latency .stat-icon {
-    background: color-mix(in srgb, var(--yellow) 22%, transparent);
+  /* Latency card: headline + per-target rows. One card, because the headline
+     IS the best of the rows — splitting them let the two disagree on screen
+     with nothing to say which was right. */
+  .latency-card {
+    padding: 9px 11px 8px;
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 6px;
+  }
+  .latency-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .latency-head-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 500 10px/13px var(--font-sans);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .latency-head-label :global(svg) {
     color: var(--yellow);
+  }
+  .latency-head-value {
+    font: 700 18px/22px var(--font-sans);
+    color: var(--text-primary);
+    font-feature-settings: "tnum";
+    letter-spacing: -0.02em;
   }
   .stat-label {
     font: 500 10px/13px var(--font-sans);
@@ -1089,6 +1430,14 @@
     font-feature-settings: "tnum";
     letter-spacing: -0.02em;
   }
+  /* Counters hold "1.2 GB" at most — they do not need the 22px headline
+     size, and shrinking them is what frees the width for the graph. */
+  .stat-value-sm {
+    font: 700 15px/19px var(--font-sans);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .stat-unit {
     font: 500 12px/16px var(--font-sans);
     color: var(--text-muted);
@@ -1096,12 +1445,111 @@
     margin-left: 2px;
   }
 
+  /* The graph card has no label row of its own — it is all canvas, so it
+     stretches to the row height instead of padding a heading. */
+  .stat-graph {
+    padding: 6px;
+  }
+  /* Narrow panes: four columns get too tight, so the graph drops to its own
+     full-width line rather than squeezing the counters into ellipses. */
+  @media (max-width: 560px) {
+    .stats-hero {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    .stat-graph {
+      grid-column: 1 / -1;
+      min-height: 60px;
+    }
+  }
+
+  /* ========== PROBE ROWS ==========
+     One compact row per probe target, colour-coded by health. They live
+     inside .latency-card (which owns the card chrome) so they need no
+     surface of their own — just a divider from the headline above. */
+  .probe-panel {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .probe-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 11px/16px var(--font-sans);
+    color: var(--text-secondary);
+    min-width: 0;
+  }
+  .probe-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+  }
+  .probe-dot.dot-ok { background: var(--green); }
+  .probe-dot.dot-warn { background: var(--yellow, #f59e0b); }
+  .probe-dot.dot-bad { background: var(--red, #ef4444); }
+  .probe-dot.dot-idle { background: var(--text-muted); opacity: 0.45; }
+  .probe-name {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+    max-width: 42%;
+  }
+  .probe-resolved {
+    color: var(--text-muted);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .probe-kind {
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    flex-shrink: 0;
+  }
+  .probe-ms {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .probe-ms.ms-ok { color: var(--green); }
+  .probe-ms.ms-warn { color: var(--yellow, #f59e0b); }
+  .probe-ms.ms-bad { color: var(--red, #ef4444); }
+  .probe-summary {
+    margin-top: 2px;
+    padding-top: 4px;
+    border-top: 0.5px solid var(--border);
+    font: 10px/14px var(--font-sans);
+    color: var(--yellow, #f59e0b);
+  }
+  /* A row whose address is not routed through this tunnel: the number is
+     still shown (it is a real measurement) but the row is marked, because
+     reading it as "this tunnel's latency" would be wrong. */
+  .probe-row-outside .probe-name,
+  .probe-row-outside .probe-ms {
+    color: var(--text-muted);
+  }
+  .probe-kind-outside {
+    color: var(--red, #ef4444);
+    background: color-mix(in srgb, var(--red, #ef4444) 14%, transparent);
+  }
+
   .stats-meta {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
-    margin: 0 0 18px 2px;
+    margin: 0 0 12px 2px;
     font: 11px/15px var(--font-sans);
     color: var(--text-muted);
   }
@@ -1115,10 +1563,10 @@
   /* ========== INFO SECTION ==========
      Card with rows + hairline dividers (iOS Settings style). */
   .info-section {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
   .section-label {
-    margin: 0 0 8px 4px;
+    margin: 0 0 6px 4px;
     font: 500 10px/13px var(--font-sans);
     color: var(--text-muted);
     text-transform: uppercase;
@@ -1176,40 +1624,6 @@
     display: block;
     text-align: left;
   }
-  .editable-info-value {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  .editable-info-value .endpoint-value {
-    flex: 1;
-  }
-  .inline-edit-btn {
-    width: 24px;
-    height: 24px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex: 0 0 auto;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .inline-edit-btn {
-      transition: background-color 140ms ease, color 140ms ease;
-    }
-  }
-  .inline-edit-btn:hover,
-  .inline-edit-btn:focus-visible {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    outline: none;
-  }
   .latency-target-input {
     width: 100%;
     min-width: 0;
@@ -1237,9 +1651,69 @@
     color: var(--text-muted);
     font-family: var(--font-sans);
   }
+  /* --- Four-slot probe target editor ---
+     Rows are positional and always visible (no edit/read modes): with four
+     of them, a click-to-edit affordance per row would cost more attention
+     than the fields are worth, and the resolved address has to sit next to
+     the box at all times anyway. */
+  .probe-target-card {
+    gap: 4px;
+    justify-content: flex-start;
+  }
+  .probe-slot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .probe-slot-input {
+    flex: 1 1 auto;
+  }
+  .probe-slot-resolved {
+    flex: 0 1 auto;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  /* Not routed through this tunnel: the row is marked where the value is
+     typed, and the marking survives a reload because it is driven by the
+     probe stream as well as the local pre-check. */
+  .probe-slot-invalid .probe-slot-input {
+    border-color: var(--red, #ef4444);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--red, #ef4444) 18%, transparent);
+  }
+  .probe-slot-invalid .probe-slot-resolved {
+    color: var(--red, #ef4444);
+  }
   .latency-target-error {
+    display: block;
     color: var(--red);
-    font: 10px/13px var(--font-sans);
+    font: 10px/14px var(--font-sans);
+  }
+  /* Nothing was saved, so the only way forward is a different value —
+     this button puts the caret back in the field with the bad text
+     selected, rather than leaving the user to find the pencil again. */
+  .latency-retry-btn {
+    margin-left: 6px;
+    padding: 0 6px;
+    font: 10px/14px var(--font-sans);
+    color: var(--red);
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--red) 35%, transparent);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .latency-retry-btn:hover {
+    background: color-mix(in srgb, var(--red) 22%, transparent);
+  }
+  .latency-target-hint {
+    display: block;
+    margin-top: 4px;
+    font: 10px/14px var(--font-sans);
+    opacity: 0.65;
   }
   @media (max-width: 520px) {
     .endpoint-block-grid {

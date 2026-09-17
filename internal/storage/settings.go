@@ -18,6 +18,21 @@ type Settings struct {
 	TrayIconStyle  string `json:"tray_icon_style"` // "color" (MVP: color only)
 	AutoStart      bool   `json:"auto_start"`      // launch GUI on OS login
 	StartMinimized bool   `json:"start_minimized"` // start hidden in the tray
+	// DisconnectOnQuit decides what "Quit" means for tunnels that are up.
+	//
+	// true (the historical behaviour, and the default when the key is
+	// absent) tears the tunnels down and stops the helper, so quitting the
+	// GUI ends the VPN session. false leaves both alone: the GUI process
+	// exits, the helper keeps running with its tunnels, and the next GUI
+	// launch reattaches to the same helper. That second mode is the one
+	// users want when the tunnel is the machine's only route out — quitting
+	// the window manager must not drop the network.
+	//
+	// Pointer so "never touched this" is distinguishable from an explicit
+	// false, which is what a plain bool cannot express for a key whose
+	// default is true. Use DisconnectOnQuitEnabled rather than
+	// dereferencing.
+	DisconnectOnQuit *bool `json:"disconnect_on_quit,omitempty"`
 	// NotifyDurationMs is how long the connection-status notification
 	// bubble stays on screen (ms). 0 means the default (10s).
 	NotifyDurationMs int `json:"notify_duration_ms,omitempty"`
@@ -309,6 +324,7 @@ func DefaultSettings() *Settings {
 		LogRetentionDays:     logging.DefaultRetentionDays,
 		HistoryRetentionDays: DefaultHistoryRetentionDays,
 		AutoUpdateCheck:      &on,
+		DisconnectOnQuit:     &on,
 		ListSort:             "name_asc",
 		ListActiveOnTop:      true,
 		ListPaneWidth:        240,
@@ -328,6 +344,17 @@ func (s *Settings) AutoUpdateCheckEnabled() bool {
 		return true
 	}
 	return *s.AutoUpdateCheck
+}
+
+// DisconnectOnQuitEnabled returns the effective value, treating nil (a
+// settings.json written before the key existed) as true — the behaviour
+// every existing install already has, so upgrading never silently starts
+// leaving tunnels up behind the user's back.
+func (s *Settings) DisconnectOnQuitEnabled() bool {
+	if s == nil || s.DisconnectOnQuit == nil {
+		return true
+	}
+	return *s.DisconnectOnQuit
 }
 
 // SettingsStore manages the app settings JSON file.
