@@ -376,7 +376,9 @@ func familyName(ipv6 bool) string {
 // kernel callbacks. Any route or interface‑parameter change pumps the
 // debounce timer; the timer fires re‑evaluation in pinSocketToPhysical's
 // idempotent path (which is a no‑op when the best underlay hasn't moved).
-// pinnedIfIndex: the tunnel's configured physical egress (0 = auto).
+// pinnedIfName: the tunnel's configured physical egress NAME ("" = auto).
+// On Windows the GUI stores the ifIndex AND the name together; we resolve
+// the name here so the pin tracks a renamed NIC instead of a stale index.
 //
 // Timing: register kernel callbacks FIRST, then perform initial pin, align official wireguard‑windows.
 //
@@ -384,12 +386,26 @@ func familyName(ipv6 bool) string {
 // debounce timer. The callbacks themselves are guarded by sync.WaitGroup
 // so concurrent goroutines spawned by the kernel callback drain before
 // the manager calls engine.Close.
-func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName string, tunnelLUID uint64, pinnedIfIndex int, tunnelName string, onLost EgressLostHook) {
+func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName string, tunnelLUID uint64, pinnedIfName string, tunnelName string, onLost EgressLostHook) {
 
 	realTunnelLUID := winipcfg.LUID(tunnelLUID)
 
-	// 在这里插入一行日志
-	slog.Info("socket bind monitor started", "tunnelLUID", realTunnelLUID, "pinnedIfIndex", pinnedIfIndex)
+	// Resolve the pinned interface name to its current ifIndex. An empty
+	// name means auto-select (pinned == 0). If the name no longer resolves
+	// the NIC is already gone — we deliberately keep pinned == 0 rather
+	// than fabricating an index; the connect path has already failed closed
+	// in that case, and staying pinned to a phantom index would be worse.
+	var pinned uint32
+	if pinnedIfName != "" {
+		if ifc, err := net.InterfaceByName(pinnedIfName); err == nil {
+			pinned = uint32(ifc.Index)
+		} else {
+			slog.Warn("socket bind monitor: pinned interface name does not resolve; will not pin",
+				"name", pinnedIfName, "error", err)
+		}
+	}
+
+	slog.Info("socket bind monitor started", "tunnelLUID", realTunnelLUID, "pinnedIfName", pinnedIfName, "resolved_ifIndex", pinned)
 
 	if bind == nil {
 		return
@@ -402,7 +418,7 @@ func startSocketBindMonitor(ctx context.Context, bind any, tunnelInterfaceName s
 		binder:              binder,
 		tunnelInterfaceName: tunnelInterfaceName,
 		tunnelLUID:          realTunnelLUID,
-		pinned:              uint32(pinnedIfIndex),
+		pinned:              pinned,
 		tunnelName:          tunnelName,
 		onLost:              onLost,
 	}

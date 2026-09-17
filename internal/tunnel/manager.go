@@ -345,7 +345,10 @@ func (m *Manager) ConnectWithContext(ctx context.Context, cfg *domain.WireGuardC
 		// here would risk lock-ordering issues if the hook itself
 		// calls back into the Manager.
 		lostHook := m.egressLost
-		startSocketBindMonitor(sbCtx, engine.bind, ifaceName, tunnelLUIDUint, pinnedIfIndex(entry), name, lostHook)
+		// Pass the bound interface NAME (populated on every platform,
+		// unlike BindIfIndex which is Windows-only). Windows resolves it
+		// to an ifIndex internally; Linux/macOS watch it by name.
+		startSocketBindMonitor(sbCtx, engine.bind, ifaceName, tunnelLUIDUint, entry.cfg.BindIfName, name, lostHook)
 
 	}
 	m.mu.Unlock()
@@ -480,15 +483,6 @@ func (m *Manager) DisconnectAll() {
 //   manager_dns.go    — AllDNSServers, CapturePreModDNS, etc.
 //   manager_pin.go    — SetPinInterface
 // All those methods share Manager.mu defined here.
-
-// pinnedIfIndex returns the tunnel's configured physical-egress ifIndex
-// (0 = auto-select, from the meta sidecar via the helper).
-func pinnedIfIndex(entry *tunnelEntry) int {
-	if entry != nil && entry.cfg != nil {
-		return entry.cfg.BindIfIndex
-	}
-	return 0
-}
 
 // EgressLostHook is invoked (on a background goroutine) when a tunnel
 // with a manually pinned physical egress loses that interface (NIC
