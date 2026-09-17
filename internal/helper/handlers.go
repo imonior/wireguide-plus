@@ -31,6 +31,7 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodIsConnected, h.handleIsConnected)
 	h.server.Handle(ipc.MethodActiveName, h.handleActiveName)
 	h.server.Handle(ipc.MethodActiveTunnels, h.handleActiveTunnels)
+	h.server.Handle(ipc.MethodEstablishedTunnels, h.handleEstablishedTunnels)
 	h.server.Handle(ipc.MethodRename, h.handleRename)
 	h.server.Handle(ipc.MethodResolveDNSPathConflict, h.handleResolveDNSPathConflict)
 	h.server.Handle(ipc.MethodClearDNSPathEnforcement, h.handleClearDNSPathEnforcement)
@@ -222,6 +223,7 @@ func (h *Helper) handleRename(params json.RawMessage) (interface{}, error) {
 	h.latencyMu.Lock()
 	if lat, ok := h.latencyByTunnel[req.OldName]; ok {
 		delete(h.latencyByTunnel, req.OldName)
+		delete(h.latencyProbeByTunnel, req.OldName)
 		h.latencyByTunnel[req.NewName] = lat
 	}
 	h.latencyMu.Unlock()
@@ -507,6 +509,7 @@ func (h *Helper) handleDisconnect(params json.RawMessage) (interface{}, error) {
 		h.wifiMu.Unlock()
 		h.latencyMu.Lock()
 		delete(h.latencyByTunnel, tunnelName)
+		delete(h.latencyProbeByTunnel, tunnelName)
 		h.latencyMu.Unlock()
 	} else {
 		// Legacy "no name" path: tear down EVERY active tunnel via
@@ -535,6 +538,7 @@ func (h *Helper) handleDisconnect(params json.RawMessage) (interface{}, error) {
 			h.wifiMu.Unlock()
 			h.latencyMu.Lock()
 			delete(h.latencyByTunnel, name)
+			delete(h.latencyProbeByTunnel, name)
 			h.latencyMu.Unlock()
 			slog.Info("tunnel disconnected", "category", "tunnel", "tunnel", name, "source", "user")
 			tornDown = append(tornDown, name)
@@ -554,6 +558,10 @@ func (h *Helper) handleDisconnect(params json.RawMessage) (interface{}, error) {
 
 func (h *Helper) handleStatus(params json.RawMessage) (interface{}, error) {
 	return h.statusDTO(), nil
+}
+
+func (h *Helper) handleEstablishedTunnels(_ json.RawMessage) (interface{}, error) {
+	return ipc.ActiveTunnelsResponse{Names: h.manager.EstablishedTunnels()}, nil
 }
 
 func (h *Helper) handleIsConnected(params json.RawMessage) (interface{}, error) {

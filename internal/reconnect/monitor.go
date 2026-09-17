@@ -664,12 +664,14 @@ func (m *Monitor) triggerLoop() {
 		case <-m.stopCh:
 			return
 		case <-wakeCh:
-			slog.Info("system wake detected, triggering reconnect")
+			slog.Info("system wake detected, triggering reconnect",
+				"note", "adapter recreated during reconnect; transient 'adapter not found' (0x490) lines from the TUN layer below are expected, not an error")
 			if m.manager.IsConnected() || m.manager.ActiveTunnel() != "" {
 				m.triggerReconnect()
 			}
 		case <-netCh:
-			slog.Info("primary interface change detected, triggering reconnect")
+			slog.Info("primary interface change detected, triggering reconnect",
+				"note", "adapter recreated during reconnect; transient 'adapter not found' (0x490) lines from the TUN layer below are expected, not an error")
 			if m.manager.IsConnected() || m.manager.ActiveTunnel() != "" {
 				m.triggerReconnect()
 			}

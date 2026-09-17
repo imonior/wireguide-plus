@@ -116,6 +116,12 @@ const (
 	MethodIsConnected   = "Tunnel.IsConnected"
 	MethodActiveName    = "Tunnel.ActiveName"
 	MethodActiveTunnels = "Tunnel.ActiveTunnels"
+	// MethodEstablishedTunnels is the "is it really up?" counterpart of
+	// MethodActiveTunnels. Active also includes StateConnecting and
+	// stateDisconnecting, so anything that renders a connected badge must
+	// ask this one instead: a tunnel still trying to resolve its endpoint
+	// must not read as up.
+	MethodEstablishedTunnels = "Tunnel.EstablishedTunnels"
 	// MethodRename runs inside the helper because it has to take connectMu
 	// to make "is the tunnel active?" + file rename atomic with respect to
 	// Connect / Disconnect / wifi-rule auto-connect. Splitting it into

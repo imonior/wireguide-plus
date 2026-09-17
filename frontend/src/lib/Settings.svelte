@@ -157,6 +157,10 @@
     theme: 'system',
     auto_start: false,
     start_minimized: false,
+    // Backend default is true (a missing key means true); mirrored here so
+    // the toggle renders ON for a config.json written before the key
+    // existed, instead of showing an OFF the user never chose.
+    disconnect_on_quit: true,
     notify_duration_ms: DEFAULT_NOTIFY_DURATION,
     health_check: false,
     dns_resolve_path: false,
@@ -190,6 +194,7 @@
         settings.theme = s.theme || 'system';
         settings.auto_start = s.auto_start ?? false;
         settings.start_minimized = s.start_minimized ?? false;
+        settings.disconnect_on_quit = s.disconnect_on_quit ?? true;
         // Normalize notification duration into the offered set so a
         // hand-edited config.json can't leave the <select> blank.
         settings.notify_duration_ms = VALID_NOTIFY_DURATIONS.includes(Number(s.notify_duration_ms))
@@ -269,6 +274,7 @@
         tray_icon_style: settings.tray_icon_style,
         auto_start: settings.auto_start,
         start_minimized: settings.start_minimized,
+        disconnect_on_quit: settings.disconnect_on_quit,
         notify_duration_ms: settings.notify_duration_ms,
         health_check: settings.health_check,
         dns_resolve_path: settings.dns_resolve_path,
@@ -353,6 +359,14 @@
 
   function onStartMinimizedChange(e) {
     settings.start_minimized = e.target.checked;
+    scheduleSave();
+  }
+
+  // What "Quit" does to live tunnels. The GUI reads this at exit time (see
+  // doShutdown in internal/gui/gui.go), so no live IPC is needed here — the
+  // next quit picks up the new value.
+  function onDisconnectOnQuitChange(e) {
+    settings.disconnect_on_quit = e.target.checked;
     scheduleSave();
   }
 
@@ -776,6 +790,16 @@
                 </div>
                 <label class="toggle">
                   <input id="start-minimized" type="checkbox" checked={settings.start_minimized} on:change={onStartMinimizedChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="disconnect-on-quit">{$t('settings.disconnect_on_quit')}</label>
+                  <p class="setting-desc">{$t('settings.disconnect_on_quit_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="disconnect-on-quit" type="checkbox" checked={settings.disconnect_on_quit} on:change={onDisconnectOnQuitChange} />
                   <span class="toggle-track"></span>
                 </label>
               </div>

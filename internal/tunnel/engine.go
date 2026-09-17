@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	awgconn "github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	awgdevice "github.com/amnezia-vpn/amneziawg-go/v3/device"
@@ -91,7 +90,10 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 	//     routes without re-running DNS after it has installed split routes
 	//     — which would loop the DNS query through the tunnel.
 	// Resolution failures here are FATAL to Connect, matching wg-quick's
-	// behaviour (it won't bring up a tunnel whose peer is unreachable).
+	// behaviour (it won't bring up a tunnel whose peer is unreachable) —
+	// but only after a bounded retry, because the first seconds after a
+	// boot-time autostart are exactly when the resolver is not answering
+	// yet. See resolveEndpointWithRetry.
 	resolvedCfg := *cfg
 	resolvedCfg.Peers = make([]config.PeerConfig, len(cfg.Peers))
 	var resolvedEndpointIPs []string
@@ -105,14 +107,11 @@ func NewEngine(cfg *config.WireGuardConfig) (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("peer[%d] endpoint %q: %w", i, p.Endpoint, err)
 		}
-		dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		ips, err := net.DefaultResolver.LookupHost(dnsCtx, host)
+		dnsCtx, dnsCancel := context.WithTimeout(context.Background(), endpointResolveBudget)
+		ips, err := resolveEndpointWithRetry(dnsCtx, host)
 		dnsCancel()
 		if err != nil {
 			return nil, fmt.Errorf("peer[%d] resolve %q: %w", i, host, err)
-		}
-		if len(ips) == 0 {
-			return nil, fmt.Errorf("peer[%d] resolve %q: no addresses found", i, host)
 		}
 		// Use the first resolved IP for the WG config. wireguard-go will
 		// roam to a different source if the peer's handshake arrives from

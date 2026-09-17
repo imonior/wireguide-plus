@@ -49,6 +49,15 @@ type TunnelService struct {
 	// lookup lock-free against concurrent Connect / Disconnect.
 	activeSessions sync.Map
 
+	// pendingSessions holds tunnels that are active but have not yet
+	// completed a WireGuard handshake. ActiveTunnels also reports
+	// StateConnecting, so without this gate a failed attempt (DNS failure,
+	// adapter error, rejected handshake) would leave a seconds-long
+	// "connected then disconnected" row in the connection history. Entries
+	// here are promoted to activeSessions on handshake, or dropped silently
+	// if the attempt disappears first.
+	pendingSessions sync.Map
+
 	// lastKnownStats caches the most recent rx/tx + reason hint (see
 	// lastKnownTunnelStats) for each currently-active tunnel. The reconcile
 	// path looks this up when a tunnel disappears so the closed history
@@ -141,11 +150,14 @@ func (s *TunnelService) callLong(method string, params interface{}, result inter
 
 // TunnelInfo is the summary shown in the tunnel list.
 type TunnelInfo struct {
-	Name               string `json:"name"`
-	IsConnected        bool   `json:"is_connected"`
-	Endpoint           string `json:"endpoint"`
-	Notes              string `json:"notes,omitempty"`
-	LatencyProbeTarget string `json:"latency_probe_target,omitempty"`
+	Name        string `json:"name"`
+	IsConnected bool   `json:"is_connected"`
+	Endpoint    string `json:"endpoint"`
+	Notes       string `json:"notes,omitempty"`
+	// LatencyProbeTargets is the four-slot probe-target list (see
+	// storage.TunnelMeta.ProbeTargets). Always four entries so the editor can
+	// render its rows positionally; an empty entry means "not configured".
+	LatencyProbeTargets []string `json:"latency_probe_targets,omitempty"`
 	// Protocol is "" or "wireguard" for standard WireGuard tunnels and
 	// "amneziawg" for AmneziaWG tunnels. The frontend shows an AWG badge
 	// when it is set, so users can tell at a glance why an AWG tunnel's

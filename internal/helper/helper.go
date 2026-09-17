@@ -172,6 +172,13 @@ type Helper struct {
 	latencyMu       sync.Mutex
 	latencyByTunnel map[string]float64
 
+	// latencyProbeByTunnel records *how* the number above was produced:
+	// which address answered and whether anything answered at all. Without
+	// it a latency of 0 is ambiguous — it can mean "not measured yet" or
+	// "nothing is reachable through this tunnel", and the second one is a
+	// genuine health signal the user should see.
+	latencyProbeByTunnel map[string]latencyProbe
+
 	// wifiMon polls CurrentSSID every 5s. The helper itself evaluates
 	// the user's wifi rules on every change so auto-connect /
 	// auto-disconnect work whether or not a GUI is running. The

@@ -510,6 +510,7 @@ func (h *Helper) disconnectAutoManaged(name string) {
 	// the status broadcast keeps reporting the dead tunnel's last RTT.
 	h.latencyMu.Lock()
 	delete(h.latencyByTunnel, name)
+	delete(h.latencyProbeByTunnel, name)
 	h.latencyMu.Unlock()
 	h.maybeArmShutdownAfterTeardown("rule-driven disconnect, no GUI attached")
 }

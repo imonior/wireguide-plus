@@ -121,12 +121,60 @@ func (m *WindowsManager) SetMTU(ifaceName string, mtu int) error {
 		mtuStr, "store=active"); err != nil {
 		return err
 	}
-	// IPv6 MTU — non-fatal if the interface has no IPv6 address configured.
+	// IPv6 MTU — non-fatal if the interface has no IPv6 stack bound to it.
 	if err := runWin("netsh", "interface", "ipv6", "set", "subinterface", ifaceName,
 		mtuStr, "store=active"); err != nil {
-		slog.Warn("failed to set IPv6 MTU (interface may not have IPv6)", "error", err)
+		// The overwhelmingly common failure is not a failure at all: the
+		// interface simply has no IPv6 subinterface yet (IPv6 disabled by
+		// policy, not yet initialised right after TUN creation, or the
+		// stack removed by a corporate baseline). netsh then answers
+		// "找不到元素" / "Element not found" — which used to be logged at
+		// WARN on every single connect. Enough instances later the log is
+		// noise and the one genuinely different error is invisible, so the
+		// expected case is demoted to Debug and anything else stays WARN.
+		if ipv6SubinterfaceMissing(err) {
+			slog.Debug("IPv6 MTU not applied: interface has no IPv6 subinterface",
+				"iface", ifaceName, "error", err)
+		} else {
+			slog.Warn("failed to set IPv6 MTU", "iface", ifaceName, "error", err)
+		}
 	}
 	return nil
+}
+
+// ipv6SubinterfaceMissing reports whether err is netsh's "there is no IPv6
+// object here to configure" answer rather than a real configuration failure.
+//
+// Matching is done on the message text because that is all netsh gives us: it
+// exits non-zero with a localised string and no usable error code, and the
+// wording ("Element not found" and its translations) is stable across Windows
+// 10/11 builds — unlike trying to enumerate it first, which costs another
+// subprocess on every connect for no extra information.
+func ipv6SubinterfaceMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Localised wordings of "Element not found", one per UI language we have
+	// seen in the logs. Listing them inline without trailing comments keeps
+	// gofmt from realigning the whole literal every time one is added.
+	msg := strings.ToLower(err.Error())
+	for _, needle := range []string{
+		"element not found",          // English
+		"找不到元素",                      // Simplified Chinese
+		"找不到项目",                      // Simplified Chinese variant
+		"找不到項目",                      // Traditional Chinese
+		"要素が見つかりません",                 // Japanese
+		"요소를 찾을 수 없습니다",              // Korean
+		"élément introuvable",        // French
+		"element nicht gefunden",     // German
+		"no se encontró el elemento", // Spanish
+		"não foi possível encontrar", // Portuguese
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *WindowsManager) BringUp(ifaceName string) error {

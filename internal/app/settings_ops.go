@@ -446,6 +446,7 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 			"proxy_url", redactURL(settings.ProxyURL),
 			"auto_start", settings.AutoStart,
 			"start_minimized", settings.StartMinimized,
+			"disconnect_on_quit", settings.DisconnectOnQuitEnabled(),
 			"log_level", settings.LogLevel,
 			"log_retention_days", settings.LogRetentionDays,
 			"auto_update_check", settings.AutoUpdateCheckEnabled(),
@@ -544,6 +545,12 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	}
 	if prev.StartMinimized != next.StartMinimized {
 		out = append(out, "start_minimized")
+	}
+	// Compared through the accessor, not the raw pointers: nil and an
+	// explicit true mean the same thing to the user, so toggling the key
+	// on after a legacy load must not log a phantom "changed".
+	if prev.DisconnectOnQuitEnabled() != next.DisconnectOnQuitEnabled() {
+		out = append(out, "disconnect_on_quit")
 	}
 	if prev.NotifyDurationMs != next.NotifyDurationMs {
 		out = append(out, "notify_duration_ms")
@@ -927,17 +934,31 @@ func (s *TunnelService) RunUpdate(info *update.UpdateInfo) error {
 		return fmt.Errorf("no update available")
 	}
 
+	var err error
 	switch runtime.GOOS {
 	case "darwin":
 		if update.IsBrewInstall() {
-			return s.runUpdateBrew(info)
+			err = s.runUpdateBrew(info)
+		} else {
+			err = s.runUpdateNative(info)
 		}
-		return s.runUpdateNative(info)
 	case "windows", "linux":
-		return s.runUpdateNative(info)
+		err = s.runUpdateNative(info)
 	default:
 		return s.openReleasePage()
 	}
+
+	// Terminal event so the log unambiguously shows upgrade outcome. The
+	// sub-functions log their own warnings on the failure paths, but a
+	// *successful* native install previously produced no "succeeded" line
+	// at all — only the frontend progress event — leaving upgrades silent
+	// in the helper log.
+	if err != nil {
+		slog.Warn("update: upgrade failed", "category", "update", "version", info.Version, "os", runtime.GOOS, "error", err)
+		return err
+	}
+	slog.Info("update: upgrade succeeded", "category", "update", "version", info.Version, "os", runtime.GOOS)
+	return nil
 }
 
 // runUpdateBrew updates a Homebrew cask install via `brew upgrade`. The

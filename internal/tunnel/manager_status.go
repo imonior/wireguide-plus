@@ -262,6 +262,29 @@ func (m *Manager) ActiveTunnel() string {
 	return names[0]
 }
 
+// EstablishedTunnels returns the names of tunnels that have *completed*
+// setup, i.e. reached StateConnected.
+//
+// Deliberately narrower than ActiveTunnels: that one also contains
+// StateConnecting and stateDisconnecting, which describe a transition that
+// may still fail. Anything that renders a "connected" badge, a green icon or
+// a "Connected" tray bubble must use this list instead — otherwise a tunnel
+// whose endpoint could not even be resolved (DNS not up yet at boot, a wrong
+// hostname) shows as connected for the whole duration of its attempt and
+// then silently vanishes, which reads as "connected, then dropped".
+func (m *Manager) EstablishedTunnels() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var names []string
+	for name, e := range m.tunnels {
+		if e.state == domain.StateConnected {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // ActiveTunnels returns the names of all connected or connecting tunnels,
 // sorted alphabetically for deterministic ordering.
 func (m *Manager) ActiveTunnels() []string {
