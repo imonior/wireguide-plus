@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-commit hook, invoked via `git config core.hooksPath scripts/git-hooks`.
+# Delegates to scripts/check-no-ai.sh with the commit message file path.
+# Bypass once with `git commit --no-verify` (e.g. when introducing this infra).
+exec "$(git rev-parse --show-toplevel)/scripts/check-no-ai.sh" "$1"

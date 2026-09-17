@@ -1,0 +1,32 @@
+name: publish-hygiene
+
+# Tool-agnostic, cross-platform guard: fails the build if any pushed commit
+# message or changed published file leaks an assistant-tool (AI-IDE) name
+# or the standalone token "AI". Mirrors scripts/git-hooks/pre-commit so the
+# rule holds even when a dev commits without the local hook enabled.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ai-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Resolve scan range
+        id: range
+        shell: bash
+        run: |
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            echo "range=origin/${GITHUB_BASE_REF}..HEAD" >> "$GITHUB_OUTPUT"
+          elif git rev-parse origin/main >/dev/null 2>&1 && [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+            echo "range=origin/main..HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=HEAD~20..HEAD" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Scan commit messages and diff
+        shell: bash
+        run: bash scripts/check-no-ai.sh --ci "${{ steps.range.outputs.range }}"

@@ -1,0 +1,25 @@
+# Dependabot keeps the *exact* action pins in .github/workflows from drifting.
+#
+# Every `uses:` in this repo is pinned to a specific patch (v5.1.0 rather than
+# v5) after a floating major tag shipped a regression that broke a release.
+# Exact pins are reproducible — but they never move on their own, so without
+# this file the only way to notice an upstream fix is to hit the bug again.
+#
+# Scope is deliberately limited to `github-actions` only:
+#   - `gomod` is NOT managed here on purpose: the Wails CLI version
+#     (`go install .../wails3@v3.0.0-alpha.74`) and the Go module version
+#     (`go.mod`) must move together, which is exactly the kind of coordinated
+#     bump Dependabot cannot express. See CONTRIBUTING.md → Prerequisites.
+#   - `npm` is NOT managed here because frontend/package-lock.json is already
+#     updated by hand alongside Vite/Svelte majors, which usually need
+#     migration edits rather than a lockfile-only bump.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - ci
+    commit-message:
+      prefix: "ci:"

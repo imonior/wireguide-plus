@@ -16,13 +16,13 @@ jobs:
     name: Linux (test + package)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: '20.19.2'
           cache: npm
@@ -87,7 +87,7 @@ jobs:
           dpkg-deb --info bin/wireguideplus.deb
           dpkg-deb --contents bin/wireguideplus.deb
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-amd64-ci
           path: |
@@ -100,13 +100,13 @@ jobs:
     name: macOS (test)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: '20.19.2'
           cache: npm
@@ -127,13 +127,13 @@ jobs:
     name: Windows (test)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version: '1.25.12'
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: '20.19.2'
           cache: npm
