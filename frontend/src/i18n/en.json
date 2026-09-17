@@ -66,6 +66,8 @@
     "export": "Export",
     "status": "Status",
     "endpoint": "Endpoint",
+    "copy_endpoint": "Copy endpoint",
+    "copied": "Copied",
     "latency_target": "Latency probe address",
     "latency_target_placeholder": "Optional — IP or hostname",
     "latency_target_hint": "Up to four probe addresses; every target is pinged on each cycle and shown as its own row. A split tunnel shows rows 3 and 4 only, and there the address (or the IP its name currently resolves to) must fall inside AllowedIPs — otherwise the value is rejected and you are asked to enter a valid one. A full tunnel shows all four rows; an empty row 1 or 2 keeps the built-in default (8.8.8.8 / 223.5.5.5). The peer endpoint is always probed automatically and needs no entry. Addresses may be IPs or hostnames: they are resolved on save and on every probe cycle, and the resolved IP is shown to the right of the box. If a target stops being routed through the tunnel after it was saved — AllowedIPs edited, or its name now resolving elsewhere — a popup reports it on connect and the row is marked in red. Display only: it never switches endpoints.",

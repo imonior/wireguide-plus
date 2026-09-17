@@ -247,6 +247,24 @@
     el?.select();
   }
 
+  // Copy the hero endpoint to the clipboard. The endpoint already shows in
+  // the hero status line; this just makes it grabbable in one click (e.g. to
+  // paste into another client) without selecting the text by hand.
+  let endpointCopied = false;
+  let endpointCopiedTimer;
+  async function copyEndpoint() {
+    const ep = $selectedTunnel?.endpoint;
+    if (!ep) return;
+    try {
+      await navigator.clipboard.writeText(ep);
+      endpointCopied = true;
+      clearTimeout(endpointCopiedTimer);
+      endpointCopiedTimer = setTimeout(() => (endpointCopied = false), 1400);
+    } catch (e) {
+      console.warn('copy endpoint failed', e);
+    }
+  }
+
   // Automatic latency probe target — single rule: probe the peer endpoint.
   //
   // Previous revisions preferred a /32 host from AllowedIPs, then 8.8.8.8
@@ -358,15 +376,20 @@
   // checks with the same coverage rule.
   function collectAllowedIPs(det) {
     const out = [];
-    for (const peer of det?.Peers || []) {
-      for (const ip of peer.AllowedIPs || []) out.push(ip);
+    // Wails serializes Go structs with json snake_case tags, so the
+    // WireGuardConfig that arrives here has `peers` / `allowed_ips`, NOT
+    // the Go camelCase `Peers` / `AllowedIPs`. Reading the camelCase
+    // names returned [] for every tunnel, which made every split-tunnel
+    // probe target look "uncovered" and blocked the save (Bug B).
+    for (const peer of det?.peers || []) {
+      for (const ip of peer.allowed_ips || []) out.push(ip);
     }
     return out;
   }
 
   function isFullTunnel(det) {
-    return (det?.Peers || []).some(peer =>
-      (peer.AllowedIPs || []).some(ip => ip === '0.0.0.0/0' || ip === '::/0')
+    return (det?.peers || []).some(peer =>
+      (peer.allowed_ips || []).some(ip => ip === '0.0.0.0/0' || ip === '::/0')
     );
   }
 
@@ -703,7 +726,14 @@
           </span>
           {#if $selectedTunnel.endpoint}
             <span class="hero-sep">·</span>
-            <span class="hero-endpoint">{$selectedTunnel.endpoint}</span>
+            <button
+              class="hero-endpoint"
+              type="button"
+              title={endpointCopied ? $t('tunnel.copied') : $t('tunnel.copy_endpoint')}
+              on:click={copyEndpoint}>
+              <span class="hero-endpoint-text">{$selectedTunnel.endpoint}</span>
+              <Icon name={endpointCopied ? 'check' : 'copy'} size={12} strokeWidth={2} />
+            </button>
           {/if}
           {#if $selectedTunnel.protocol === 'amneziawg' && $appSettings.loaded}
             <span class="hero-sep">·</span>
@@ -717,6 +747,23 @@
             </span>
           {/if}
         </div>
+        {#if isConnected && status.state === 'connected'}
+          <div class="hero-meta">
+            <span class="meta-item">
+              <Icon name="clock" size={12} strokeWidth={2} />
+              {$t('tunnel.handshake')}: {status.last_handshake || '—'}
+            </span>
+            <span class="meta-sep">·</span>
+            <span class="meta-item">{$t('tunnel.duration')}: {status.duration || '—'}</span>
+            {#if status.interface_name}
+              <span class="meta-sep">·</span>
+              <span class="meta-item">
+                <Icon name="network" size={12} strokeWidth={2} />
+                {$t('tunnel.interface')}: <span class="mono">{status.interface_name}</span>
+              </span>
+            {/if}
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -752,11 +799,103 @@
       {/if}
     </div>
 
-    <!-- STATS HERO: counters + throughput graph on ONE row.
-         The graph used to be a separate 150px panel further down the pane;
-         it now sits inline as a compact strip, and RX/TX shrink to the
-         width their numbers actually need — the counters are a few
-         characters, the graph is what benefits from the space. -->
+    <!-- LATENCY ROW: probe display + target editor on ONE row.
+         The headline number and the editable targets sit side by side so the
+         value you read and the value you set are in the same place. The
+         latency card also owns the per-target breakdown (same reading at two
+         resolutions); a silent public probe next to a healthy endpoint reads
+         as "tunnel up, ICMP filtered" rather than a disagreeing aggregate.
+         The redundant endpoint card that used to live here was removed — the
+         endpoint already shows (and is now copyable) in the hero above. -->
+    {#if $selectedTunnel.endpoint}
+      <div class="latency-row">
+        <!-- LATENCY DISPLAY -->
+        <div class="latency-card">
+          <div class="latency-head">
+            <div class="latency-head-label">
+              <Icon name="activity" size={12} strokeWidth={2.5} />
+              <span>{$t('tunnel.latency')}</span>
+            </div>
+            <div class="latency-head-value">
+              {#if probeHeadline !== null}
+                {probeHeadline}<span class="stat-unit">ms</span>
+              {:else}
+                —
+              {/if}
+            </div>
+          </div>
+          {#if probeRows.length}
+            <div class="probe-panel">
+              {#each probeRows as row (row.key)}
+                <div class="probe-row" class:probe-row-outside={row.outside}>
+                  <span class="probe-dot" class:dot-ok={row.state === 'ok'}
+                    class:dot-warn={row.state === 'warn'} class:dot-bad={row.state === 'bad'}
+                    class:dot-idle={row.state === 'idle'}></span>
+                  <span class="probe-name mono" title={row.title}>{row.label}</span>
+                  {#if row.resolved}
+                    <span class="probe-resolved mono" title={row.resolved}>{row.resolved}</span>
+                  {/if}
+                  <span class="probe-kind" class:probe-kind-outside={row.outside}>
+                    {row.outside ? $t('tunnel.probe_outside') : row.kindLabel}
+                  </span>
+                  <span class="probe-ms" class:ms-ok={row.state === 'ok'}
+                    class:ms-warn={row.state === 'warn'} class:ms-bad={row.state === 'bad'}>
+                    {row.display}
+                  </span>
+                </div>
+              {/each}
+              {#if status.latency_probe_state === 'unreachable'}
+                <div class="probe-summary">{$t('tunnel.probe_unreachable')}</div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- LATENCY TARGET EDITOR -->
+        <div class="latency-target-col">
+          <h3 class="section-label">{$t('tunnel.latency_target')}</h3>
+          <div class="info-card endpoint-card probe-target-card">
+            {#each probeSlotIndexes as i (i)}
+              <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
+                <input
+                  bind:this={probeInputs[i]}
+                  class="latency-target-input probe-slot-input"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder={i < 2 ? probeSlotDefault(i) : $t('tunnel.latency_target_placeholder')}
+                  bind:value={probeSlots[i]}
+                  on:input={onProbeSlotInput}
+                  on:keydown={(e) => onProbeSlotKeydown(e, i)} />
+                {#if slotResolved(i)}
+                  <!-- What the value resolves to, right now. Shown for
+                       hostnames so a DDNS target that moved is visible
+                       without re-saving; for a literal IP it is the
+                       address itself, which reads as a confirmation
+                       rather than a duplicate. -->
+                  <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                {/if}
+              </div>
+            {/each}
+            {#if probeSlotMessage}
+              <!-- Rejected: the value was not saved, so say so and send
+                   the caret back into the offending row. A red line alone
+                   leaves the user staring at an unsaved, unchangeable
+                   box. -->
+              <span class="latency-target-error">
+                {probeSlotMessage}
+                <button class="latency-retry-btn" type="button" on:click={retryProbeSlots}>
+                  {$t('tunnel.latency_target_retry')}
+                </button>
+              </span>
+            {/if}
+            <span class="latency-target-hint">{$t('tunnel.latency_target_hint')}</span>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- STATS HERO: counters + throughput graph on ONE row (connected only). -->
     {#if isConnected && status.state === 'connected'}
       <div class="stats-hero">
         <div class="stat-card stat-rx">
@@ -777,147 +916,29 @@
           <StatsDashboard compact />
         </div>
       </div>
-
-      <!-- LATENCY CARD — the ONE place latency is shown: the headline value
-           and the per-target breakdown live in the same card because they
-           are the same reading at two resolutions. Rendering them as two
-           blocks meant the aggregate could disagree with the rows beneath
-           it and nothing on screen said which to believe.
-           Every candidate is pinged every cycle (public probes, the
-           endpoint, the user's targets), so the rows answer different
-           questions: a silent public probe beside a healthy endpoint means
-           "the tunnel is up, ICMP is filtered". -->
-      <div class="latency-card">
-        <div class="latency-head">
-          <div class="latency-head-label">
-            <Icon name="activity" size={12} strokeWidth={2.5} />
-            <span>{$t('tunnel.latency')}</span>
-          </div>
-          <div class="latency-head-value">
-            {#if probeHeadline !== null}
-              {probeHeadline}<span class="stat-unit">ms</span>
-            {:else}
-              —
-            {/if}
-          </div>
-        </div>
-        {#if probeRows.length}
-          <div class="probe-panel">
-            {#each probeRows as row (row.key)}
-              <div class="probe-row" class:probe-row-outside={row.outside}>
-                <span class="probe-dot" class:dot-ok={row.state === 'ok'}
-                  class:dot-warn={row.state === 'warn'} class:dot-bad={row.state === 'bad'}
-                  class:dot-idle={row.state === 'idle'}></span>
-                <span class="probe-name mono" title={row.title}>{row.label}</span>
-                {#if row.resolved}
-                  <span class="probe-resolved mono" title={row.resolved}>{row.resolved}</span>
-                {/if}
-                <span class="probe-kind" class:probe-kind-outside={row.outside}>
-                  {row.outside ? $t('tunnel.probe_outside') : row.kindLabel}
-                </span>
-                <span class="probe-ms" class:ms-ok={row.state === 'ok'}
-                  class:ms-warn={row.state === 'warn'} class:ms-bad={row.state === 'bad'}>
-                  {row.display}
-                </span>
-              </div>
-            {/each}
-            {#if status.latency_probe_state === 'unreachable'}
-              <div class="probe-summary">{$t('tunnel.probe_unreachable')}</div>
-            {/if}
-          </div>
-        {/if}
-      </div>
-
-      <div class="stats-meta">
-        <span class="meta-item">
-          <Icon name="clock" size={11} strokeWidth={2} />
-          {$t('tunnel.handshake')}: {status.last_handshake || '—'}
-        </span>
-        <span class="meta-sep">·</span>
-        <span class="meta-item">{$t('tunnel.duration')}: {status.duration || '—'}</span>
-        {#if status.interface_name}
-          <span class="meta-sep">·</span>
-          <span class="meta-item">
-            <Icon name="network" size={11} strokeWidth={2} />
-            {$t('tunnel.interface')}: <span class="mono">{status.interface_name}</span>
-          </span>
-        {/if}
-      </div>
     {/if}
 
-    <!-- INFO SECTION: card with rows + dividers -->
-    {#if $selectedTunnel.endpoint || detail}
+    <!-- DETAIL CARD: peers + DNS (snake_case fields off the IPC payload). -->
+    {#if detail}
       <div class="info-section">
-        {#if $selectedTunnel.endpoint}
-          <div class="endpoint-block-grid">
-            <div class="endpoint-block">
-              <h3 class="section-label">{$t('tunnel.endpoint')}</h3>
-              <div class="info-card endpoint-card">
-                <span class="info-value mono endpoint-value" title={$selectedTunnel.endpoint}>{$selectedTunnel.endpoint}</span>
-              </div>
+        <div class="info-card detail-info-card">
+          {#each detail.peers || [] as peer}
+            <div class="info-row">
+              <span class="info-label">{$t('tunnel.allowed_ips')}</span>
+              <span class="info-value">{(peer.allowed_ips || []).join(', ') || '—'}</span>
             </div>
-            <div class="endpoint-block">
-              <h3 class="section-label">{$t('tunnel.latency_target')}</h3>
-              <div class="info-card endpoint-card probe-target-card">
-                {#each probeSlotIndexes as i (i)}
-                  <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
-                    <input
-                      bind:this={probeInputs[i]}
-                      class="latency-target-input probe-slot-input"
-                      type="text"
-                      spellcheck="false"
-                      autocomplete="off"
-                      placeholder={i < 2 ? probeSlotDefault(i) : $t('tunnel.latency_target_placeholder')}
-                      bind:value={probeSlots[i]}
-                      on:input={onProbeSlotInput}
-                      on:keydown={(e) => onProbeSlotKeydown(e, i)} />
-                    {#if slotResolved(i)}
-                      <!-- What the value resolves to, right now. Shown for
-                           hostnames so a DDNS target that moved is visible
-                           without re-saving; for a literal IP it is the
-                           address itself, which reads as a confirmation
-                           rather than a duplicate. -->
-                      <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
-                    {/if}
-                  </div>
-                {/each}
-                {#if probeSlotMessage}
-                  <!-- Rejected: the value was not saved, so say so and send
-                       the caret back into the offending row. A red line alone
-                       leaves the user staring at an unsaved, unchangeable
-                       box. -->
-                  <span class="latency-target-error">
-                    {probeSlotMessage}
-                    <button class="latency-retry-btn" type="button" on:click={retryProbeSlots}>
-                      {$t('tunnel.latency_target_retry')}
-                    </button>
-                  </span>
-                {/if}
-                <span class="latency-target-hint">{$t('tunnel.latency_target_hint')}</span>
-              </div>
+            <div class="info-row">
+              <span class="info-label">{$t('tunnel.public_key')}</span>
+              <span class="info-value mono">{peer.public_key?.substring(0, 20)}…</span>
             </div>
-          </div>
-        {/if}
-        {#if detail}
-          <div class="info-card detail-info-card">
-            {#each detail.Peers || [] as peer}
-              <div class="info-row">
-                <span class="info-label">{$t('tunnel.allowed_ips')}</span>
-                <span class="info-value">{(peer.AllowedIPs || []).join(', ') || '—'}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">{$t('tunnel.public_key')}</span>
-                <span class="info-value mono">{peer.PublicKey?.substring(0, 20)}…</span>
-              </div>
-            {/each}
-            {#if detail.Interface?.DNS?.length}
-              <div class="info-row">
-                <span class="info-label">DNS</span>
-                <span class="info-value">{detail.Interface.DNS.join(', ')}</span>
-              </div>
-            {/if}
-          </div>
-        {/if}
+          {/each}
+          {#if detail.interface?.dns?.length}
+            <div class="info-row">
+              <span class="info-label">DNS</span>
+              <span class="info-value">{detail.interface.dns.join(', ')}</span>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
 
@@ -1195,9 +1216,34 @@
   .hero-card.hero-warning .hero-state-text { color: var(--orange, #FF9500); }
   .hero-sep { color: var(--text-muted); opacity: 0.6; }
   .hero-endpoint {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 1px 5px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 11px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .hero-endpoint:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text-primary);
+  }
+  .hero-endpoint:active { transform: translateY(0.5px); }
+  .hero-endpoint :global(svg) {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .hero-endpoint-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1223,6 +1269,31 @@
     background: color-mix(in srgb, var(--danger, #d33) 13%, transparent);
     border-color: color-mix(in srgb, var(--danger, #d33) 32%, transparent);
   }
+
+  /* "Handshake / Duration / Interface" used to be a 11px line under the
+     latency card; it now lives in the hero and is enlarged so the live
+     connection facts read at a glance. */
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font: 600 13px/18px var(--font-sans);
+    color: var(--text-secondary);
+  }
+  .hero-meta .meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .hero-meta .meta-item :global(svg) { opacity: 0.8; }
+  .hero-meta .mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+  .hero-meta .meta-sep { opacity: 0.5; }
 
   /* ========== PRIMARY ACTION ==========
      Big full-width gradient button below the hero card. */
@@ -1394,6 +1465,22 @@
     border-radius: 12px;
     margin-bottom: 6px;
   }
+  /* Latency display + target editor on ONE row: the reading and the input
+     that drives it share a line so they are obviously the same thing. */
+  .latency-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 6px;
+    align-items: stretch;
+  }
+  .latency-row .latency-card { margin-bottom: 0; }
+  .latency-target-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .latency-target-col .probe-target-card { flex: 1 1 auto; }
   .latency-head {
     display: flex;
     align-items: baseline;
@@ -1544,15 +1631,6 @@
     background: color-mix(in srgb, var(--red, #ef4444) 14%, transparent);
   }
 
-  .stats-meta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 0 0 12px 2px;
-    font: 11px/15px var(--font-sans);
-    color: var(--text-muted);
-  }
   .meta-item {
     display: inline-flex;
     align-items: center;
@@ -1603,15 +1681,6 @@
     font-family: var(--font-mono);
     font-size: 11px;
   }
-  .endpoint-block-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  .endpoint-block {
-    min-width: 0;
-  }
   .endpoint-card {
     min-height: 50px;
     padding: 11px 14px;
@@ -1619,10 +1688,6 @@
     display: flex;
     justify-content: center;
     flex-direction: column;
-  }
-  .endpoint-value {
-    display: block;
-    text-align: left;
   }
   .latency-target-input {
     width: 100%;
@@ -1715,8 +1780,10 @@
     font: 10px/14px var(--font-sans);
     opacity: 0.65;
   }
+  /* Narrow panes: the latency row stacks instead of squeezing the two cards
+     into ellipses. */
   @media (max-width: 520px) {
-    .endpoint-block-grid {
+    .latency-row {
       grid-template-columns: 1fr;
     }
   }
