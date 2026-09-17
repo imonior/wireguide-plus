@@ -76,6 +76,8 @@
     "probe_target": "探测目标",
     "probe_unreachable": "探测无响应:所有候选目标均不可达,隧道可能已断,或对端/网络禁用了 ICMP",
     "latency_target_retry": "重新输入",
+    "latency_preset": "预设",
+    "latency_custom": "自定义",
     "probe_kind_public": "公共",
     "probe_kind_endpoint": "端点",
     "probe_kind_custom": "自定义",

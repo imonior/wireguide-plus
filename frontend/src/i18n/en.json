@@ -76,6 +76,8 @@
     "probe_target": "Probe target",
     "probe_unreachable": "No probe reply: every candidate is unreachable — the tunnel may be down, or ICMP is filtered",
     "latency_target_retry": "Re-enter",
+    "latency_preset": "Preset",
+    "latency_custom": "Custom",
     "probe_kind_public": "public",
     "probe_kind_endpoint": "endpoint",
     "probe_kind_custom": "custom",

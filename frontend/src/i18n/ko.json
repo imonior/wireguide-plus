@@ -76,6 +76,8 @@
     "probe_target": "측정 대상",
     "probe_unreachable": "응답 없음: 모든 후보에 도달할 수 없습니다. 터널이 끊겼거나 ICMP가 차단된 것일 수 있습니다",
     "latency_target_retry": "다시 입력",
+    "latency_preset": "프리셋",
+    "latency_custom": "사용자 지정",
     "probe_kind_public": "공용",
     "probe_kind_endpoint": "엔드포인트",
     "probe_kind_custom": "사용자 지정",
