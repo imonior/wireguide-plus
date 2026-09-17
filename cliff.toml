@@ -117,17 +117,17 @@ commit_parsers = [
 
     # Breaking changes / manual upgrade steps — surfaced first (0| sorts
     # ahead of the platform groups below).
-    { message = '^(BREAKING|Breaking|UPGRADE|Upgrade)[\s:]', group = "0|⚠️ Upgrade notes" },
+    { message = '^(BREAKING|Breaking|UPGRADE|Upgrade)[\s:]', group = "0|⚠️ 升级提示" },
 
     # Project's existing prefix convention.
     { message = '^Windows[\s:]', group = "1|Windows" },
     { message = '^macOS[\s:]', group = "2|macOS" },
     { message = '^Linux[\s:]', group = "3|Linux" },
-    { message = '^(Add|Bundle|Make)\s', group = "4|Features" },
-    { message = '^(Fix|Resolve)\s', group = "5|Bug fixes" },
-    { message = '^(Audit|Wire|Surface|Bound|Periodic|Update)\s', group = "6|Reliability" },
-    { message = '^(Settings|UI|Design|Sidebar|Rebrand|Polish)[\s:/]', group = "7|UI" },
-    { message = '^(CI|Build)[\s:]', group = "8|Build / CI" },
+    { message = '^(Add|Bundle|Make)\s', group = "4|✨ 新增" },
+    { message = '^(Fix|Resolve)\s', group = "5|🐛 修复" },
+    { message = '^(Audit|Wire|Surface|Bound|Periodic|Update)\s', group = "6|🛠 内部" },
+    { message = '^(Settings|UI|Design|Sidebar|Rebrand|Polish)[\s:/]', group = "7|🎨 界面" },
+    { message = '^(CI|Build)[\s:]', group = "8|🔧 构建 / CI" },
 
     # Conventional Commits fallback (forward-compat).
     { message = '^feat[(:]', group = "4|Features" },
@@ -139,5 +139,5 @@ commit_parsers = [
     { message = '^chore[(:]', group = "9|Other" },
 
     # Anything else.
-    { message = '.*', group = "9|Other" },
+    { message = '.*', group = "9|📦 其他" },
 ]
