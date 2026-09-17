@@ -200,21 +200,28 @@ type appBarData struct {
 
 type popupTexts struct {
 	connected    string
+	connecting   string
 	notConnected string
-	openLabel    string
-	discLabel    string
+	// outOfRange labels the warning line naming probe targets that are no
+	// longer routed through the tunnel (see popupData.outOfRange).
+	outOfRange string
+	openLabel  string
+	discLabel  string
 }
+
+// popupState (and its three values) lives in popup_state.go — it is part of
+// the tray's contract on every platform, not just this one.
 
 func popupTextsFor(lang string) popupTexts {
 	switch lang {
 	case "zh", "zh-CN", "zh-Hans", "zh-TW", "zh-Hant":
-		return popupTexts{connected: "已连接", notConnected: "未连接", openLabel: "打开主界面", discLabel: "断开连接"}
+		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接"}
 	case "ko":
-		return popupTexts{connected: "연결됨", notConnected: "연결 안 됨", openLabel: "창 열기", discLabel: "연결 끊기"}
+		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기"}
 	case "ja":
-		return popupTexts{connected: "接続済み", notConnected: "未接続", openLabel: "ウィンドウを開く", discLabel: "切断"}
+		return popupTexts{connected: "接続済み", connecting: "接続中", notConnected: "未接続", outOfRange: "トンネル範囲外のプローブ先", openLabel: "ウィンドウを開く", discLabel: "切断"}
 	default:
-		return popupTexts{connected: "Connected", notConnected: "Disconnected", openLabel: "Open Window", discLabel: "Disconnect"}
+		return popupTexts{connected: "Connected", connecting: "Connecting", notConnected: "Disconnected", outOfRange: "Probe target outside tunnel routes", openLabel: "Open Window", discLabel: "Disconnect"}
 	}
 }
 
@@ -241,13 +248,13 @@ func namesSeparator(lang string) string {
 func rgb(r, g, b uint32) uint32 { return r | g<<8 | b<<16 }
 
 // popupPalette returns (bg, fg, border, btnHover, dot) as COLORREF values.
-func popupPalette(light bool) (bg, fg, border, btnHover, dot uint32) {
+func popupPalette(light bool) (bg, fg, border, btnHover, dot, warn uint32) {
 	if light {
 		return rgb(0xF7, 0xF7, 0xF7), rgb(0x11, 0x11, 0x11), rgb(0xD9, 0xD9, 0xD9),
-			rgb(0xE7, 0xE7, 0xE7), rgb(0x2F, 0xBF, 0x71)
+			rgb(0xE7, 0xE7, 0xE7), rgb(0x2F, 0xBF, 0x71), rgb(0xB5, 0x6A, 0x0F)
 	}
 	return rgb(0x20, 0x20, 0x20), rgb(0xFF, 0xFF, 0xFF), rgb(0x3C, 0x3C, 0x3C),
-		rgb(0x2E, 0x2E, 0x2E), rgb(0x34, 0xC7, 0x59)
+		rgb(0x2E, 0x2E, 0x2E), rgb(0x34, 0xC7, 0x59), rgb(0xF0, 0xB4, 0x5E)
 }
 
 func systemLightTheme() bool {
@@ -268,9 +275,16 @@ func systemLightTheme() bool {
 
 type popupData struct {
 	names     []string
-	connected bool
-	lang      string
-	onOpen    func()
+	state     popupState
+	// outOfRange lists probe targets that are currently NOT routed through
+	// the tunnel (an AllowedIPs edit or a moved DDNS name can invalidate a
+	// target that was accepted when it was saved). Rendered as an amber
+	// warning line under the tunnel list — the companion to the editor's
+	// colour marking, for the case where the app window is closed and the
+	// only thing on screen is this bubble.
+	outOfRange []string
+	lang       string
+	onOpen     func()
 	onDisconnect func()
 
 	themeLight bool
@@ -285,6 +299,7 @@ type popupData struct {
 	closeRect windows.Rect
 	dotRect   windows.Rect
 	bodyRect  windows.Rect
+	warnRect  windows.Rect
 	openRect  windows.Rect
 	discRect  windows.Rect
 
@@ -306,7 +321,11 @@ var (
 // showStatusPopup displays the connection-situation bubble near the tray
 // icon. duration controls how long it stays before auto-closing (the ✕
 // button or a click also closes it immediately).
-func showStatusPopup(names []string, connected bool, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+// state must be derived from the *established* tunnel set (see
+// Manager.EstablishedTunnels): popupStateConnecting exists so the bubble can
+// say "still trying" instead of "connected" for a tunnel whose connect
+// attempt has not finished — and may yet fail.
+func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("popup: recovered from panic in showStatusPopup", "err", r, "stack", string(debug.Stack()))
@@ -315,10 +334,11 @@ func showStatusPopup(names []string, connected bool, lang string, duration time.
 	if duration <= 0 {
 		duration = 10 * time.Second
 	}
-	slog.Info("popup: showStatusPopup called", "names", names, "connected", connected, "duration", duration)
+	slog.Info("popup: showStatusPopup called", "names", names, "state", state,
+		"out_of_range", outOfRange, "duration", duration)
 	ensurePopupClass()
 	closeConnectPopup() // replace any stale popup
-	go runPopupLoop(names, connected, lang, duration, onOpen, onDisconnect)
+	go runPopupLoop(names, state, outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
 func closeConnectPopup() {
@@ -355,7 +375,7 @@ func loadCursor(hinst uintptr, id int32) uintptr {
 	return c
 }
 
-func runPopupLoop(names []string, connected bool, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func runPopupLoop(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	// The window's message queue is bound to the OS thread that created it.
 	// A plain goroutine can migrate between OS threads between syscalls, which
 	// would make GetMessage/DispatchMessage run on a different thread than the
@@ -366,7 +386,8 @@ func runPopupLoop(names []string, connected bool, lang string, duration time.Dur
 	defer runtime.UnlockOSThread()
 	d := &popupData{
 		names:        names,
-		connected:    connected,
+		state:        state,
+		outOfRange:   outOfRange,
 		lang:         lang,
 		onOpen:       onOpen,
 		onDisconnect: onDisconnect,
@@ -398,7 +419,15 @@ func runPopupLoop(names []string, connected bool, lang string, duration time.Dur
 	}
 
 	w := int32(348 * d.scale)
-	h := int32(120 * d.scale)
+	// The warning line is the only optional row. Growing the window (rather
+	// than squeezing the warning in) keeps the buttons at their fixed offsets
+	// from the bottom edge — they are positioned from h, so raising h moves
+	// them down with the extra row instead of overlapping the tunnel names.
+	warnLine := int32(0)
+	if len(d.outOfRange) > 0 {
+		warnLine = int32(18 * d.scale)
+	}
+	h := int32(120*d.scale) + warnLine
 	pad := int32(14 * d.scale)
 	d.titleRect = windows.Rect{Left: pad, Top: int32(12 * d.scale), Right: w - pad, Bottom: int32(32 * d.scale)}
 	d.closeRect = windows.Rect{Left: w - pad - int32(22*d.scale), Top: int32(10 * d.scale), Right: w - pad, Bottom: int32(32 * d.scale)}
@@ -407,6 +436,9 @@ func runPopupLoop(names []string, connected bool, lang string, duration time.Dur
 	d.dotRect = windows.Rect{Left: pad + int32(1*d.scale), Top: statusY + int32(4*d.scale),
 		Right: pad + dotSize + int32(1*d.scale), Bottom: statusY + dotSize + int32(4*d.scale)}
 	d.bodyRect = windows.Rect{Left: pad, Top: statusY + int32(20*d.scale), Right: w - pad, Bottom: statusY + int32(38*d.scale)}
+	if warnLine > 0 {
+		d.warnRect = windows.Rect{Left: pad, Top: d.bodyRect.Bottom, Right: w - pad, Bottom: d.bodyRect.Bottom + warnLine}
+	}
 
 	// Buttons, right-aligned: [Disconnect] [Open Window]
 	texts := popupTextsFor(lang)
@@ -608,7 +640,8 @@ func drawPopup(d *popupData) {
 
 	var client windows.Rect
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client)))
-	bg, fg, border, _, dotGreen := popupPalette(d.themeLight)
+	bg, fg, border, _, dotGreen, warnColor := popupPalette(d.themeLight)
+	texts := popupTextsFor(d.lang)
 
 	// Background
 	brush := createSolidBrush(bg)
@@ -633,10 +666,21 @@ func drawPopup(d *popupData) {
 	// Close ✕
 	drawCloseGlyph(hdc, d, fg)
 
-	// Status dot: green when connected, grey when not
+	// Status dot: green only when something is genuinely up. A tunnel that
+	// is still connecting gets the neutral border colour and a "Connecting"
+	// caption — it has not connected yet and may still fail, so it must not
+	// borrow the green.
 	dotColor := dotGreen
-	if !d.connected {
+	statusText := texts.connected
+	switch d.state {
+	case popupStateConnecting:
 		dotColor = border
+		statusText = texts.connecting
+	case popupStateConnected:
+		// keep green + "Connected"
+	default:
+		dotColor = border
+		statusText = texts.notConnected
 	}
 	dotBrush := createSolidBrush(dotColor)
 	oldDotPen := selectObject(hdc, getStockObject(nullPen))
@@ -646,12 +690,7 @@ func drawPopup(d *popupData) {
 	selectObject(hdc, oldDotBrush)
 	procDeleteObject.Call(dotBrush)
 
-	// Status line ("已连接" / "未连接") next to the dot
-	texts := popupTextsFor(d.lang)
-	statusText := texts.connected
-	if !d.connected {
-		statusText = texts.notConnected
-	}
+	// Status line ("已连接" / "连接中" / "未连接") next to the dot
 	selectFont(hdc, d.bodyFont)
 	procSetTextColor.Call(hdc, uintptr(fg))
 	drawTextOut(hdc, statusText, d.dotRect.Right+int32(8*d.scale), statusLineTop(d))
@@ -659,6 +698,15 @@ func drawPopup(d *popupData) {
 	// Tunnel names (single line with ellipsis)
 	bodyText := strings.Join(d.names, namesSeparator(d.lang))
 	drawTextClipped(hdc, d.bodyFont, fg, bodyText, d.bodyRect)
+
+	// Warning line: probe targets that are not routed through this tunnel.
+	// Amber, not red — the tunnel itself is up and carrying traffic; it is
+	// the *reading* for those targets that is meaningless, which is a
+	// setting to revisit rather than a failure.
+	if len(d.outOfRange) > 0 {
+		warn := texts.outOfRange + ": " + strings.Join(d.outOfRange, namesSeparator(d.lang))
+		drawTextClipped(hdc, d.bodyFont, warnColor, warn, d.warnRect)
+	}
 
 	// Buttons
 	drawPopupButton(hdc, d, d.openRect, texts.openLabel, d.hoverOpen)
@@ -670,7 +718,7 @@ func statusLineTop(d *popupData) int32 {
 }
 
 func drawPopupButton(hdc uintptr, d *popupData, r windows.Rect, label string, hover bool) {
-	_, fg, border, btnHover, _ := popupPalette(d.themeLight)
+	_, fg, border, btnHover, _, _ := popupPalette(d.themeLight)
 	if hover {
 		brush := createSolidBrush(btnHover)
 		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&r)), brush)

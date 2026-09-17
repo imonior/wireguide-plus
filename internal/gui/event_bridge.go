@@ -3,12 +3,49 @@ package gui
 import (
 	"encoding/json"
 	"log/slog"
+	"sort"
 	"sync"
 
 	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// outOfRangeTargets collects the probe targets that are no longer routed
+// through the tunnel meant to carry them.
+//
+// The condition can appear *after* a target was accepted: AllowedIPs can be
+// edited, and a hostname can resolve to a different address on a later
+// lookup. The setting is deliberately kept (deleting a user's input because
+// its target moved would be worse than a warning), so the only thing left to
+// do is say so — which is what this list feeds: the status bubble's amber
+// warning line and the editor's marking on the affected row.
+//
+// The primary tunnel's results ride in status.LatencyProbeResults; the other
+// tunnels' arrive in status.Tunnels, which is only populated when more than
+// one tunnel is active. Both are consulted, and duplicates collapse — the
+// same address can legitimately appear as two slots.
+func outOfRangeTargets(status ipc.ConnectionStatus) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(r domain.ProbeResult) {
+		if r.Coverage != "outside" || r.Target == "" || seen[r.Target] {
+			return
+		}
+		seen[r.Target] = true
+		out = append(out, r.Target)
+	}
+	for _, r := range status.LatencyProbeResults {
+		add(r)
+	}
+	for _, ts := range status.Tunnels {
+		for _, r := range ts.LatencyProbeResults {
+			add(r)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // eventBridge forwards IPC notifications from the helper to Wails events the
 // frontend subscribes to. It also exposes `Resubscribe()` so the helper
@@ -19,13 +56,23 @@ type eventBridge struct {
 	// onStatusChange is the cheap hook called for every status event — it
 	// updates the tray icon's label/tooltip without any IPC or disk work so
 	// the event loop goroutine never blocks on it.
-	onStatusChange func(activeNames []string, handshakeMap map[string]bool)
+	//
+	// It receives BOTH tunnel sets: activeNames (connecting/connected/
+	// disconnecting — lifecycle truth) and establishedNames (setup really
+	// finished — what the icon and the tray bubble may claim). The two are
+	// different on purpose; see Manager.EstablishedTunnels.
+	//
+	// outOfRange lists probe targets that an established tunnel no longer
+	// routes (AllowedIPs edited, a DDNS name moved). It travels with the
+	// status because nothing else notices: the target was valid when saved,
+	// so only a fresh evaluation can catch it.
+	onStatusChange func(activeNames []string, establishedNames []string, handshakeMap map[string]bool, outOfRange []string)
 	// onReconcileHistory is called on every status event with the active
 	// tunnel set + per-tunnel rx/tx so the history store can record sessions
 	// that were started or ended by the helper itself (auto-reconnect on
 	// wake, wifi rules, health-check recovery). nil when the bridge runs
 	// without a history store.
-	onReconcileHistory func(activeNames []string, rx, tx map[string]int64, reason string)
+	onReconcileHistory func(activeNames []string, handshakeMap map[string]bool, rx, tx map[string]int64, reason string)
 	// onQuitRequested terminates the app. Fired for ipc.EventQuit, which
 	// the helper broadcasts when someone runs `wireguideplus ctl stop`.
 	onQuitRequested func()
@@ -37,8 +84,8 @@ type eventBridge struct {
 func newEventBridge(
 	app *application.App,
 	clients *ipc.ClientHolder,
-	onStatusChange func(activeNames []string, handshakeMap map[string]bool),
-	onReconcileHistory func(activeNames []string, rx, tx map[string]int64, reason string),
+	onStatusChange func(activeNames []string, establishedNames []string, handshakeMap map[string]bool, outOfRange []string),
+	onReconcileHistory func(activeNames []string, handshakeMap map[string]bool, rx, tx map[string]int64, reason string),
 	onQuitRequested func(),
 ) *eventBridge {
 	return &eventBridge{
@@ -103,15 +150,18 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 			slog.Debug("event bridge: unmarshal status failed", "error", err)
 		} else {
 			b.app.Event.Emit("status", status)
+			// Build the handshake map once — the history reconciler needs it
+			// just as much as the tray icon: a tunnel must not open a history
+			// session before it has actually handshook.
+			hsMap := make(map[string]bool)
+			for _, ts := range status.Tunnels {
+				hsMap[ts.TunnelName] = ts.LastHandshake != ""
+			}
+			if status.TunnelName != "" {
+				hsMap[status.TunnelName] = status.LastHandshake != ""
+			}
 			if b.onStatusChange != nil {
-				hsMap := make(map[string]bool)
-				for _, ts := range status.Tunnels {
-					hsMap[ts.TunnelName] = ts.LastHandshake != ""
-				}
-				if status.TunnelName != "" {
-					hsMap[status.TunnelName] = status.LastHandshake != ""
-				}
-				b.onStatusChange(status.ActiveTunnels, hsMap)
+				b.onStatusChange(status.ActiveTunnels, status.EstablishedTunnels, hsMap, outOfRangeTargets(status))
 			}
 			if b.onReconcileHistory != nil {
 				rx := make(map[string]int64, len(status.Tunnels)+1)
@@ -124,7 +174,7 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 					rx[status.TunnelName] = status.RxBytes
 					tx[status.TunnelName] = status.TxBytes
 				}
-				b.onReconcileHistory(status.ActiveTunnels, rx, tx, "")
+				b.onReconcileHistory(status.ActiveTunnels, hsMap, rx, tx, "")
 			}
 		}
 	case ipc.EventReconnect:

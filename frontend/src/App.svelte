@@ -15,7 +15,6 @@
   import History from './lib/History.svelte';
   import DNSLeakTest from './lib/DNSLeakTest.svelte';
   import RouteVisualization from './lib/RouteVisualization.svelte';
-  import StatsDashboard from './lib/StatsDashboard.svelte';
   import UpdateNotice from './lib/UpdateNotice.svelte';
   import LegacyMigration from './lib/LegacyMigration.svelte';
   import EgressLostDialog from './lib/EgressLostDialog.svelte';
@@ -28,9 +27,16 @@
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
   import { TunnelService } from '../bindings/github.com/imonior/wireguide-plus/internal/app';
   import Icon from './lib/Icon.svelte';
+  import StatusPopup from './lib/StatusPopup.svelte';
 
   // View state
   let currentView = 'tunnels'; // 'tunnels' | 'history' | 'dnsleak' | 'routes' | 'logs'
+
+  // Popup window mode: when the app is loaded in the secondary status-bubble
+  // window (URL carries ?popup=1) we render only <StatusPopup/> and skip the
+  // full app shell. macOS/Linux use this; Windows keeps its native Win32
+  // bubble and never opens this window.
+  const isPopup = new URLSearchParams(window.location.search).has('popup');
 
 
   // Modal state
@@ -147,6 +153,17 @@
   }
 
   onMount(async () => {
+    // Popup window: only resolve theme + language so the bubble matches the
+    // app's appearance. Skip the full data load (tunnels/status/logs/events) —
+    // the popup is a tiny self-contained view that carries its own data.
+    if (isPopup) {
+      try {
+        await applySettingsToUI();
+      } catch (_) {
+        applyTheme('system');
+      }
+      return;
+    }
     // Load and apply saved theme before loading other data.
     // applyTheme sets the data-theme attribute AND the resolvedTheme store
     // that CodeMirror subscribes to for its own light/dark swap.
@@ -996,6 +1013,9 @@
      separate components mounted conditionally below; they pick up the new
      language on their next open (deliberate — otherwise changing language
      mid-interaction would destroy the modal). -->
+{#if isPopup}
+  <StatusPopup />
+{:else}
 <div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration) && currentView === 'tunnels' ? true : undefined}>
   <!-- Wails adds .file-drop-target-active class to .app when dragging files.
        We only render the overlay when drop-target is actually active — i.e.
@@ -1122,11 +1142,9 @@
                 on:connect={handleConnect}
                 on:refresh={handleRefresh}
                 on:notify={(e) => showToast(e.detail)} />
-              {#if $connectionStatus?.state === 'connected' && $connectionStatus?.tunnel_name === $selectedTunnel?.name}
-                <div class="stats-section">
-                  <StatsDashboard />
-                </div>
-              {/if}
+              <!-- Throughput graph now lives inline in the tunnel detail's
+                   stats row (compact), so the detail pane reads as one
+                   block instead of two stacked sections. -->
             {:else}
               <div class="empty-detail">
                 <div class="empty-icon-wrap">
@@ -1335,6 +1353,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
   :global(body) {
@@ -1628,10 +1647,6 @@
     overflow-y: auto;
     background: var(--bg-primary);
   }
-  .stats-section {
-    padding: 0 var(--space-6) var(--space-4);
-  }
-
   /* ---------- Empty state ---------- */
   .empty-detail {
     display: flex;

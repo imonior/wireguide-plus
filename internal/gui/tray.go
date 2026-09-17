@@ -9,6 +9,7 @@ import (
 	"math"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -427,10 +428,20 @@ type trayManager struct {
 	doShutdown func()
 
 	mu            sync.Mutex
-	activeTunnels map[string]bool // cached from status events
-	hasHandshake  map[string]bool // per-tunnel handshake status
-	rebuildTimer  *time.Timer     // debounce timer for rebuildMenu
-	notifyTimer   *time.Timer     // debounce timer for the status notification
+	activeTunnels map[string]bool // cached from status events (connecting too)
+	// establishedTunnels is the subset that finished setup (StateConnected).
+	// Everything user-visible — the "on" icon, the tooltip and the status
+	// bubble — reads this one so a tunnel whose connect attempt is still
+	// running (and may fail) is never announced as connected.
+	establishedTunnels map[string]bool
+	// outOfRange caches the probe targets that are no longer routed through
+	// their tunnel, as of the last status event. Surfaced in the status
+	// bubble: when the window is closed the bubble is the only place the
+	// user can be told, and the editor's colour marking is invisible then.
+	outOfRange []string
+	hasHandshake       map[string]bool // per-tunnel handshake status
+	rebuildTimer       *time.Timer     // debounce timer for rebuildMenu
+	notifyTimer        *time.Timer     // debounce timer for the status notification
 	// menu is the ONE Menu object backing the tray for the app's whole
 	// lifetime. rebuildMenu clears and refills it in place instead of
 	// creating a fresh Menu: Wails reuses the same NSMenu instance on
@@ -591,30 +602,65 @@ func (t *trayManager) safeSetIcon(icon []byte) {
 	}()
 }
 
-func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string]bool) {
+// setIconState receives BOTH sets on purpose:
+//
+//	activeNames      — connecting/connected/disconnecting (lifecycle truth,
+//	                   used to decide *whether the menu needs a rebuild*)
+//	establishedNames — tunnels whose setup actually finished
+//
+// Anything the user can read as "it's connected" (the green "on" icon, the
+// tooltip listing names, the status bubble) keys off establishedNames. Using
+// activeNames there is what made a failing connect look like "connected, then
+// dropped": during the attempt the tunnel is neither up nor gone.
+func (t *trayManager) setIconState(activeNames []string, establishedNames []string, handshakeMap map[string]bool, outOfRange []string) {
 	newSet := make(map[string]bool, len(activeNames))
 	for _, n := range activeNames {
 		newSet[n] = true
 	}
+	newEstablished := make(map[string]bool, len(establishedNames))
+	for _, n := range establishedNames {
+		// An established tunnel is by definition part of the active set;
+		// trust only the intersection so a helper that sends one field and
+		// not the other can never advertise a phantom connection.
+		if newSet[n] {
+			newEstablished[n] = true
+		}
+	}
 
 	t.mu.Lock()
 	prev := t.activeTunnels
+	prevEstablished := t.establishedTunnels
 	prevHandshake := t.hasHandshake
 	prevAnyConnected := len(prev) > 0
 	t.activeTunnels = newSet
+	t.establishedTunnels = newEstablished
 	t.hasHandshake = handshakeMap
+	t.outOfRange = outOfRange
 	t.mu.Unlock()
 
-	anyConnected := len(activeNames) > 0
+	// Everything user-visible reads these, not the raw active list.
+	connectedNames := make([]string, 0, len(newEstablished))
+	for n := range newEstablished {
+		connectedNames = append(connectedNames, n)
+	}
+	sort.Strings(connectedNames)
+	anyConnected := len(newEstablished) > 0
 
-	// Compute "did the active-set change" up front so we can both
-	// (a) gate the SetIcon/SetTooltip cgo calls (they're cheap but
-	// at 1Hz they add up) and (b) reuse the result for the menu
-	// rebuild gate below.
-	activeChanged := prevAnyConnected != anyConnected || len(prev) != len(newSet)
+	// Gate on BOTH sets: the icon must change when a tunnel finishes its
+	// transition (connecting → connected) even though the active set
+	// (which already contained it) did not change.
+	activeChanged := prevAnyConnected != anyConnected || len(prev) != len(newSet) || len(prevEstablished) != len(newEstablished)
 	if !activeChanged {
 		for k := range prev {
 			if !newSet[k] {
+				activeChanged = true
+				break
+			}
+		}
+	}
+	if !activeChanged {
+		for k := range prevEstablished {
+			if !newEstablished[k] {
 				activeChanged = true
 				break
 			}
@@ -630,7 +676,7 @@ func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string
 		}
 		if anyConnected {
 			t.safeSetIcon(onIcon)
-			tooltip := "WireGuide Plus — " + strings.Join(activeNames, ", ")
+			tooltip := "WireGuide Plus — " + strings.Join(connectedNames, ", ")
 			t.tray.SetTooltip(tooltip)
 		} else {
 			if runtime.GOOS == "darwin" || ((runtime.GOOS == "windows" || runtime.GOOS == "linux") && len(offIcon) > 0) {
@@ -645,9 +691,9 @@ func (t *trayManager) setIconState(activeNames []string, handshakeMap map[string
 			t.tray.SetLabel("WireGuide Plus")
 		}
 	} else if anyConnected {
-		// Active names may have reordered without count changing.
+		// Established names may have reordered without count changing.
 		// Refresh tooltip only when names differ from last broadcast.
-		newTooltip := "WireGuide Plus — " + strings.Join(activeNames, ", ")
+		newTooltip := "WireGuide Plus — " + strings.Join(connectedNames, ", ")
 		t.tray.SetTooltip(newTooltip)
 	}
 
@@ -709,13 +755,42 @@ func (t *trayManager) scheduleStatusNotification() {
 // showStatusNotification renders the tray bubble with the current connection
 // situation (connected tunnel list, or "not connected"). Its on-screen
 // duration comes from the notify_duration_ms setting (default 10s).
+//
+// The listed names and the green state come from the ESTABLISHED set. When
+// nothing is established yet but tunnels are still trying, the bubble says
+// "Connecting" instead of "Connected" — which is what actually happened.
 func (t *trayManager) showStatusNotification() {
 	t.mu.Lock()
-	names := make([]string, 0, len(t.activeTunnels))
-	for n := range t.activeTunnels {
+	names := make([]string, 0, len(t.establishedTunnels))
+	for n := range t.establishedTunnels {
 		names = append(names, n)
 	}
+	pending := make([]string, 0, 1)
+	for n := range t.activeTunnels {
+		if !t.establishedTunnels[n] {
+			pending = append(pending, n)
+		}
+	}
+	outOfRange := append([]string(nil), t.outOfRange...)
 	t.mu.Unlock()
+	sort.Strings(names)
+
+	state := popupStateConnected
+	if len(names) > 0 {
+		state = popupStateConnected
+	} else if len(pending) > 0 {
+		// Nothing is up yet, something is still dialling: say so, and name
+		// it so the bubble isn't an unexplained "Connecting".
+		state = popupStateConnecting
+		names = pending
+		sort.Strings(names)
+		// The warning is about what the *established* tunnels route, so it
+		// makes no sense while nothing is established yet.
+		outOfRange = nil
+	} else {
+		state = popupStateDisconnected
+		outOfRange = nil
+	}
 
 	lang := "en"
 	duration := 10 * time.Second
@@ -727,8 +802,7 @@ func (t *trayManager) showStatusNotification() {
 			duration = time.Duration(s.NotifyDurationMs) * time.Millisecond
 		}
 	}
-	connected := len(names) > 0
-	showStatusPopup(names, connected, lang, duration, showDock, func() {
+	showStatusPopup(names, state, outOfRange, lang, duration, showDock, func() {
 		t.mu.Lock()
 		names := make([]string, 0, len(t.activeTunnels))
 		for n := range t.activeTunnels {

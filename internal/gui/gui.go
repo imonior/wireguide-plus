@@ -211,6 +211,11 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	})
 	tunnelService.SetApp(app)
 	bindAppToLogHandler(app)
+	// Status bubble (macOS/Linux secondary window; see popup_wails.go). On
+	// Windows this just registers dormant handlers — showStatusPopup there is
+	// the native Win32 bubble, which never opens this window.
+	popupApp = app
+	registerPopupEvents(app)
 	// Replace the menu bar Wails synthesizes on macOS: its default Help →
 	// Learn More navigates the WebView itself to wails.io (no way back to
 	// the GUI). Ours opens the GitHub project page in the system browser.
@@ -437,7 +442,6 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	recoveryGate := newShutdownGate()
 	doShutdown = func() {
 		shutdownOnce.Do(func() {
-			slog.Info("shutting down GUI + helper")
 			recoveryGate.Trip()
 			// Persist window geometry (covers "Quit" from the tray while
 			// the window is hidden — close-to-tray already saved it).
@@ -450,22 +454,46 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 			// debounced writer would otherwise lose the last 100ms of
 			// records when the GUI process exits.
 			historyStore.Flush()
+
+			// What quitting means for live tunnels is the user's call
+			// (disconnect_on_quit; default on, which is what every install
+			// has done since before the setting existed). Off is the "this
+			// VPN is the machine's only route out" case: we drop our own IPC
+			// connection and nothing else. The helper stays up under its own
+			// long-standing rule — it never shuts down while a tunnel is
+			// active, the same semantics wg-quick's monitor daemon has — and
+			// the next launch reattaches to it rather than spawning a fresh
+			// one (which would also mean a fresh authorization prompt).
+			disconnectOnQuit := true
+			if st, err := tunnelService.GetSettings(); err == nil && st != nil {
+				disconnectOnQuit = st.DisconnectOnQuitEnabled()
+			}
+			slog.Info("shutting down GUI", "disconnect_on_quit", disconnectOnQuit)
+
 			c := clients.Get()
 			if c != nil {
-				// Bounded timeouts so a hung helper can't keep the GUI
-				// alive forever — user clicked Quit, they expect the app
-				// to die. 2s is generous for a local Unix-socket RPC that
-				// just kicks off async teardown.
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				if err := c.CallWithContext(ctx, ipc.MethodDisconnect, nil, nil); err != nil {
-					slog.Warn("shutdown: Disconnect RPC failed", "error", err)
+				if disconnectOnQuit {
+					// Bounded timeouts so a hung helper can't keep the GUI
+					// alive forever — user clicked Quit, they expect the app
+					// to die. 2s is generous for a local Unix-socket RPC that
+					// just kicks off async teardown.
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := c.CallWithContext(ctx, ipc.MethodDisconnect, nil, nil); err != nil {
+						slog.Warn("shutdown: Disconnect RPC failed", "error", err)
+					}
+					cancel()
+					ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+					if err := c.CallWithContext(ctx, ipc.MethodShutdown, nil, nil); err != nil {
+						slog.Warn("shutdown: Shutdown RPC failed", "error", err)
+					}
+					cancel()
+				} else {
+					// Deliberately NO Shutdown RPC: asking the helper to exit
+					// would run its cleanup(), which disconnects every tunnel
+					// — exactly the session we were asked to preserve.
+					slog.Info("quit with tunnels up: helper and its tunnels are left running",
+						"category", "lifecycle")
 				}
-				cancel()
-				ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-				if err := c.CallWithContext(ctx, ipc.MethodShutdown, nil, nil); err != nil {
-					slog.Warn("shutdown: Shutdown RPC failed", "error", err)
-				}
-				cancel()
 			}
 			// Close in a goroutine with a short delay so the helper has
 			// time to process the shutdown command without blocking the
