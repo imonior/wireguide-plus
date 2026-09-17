@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.6] - 2026-09-18
+
+### ✨ 新增
+
+- **保存延迟探测目标后立即重新探测**：此前改完目标要等下一个 30 秒周期才出结果，看上去像「点了没反应」。新增 IPC `Tunnel.ProbeNow`，写盘成功后立即异步跑一轮探测（RPC 立刻返回，不被 15 秒 ICMP 超时拖住），结果经 1Hz 状态广播推送；周期 tick 与手动触发重叠时后来那次被丢弃，不会把每个目标 ping 两遍；结果回来前前端在对应行显示「探测中…」。
+- **Linux / macOS 上报 pinned 出口网卡丢失**：「显式 pin 出口网卡 → 不做自动故障切换」此前只有 Windows 会在运行时通知 GUI，Linux / macOS 缺位。现三平台一致：Linux / macOS 每 2 秒检查被 pin 的网卡是否存在且 up，丢失时复用同一 `EventEgressInterfaceLost` 通知链弹提示（隧道保持 pin 状态，不偷偷切走）。Windows 侧监控改为按网卡名解析（`net.InterfaceByName`），网卡改名后也能持续追踪，与另两平台签名一致。
+
+### 🐛 修复
+
+- **隧道新建 / 编辑点击保存无反应**：字段编辑器（Fields tab）既不声明也不渲染 `errors`，父级又漏传 —— 校验或保存失败被完全静默吞掉。现与配置编辑器一致，错误直接显示在编辑区顶部。
+- **分流隧道延迟探测目标误报「不在 AllowedIPs 内」**：Wails IPC 序列化字段为 snake_case（`peers` / `allowed_ips` / `public_key` / `interface.dns`），前端按 camelCase 读取取不到值，覆盖校验因此认为一个合法地址都没覆盖 → 任何 IP / 域名都被拒。同时修复详情页公钥、DNS 显示为空的问题。
+- **端点等信息无法选中复制**：hero 端点由「点击复制按钮」改回可选中文本 —— 用户常只要主机名、或只要括号里的实时 IP，按钮只能给整串。并补齐全局选中高亮：应用全局禁用了文本选择，此前只有少数区域自行 opt-in，高亮色随系统、在暗色卡片上几乎看不见；现统一用主题强调色，输入框 / 文本域也显式恢复可选中。
+
+### 🔧 变更
+
+- **隧道详情页精简**：删除与 hero 重复的独立端点显示块；延迟结果卡与延迟探测目标输入框合并为同一行；目标输入框下方的长提示折叠进「详细说明」（常驻只留一句）；「握手 / 时长 / 接口名称」移入 hero 并加大字号；域名端点在后面追加实时解析地址（`host:port (ip:port)`），取值来自探测流而非前端另做 DNS，字面 IP 不重复显示。
+
 ## [2.2.5] - 2026-09-17
 
 ### ✨ 新增

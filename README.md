@@ -47,7 +47,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Settings export & import** — bundles tunnels, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
 - **Tools tab** — a built-in **DNS Leak Test** checks whether your traffic actually exits through the configured DNS servers, and **Route Visualization** shows the active routing table with per-route VPN / Direct badges, a LAN on-link filter, and Cellular interface labelling.
 - **Tunnel policies** — per-tunnel DNS resolution paths, force specific domains through the tunnel, traffic protection, default DNS, and deterministic conflict resolution.
-- **Latency probe** — per-tunnel latency probing with multiple targets in parallel; each candidate (public resolvers 8.8.8.8 / 223.5.5.5, the tunnel endpoint, and any custom address or domain) is probed simultaneously and shown with its resolved IP, kind and round-trip time. On split tunnels, custom targets are validated against the tunnel's AllowedIPs coverage before they are saved.
+- **Latency probe** — per-tunnel latency probing with multiple targets in parallel; each candidate (public resolvers 8.8.8.8 / 223.5.5.5, the tunnel endpoint, and any custom address or domain) is probed simultaneously and shown with its resolved IP, kind and round-trip time. On split tunnels, custom targets are validated against the tunnel's AllowedIPs coverage before they are saved. Targets are re-probed immediately after saving, and a domain endpoint shows the address it currently resolves to in the tunnel header.
 
 ## Fixes & enhancements over upstream wireguide
 

@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.6] - 2026-09-18
+
+### ✨ Added
+
+- **Re-probe immediately when latency targets change**: editing a target previously waited for the next 30 s cycle, which read as "nothing happened". A new `Tunnel.ProbeNow` IPC runs a probe cycle right after the targets are persisted, asynchronously (the RPC returns at once instead of blocking on a 15 s ICMP timeout) and pushes the result through the 1 Hz status broadcast. A guard drops the later request when a manual trigger overlaps the periodic tick, so no target is pinged twice; until the result lands, the row shows a "probing…" marker.
+- **Pinned-egress loss is now reported on Linux / macOS**: "explicitly pinned egress interface → no auto-failover" previously notified the GUI at runtime only on Windows. All three platforms now behave the same: Linux / macOS check every 2 s whether the pinned interface still exists and is up, and on loss raise the same `EventEgressInterfaceLost` event (the tunnel stays pinned rather than silently moving). The Windows monitor now resolves the pinned interface by name via `net.InterfaceByName`, so a renamed NIC keeps being tracked, matching the other two platforms' signature.
+
+### 🐛 Fixed
+
+- **Tunnel create / edit saved nothing and said nothing**: the field editor (Fields tab) neither declared nor rendered `errors`, and the parent never passed it — so every validation or save failure was swallowed silently. It now shows the same error block as the config editor, at the top of the editor.
+- **Split-tunnel latency targets wrongly rejected as "outside AllowedIPs"**: Wails serialises IPC fields as snake_case (`peers`, `allowed_ips`, `public_key`, `interface.dns`) while the frontend read them as camelCase, so the coverage check saw no allowed IP at all and rejected every address. Also fixes the peer public key and DNS rows rendering empty on the detail page.
+- **Endpoint could not be selected and copied**: the hero endpoint went back to selectable text instead of a click-to-copy button — users usually want a piece of it (just the host, or just the live IP in parentheses), which a button can never give. Selection highlighting was also missing: the app disables selection globally, and the few regions that opted back in inherited the UA colour, nearly invisible over a dark card. One global rule now applies the theme accent everywhere, and form fields explicitly opt back in.
+
+### 🔧 Changed
+
+- **Tighter tunnel detail page**: dropped the standalone endpoint block that duplicated the hero. The latency card and the probe-target input now share one row. The long hint under the target input is collapsed behind a "details" toggle, leaving one line visible. Handshake / uptime / interface moved into the hero at a larger size. A domain endpoint now carries its live resolved address (`host:port (ip:port)`), taken from the probe stream rather than a second DNS lookup, and skipped when the endpoint is already a literal IP.
+
 ## [2.2.5] - 2026-09-17
 
 ### ✨ Added
