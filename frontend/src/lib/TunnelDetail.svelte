@@ -514,11 +514,6 @@
   // would make its own public probes uneditable.
   $: fullTunnel = !detail || isFullTunnel(detail);
 
-  // Which rows the editor renders. Split tunnels drop 0/1 entirely rather
-  // than disabling them: a greyed-out box invites the user to try, and the
-  // address would never be probed on that tunnel anyway.
-  $: probeSlotIndexes = fullTunnel ? [0, 1, 2, 3] : [2, 3];
-
   // The compiled-in defaults for the public-probe slots, shown as
   // placeholders so an empty (cleared) row still says what will be probed.
   const PROBE_SLOT_DEFAULTS = ['8.8.8.8', '223.5.5.5', '', ''];
@@ -967,36 +962,76 @@
         <div class="latency-target-col">
           <h3 class="section-label">{$t('tunnel.latency_target')}</h3>
           <div class="info-card endpoint-card probe-target-card">
-            {#each probeSlotIndexes as i (i)}
-              <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
-                <input
-                  bind:this={probeInputs[i]}
-                  class="latency-target-input probe-slot-input"
-                  type="text"
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder={i < 2 ? probeSlotDefault(i) : $t('tunnel.latency_target_placeholder')}
-                  bind:value={probeSlots[i]}
-                  on:input={onProbeSlotInput}
-                  on:keydown={(e) => onProbeSlotKeydown(e, i)} />
-                {#if slotResolved(i)}
-                  <!-- What the value resolves to, right now. Shown for
-                       hostnames so a DDNS target that moved is visible
-                       without re-saving; for a literal IP it is the
-                       address itself, which reads as a confirmation
-                       rather than a duplicate. -->
-                  <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
-                {/if}
-                {#if probePendingSlots[i]}
-                  <!-- Saved, but not measured yet. The helper re-probes on
-                       save, so this is a second or two — long enough that
-                       showing nothing at all reads as "nothing happened". -->
-                  <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
-                    {$t('tunnel.latency_probing')}
-                  </span>
-                {/if}
+            {#if detail}
+              <!-- The tunnel's routing range, as a quiet reference above the
+                   editable targets: for a full tunnel it is 0.0.0.0/0 (why the
+                   two preset public-probe slots exist), and for a split tunnel
+                   it tells you which addresses are even reachable. Placed on top
+                   so it reads as context for everything below, not a footnote. -->
+              <div class="probe-allowed-ref">
+                <span class="probe-allowed-label">{$t('tunnel.allowed_ips')}</span>
+                <span class="probe-allowed-value mono" title={collectAllowedIPs(detail).join(', ')}>
+                  {collectAllowedIPs(detail).join(', ') || '—'}
+                </span>
               </div>
-            {/each}
+            {/if}
+            <!-- Preset public-probe slots (left) and free-form slots (right),
+                 two rows each. Split tunnels drop the preset column entirely,
+                 leaving the two custom rows full-width in a single column. -->
+            <div class="probe-slots-grid" class:full={fullTunnel}>
+              {#if fullTunnel}
+                <div class="probe-col">
+                  <div class="probe-col-label">{$t('tunnel.latency_preset')}</div>
+                  {#each [0, 1] as i (i)}
+                    <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
+                      <input
+                        bind:this={probeInputs[i]}
+                        class="latency-target-input probe-slot-input"
+                        type="text"
+                        spellcheck="false"
+                        autocomplete="off"
+                        placeholder={probeSlotDefault(i)}
+                        bind:value={probeSlots[i]}
+                        on:input={onProbeSlotInput}
+                        on:keydown={(e) => onProbeSlotKeydown(e, i)} />
+                      {#if slotResolved(i)}
+                        <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                      {/if}
+                      {#if probePendingSlots[i]}
+                        <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
+                          {$t('tunnel.latency_probing')}
+                        </span>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              <div class="probe-col">
+                <div class="probe-col-label">{$t('tunnel.latency_custom')}</div>
+                {#each [2, 3] as i (i)}
+                  <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
+                    <input
+                      bind:this={probeInputs[i]}
+                      class="latency-target-input probe-slot-input"
+                      type="text"
+                      spellcheck="false"
+                      autocomplete="off"
+                      placeholder={$t('tunnel.latency_target_placeholder')}
+                      bind:value={probeSlots[i]}
+                      on:input={onProbeSlotInput}
+                      on:keydown={(e) => onProbeSlotKeydown(e, i)} />
+                    {#if slotResolved(i)}
+                      <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                    {/if}
+                    {#if probePendingSlots[i]}
+                      <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
+                        {$t('tunnel.latency_probing')}
+                      </span>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
             {#if probeSlotMessage}
               <!-- Rejected: the value was not saved, so say so and send
                    the caret back into the offending row. A red line alone
@@ -1617,7 +1652,7 @@
     color: var(--yellow);
   }
   .latency-head-value {
-    font: 700 18px/22px var(--font-sans);
+    font: 700 18px/24px var(--font-sans);
     color: var(--text-primary);
     font-feature-settings: "tnum";
     letter-spacing: -0.02em;
@@ -1676,13 +1711,13 @@
     border-top: 0.5px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
   }
   .probe-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    font: 11px/16px var(--font-sans);
+    font: 11px/18px var(--font-sans);
     color: var(--text-secondary);
     min-width: 0;
   }
@@ -1747,7 +1782,7 @@
     margin-top: 2px;
     padding-top: 4px;
     border-top: 0.5px solid var(--border);
-    font: 10px/14px var(--font-sans);
+    font: 10px/16px var(--font-sans);
     color: var(--yellow, #f59e0b);
   }
   /* A row whose address is not routed through this tunnel: the number is
@@ -1828,8 +1863,59 @@
      than the fields are worth, and the resolved address has to sit next to
      the box at all times anyway. */
   .probe-target-card {
-    gap: 4px;
+    gap: 6px;
     justify-content: flex-start;
+  }
+  /* The tunnel's routing range, shown as a quiet reference above the editable
+     targets so it reads as context, not a footnote. */
+  .probe-allowed-ref {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+    border-bottom: 0.5px solid var(--border);
+    min-width: 0;
+  }
+  .probe-allowed-label {
+    flex-shrink: 0;
+    font: 500 10px/14px var(--font-sans);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .probe-allowed-value {
+    color: var(--text-secondary);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+  }
+  /* Two columns of probe slots: preset (left) + custom (right), two rows each.
+     Split tunnels render only the custom column, which then spans full width. */
+  .probe-slots-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px 10px;
+  }
+  .probe-slots-grid.full {
+    grid-template-columns: 1fr 1fr;
+  }
+  .probe-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .probe-col-label {
+    margin: 0 0 1px 2px;
+    font: 500 10px/13px var(--font-sans);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
   .probe-slot {
     display: flex;
