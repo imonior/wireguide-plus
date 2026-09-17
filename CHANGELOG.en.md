@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.5] - 2026-09-17
+
+### ✨ Added
+
+- **macOS / Linux system status popup now matches Windows**: previously only Windows showed the system tray bubble; macOS / Linux `showStatusPopup` was an empty stub. The cross-platform popup logic is now extracted (`popup_wails.go` + `popup_state.go`), so macOS / Linux show the same bubble — current connection state 10 s after startup (once the elevation prompt settles), and a delayed bubble with the stable latest state after network changes alter tunnel state; the bubble has an action menu (open main window / disconnect), can be dismissed manually, and auto-closes after the configurable dwell time (default 10 s).
+- **Multi-target latency probe in parallel**: the full tunnel now probes 8.8.8.8 + 223.5.5.5 + endpoint + custom values (de-duplicated) simultaneously instead of "first one that answers wins"; the split tunnel probes only endpoint + custom values. Each candidate is shown on its own row (status dot + name + resolved IP + kind tag + milliseconds, green ≤100 ms / yellow ≤300 ms / red or unreachable otherwise).
+- **Latency probe target AllowedIPs coverage check**: on a split tunnel (AllowedIPs without 0.0.0.0/0), a custom IP outside the coverage is rejected at save with a red hint; the full tunnel does not check. Domains are resolved at save time and rejected if they cannot be resolved. Four slots store the targets (two public-coverage + two any-type), and coverage is recomputed from the current config every cycle, so a target that only becomes invalid after a save is still caught.
+- **Disconnect-on-quit toggle**: Settings gains an explicit "Disconnect tunnels on quit" switch, on by default (preserving current behaviour); when off, quitting uses Shutdown to keep the tunnels up.
+
+### 🐛 Fixed
+
+- **Connection state misreported**: `StateConnecting` was previously counted as an active tunnel, making the tray / icon turn green early and leaving "connected then immediately disconnected" entries in history. A new "established tunnel" state (true only after the handshake completes) is used for the visual; a "connecting" intermediate state was added; history records a session only after the handshake succeeds and silently drops attempts that never handshake.
+- **Startup connect failed when DNS not ready**: a new `resolveEndpointWithRetry` (15 s total budget / 5 s per attempt / 0.8 s doubling backoff) retries only transient DNS failures before the engine is built, avoiding startup failures when DNS is not yet ready.
+- **IPv6 MTU warning noise**: a non-fatal missing IPv6 sub-interface ("element not found") is now logged at Debug; other errors stay at Warn.
+
+### 🛠 Internal
+
+- **Non-Windows build fix**: the `popup_state` type and constants were defined in a `//go:build windows` file, breaking macOS / Linux compilation; they are now in a build-tag-free `popup_state.go`.
+- **`internal/diag` self-conflict live-repro test is now environment-aware**: it previously hard-coded `selfAddrs=10.30.35.2/32`, which disagreed with the machine's actual adapter address and falsely reported a self-conflict; it now scans the real interface for the address and skips when the system is not in that shape.
+- **CI / build**: pinned action versions (checkout v5.1.0 / setup-go v6.5.0 / setup-node v5.0.0 / upload-artifact v7.0.1 / git-cliff v4.9.0), added dependabot; added a publish-hygiene pre-commit hook + CI scan for sensitive tokens in commit messages / release files; added `.gitattributes` for consistent line endings; CONTRIBUTING version matrix synced.
+
+### 📝 Docs
+
+- **README**: documented the multi-target latency probe, macOS / Linux status popup, and disconnect-on-quit (all 5 languages).
+
 ## [2.2.0] - 2026-09-16
 
 ### ✨ Added

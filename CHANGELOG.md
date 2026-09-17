@@ -4,6 +4,31 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.5] - 2026-09-17
+
+### ✨ 新增
+
+- **macOS / Linux 系统状态气泡与 Windows 统一**：此前仅 Windows 弹系统托盘气泡，macOS / Linux 的 `showStatusPopup` 为空实现。现抽出跨平台弹窗逻辑（`popup_wails.go` + `popup_state.go`），macOS / Linux 也弹同款气泡——启动 10 秒后（提权提示安定）展示当前连接状态，网络变化导致隧道状态改变后延迟展示稳定最新状态；气泡含操作菜单（打开主窗口 / 断开）、可手动关闭、按设置驻留时长（默认 10 秒）自动关闭。
+- **延迟探测多目标并行**：全通道同时探测 8.8.8.8 + 223.5.5.5 + 端点 + 手填值（去重），不再「第一个通就停」；分流通道只探测端点 + 手填值。每个候选独立一行展示（状态点 + 名称 + 解析 IP + 类型标签 + 毫秒，≤100ms 绿 / ≤300ms 黄 / 其余红或不通）。
+- **延迟探测目标 AllowedIPs 覆盖校验**：分流（AllowedIPs 无 0.0.0.0/0）下手填 IP 不在覆盖范围内 → 拦截保存并红字提示；全通道不校验。域名在保存时解析，解析不出即拒绝。四个槽位存储（2 个公共覆盖 + 2 个任意类型），并随每次配置动态重算覆盖，保存后才失效的目标也能被发现。
+- **退出时断开开关**：设置新增「退出时断开隧道」显式开关，默认开启（保持现状）；关闭时退出走 Shutdown 以保留隧道。
+
+### 🐛 修复
+
+- **连接状态误标**：此前 `StateConnecting` 即被算作活动隧道，导致托盘 / 图标提前变绿、连接历史出现「连上立刻断开」。现新增「已建立隧道」（握手成功才为真连接），GUI 视觉改用已建立集合判定，并新增「正在连接」中间态；连接历史仅在握手成功后才记录，未握手的尝试静默丢弃。
+- **开机 DNS 未就绪即连失败**：新增 `resolveEndpointWithRetry`（15 秒总预算 / 5 秒单次 / 0.8 秒翻倍退避），仅重试瞬时 DNS 失败，再建立引擎，避免开机 DNS 未就绪导致的连接失败。
+- **IPv6 MTU 警告噪声**：非致命的 IPv6 子接口缺失（「找不到元素」）降为 Debug，其余错误仍 WARN。
+
+### 🛠 内部
+
+- **非 Windows 编译修复**：`popup_state` 类型与常量原定义在 `//go:build windows` 文件，导致 macOS / Linux 编译失败；抽出到无构建标签的 `popup_state.go`。
+- **`internal/diag` 自冲突 live-repro 测试环境感知**：原写死 `selfAddrs=10.30.35.2/32`，与本机实际适配器地址不符误报自冲突；现扫描真实接口取地址，系统不在该形态时跳过。
+- **CI / 构建**：钉版本（checkout v5.1.0 / setup-go v6.5.0 / setup-node v5.0.0 / upload-artifact v7.0.1 / git-cliff v4.9.0），新增 dependabot；提交信息与发布文件敏感词预提交钩子 + CI 扫描；新增 `.gitattributes` 统一行尾；CONTRIBUTING 版本矩阵同步更新。
+
+### 📝 文档
+
+- **README**：补充延迟探测多目标、macOS / Linux 状态气泡、退出时断开等说明（5 语言同步）。
+
 ## [2.2.0] - 2026-09-16
 
 ### ✨ 新增

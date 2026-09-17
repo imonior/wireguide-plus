@@ -39,7 +39,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   cable unplug, network loss, ...) that alter tunnel state also show a 10-second-delayed
   bubble with the stable, latest state. The bubble has an action menu (open main window /
   disconnect), can be dismissed manually, or auto-closes after a configurable dwell time
-  (default 10 s, adjustable in Settings).
+  (default 10 s, adjustable in Settings). macOS and Linux now show the same bubble (previously Windows-only).
 - **Tunnel management** — import / export `.conf`, connection history, quick toggles.
 - **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
 - **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear).
@@ -47,6 +47,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Settings export & import** — bundles tunnels, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
 - **Tools tab** — a built-in **DNS Leak Test** checks whether your traffic actually exits through the configured DNS servers, and **Route Visualization** shows the active routing table with per-route VPN / Direct badges, a LAN on-link filter, and Cellular interface labelling.
 - **Tunnel policies** — per-tunnel DNS resolution paths, force specific domains through the tunnel, traffic protection, default DNS, and deterministic conflict resolution.
+- **Latency probe** — per-tunnel latency probing with multiple targets in parallel; each candidate (public resolvers 8.8.8.8 / 223.5.5.5, the tunnel endpoint, and any custom address or domain) is probed simultaneously and shown with its resolved IP, kind and round-trip time. On split tunnels, custom targets are validated against the tunnel's AllowedIPs coverage before they are saved.
 
 ## Fixes & enhancements over upstream wireguide
 
