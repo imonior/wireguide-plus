@@ -66,8 +66,6 @@
     "export": "エクスポート",
     "status": "ステータス",
     "endpoint": "エンドポイント",
-    "copy_endpoint": "エンドポイントをコピー",
-    "copied": "コピーしました",
     "latency_target": "遅延測定先アドレス",
     "latency_target_placeholder": "任意 — IP またはホスト名",
     "latency_target_hint": "IP またはホスト名,最大 4 件。分割トンネルでは AllowedIPs の範囲内にある必要があります。",

@@ -66,8 +66,6 @@
     "export": "导出",
     "status": "状态",
     "endpoint": "端点",
-    "copy_endpoint": "复制端点",
-    "copied": "已复制",
     "latency_target": "延迟探测目标地址",
     "latency_target_placeholder": "可选,IP 或域名",
     "latency_target_hint": "IP 或域名,最多四个;分流隧道需落在 AllowedIPs 内。",

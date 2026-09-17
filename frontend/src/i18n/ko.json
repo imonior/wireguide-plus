@@ -66,8 +66,6 @@
     "export": "내보내기",
     "status": "상태",
     "endpoint": "엔드포인트",
-    "copy_endpoint": "엔드포인트 복사",
-    "copied": "복사됨",
     "latency_target": "지연 측정 주소",
     "latency_target_placeholder": "선택 — IP 또는 호스트 이름",
     "latency_target_hint": "IP 또는 호스트 이름, 최대 4개. 분할 터널에서는 AllowedIPs 범위 안에 있어야 합니다.",

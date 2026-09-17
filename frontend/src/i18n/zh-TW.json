@@ -66,8 +66,6 @@
     "export": "匯出",
     "status": "狀態",
     "endpoint": "端點",
-    "copy_endpoint": "複製端點",
-    "copied": "已複製",
     "latency_target": "延遲探測目標位址",
     "latency_target_placeholder": "可選,IP 或網域",
     "latency_target_hint": "IP 或網域,最多四個;分流隧道需落在 AllowedIPs 內。",

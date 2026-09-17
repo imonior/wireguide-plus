@@ -66,8 +66,6 @@
     "export": "Export",
     "status": "Status",
     "endpoint": "Endpoint",
-    "copy_endpoint": "Copy endpoint",
-    "copied": "Copied",
     "latency_target": "Latency probe address",
     "latency_target_placeholder": "Optional — IP or hostname",
     "latency_target_hint": "IP or hostname, up to four. On a split tunnel the address must fall inside AllowedIPs.",

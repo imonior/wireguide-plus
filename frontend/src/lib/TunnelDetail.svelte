@@ -342,24 +342,18 @@
     return port ? `${endpointLiveIP}:${port}` : endpointLiveIP;
   })();
 
-  // Copy the hero endpoint to the clipboard. The endpoint already shows in
-  // the hero status line; this just makes it grabbable in one click (e.g. to
-  // paste into another client) without selecting the text by hand.
-  let endpointCopied = false;
-  let endpointCopiedTimer;
-  async function copyEndpoint() {
-    const ep = $selectedTunnel?.endpoint;
-    if (!ep) return;
-    try {
-      await navigator.clipboard.writeText(ep);
-      endpointCopied = true;
-      clearTimeout(endpointCopiedTimer);
-      endpointCopiedTimer = setTimeout(() => (endpointCopied = false), 1400);
-    } catch (e) {
-      console.warn('copy endpoint failed', e);
-    }
-  }
+  // Hover value for the whole endpoint: the pane can clip a long DDNS name,
+  // and a clipped span is no help when the user is reading it off-screen.
+  $: endpointTitle = endpointLive
+    ? `${$selectedTunnel?.endpoint || ''} (${endpointLive})`
+    : $selectedTunnel?.endpoint || '';
 
+  // The hero endpoint is plain selectable text, not a copy button: the app
+  // sets `user-select: none` globally (public/style.css), so the span opts
+  // back in via CSS. Selecting beats a click-to-copy here because a user
+  // copying an endpoint usually wants a piece of it — the host, or just the
+  // resolved address in parentheses — not the whole string.
+  //
   // Automatic latency probe target — single rule: probe the peer endpoint.
   //
   // Previous revisions preferred a /32 host from AllowedIPs, then 8.8.8.8
@@ -822,16 +816,15 @@
           </span>
           {#if $selectedTunnel.endpoint}
             <span class="hero-sep">·</span>
-            <button
-              class="hero-endpoint"
-              type="button"
-              title={endpointCopied ? $t('tunnel.copied') : $t('tunnel.copy_endpoint')}
-              on:click={copyEndpoint}>
+            <!-- Selectable, not click-to-copy: users copy parts of this
+                 (the host, or just the resolved address) as often as all of
+                 it, and a button would only ever give them the whole string.
+                 The title carries the full value in case the pane clips it. -->
+            <span class="hero-endpoint" title={endpointTitle}>
               <span class="hero-endpoint-text">{$selectedTunnel.endpoint}{#if endpointLive}<span
                 class="hero-endpoint-ip"
                 title={endpointLiveIP}>({endpointLive})</span>{/if}</span>
-              <Icon name={endpointCopied ? 'check' : 'copy'} size={12} strokeWidth={2} />
-            </button>
+            </span>
           {/if}
           {#if $selectedTunnel.protocol === 'amneziawg' && $appSettings.loaded}
             <span class="hero-sep">·</span>
@@ -1342,32 +1335,26 @@
   .hero-card.hero-warning .hero-state-text { color: var(--orange, #FF9500); }
   .hero-sep { color: var(--text-muted); opacity: 0.6; }
   .hero-endpoint {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin: 0;
-    padding: 1px 5px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
+    display: inline-block;
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 11px;
-    cursor: pointer;
+    /* The app turns selection off globally; this is one of the few values a
+       user is expected to lift out of the UI, so it opts back in. Without
+       this the text renders but cannot be highlighted at all. */
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
     max-width: 100%;
+    vertical-align: bottom;
   }
-  .hero-endpoint:hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    color: var(--text-primary);
-  }
-  .hero-endpoint:active { transform: translateY(0.5px); }
-  .hero-endpoint :global(svg) {
-    flex-shrink: 0;
-    opacity: 0.7;
+  .hero-endpoint::selection,
+  .hero-endpoint :global(*)::selection {
+    background: color-mix(in srgb, var(--accent) 34%, transparent);
   }
   .hero-endpoint-text {
     overflow: hidden;
@@ -1810,6 +1797,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Public key / DNS / AllowedIPs are values a user lifts out of the app
+       to paste somewhere else; the global opt-out would block that. */
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
   .info-value.mono {
     font-family: var(--font-mono);
