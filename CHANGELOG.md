@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.7] - 2026-09-18
+
+### 🐛 修复
+
+- **域名端点 hero 不显示当前连接的实时 IP**：后端把 UAPI 已解析地址当探测候选传给探测流程，导致解析 IP 始终为空、hero 永远只显示域名。现改为取 UAPI 实际握手地址（`status.endpoint`），域名端点连上后在 hero 实时显示 `host:port (ip:port)`，字面 IP 不重复显示。
+- **字段编辑器（Fields）点保存无反应**：保存按钮在异步 `SetTunnelFields` 完成前就派发了旧内容，且一个覆盖输入的响应式会反复触发 `load()`，看上去像「点了没反应」。现 `doSave` 等待 `apply()` 成功后才派发保存事件，按钮加忙碌态与「保存中」文案。
+
+### 🔧 变更
+
+- **探测目标编辑器改为双列**：全通道（`0.0.0.0/0`）时左侧「预设」（内置 8.8.8.8 / 223.5.5.5）与右侧「自定义」各两行；分流通道只显示右侧自定义列、单列满宽。卡片顶部新增 AllowedIPs 参考行，编辑探测目标时可直接对照「哪些地址才经此隧道」。延迟显示卡文字行距略增，呼吸感更松。
+- **详情页移除路由无关信息卡**：删除了详情页不该出现的 allowed_ips / 公钥 / DNS 卡片（与 hero / 路由无关），并清理了对应的死 CSS。
+- **自适应布局回落单列**：窗口被缩放或整页缩放导致探测卡过窄时，探测目标的双列自动回落为单列（用容器查询监听卡片自身宽度，连整页缩放也能正确触发），输入框不再被挤压成省略号。
+
 ## [2.2.6] - 2026-09-18
 
 ### ✨ 新增

@@ -1865,6 +1865,14 @@
   .probe-target-card {
     gap: 6px;
     justify-content: flex-start;
+    /* Establish a containment context so the slot grid below reacts to the
+       card's OWN width, not just the window width. This is what lets the
+       layout survive whole-page zoom: embedding webviews (and browser zoom)
+       shrink the card's CSS-px width even when the OS window is wide, and a
+       plain viewport media query can miss that. When the card gets too narrow
+       to hold two columns, the public/custom probe columns stack into one. */
+    container-type: inline-size;
+    container-name: probe-card;
   }
   /* The tunnel's routing range, shown as a quiet reference above the editable
      targets so it reads as context, not a footnote. */
@@ -1903,6 +1911,15 @@
   }
   .probe-slots-grid.full {
     grid-template-columns: 1fr 1fr;
+  }
+  /* Collapse the two probe columns when the card itself is too narrow to hold
+     them side by side. Driven by the card's content-box width (see the
+     container-type on .probe-target-card) so it fires on page zoom too, not
+     only on a small window. */
+  @container probe-card (max-width: 340px) {
+    .probe-slots-grid.full {
+      grid-template-columns: 1fr;
+    }
   }
   .probe-col {
     display: flex;
@@ -2019,9 +2036,14 @@
     opacity: 0.9;
   }
   /* Narrow panes: the latency row stacks instead of squeezing the two cards
-     into ellipses. */
+     into ellipses; below this width the probe editor's two columns also fall
+     back to one (mirrors the container query above, which covers page zoom
+     where the window stays wide but the rendered card is narrow). */
   @media (max-width: 520px) {
     .latency-row {
+      grid-template-columns: 1fr;
+    }
+    .probe-slots-grid.full {
       grid-template-columns: 1fr;
     }
   }

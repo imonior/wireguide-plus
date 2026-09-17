@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.7] - 2026-09-18
+
+### 🐛 Fixed
+
+- **Domain endpoint hero did not show the live connected IP**: the backend passed the UAPI-resolved address in as a probe candidate, so the resolved IP was always empty and the hero only ever showed the domain. It now reads the UAPI handshake address (`status.endpoint`), and once a domain endpoint is up the hero shows `host:port (ip:port)` live, skipping the duplicate when the endpoint is already a literal IP.
+- **Field editor (Fields) saved nothing on click**: the save button dispatched the stale content before the async `SetTunnelFields` call finished, and a reactive that overwrote the input kept re-firing `load()`, so it looked like nothing happened. `doSave` now awaits `apply()` and only dispatches on success, with a busy state and a "saving" label on the button.
+
+### 🔧 Changed
+
+- **Probe-target editor is now two columns**: on a full tunnel (`0.0.0.0/0`) the left "preset" column (built-in 8.8.8.8 / 223.5.5.5) and the right "custom" column each hold two rows; a split tunnel shows only the custom column, full width. A new AllowedIPs reference line sits at the top of the card so you can check which addresses are even routed through this tunnel while editing targets. The latency display card got slightly looser line spacing.
+- **Detail page dropped the routing-irrelevant info card**: removed the allowed_ips / public key / DNS card that should not have been on the detail page (unrelated to the hero / routing) and deleted its now-dead CSS.
+- **Responsive fallback to one column**: when the window or the whole page is zoomed so narrow that the probe card can't hold two columns, the probe editor collapses to one column automatically (a container query watches the card's own width, so whole-page zoom triggers it correctly too) instead of squeezing the inputs into ellipses.
+
 ## [2.2.6] - 2026-09-18
 
 ### ✨ Added
