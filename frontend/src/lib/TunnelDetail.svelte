@@ -1352,10 +1352,6 @@
     max-width: 100%;
     vertical-align: bottom;
   }
-  .hero-endpoint::selection,
-  .hero-endpoint :global(*)::selection {
-    background: color-mix(in srgb, var(--accent) 34%, transparent);
-  }
   .hero-endpoint-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1701,6 +1697,16 @@
   .probe-dot.dot-warn { background: var(--yellow, #f59e0b); }
   .probe-dot.dot-bad { background: var(--red, #ef4444); }
   .probe-dot.dot-idle { background: var(--text-muted); opacity: 0.45; }
+  /* Probe rows are addresses, and addresses get copied: the resolved IP of
+     a DDNS target, the endpoint actually being measured. Opt them in — the
+     global opt-out would otherwise leave them unselectable. */
+  .probe-name,
+  .probe-resolved,
+  .probe-slot-resolved {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+  }
   .probe-name {
     color: var(--text-primary);
     overflow: hidden;

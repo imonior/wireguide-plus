@@ -383,6 +383,33 @@ button::-moz-focus-inner {
     padding: 0;
 }
 
+/* Text selection — :root disables selection so dragging across the chrome
+ * never highlights labels, nav items or card titles. The regions that opt
+ * back in (log entries, route rows, DNS resolvers, tunnel endpoint / keys)
+ * used to inherit the UA default, which on WebView2 is a blue that clashes
+ * with the theme and on some builds is nearly invisible over a dark card.
+ * One global rule gives every opt-in region the same accent highlight.
+ * ::-moz-selection must be its own rule: Firefox drops the whole block if
+ * it is grouped with ::selection (unknown selector invalidation). */
+::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--text-primary);
+}
+::-moz-selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--text-primary);
+}
+
+/* Form fields opt back in explicitly: user-select is inherited, so the
+ * global opt-out at :root reaches inputs and textareas too. Browsers
+ * usually keep fields selectable anyway, but that is UA-dependent and the
+ * config textarea is one of the main things users copy out of the app. */
+input,
+textarea {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 /* Scrollbars — themed so long lists (tunnels, logs, history) don't fall
  * back to the stock WebView chrome (visibly wrong on Windows; macOS keeps
  * its auto-hiding overlay style but the thumb is painted with theme tokens).
