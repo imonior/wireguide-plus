@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6.5.0
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.25.12'
 
@@ -143,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6.5.0
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.25.12'
 
@@ -373,7 +373,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5.1.0
 
-      - uses: actions/setup-go@v6.5.0
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.25.12'
 
@@ -518,7 +518,7 @@ jobs:
           cat SHA256SUMS
           echo "macos_sha=$(awk '/WireGuidePlus-darwin-arm64\.zip$/ {print $1; exit}' SHA256SUMS)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-go@v6.5.0
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.25.12'
 
