@@ -179,6 +179,14 @@ type Helper struct {
 	// genuine health signal the user should see.
 	latencyProbeByTunnel map[string]latencyProbe
 
+	// probeInFlight guards measureLatencies against overlapping cycles.
+	// The periodic loop owns one caller, but Tunnel.ProbeNow adds a
+	// second (user-triggered) one: two concurrent cycles would ping every
+	// target twice while the cache only keeps the last result per tunnel,
+	// so a request arriving mid-cycle is folded into the running one
+	// rather than doubled.
+	probeInFlight atomic.Bool
+
 	// wifiMon polls CurrentSSID every 5s. The helper itself evaluates
 	// the user's wifi rules on every change so auto-connect /
 	// auto-disconnect work whether or not a GUI is running. The

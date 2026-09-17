@@ -40,6 +40,31 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodReportSSID, h.handleReportSSID)
 	h.server.Handle(ipc.MethodAutomationPreview, h.handleAutomationPreview)
 	h.server.Handle(ipc.MethodAutomationReevaluate, h.handleAutomationReevaluate)
+	h.server.Handle(ipc.MethodProbeNow, h.handleProbeNow)
+}
+
+// handleProbeNow runs one latency probe cycle right now instead of waiting
+// for the next 30s tick.
+//
+// The GUI calls it after the probe targets are saved. Without it, a target
+// the user just typed either had no row in the breakdown or kept showing the
+// previous address's reading until the next tick — the edit looked like it
+// had done nothing.
+//
+// It returns as soon as the cycle is *started*: a full cycle costs as much
+// as its slowest ICMP timeout (15s), and blocking the RPC on that would
+// stall the GUI's save path. Nothing is lost — the 1Hz event loop broadcasts
+// the fresh status as soon as the results land in the cache.
+func (h *Helper) handleProbeNow(_ json.RawMessage) (interface{}, error) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("probe-now cycle panic recovered", "panic", r)
+			}
+		}()
+		h.measureLatencies()
+	}()
+	return ipc.Empty{}, nil
 }
 
 // handleAutomationReevaluate runs one automation evaluation immediately.

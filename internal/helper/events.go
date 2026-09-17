@@ -362,6 +362,18 @@ type latencyProbe struct {
 // measureLatencies pings each connected tunnel's preferred latency target
 // and updates the cache. Failures store 0, which the frontend renders as "—".
 func (h *Helper) measureLatencies() {
+	// One cycle at a time. latencyLoop calls this every 30s and
+	// Tunnel.ProbeNow can call it in between, so the two can overlap —
+	// and the cache keeps only the last result per tunnel, meaning the
+	// older cycle's work is thrown away while its pings still happened.
+	// Skipping is safe: whatever is in flight will publish a fresher
+	// result than the one we would have produced anyway.
+	if !h.probeInFlight.CompareAndSwap(false, true) {
+		slog.Debug("latency probe cycle already running — skipping this one")
+		return
+	}
+	defer h.probeInFlight.Store(false)
+
 	statuses := h.manager.AllStatuses()
 
 	// Collect tasks first so we know how many workers are needed.

@@ -122,6 +122,14 @@ const (
 	// ask this one instead: a tunnel still trying to resolve its endpoint
 	// must not read as up.
 	MethodEstablishedTunnels = "Tunnel.EstablishedTunnels"
+	// MethodProbeNow asks the helper to run one latency probe cycle
+	// immediately instead of waiting for the next 30s tick. The GUI calls
+	// it after the probe targets change: without it a target the user just
+	// typed either showed no row at all, or kept the previous address's
+	// reading, for up to half a minute — which reads as "the field does
+	// nothing". It takes no parameters and probes every connected tunnel
+	// (bounded by latencyPoolSize), the same work one periodic tick does.
+	MethodProbeNow = "Tunnel.ProbeNow"
 	// MethodRename runs inside the helper because it has to take connectMu
 	// to make "is the tunnel active?" + file rename atomic with respect to
 	// Connect / Disconnect / wifi-rule auto-connect. Splitting it into

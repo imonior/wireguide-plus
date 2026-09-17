@@ -177,6 +177,18 @@ func (s *TunnelService) SetTunnelLatencyProbeTargets(name string, targets []stri
 	}); err != nil {
 		return nil, err
 	}
+
+	// Re-probe now, not on the next 30s tick: the row the user just typed
+	// has to show a reading while they are still looking at it. The helper
+	// re-reads the targets from disk each cycle, so this picks up exactly
+	// what was written above.
+	//
+	// Best-effort on purpose. The helper may not be running (nothing is
+	// connected, nothing to probe), and an IPC failure here must not fail
+	// a save that has already been committed to disk.
+	if err := s.call(ipc.MethodProbeNow, nil, nil); err != nil {
+		slog.Debug("probe-now after latency target save failed", "tunnel", name, "error", err)
+	}
 	return resolved, nil
 }
 
