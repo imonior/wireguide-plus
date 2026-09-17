@@ -1228,6 +1228,7 @@
             <FieldsEditor
               bind:content={editorContent}
               bind:name={editName}
+              errors={editorErrors}
               isNew={editorIsNew}
               nameEditable={true}
               {TunnelService}

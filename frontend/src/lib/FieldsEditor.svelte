@@ -21,6 +21,12 @@
   // model re-parses the CURRENT conf text (it may have changed in the
   // conf-text view or via the script panel).
   export let reloadKey = 0;
+  // Validation / save errors reported by the parent's doSave (name
+  // required, invalid characters, backend ValidateConfig / ImportConfig /
+  // UpdateConfig failures). Without this the Fields tab silently swallowed
+  // every failure — the modal just stayed open with no feedback. Mirrors
+  // ConfigEditor's `errors` prop.
+  export let errors = [];
 
   const dispatch = createEventDispatcher();
 
@@ -117,6 +123,14 @@
   </div>
 
   {#if loadErr}<p class="fe-error">{loadErr}</p>{/if}
+
+  {#if errors.length > 0}
+    <div class="editor-errors">
+      {#each errors as err}
+        <p>{err}</p>
+      {/each}
+    </div>
+  {/if}
 
   <div class="fe-scroll">
     <div class="fe-grid">
@@ -298,4 +312,20 @@
   }
   .fe-peer-select { font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; }
   .fe-error { color: #d33; font-size: 12px; margin: 4px 0; }
+  /* Validation / save errors from the parent (name required, backend
+     ValidateConfig / ImportConfig / UpdateConfig failures). Mirrors
+     ConfigEditor.editor-errors so the Fields and conf tabs behave the same. */
+  .editor-errors {
+    padding: 10px 16px;
+    background: var(--error-bg, #2a1416);
+    border-top: 0.5px solid var(--red, #e5484d);
+    flex-shrink: 0;
+    max-height: 100px;
+    overflow-y: auto;
+  }
+  .editor-errors p {
+    margin: 3px 0;
+    color: var(--error-text, #ff8a8a);
+    font: 12px/16px var(--font-sans);
+  }
 </style>
