@@ -5,7 +5,7 @@
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './tunnel-name.js';
-  import { classifyIPCoverage, stripPort } from './ip-utils.js';
+  import { classifyIPCoverage, parseIP, stripPort } from './ip-utils.js';
   import { createEventDispatcher, tick, onDestroy } from 'svelte';
   import AutomationEditor from './AutomationEditor.svelte';
   import StatsDashboard from './StatsDashboard.svelte';
@@ -87,6 +87,46 @@
   let probeSlotSaveTimer = null;
   let probeSlotError = '';
   let probeInputs = [];
+  // Slots whose value changed but whose probe row has not come back yet.
+  // The helper now re-probes on save (Tunnel.ProbeNow), so this clears
+  // within a second or two; it exists so that window reads as "measuring"
+  // rather than as "the row silently ignored what I typed".
+  let probePendingSlots = {};
+  let probePendingTimer = null;
+  // The long-form target explanation is collapsed by default — it is detail
+  // you read once, and expanded it pushed the editable rows off the card.
+  let hintOpen = false;
+
+  // Drop a slot's "measuring" marker as soon as the probe stream reports a
+  // row for it. Runs off the results themselves rather than a timer so the
+  // marker disappears exactly when the number lands.
+  function clearPendingSlots(results) {
+    if (!Object.keys(probePendingSlots).length) return;
+    let changed = false;
+    const next = { ...probePendingSlots };
+    for (const r of results || []) {
+      const slot = r.slot ?? -1;
+      if (slot >= 0 && next[slot]) {
+        delete next[slot];
+        changed = true;
+      }
+    }
+    if (changed) probePendingSlots = next;
+  }
+
+  $: clearPendingSlots(probeResults);
+
+  function markPendingSlots(prev, next) {
+    const pending = {};
+    for (let i = 0; i < PROBE_SLOTS; i++) {
+      if (prev[i] !== next[i]) pending[i] = true;
+    }
+    probePendingSlots = pending;
+    if (probePendingTimer) clearTimeout(probePendingTimer);
+    // Backstop: a slot that is never probed (tunnel down, target dropped as
+    // a duplicate of the endpoint) must not keep claiming to be measured.
+    probePendingTimer = setTimeout(() => (probePendingSlots = {}), 20000);
+  }
 
   // flushNotes is the single write path used by both the debounce/blur
   // saver and the cross-tunnel-switch flush. It patches BOTH stores —
@@ -170,11 +210,14 @@
     probeSlotsSaved = [...probeSlots];
     probeSlotResolved = ['', '', '', ''];
     probeSlotError = '';
+    probePendingSlots = {};
+    hintOpen = false;
   }
 
   async function flushProbeSlots(name, slots) {
     if (!name) return false;
     const payload = normalizeSlots(slots);
+    const prevSaved = [...probeSlotsSaved];
     try {
       const resolved = await TunnelService.SetTunnelLatencyProbeTargets(name, payload);
       const resolvedList = normalizeSlots(Array.isArray(resolved) ? resolved : []);
@@ -190,6 +233,9 @@
         // does not look like resolution failed.
         probeSlotResolved = resolvedList.map((r, i) => r || payload[i]);
         probeSlotError = '';
+        // What changed is now saved; the reading for it is on its way (the
+        // helper re-probes on save). Mark the rows so the wait is visible.
+        markPendingSlots(prevSaved, payload);
       }
       return true;
     } catch (e) {
@@ -246,6 +292,55 @@
     el?.focus();
     el?.select();
   }
+
+  // Port half of an endpoint, or "" when there is none. Kept separate from
+  // stripPort because the resolved address below needs to be reassembled
+  // into a complete "ip:port" — and IPv6 ("[fd00::1]:51820", or a bare
+  // address with many colons) must not be mistaken for host:port.
+  function endpointPort(value) {
+    const text = (value || '').trim();
+    if (text.startsWith('[')) {
+      const close = text.indexOf(']');
+      if (close === -1 || text[close + 1] !== ':') return '';
+      const port = text.slice(close + 2);
+      return /^\d+$/.test(port) ? port : '';
+    }
+    const first = text.indexOf(':');
+    if (first === -1 || first !== text.lastIndexOf(':')) return '';
+    const port = text.slice(first + 1);
+    return /^\d+$/.test(port) ? port : '';
+  }
+
+  // The address the endpoint NAME currently points at — the hero's "live IP".
+  //
+  // A DDNS peer is a name in the config but an address on the wire, and the
+  // two drift the moment the peer moves (ISP reconnect, failover). Showing
+  // the name alone hides the one thing worth knowing when a tunnel suddenly
+  // misbehaves: which address it is actually dialling.
+  //
+  // The value comes off the probe stream rather than a fresh DNS lookup:
+  // the endpoint is probed every cycle, so this is the address the helper
+  // measured against, not a second opinion that could disagree.
+  $: endpointLiveIP = (() => {
+    const ep = ($selectedTunnel?.endpoint || '').trim();
+    if (!ep) return '';
+    // A literal address has nothing to resolve — printing it twice is noise.
+    if (parseIP(stripPort(ep))) return '';
+    const rows = probeResults;
+    const byKind = rows.find(r => r.kind === 'endpoint' && r.resolved_ip);
+    if (byKind) return byKind.resolved_ip;
+    const byTarget = rows.find(r => r.target === ep && r.resolved_ip);
+    return byTarget ? byTarget.resolved_ip : '';
+  })();
+
+  // "host:port (ip:port)" — the port rides along on the resolved side so the
+  // parenthesised value is a complete endpoint, comparable and pasteable,
+  // not a bare address the user has to mentally re-attach to a port.
+  $: endpointLive = (() => {
+    if (!endpointLiveIP) return '';
+    const port = endpointPort($selectedTunnel?.endpoint || '');
+    return port ? `${endpointLiveIP}:${port}` : endpointLiveIP;
+  })();
 
   // Copy the hero endpoint to the clipboard. The endpoint already shows in
   // the hero status line; this just makes it grabbable in one click (e.g. to
@@ -455,6 +550,7 @@
   onDestroy(() => {
     if (notesSaveTimer) clearTimeout(notesSaveTimer);
     if (probeSlotSaveTimer) clearTimeout(probeSlotSaveTimer);
+    if (probePendingTimer) clearTimeout(probePendingTimer);
     // Best-effort flush on unmount (e.g. user deselected the tunnel
     // while a debounce was still pending).
     if (lastLoadedName && notesValue !== notesSaved) {
@@ -731,7 +827,9 @@
               type="button"
               title={endpointCopied ? $t('tunnel.copied') : $t('tunnel.copy_endpoint')}
               on:click={copyEndpoint}>
-              <span class="hero-endpoint-text">{$selectedTunnel.endpoint}</span>
+              <span class="hero-endpoint-text">{$selectedTunnel.endpoint}{#if endpointLive}<span
+                class="hero-endpoint-ip"
+                title={endpointLiveIP}>({endpointLive})</span>{/if}</span>
               <Icon name={endpointCopied ? 'check' : 'copy'} size={12} strokeWidth={2} />
             </button>
           {/if}
@@ -875,6 +973,14 @@
                        rather than a duplicate. -->
                   <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
                 {/if}
+                {#if probePendingSlots[i]}
+                  <!-- Saved, but not measured yet. The helper re-probes on
+                       save, so this is a second or two — long enough that
+                       showing nothing at all reads as "nothing happened". -->
+                  <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
+                    {$t('tunnel.latency_probing')}
+                  </span>
+                {/if}
               </div>
             {/each}
             {#if probeSlotMessage}
@@ -889,7 +995,27 @@
                 </button>
               </span>
             {/if}
-            <span class="latency-target-hint">{$t('tunnel.latency_target_hint')}</span>
+            <!-- One short line is always visible; the full explanation is
+                 collapsed. Expanded it is taller than the four rows it
+                 explains, which pushed the editable fields out of view —
+                 and it is detail you read once, not a rule you re-check
+                 every time you type an address. -->
+            <div class="latency-target-foot">
+              <span class="latency-target-hint">{$t('tunnel.latency_target_hint')}</span>
+              <button
+                class="hint-toggle"
+                class:hint-toggle-open={hintOpen}
+                type="button"
+                aria-expanded={hintOpen}
+                title={$t('tunnel.latency_target_help')}
+                on:click={() => (hintOpen = !hintOpen)}>
+                <Icon name="info" size={11} strokeWidth={2} />
+                <span class="hint-toggle-text">{$t('tunnel.latency_target_help')}</span>
+              </button>
+            </div>
+            {#if hintOpen}
+              <p class="latency-target-details">{$t('tunnel.latency_target_details')}</p>
+            {/if}
           </div>
         </div>
       </div>
@@ -1248,6 +1374,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+  /* The name's CURRENT address, in parentheses. Dimmer than the name
+     because the name is what the config says and the address is a live
+     measurement — but same monospace, so the two read as one value. */
+  .hero-endpoint-ip {
+    margin-left: 3px;
+    font-family: var(--font-mono);
+    opacity: 0.72;
   }
   .awg-badge {
     padding: 0 6px;
@@ -1774,11 +1908,57 @@
   .latency-retry-btn:hover {
     background: color-mix(in srgb, var(--red) 22%, transparent);
   }
-  .latency-target-hint {
-    display: block;
+  .probe-slot-pending {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 999px;
+    font: 9px/15px var(--font-sans);
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    white-space: nowrap;
+  }
+  .latency-target-foot {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     margin-top: 4px;
+  }
+  .latency-target-hint {
+    flex: 1 1 auto;
+    min-width: 0;
     font: 10px/14px var(--font-sans);
     opacity: 0.65;
+  }
+  /* Collapsed by default — see the markup comment. Opacity, not display:
+     it stays a real control for keyboard/screen-reader users either way. */
+  .hint-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 0 6px;
+    height: 16px;
+    border: 0.5px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font: 10px/14px var(--font-sans);
+    cursor: pointer;
+  }
+  .hint-toggle:hover {
+    color: var(--text-secondary);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .hint-toggle-open {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .hint-toggle :global(svg) { flex-shrink: 0; }
+  .latency-target-details {
+    margin: 6px 0 0;
+    font: 10px/15px var(--font-sans);
+    color: var(--text-muted);
+    opacity: 0.9;
   }
   /* Narrow panes: the latency row stacks instead of squeezing the two cards
      into ellipses. */
