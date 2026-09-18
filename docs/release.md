@@ -95,19 +95,26 @@ Release assets produced per tag:
 
 ### Release notes
 
-The GitHub Release body is the **latest version's section** of the curated,
-English-by-default `CHANGELOG.md` — never the whole file, never git-cliff:
+The GitHub Release body restores the **pre-v2.2.7 page structure**: the curated,
+English-by-default `CHANGELOG.md` changes for this version, followed by the
+static "📦 Downloads" asset guide / checksums / Full Changelog / SignPath
+footer — never the whole file, never git-cliff:
 
 1. `release.yml` checks out the repo (full history) and runs an `awk` step that
-   slices from the first `## [X.Y.Z]` heading down to the next one, writing
-   just that block to `RELEASE_NOTES.md`.
-2. `softprops/action-gh-release` attaches `RELEASE_NOTES.md` via `body_path`.
+   slices from the first `## [X.Y.Z]` heading down to the next one (the version
+   header line is dropped), writing just that changelog block to
+   `RELEASE_NOTES.md`.
+2. The asset/download/footer tail is appended from `build/release-tail.md.tmpl`
+   with `__CUR__` / `__PREV__` filled from the current and previous tags (the
+   previous tag comes from `git tag --sort=-v:refname`), so the Downloads links
+   and the `Full Changelog` compare URL always point at this release.
+3. `softprops/action-gh-release` attaches `RELEASE_NOTES.md` via `body_path`.
 
-This scope matches what a `--latest` git-cliff run would have produced (so the
-release page shows only this version's changes, with the download assets right
-below — not the entire changelog history). The hand-written `CHANGELOG.md` is
-the source of truth and is kept English by default; `fix-release-notes.yml`
-re-slices the same block and overwrites a published release's body via
+This keeps the page layout every release used before v2.2.7 (changelog, then the
+download/footer block) while staying English and scoped to this version — not the
+entire changelog history. The hand-written `CHANGELOG.md` is the source of truth
+and is kept English by default; `fix-release-notes.yml` rebuilds the same body
+and overwrites a published release's body via
 `gh release edit --notes-file RELEASE_NOTES.md` (it guards that the input tag is
 the latest tag, since only that section is meaningful as a body).
 

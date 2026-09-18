@@ -41,13 +41,24 @@ jobs:
 
       # Overwrite the published release body with ONLY the latest version's
       # section from the curated, English-by-default CHANGELOG.md (not the
-      # whole file). We no longer regenerate from git-cliff — its output
-      # followed commit subject language, so a Chinese commit made the notes
-      # Chinese, and it rendered every version section into the body.
-      - name: Extract latest release-notes section
+      # whole file) PLUS the static "📦 Downloads" asset guide / checksums /
+      # Full Changelog / SignPath footer (build/release-tail.md.tmpl) — the
+      # exact page structure every release used before v2.2.7. We no longer
+      # regenerate from git-cliff: its output followed commit subject
+      # language, so a Chinese commit made the notes Chinese, and it rendered
+      # every version section into the body.
+      - name: Build release body (curated changelog + asset/download tail)
         run: |
           set -euo pipefail
-          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md > RELEASE_NOTES.md
+          cur="${{ inputs.tag }}"
+          prev="$(git tag --sort=-v:refname | awk -v c="$cur" 'f{print; exit} $0==c{f=1}')"
+          prev="${prev:-$cur}"
+          echo "current tag: $cur   previous tag: $prev"
+          # Latest changelog section, with the "## [x.y.z] - date" header line
+          # dropped so the body reads like a changelog (matches the old layout).
+          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 > RELEASE_NOTES.md
+          # Append the asset/download/footer tail with version placeholders filled.
+          sed -e "s#__CUR__#$cur#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
           echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
           cat RELEASE_NOTES.md
       - name: Overwrite release body
