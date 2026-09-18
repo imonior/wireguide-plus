@@ -74,6 +74,34 @@ export class ConnectionStatus {
         }
         if (/** @type {any} */(false)) {
             /**
+             * LastHandshakeUnix is LastHandshakeTime as Unix seconds — the one
+             * handshake field that crosses the wire (LastHandshakeTime itself is
+             * internal). The UI ages it against its own clock so the rendered age
+             * keeps moving even when the status stream stalls, and so a tunnel whose
+             * peer stopped answering stops claiming a fresh handshake. 0 means no
+             * handshake has ever completed.
+             * @member
+             * @type {number | undefined}
+             */
+            this["last_handshake_unix"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * HandshakeStale is true when the tunnel has been up longer than the
+             * stale threshold yet its peer has not completed a WireGuard handshake
+             * within that window. A healthy tunnel re-handshakes on its keepalive
+             * interval (often 25s); a tunnel whose upstream dropped — the local NIC
+             * and WireGuard interface stay up, but the peer is unreachable — stops
+             * handshaking and this flips true. The UI renders it as a degraded
+             * "connected but no recent handshake" state instead of a falsely-healthy
+             * one, so a dead WAN link no longer reads as a working tunnel.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["handshake_stale"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {string | undefined}
              */
@@ -177,22 +205,22 @@ export class ConnectionStatus {
      * @returns {ConnectionStatus}
      */
     static createFrom($$source = {}) {
-        const $$createField12_0 = $$createType1;
-        const $$createField13_0 = $$createType2;
-        const $$createField14_0 = $$createType2;
-        const $$createField15_0 = $$createType4;
+        const $$createField14_0 = $$createType1;
+        const $$createField15_0 = $$createType2;
+        const $$createField16_0 = $$createType2;
+        const $$createField17_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("latency_probe_results" in $$parsedSource) {
-            $$parsedSource["latency_probe_results"] = $$createField12_0($$parsedSource["latency_probe_results"]);
+            $$parsedSource["latency_probe_results"] = $$createField14_0($$parsedSource["latency_probe_results"]);
         }
         if ("active_tunnels" in $$parsedSource) {
-            $$parsedSource["active_tunnels"] = $$createField13_0($$parsedSource["active_tunnels"]);
+            $$parsedSource["active_tunnels"] = $$createField15_0($$parsedSource["active_tunnels"]);
         }
         if ("established_tunnels" in $$parsedSource) {
-            $$parsedSource["established_tunnels"] = $$createField14_0($$parsedSource["established_tunnels"]);
+            $$parsedSource["established_tunnels"] = $$createField16_0($$parsedSource["established_tunnels"]);
         }
         if ("tunnels" in $$parsedSource) {
-            $$parsedSource["tunnels"] = $$createField15_0($$parsedSource["tunnels"]);
+            $$parsedSource["tunnels"] = $$createField17_0($$parsedSource["tunnels"]);
         }
         return new ConnectionStatus(/** @type {Partial<ConnectionStatus>} */($$parsedSource));
     }

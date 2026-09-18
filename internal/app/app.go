@@ -12,6 +12,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -129,6 +130,17 @@ func (s *TunnelService) call(method string, params interface{}, result interface
 		return errHelperUnavailable
 	}
 	return c.Call(method, params, result)
+}
+
+// LogFrontend records a diagnostic breadcrumb sent from the webview. The
+// edit-save chain was able to stall between its JS and Go halves with no
+// trace at all (a 06:06 repro showed the disconnect landing but the
+// UpdateConfig RPC never arriving, and nothing on either side). This gives
+// every frontend step a line in the same log file the backend writes, so
+// "the button did nothing" can always be reconstructed afterwards. It is
+// deliberately fire-and-forget on the JS side and must never fail loudly.
+func (s *TunnelService) LogFrontend(message string) {
+	slog.Info("frontend", "category", "gui", "detail", message)
 }
 
 // callLong performs an RPC with a generous timeout for operations that may

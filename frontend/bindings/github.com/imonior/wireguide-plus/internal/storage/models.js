@@ -446,6 +446,27 @@ export class Settings {
         }
         if (/** @type {any} */(false)) {
             /**
+             * DisconnectOnQuit decides what "Quit" means for tunnels that are up.
+             * 
+             * true (the historical behaviour, and the default when the key is
+             * absent) tears the tunnels down and stops the helper, so quitting the
+             * GUI ends the VPN session. false leaves both alone: the GUI process
+             * exits, the helper keeps running with its tunnels, and the next GUI
+             * launch reattaches to the same helper. That second mode is the one
+             * users want when the tunnel is the machine's only route out — quitting
+             * the window manager must not drop the network.
+             * 
+             * Pointer so "never touched this" is distinguishable from an explicit
+             * false, which is what a plain bool cannot express for a key whose
+             * default is true. Use DisconnectOnQuitEnabled rather than
+             * dereferencing.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["disconnect_on_quit"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * NotifyDurationMs is how long the connection-status notification
              * bubble stays on screen (ms). 0 means the default (10s).
              * @member
@@ -709,30 +730,30 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField19_0 = $$createType3;
-        const $$createField20_0 = $$createType5;
-        const $$createField21_0 = $$createType2;
+        const $$createField20_0 = $$createType3;
+        const $$createField21_0 = $$createType5;
         const $$createField22_0 = $$createType2;
-        const $$createField25_0 = $$createType2;
+        const $$createField23_0 = $$createType2;
         const $$createField26_0 = $$createType2;
+        const $$createField27_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField19_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField20_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField20_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField21_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField21_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField22_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField22_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField23_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField25_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField26_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField26_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField27_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

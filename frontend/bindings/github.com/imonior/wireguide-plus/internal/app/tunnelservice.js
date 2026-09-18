@@ -600,6 +600,21 @@ export function ListTunnelsLocal() {
 }
 
 /**
+ * LogFrontend records a diagnostic breadcrumb sent from the webview. The
+ * edit-save chain was able to stall between its JS and Go halves with no
+ * trace at all (a 06:06 repro showed the disconnect landing but the
+ * UpdateConfig RPC never arriving, and nothing on either side). This gives
+ * every frontend step a line in the same log file the backend writes, so
+ * "the button did nothing" can always be reconstructed afterwards. It is
+ * deliberately fire-and-forget on the JS side and must never fail loudly.
+ * @param {string} message
+ * @returns {$CancellablePromise<void>}
+ */
+export function LogFrontend(message) {
+    return $Call.ByID(741012659, message);
+}
+
+/**
  * MigrateLegacyData copies the legacy config/tunnels/logs into the current
  * locations. Overwrite controls whether existing target files are replaced;
  * IncludeLogs controls whether the legacy logs directory is migrated.
@@ -1138,7 +1153,18 @@ export function TunnelExists(name) {
 
 /**
  * UpdateConfig parses, validates, and overwrites an existing tunnel's config.
- * Rejects edits of the connected tunnel.
+ * 
+ * Editing a CONNECTED tunnel is allowed. It used to be rejected outright, and
+ * that refusal is exactly what made saving impossible: the GUI could not
+ * translate the English error into anything actionable, so Save looked dead
+ * unless you already knew the tunnel had to be stopped first.
+ * 
+ * Editing != applying. The running instance keeps using the configuration it
+ * was handed at connect time, so whoever changes the file owns the restart:
+ * stop the tunnel, save, then reconnect it. persistEditorSave does this for
+ * the GUI. The price of getting it wrong is a tunnel that runs the previous
+ * config until the next connect — not corruption — which is why this is a
+ * logged warning rather than an error.
  * @param {string} name
  * @param {string} content
  * @returns {$CancellablePromise<void>}

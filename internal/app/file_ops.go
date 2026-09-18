@@ -278,6 +278,12 @@ func (s *TunnelService) GetConfigText(name string) (string, error) {
 // config until the next connect — not corruption — which is why this is a
 // logged warning rather than an error.
 func (s *TunnelService) UpdateConfig(name, content string) error {
+	// Entry breadcrumb: distinguishes "the RPC never reached Go" (no line)
+	// from "Go got it and stalled/failed below" (this line, then whichever
+	// branch line follows). A 06:06 repro showed the save chain's disconnect
+	// landing but no update-config-called line and no failure line — the RPC
+	// was lost between the webview and Go, which this makes visible.
+	slog.Info("tunnel: update config called", "category", "tunnel", "tunnel", name, "bytes", len(content))
 	// The state probe below only decides WHICH log line we write — it must
 	// never block the write itself. It used to return an error on any IPC
 	// hiccup, and a transient helper problem then made every edit fail with

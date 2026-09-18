@@ -143,6 +143,9 @@
   async function doSave() {
     if (saving) return;
     saving = true;
+    // Breadcrumb: the flush below is the one step the parent cannot see;
+    // if the save dies here the log shows the click with no follow-up.
+    try { TunnelService.LogFrontend('fields editor save click name="' + name + '"'); } catch (_) {}
     loadErr = '';
     let timedOut = false;
     try {

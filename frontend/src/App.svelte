@@ -153,6 +153,18 @@
   }
 
   onMount(async () => {
+    // Global webview fault capture: any unhandled promise rejection or
+    // uncaught error used to vanish (console-only), which is exactly how a
+    // save could die between steps with "no reaction, no prompt, no log".
+    // Route both into the shared Go log via a breadcrumb.
+    window.addEventListener('unhandledrejection', (e) => {
+      const r = e?.reason;
+      logStep('unhandled rejection: ' + (r?.message || String(r)));
+    });
+    window.addEventListener('error', (e) => {
+      logStep('window error: ' + (e?.message || String(e)));
+    });
+
     // Popup window: only resolve theme + language so the bubble matches the
     // app's appearance. Skip the full data load (tunnels/status/logs/events) —
     // the popup is a tiny self-contained view that carries its own data.
@@ -395,6 +407,17 @@
     toastTimer = setTimeout(() => { toast = ''; toastTimer = null; }, 3000);
   }
 
+  // Fire-and-forget breadcrumb into the Go log (frontend + backend share one
+  // file). Every step of the edit-save chain logs here, so a save that goes
+  // silent can be reconstructed: the LAST breadcrumb shows exactly where the
+  // chain died. Must never throw and never await.
+  function logStep(msg) {
+    try {
+      const p = TunnelService.LogFrontend(msg);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) { /* breadcrumb must never break the flow it traces */ }
+  }
+
   // Bounded RPC: races `p` against a timer so a wedged backend call can no
   // longer hang the save chain into a silent "button does nothing" — the
   // timeout rejects with a LOCALISED message (built here, where $t is in
@@ -404,7 +427,10 @@
     return Promise.race([
       p,
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error($t('editor.op_timeout'))), ms)),
+        setTimeout(() => {
+          logStep('rpc timeout fired after ' + ms + 'ms');
+          reject(new Error($t('editor.op_timeout')));
+        }, ms)),
     ]);
   }
 
@@ -706,7 +732,20 @@
   let awgPendingRun = null;
 
   function gateAWGReminder(content, run) {
-    if (!contentIsAWG(content) || localStorage.getItem('awg_reminder_dismissed')) {
+    // The gate sits OUTSIDE doSave's try/catch, so anything it throws would
+    // vanish into an unobserved async rejection — the save would die right
+    // after validation with zero feedback (a real "no reaction at all").
+    // Degrade to running the save instead.
+    let isAWG = false;
+    let dismissed = false;
+    try {
+      isAWG = contentIsAWG(content);
+      dismissed = !!localStorage.getItem('awg_reminder_dismissed');
+    } catch (err) {
+      logStep('awg gate threw, running save anyway: ' + (err?.message || err));
+    }
+    logStep('awg gate isAWG=' + isAWG + ' dismissed=' + dismissed);
+    if (!isAWG || dismissed) {
       run();
       return;
     }
@@ -729,6 +768,7 @@
 
   async function doSave(e) {
     const { name: rawName, content: saveContent } = e.detail;
+    logStep('editor save event name="' + rawName + '" bytes=' + (saveContent || '').length);
     // Capture the original name into a local at the top of doSave —
     // editorOriginalName is reset by handleEdit on every Edit click,
     // and an Edit on a *different* tunnel arriving while UpdateConfig
@@ -770,6 +810,7 @@
     // modal open with no message at all.
     try {
       const errors = await withTimeout(TunnelService.ValidateConfig(saveContent));
+      logStep('validate done errors=' + (errors ? errors.length : 0));
       if (errors && errors.length > 0) {
         editorErrors = localizeValidation(errors, $t);
         showToast($t('editor.invalid_config'));
@@ -777,6 +818,7 @@
       }
     } catch (err) {
       console.error('validate config failed:', err);
+      logStep('validate rpc failed: ' + errText(err));
       editorErrors = [errText(err)];
       // Inline bar AND toast: the bar can sit out of view in a scrolled
       // editor, and an invisible failure is indistinguishable from a dead
@@ -807,13 +849,16 @@
     // backend's English error (or silence) stand in for feedback.
     const liveName = wasNew ? '' : originalName;
     const wasLive = isTunnelLive(liveName);
+    logStep('persist save name="' + saveName + '" wasNew=' + wasNew + ' wasLive=' + wasLive);
     let stopped = false;
     if (wasLive) {
       try {
         await withTimeout(TunnelService.DisconnectTunnel(liveName));
+        logStep('disconnect before save done');
         stopped = true;
       } catch (err) {
         console.error('stop before save failed:', err);
+        logStep('disconnect before save failed: ' + errText(err));
         editorErrors = [$t('editor.stop_failed', { err: errText(err) })];
         showToast($t('editor.save_failed_detail', { err: errText(err) }));
         return;
@@ -822,7 +867,9 @@
 
     try {
       if (wasNew) {
+        logStep('calling ImportConfig');
         await withTimeout(TunnelService.ImportConfig(saveName, saveContent));
+        logStep('ImportConfig done');
         // A NEW tunnel's egress binding was only staged in the editor
         // (no meta sidecar existed before the save). Apply it now with
         // the final tunnel name. Best-effort: the tunnel itself saved.
@@ -845,10 +892,14 @@
       } else {
         const renamed = saveName !== originalName;
         if (renamed) {
+          logStep('calling RenameTunnel');
           await withTimeout(TunnelService.RenameTunnel(originalName, saveName));
+          logStep('RenameTunnel done');
         }
         try {
+          logStep('calling UpdateConfig');
           await withTimeout(TunnelService.UpdateConfig(saveName, saveContent));
+          logStep('UpdateConfig done');
         } catch (err) {
           // UpdateConfig failed AFTER the rename succeeded. Roll
           // the rename back so the file system matches the user's
@@ -898,6 +949,7 @@
       }
     } catch (err) {
       console.error('persist editor save failed:', err);
+      logStep('persist save failed: ' + errText(err));
       editorErrors = [errText(err)];
       // Inline bar AND toast — a failure the user cannot see is the exact
       // "Save does nothing" bug report, so make it impossible to miss.
