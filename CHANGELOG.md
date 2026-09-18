@@ -2,705 +2,705 @@
 
 All notable changes to WireGuide Plus will be documented in this file.
 
-> English: [CHANGELOG.en.md](CHANGELOG.en.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
+> 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
 ## [2.2.7] - 2026-09-18
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **域名端点 hero 不显示当前连接的实时 IP**：后端把 UAPI 已解析地址当探测候选传给探测流程，导致解析 IP 始终为空、hero 永远只显示域名。现改为取 UAPI 实际握手地址（`status.endpoint`），域名端点连上后在 hero 实时显示 `host:port (ip:port)`，字面 IP 不重复显示。
-- **字段编辑器（Fields）点保存无反应**：保存按钮在异步 `SetTunnelFields` 完成前就派发了旧内容，且一个覆盖输入的响应式会反复触发 `load()`，看上去像「点了没反应」。现 `doSave` 等待 `apply()` 成功后才派发保存事件，按钮加忙碌态与「保存中」文案。
+- **Domain endpoint hero did not show the live connected IP**: the backend passed the UAPI-resolved address in as a probe candidate, so the resolved IP was always empty and the hero only ever showed the domain. It now reads the UAPI handshake address (`status.endpoint`), and once a domain endpoint is up the hero shows `host:port (ip:port)` live, skipping the duplicate when the endpoint is already a literal IP.
+- **Field editor (Fields) saved nothing on click**: the save button dispatched the stale content before the async `SetTunnelFields` call finished, and a reactive that overwrote the input kept re-firing `load()`, so it looked like nothing happened. `doSave` now awaits `apply()` and only dispatches on success, with a busy state and a "saving" label on the button.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **探测目标编辑器改为双列**：全通道（`0.0.0.0/0`）时左侧「预设」（内置 8.8.8.8 / 223.5.5.5）与右侧「自定义」各两行；分流通道只显示右侧自定义列、单列满宽。卡片顶部新增 AllowedIPs 参考行，编辑探测目标时可直接对照「哪些地址才经此隧道」。延迟显示卡文字行距略增，呼吸感更松。
-- **详情页移除路由无关信息卡**：删除了详情页不该出现的 allowed_ips / 公钥 / DNS 卡片（与 hero / 路由无关），并清理了对应的死 CSS。
-- **自适应布局回落单列**：窗口被缩放或整页缩放导致探测卡过窄时，探测目标的双列自动回落为单列（用容器查询监听卡片自身宽度，连整页缩放也能正确触发），输入框不再被挤压成省略号。
+- **Probe-target editor is now two columns**: on a full tunnel (`0.0.0.0/0`) the left "preset" column (built-in 8.8.8.8 / 223.5.5.5) and the right "custom" column each hold two rows; a split tunnel shows only the custom column, full width. A new AllowedIPs reference line sits at the top of the card so you can check which addresses are even routed through this tunnel while editing targets. The latency display card got slightly looser line spacing.
+- **Detail page dropped the routing-irrelevant info card**: removed the allowed_ips / public key / DNS card that should not have been on the detail page (unrelated to the hero / routing) and deleted its now-dead CSS.
+- **Responsive fallback to one column**: when the window or the whole page is zoomed so narrow that the probe card can't hold two columns, the probe editor collapses to one column automatically (a container query watches the card's own width, so whole-page zoom triggers it correctly too) instead of squeezing the inputs into ellipses.
 
 ## [2.2.6] - 2026-09-18
 
-### ✨ 新增
+### ✨ Added
 
-- **保存延迟探测目标后立即重新探测**：此前改完目标要等下一个 30 秒周期才出结果，看上去像「点了没反应」。新增 IPC `Tunnel.ProbeNow`，写盘成功后立即异步跑一轮探测（RPC 立刻返回，不被 15 秒 ICMP 超时拖住），结果经 1Hz 状态广播推送；周期 tick 与手动触发重叠时后来那次被丢弃，不会把每个目标 ping 两遍；结果回来前前端在对应行显示「探测中…」。
-- **Linux / macOS 上报 pinned 出口网卡丢失**：「显式 pin 出口网卡 → 不做自动故障切换」此前只有 Windows 会在运行时通知 GUI，Linux / macOS 缺位。现三平台一致：Linux / macOS 每 2 秒检查被 pin 的网卡是否存在且 up，丢失时复用同一 `EventEgressInterfaceLost` 通知链弹提示（隧道保持 pin 状态，不偷偷切走）。Windows 侧监控改为按网卡名解析（`net.InterfaceByName`），网卡改名后也能持续追踪，与另两平台签名一致。
+- **Re-probe immediately when latency targets change**: editing a target previously waited for the next 30 s cycle, which read as "nothing happened". A new `Tunnel.ProbeNow` IPC runs a probe cycle right after the targets are persisted, asynchronously (the RPC returns at once instead of blocking on a 15 s ICMP timeout) and pushes the result through the 1 Hz status broadcast. A guard drops the later request when a manual trigger overlaps the periodic tick, so no target is pinged twice; until the result lands, the row shows a "probing…" marker.
+- **Pinned-egress loss is now reported on Linux / macOS**: "explicitly pinned egress interface → no auto-failover" previously notified the GUI at runtime only on Windows. All three platforms now behave the same: Linux / macOS check every 2 s whether the pinned interface still exists and is up, and on loss raise the same `EventEgressInterfaceLost` event (the tunnel stays pinned rather than silently moving). The Windows monitor now resolves the pinned interface by name via `net.InterfaceByName`, so a renamed NIC keeps being tracked, matching the other two platforms' signature.
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **隧道新建 / 编辑点击保存无反应**：字段编辑器（Fields tab）既不声明也不渲染 `errors`，父级又漏传 —— 校验或保存失败被完全静默吞掉。现与配置编辑器一致，错误直接显示在编辑区顶部。
-- **分流隧道延迟探测目标误报「不在 AllowedIPs 内」**：Wails IPC 序列化字段为 snake_case（`peers` / `allowed_ips` / `public_key` / `interface.dns`），前端按 camelCase 读取取不到值，覆盖校验因此认为一个合法地址都没覆盖 → 任何 IP / 域名都被拒。同时修复详情页公钥、DNS 显示为空的问题。
-- **端点等信息无法选中复制**：hero 端点由「点击复制按钮」改回可选中文本 —— 用户常只要主机名、或只要括号里的实时 IP，按钮只能给整串。并补齐全局选中高亮：应用全局禁用了文本选择，此前只有少数区域自行 opt-in，高亮色随系统、在暗色卡片上几乎看不见；现统一用主题强调色，输入框 / 文本域也显式恢复可选中。
+- **Tunnel create / edit saved nothing and said nothing**: the field editor (Fields tab) neither declared nor rendered `errors`, and the parent never passed it — so every validation or save failure was swallowed silently. It now shows the same error block as the config editor, at the top of the editor.
+- **Split-tunnel latency targets wrongly rejected as "outside AllowedIPs"**: Wails serialises IPC fields as snake_case (`peers`, `allowed_ips`, `public_key`, `interface.dns`) while the frontend read them as camelCase, so the coverage check saw no allowed IP at all and rejected every address. Also fixes the peer public key and DNS rows rendering empty on the detail page.
+- **Endpoint could not be selected and copied**: the hero endpoint went back to selectable text instead of a click-to-copy button — users usually want a piece of it (just the host, or just the live IP in parentheses), which a button can never give. Selection highlighting was also missing: the app disables selection globally, and the few regions that opted back in inherited the UA colour, nearly invisible over a dark card. One global rule now applies the theme accent everywhere, and form fields explicitly opt back in.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **隧道详情页精简**：删除与 hero 重复的独立端点显示块；延迟结果卡与延迟探测目标输入框合并为同一行；目标输入框下方的长提示折叠进「详细说明」（常驻只留一句）；「握手 / 时长 / 接口名称」移入 hero 并加大字号；域名端点在后面追加实时解析地址（`host:port (ip:port)`），取值来自探测流而非前端另做 DNS，字面 IP 不重复显示。
+- **Tighter tunnel detail page**: dropped the standalone endpoint block that duplicated the hero. The latency card and the probe-target input now share one row. The long hint under the target input is collapsed behind a "details" toggle, leaving one line visible. Handshake / uptime / interface moved into the hero at a larger size. A domain endpoint now carries its live resolved address (`host:port (ip:port)`), taken from the probe stream rather than a second DNS lookup, and skipped when the endpoint is already a literal IP.
 
 ## [2.2.5] - 2026-09-17
 
-### ✨ 新增
+### ✨ Added
 
-- **macOS / Linux 系统状态气泡与 Windows 统一**：此前仅 Windows 弹系统托盘气泡，macOS / Linux 的 `showStatusPopup` 为空实现。现抽出跨平台弹窗逻辑（`popup_wails.go` + `popup_state.go`），macOS / Linux 也弹同款气泡——启动 10 秒后（提权提示安定）展示当前连接状态，网络变化导致隧道状态改变后延迟展示稳定最新状态；气泡含操作菜单（打开主窗口 / 断开）、可手动关闭、按设置驻留时长（默认 10 秒）自动关闭。
-- **延迟探测多目标并行**：全通道同时探测 8.8.8.8 + 223.5.5.5 + 端点 + 手填值（去重），不再「第一个通就停」；分流通道只探测端点 + 手填值。每个候选独立一行展示（状态点 + 名称 + 解析 IP + 类型标签 + 毫秒，≤100ms 绿 / ≤300ms 黄 / 其余红或不通）。
-- **延迟探测目标 AllowedIPs 覆盖校验**：分流（AllowedIPs 无 0.0.0.0/0）下手填 IP 不在覆盖范围内 → 拦截保存并红字提示；全通道不校验。域名在保存时解析，解析不出即拒绝。四个槽位存储（2 个公共覆盖 + 2 个任意类型），并随每次配置动态重算覆盖，保存后才失效的目标也能被发现。
-- **退出时断开开关**：设置新增「退出时断开隧道」显式开关，默认开启（保持现状）；关闭时退出走 Shutdown 以保留隧道。
+- **macOS / Linux system status popup now matches Windows**: previously only Windows showed the system tray bubble; macOS / Linux `showStatusPopup` was an empty stub. The cross-platform popup logic is now extracted (`popup_wails.go` + `popup_state.go`), so macOS / Linux show the same bubble — current connection state 10 s after startup (once the elevation prompt settles), and a delayed bubble with the stable latest state after network changes alter tunnel state; the bubble has an action menu (open main window / disconnect), can be dismissed manually, and auto-closes after the configurable dwell time (default 10 s).
+- **Multi-target latency probe in parallel**: the full tunnel now probes 8.8.8.8 + 223.5.5.5 + endpoint + custom values (de-duplicated) simultaneously instead of "first one that answers wins"; the split tunnel probes only endpoint + custom values. Each candidate is shown on its own row (status dot + name + resolved IP + kind tag + milliseconds, green ≤100 ms / yellow ≤300 ms / red or unreachable otherwise).
+- **Latency probe target AllowedIPs coverage check**: on a split tunnel (AllowedIPs without 0.0.0.0/0), a custom IP outside the coverage is rejected at save with a red hint; the full tunnel does not check. Domains are resolved at save time and rejected if they cannot be resolved. Four slots store the targets (two public-coverage + two any-type), and coverage is recomputed from the current config every cycle, so a target that only becomes invalid after a save is still caught.
+- **Disconnect-on-quit toggle**: Settings gains an explicit "Disconnect tunnels on quit" switch, on by default (preserving current behaviour); when off, quitting uses Shutdown to keep the tunnels up.
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **连接状态误标**：此前 `StateConnecting` 即被算作活动隧道，导致托盘 / 图标提前变绿、连接历史出现「连上立刻断开」。现新增「已建立隧道」（握手成功才为真连接），GUI 视觉改用已建立集合判定，并新增「正在连接」中间态；连接历史仅在握手成功后才记录，未握手的尝试静默丢弃。
-- **开机 DNS 未就绪即连失败**：新增 `resolveEndpointWithRetry`（15 秒总预算 / 5 秒单次 / 0.8 秒翻倍退避），仅重试瞬时 DNS 失败，再建立引擎，避免开机 DNS 未就绪导致的连接失败。
-- **IPv6 MTU 警告噪声**：非致命的 IPv6 子接口缺失（「找不到元素」）降为 Debug，其余错误仍 WARN。
+- **Connection state misreported**: `StateConnecting` was previously counted as an active tunnel, making the tray / icon turn green early and leaving "connected then immediately disconnected" entries in history. A new "established tunnel" state (true only after the handshake completes) is used for the visual; a "connecting" intermediate state was added; history records a session only after the handshake succeeds and silently drops attempts that never handshake.
+- **Startup connect failed when DNS not ready**: a new `resolveEndpointWithRetry` (15 s total budget / 5 s per attempt / 0.8 s doubling backoff) retries only transient DNS failures before the engine is built, avoiding startup failures when DNS is not yet ready.
+- **IPv6 MTU warning noise**: a non-fatal missing IPv6 sub-interface ("element not found") is now logged at Debug; other errors stay at Warn.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **非 Windows 编译修复**：`popup_state` 类型与常量原定义在 `//go:build windows` 文件，导致 macOS / Linux 编译失败；抽出到无构建标签的 `popup_state.go`。
-- **`internal/diag` 自冲突 live-repro 测试环境感知**：原写死 `selfAddrs=10.30.35.2/32`，与本机实际适配器地址不符误报自冲突；现扫描真实接口取地址，系统不在该形态时跳过。
-- **CI / 构建**：钉版本（checkout v5.1.0 / setup-go v6.5.0 / setup-node v5.0.0 / upload-artifact v7.0.1 / git-cliff v4.9.0），新增 dependabot；提交信息与发布文件敏感词预提交钩子 + CI 扫描；新增 `.gitattributes` 统一行尾；CONTRIBUTING 版本矩阵同步更新。
+- **Non-Windows build fix**: the `popup_state` type and constants were defined in a `//go:build windows` file, breaking macOS / Linux compilation; they are now in a build-tag-free `popup_state.go`.
+- **`internal/diag` self-conflict live-repro test is now environment-aware**: it previously hard-coded `selfAddrs=10.30.35.2/32`, which disagreed with the machine's actual adapter address and falsely reported a self-conflict; it now scans the real interface for the address and skips when the system is not in that shape.
+- **CI / build**: pinned action versions (checkout v5.1.0 / setup-go v6.5.0 / setup-node v5.0.0 / upload-artifact v7.0.1 / git-cliff v4.9.0), added dependabot; added a publish-hygiene pre-commit hook + CI scan for sensitive tokens in commit messages / release files; added `.gitattributes` for consistent line endings; CONTRIBUTING version matrix synced.
 
-### 📝 文档
+### 📝 Docs
 
-- **README**：补充延迟探测多目标、macOS / Linux 状态气泡、退出时断开等说明（5 语言同步）。
+- **README**: documented the multi-target latency probe, macOS / Linux status popup, and disconnect-on-quit (all 5 languages).
 
 ## [2.2.0] - 2026-09-16
 
-### ✨ 新增
+### ✨ Added
 
-- **隧道名称校验与净化（共享模块）**：新增前端模块 `tunnel-name.js`，镜像后端 `ValidateTunnelName()` 的全部规则（允许字符 `A-Za-z0-9-_ `、≤64 字符、禁首尾空格、禁 Windows 保留设备名），供**导入**、**配置编辑器名称框**、**详情页重命名**三处录入点共用，行为完全一致。
-- **名称自动修正提示**：名称中的非法字符（如 `.`、`()`、`·`、中文等）会被自动替换为 `-`，并以 toast 告知「原名 → 实际保存名」，不再让用户误以为写入失败。
+- **Tunnel-name validation and sanitising (shared module)**: a new frontend module `tunnel-name.js` mirrors every rule of the backend `ValidateTunnelName()` (allowed characters `A-Za-z0-9-_ `, 64-char limit, no leading/trailing spaces, no Windows reserved device names) and is shared by all three entry points — **import**, the **config editor's name field** and **rename on the detail page** — so their behaviour is now identical.
+- **Notice when a name is auto-corrected**: illegal characters (`.`, `()`, `·`, non-ASCII, etc.) are replaced with `-` and a toast reports "original → saved name", so the change can no longer look like a silent failure.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **手动改名行为与导入统一**：此前手动改名遇到非法字符会直接弹出后端英文报错，而导入则静默改名，两者行为不一致；现在**一律自动替换非法字符并提示**。净化后仍无法成立的仅剩两种情况，会明确报错：输入全为非法字符（改后为空）与 Windows 保留设备名（`CON`/`NUL`/`COM1` 等）。
-- **编辑器名称框回显实际保存名**：保存后名称框显示的是真正落盘的名字，避免「以为叫 A、实际存成 B」。
-- **提示文案多语言化**：导入成功的提示此前是硬编码英文（`Imported "x"`），现统一走 i18n；文件名被修正时改用专门文案说明原因（5 语言齐备）。
+- **Manual rename now behaves like import**: renaming previously surfaced the backend's raw English error on an illegal character while import silently sanitised — the two disagreed. Now **illegal characters are always auto-replaced, with a notice**. Only two cases survive sanitising and raise an explicit error: a name made up entirely of illegal characters (empty afterwards) and a Windows reserved device name (`CON` / `NUL` / `COM1`, ...).
+- **The editor's name field shows the name that will actually be saved**, so it can no longer read "A" while storing "B".
+- **Localised prompts**: the import success toast was hardcoded English (`Imported "x"`); it now goes through i18n, and a dedicated message explains when the file name had to be adjusted (all 5 languages).
 
-### 🛠 内部
+### 🛠 Internal
 
-- **保留设备名补充**：`reservedDeviceNames` 补入 `CONIN$` / `CONOUT$`（防御性条目，`$` 本不在允许字符集内），并新增 `TestReservedDeviceNamesCoverage` 直接钉住该表，防止条目被误删而无测试报警。
+- **Reserved device names extended**: `reservedDeviceNames` gains `CONIN$` / `CONOUT$` (defensive entries — `$` is already outside the allowed character set) plus a new `TestReservedDeviceNamesCoverage` that pins the map itself, so a dropped entry can no longer go unnoticed.
 
 ## [2.1.2] - 2026-09-14
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **macOS 下所有文本输入框无法粘贴 / 复制 / 剪切** — 此前自定义菜单栏（`installCustomMenuBar`）仅保留了 App 与 Help，丢弃了 Edit 菜单。在 macOS 上，WebView 内的文本编辑（配置、字段、脚本编辑器及一切输入框）的 Cmd+X/C/V 等命令经由菜单栏 Edit 菜单的 responder 链路由到 WebView；缺失该菜单会导致粘贴 / 复制 / 剪切全部静默失效。现已补回 `application.EditMenu` 角色，恢复全部文本域的粘贴能力（仅影响 macOS；Windows / Linux 不受影响）。
+- **macOS: paste / copy / cut broken in all text fields** — the custom menu bar (`installCustomMenuBar`) previously kept only the App and Help menus and dropped the Edit menu. On macOS, text editing inside the WebView (config, field and script editors, and every input) routes Cmd+X/C/V through the Edit menu's responder chain; without it, paste / copy / cut silently failed everywhere. `application.EditMenu` is now re-added, restoring paste in all text fields (macOS only; Windows / Linux unaffected).
 
 ## [2.1.1] - 2026-09-13
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **自动化「on interface」下拉列表不完整** — 该条件原复用实时网络预览（`AutomationPreview`）返回的网口，仅含当前 UP 且带路由地址的网口，单 Wi-Fi 环境下只剩 `en0` 并会被默认预填。现改为与隧道配置「绑定物理网卡」共用同一数据源（`TunnelService.ListPhysicalInterfaces()`），列出**全部物理网卡**（含未连接的 Wi-Fi / 有线），标签格式（友好名 · 硬件型号 · 序号 · 下线状态）也完全对齐。
+- **Automation "on interface" dropdown was incomplete** — this condition previously reused the live network preview (`AutomationPreview`), which only returns interfaces currently UP with a routed address; on a Wi-Fi-only machine it listed just `en0` and pre-filled it by default. It now shares the same data source as the tunnel "Bind physical interface" field (`TunnelService.ListPhysicalInterfaces()`), listing **every physical adapter** (including disconnected Wi-Fi / Ethernet) with the same label format (friendly name · hardware model · index · down state).
 
-### 📝 文档
+### 📝 Docs
 
-- **README 安装章节结构** — 为「下载与安装」补充分平台子章节（`### Windows` / `### macOS` / `### Linux`）总纲，使 Windows 不再占据顶层、与其他平台平级（5 语言 README 同步修正）。
+- **README install section structure** — added per-platform subsections (`### Windows` / `### macOS` / `### Linux`) under "Download & Install" so Windows no longer sits at the top level; all platforms are now siblings (fixed in all 5 language READMEs).
 
 ## [2.1.0] - 2026-09-13
 
-### 🔧 变更
+### 🔧 Changed
 
-- **代理镜像预设更新** — 设置 → 更新 中的 GitHub 加速镜像预设调整为 `ghfast.top` / `gh-proxy.com` / `ghproxy.net` / `mirror.ghproxy.com` 四项，原有的「自定义镜像」与「本地代理」输入框保留不变。
-- **隧道主界面连接 / 断开按钮配色** — 连接按钮改用绿色（go），断开按钮改用红色（stop），两者均为实色填充、仅靠色相区分，连接 / 断开一眼可辨。
-- **自动化条件 UI 重构**：
-  - 「在此网络」条件更名为 **「在网关 MAC」**，明确其按网关（路由器）MAC 地址指纹识别网络，辨识度更高；并补「网关 MAC 指纹」说明。
-  - 移除 **「任意 Wi-Fi」** 独立选项 —— Wi-Fi SSID 条件现在必须填写具体 SSID，不再提供「任意 Wi-Fi」快捷项。
-  - 移除 **「在有线网络（Ethernet）」** 独立条件 —— 接口（on interface）下拉现在列出**全部网络接口**（含无线网卡），有线的真正区分维度（网关 IP / 网关 MAC / 子网）已单列。
-  - 默认态语义不变：规则不填任何条件即对所有网络生效（这正是「任意」场景的兜底）。
+- **Proxy mirror presets updated** — the GitHub acceleration mirror presets in Settings -> Update are now `ghfast.top` / `gh-proxy.com` / `ghproxy.net` / `mirror.ghproxy.com`; the existing "custom mirror" and "local proxy" input fields are unchanged.
+- **Tunnel connect / disconnect button colors** — the Connect button is now green (go) and the Disconnect button is red (stop); both are solid-filled and distinguished purely by hue, so connect vs. disconnect is obvious at a glance.
+- **Automation condition UI rework**:
+  - The "on this network" condition is renamed to **"on gateway MAC"**, making clear it fingerprints the network by the gateway (router) MAC address and is far more recognizable; a "gateway MAC fingerprint" note is added.
+  - Removed the **"Any Wi-Fi"** standalone option — the Wi-Fi SSID condition now requires a concrete SSID; the "any Wi-Fi" shortcut is gone.
+  - Removed the **"On wired network (Ethernet)"** standalone condition — the interface (on interface) dropdown now lists **every network adapter** (including Wi-Fi cards); the real wired-network discriminators (gateway IP / gateway MAC / subnet) are already separate conditions.
+  - Default-state semantics are unchanged: a rule with no conditions applies to all networks (this is exactly the "any" fallback).
 
-### 🛠 内部
+### 🛠 Internal
 
-- 旧的 `ethernet` 自动化规则继续被后台引擎兼容（不丢数据）；新规则无法再创建该条件类型。
+- Legacy `ethernet` automation rules remain compatible with the backend engine (no data loss); new rules can no longer create that condition type.
 
 ## [2.0.0] - 2026-09-13
 
-### ✨ 新增
+### ✨ Added
 
-- **手动连接 / 断开与覆盖锁（Manual Override）**：主操作按钮现在明确为手动动作，强制执行连接 / 断开并忽略任何自动规则；隧道详情显示「控制来源」芯片——自动（规则 / 默认兜底）、手动断开（规则已暂停）、手动连接（已锁定），悬停查看完整语义。
-- **默认兜底生效指示**：当没有规则命中、收敛到默认状态时，默认状态行的外圈高亮与命中规则一致，并标注「当前生效：已执行默认兜底动作」。
-- **隧道状态术语澄清**：区分「已连接」（网卡就绪且握手成功、可传输数据）、「连接中」（网卡已建立但尚未握手，半开态）、「已断开」（无网卡），并附详细说明。
-- **路由可视化增强**：新增局域网直连路由（网关为 `-`）过滤开关；蜂窝（Cellular）接口类型标签；说明弹窗解释 `-`、ARP / 邻居条目的自动隐藏、虚拟 / 第三方网卡显示创建软件名。
-- **DNS 泄漏测试韧性**：公共 DNS 列表源（public-dns.info）获取失败时自动回退到内置公共 DNS 列表，测试不受影响，并给出清晰提示。
-- **自动化规则「生效」判定说明**：详细说明命中需同时满足的 4 个条件（条件匹配当前网络、为列表首个匹配、引擎实际执行动作、隧道真实状态与动作一致），并澄清 disconnect 正确执行后隧道即 down 属「生效」、半开态不冒称生效。
+- **Manual connect / disconnect with override latch**: the primary action is now explicitly a manual action that force-connects / force-disconnects and ignores any automation rule; the tunnel detail shows a "control source" chip — Auto (rule / default fallback), Manual Disconnect (rules paused), Manual Connect (latched) — with a tooltip explaining the full semantics.
+- **Default-fallback indicator**: when no rule matches and the tunnel converges to its default state, the default-state row's outer ring highlights like a matched rule and is labelled "In effect: default fallback executed".
+- **Tunnel state terminology clarified**: distinguishes "Connected" (interface up + handshake complete, data flows), "Connecting" (interface up but handshake not yet done — half-open), "Disconnected" (no interface), with a detailed tooltip.
+- **Route visualization enhancements**: new toggle to filter on-link LAN routes (gateway `-`); Cellular interface-type label; a help popover explaining `-`, automatic hiding of ARP/neighbor entries, and virtual/third-party adapters showing their creator app name.
+- **DNS leak test resilience**: when the public DNS list source (public-dns.info) fails to fetch, automatically fall back to the built-in public DNS list — the test is unaffected — with a clear hint.
+- **Automation "in-effect" criteria explained**: a tooltip detailing the 4 conditions a match must satisfy (conditions match current network, it is the first match, the engine actually executes the action, and the tunnel's real state matches the action), and clarifying that a correctly-executed disconnect leaves the tunnel down (which is "in effect") while a half-open state is not claimed as in-effect.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **隧道详情主操作重构**：连接按钮增加品牌酒红左侧条（#A01D21，呼应 App 图标）；主 CTA 加大并加重阴影；断开按钮常驻浅红描边；主操作 sticky 常驻，长面板下不滚出视野；双行副标题移入 tooltip。
-- **主题与对比度**：暗色 `--text-muted` 对比度提升至 AA（约 4.8:1）；暗色 `--green` 对齐图标医用绿（#22c55e，AAA）；清理冗余 token（`--blue-tint`、`--accent-blue`），统一引用 `--accent-tint`。
-- **文档**：README 不再推荐 WireTunnels；移除 2.0「Windows 系统服务」路线图（该目标不再纳入规划）。
+- **Tunnel detail primary action redesign**: the Connect button gains a brand crimson left bar (#A01D21, echoing the app icon); the CTA is enlarged with a heavier shadow; the Disconnect button keeps a persistent light-red outline; the primary action is sticky so it never scrolls out of view in long panels; the two-line subtitle moves into a tooltip.
+- **Theme & contrast**: dark-mode `--text-muted` contrast raised to AA (~4.8:1); dark-mode `--green` aligned to the icon's medical green (#22c55e, AAA); removed redundant tokens (`--blue-tint`, `--accent-blue`) in favour of `--accent-tint`.
+- **Docs**: README no longer recommends WireTunnels; removed the 2.0 "Windows system service" roadmap (that goal is no longer planned).
 
-### 🛠 内部
+### 🛠 Internal
 
-- **新增测试**：手动覆盖锁（manual override）、接口归属（iface owner）、DNS 泄漏公共列表获取；更新自动化评估测试以覆盖新语义与默认兜底。
-- **多语言文件 515 键对齐**（zh / en / ja / ko / zh-TW）。
+- **New tests**: manual override latch, interface ownership, DNS-leak public-list fetch; updated automation-evaluation tests for the new semantics and default fallback.
+- **i18n files aligned to 515 keys** (zh / en / ja / ko / zh-TW).
 
 ## [1.8.5] - 2026-09-12
 
-### ✨ 新增
+### ✨ Added
 
-- **策略层（Policy Layer）**：基于隧道快照的纯函数分析器——前缀分类、路由严重度、DNS 与保护检查。
-- **冲突策略**：保存时允许并记录日志；手动连接时阻断并弹出冲突警告；自动化触发时阻断并通知；绝不改写 AllowedIPs。
-- **每隧道策略**（存于 `.meta` 侧车文件）：traffic_protect、domains、use_as_default_dns、dns_resolve_path、system_dns，并新增 TunnelPolicies 界面。
-- **路由数据契约**：仅 L3 下一跳的网关（直连为 `—`，MAC 与 ARP / 邻居条目已过滤）、规范化目的地、仅单播。
-- **诊断增强**：自动化网络板显示接口类型标签；更丰富的连接 / 断开日志；紧凑的隧道编辑器布局。
+- **Policy layer**: pure-function analyzers over tunnel snapshots — prefix classification, route severity, DNS and protection checks.
+- **Conflict policy**: allow + log on save; block + ConflictWarning on manual connect; block + notify on automation; never rewrites AllowedIPs.
+- **Per-tunnel policies** (stored in the `.meta` sidecar): traffic_protect, domains, use_as_default_dns, dns_resolve_path, system_dns, with a new TunnelPolicies UI.
+- **Routes data contract**: L3-next-hop-only Gateway (`—` for on-link; MAC and ARP/neighbor entries filtered), canonical Destination, unicast only.
+- **Diagnostics**: interface-type label on the automation network board; richer connect/disconnect logs; compact tunnel editor layout.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **移除全局 Kill Switch**：从设置 / IPC / CLI / helper 中移除全局 Kill Switch，相关保护由每隧道策略接管。
+- **Removed the global Kill Switch** from Settings / IPC / CLI / helper; related protection is now handled per-tunnel by the policy layer.
 
 ## [1.8.0] - 2026-09-09
 
-### ✨ 新增
+### ✨ Added
 
-- **运行日志大幅充实** — GUI 启动时记录版本与平台；隧道的连接/断开请求与结果（失败原因以 WARN 级别记录）、配置导入（含 zip 批量导入的成功/失败统计）、保存、删除、重命名都有对应日志；自动化引擎逐隧道记录决策（连接、断开、跳过及原因），手动断开设置的「闩锁」在设置与清除时都会提示，排查"规则为什么不连"不再靠猜。
-- **路由表网关显示「链路直连」** — 网关为 `link#N` 的链路路由不再显示晦涩的内核记号，统一显示为本地化的「链路直连」（悬停仍可查看原始值）。
+- **Much richer runtime logs** — the GUI logs its version and platform at startup; tunnel connect/disconnect requests and outcomes (failures logged at WARN with the reason), config import (including per-zip success/failure counts), save, delete and rename all have entries; the automation engine logs a per-tunnel decision line (connect, disconnect, or skip with the reason), and the manual-off latch logs whenever it is set or cleared — troubleshooting "why didn't my rule connect" no longer means guessing.
+- **On-link gateways in the route table** — link-layer gateways (`link#N`) now render as a localised "on-link" label instead of a kernel abbreviation (the raw value stays available via tooltip).
 
-### 🔧 变更
+### 🔧 Changed
 
-- **保存自动化策略立即生效** — 在自动化编辑器保存规则或默认状态后，应用会立刻触发一次重新评估，不再需要等待下一次网络事件。
-- **日志增加类别字段** — 日志条目现在带 `category`（tunnel / network / app），便于按主题筛选。
+- **Automation policy applies immediately** — saving rules or a default state in the automation editor now triggers a re-evaluation right away instead of waiting for the next network event.
+- **Category field in logs** — log entries now carry a `category` (tunnel / network / app) for easier filtering.
 
-### 🐛 修复
+### 🐛 Fixed
 
-- **AllowedIPs 冲突检测误报彻底修复**（1.7.9 修复不完整的补充）：
-  - 隧道自身接口现在**按地址识别**（接口携带隧道自己的 Address 即跳过），不再依赖 helper 状态回传接口名——CLI 的 `connect` 预检与 GUI 状态查询失败的路径也不会再把隧道自己的路由当成冲突源。
-  - 新增 CIDR **严格位于已有更宽路由内部**时不再告警：最长前缀匹配下更具体的路由永远胜出、结果确定无歧义。此前 Clash/Mihomo TUN 的近默认路由（如 `8.0.0.0/5` 罩住整个 `10.0.0.0/8`）会把所有私有网段都报成"冲突"。相等前缀（两隧道抢同一段）与新增超集（全隧道覆盖既有路由）仍会照常告警。
-- **只有默认状态、没有规则的隧道此前从未被评估** — 引擎只遍历「有规则」的隧道，导致 1.7.9 的「默认状态单独生效」实际不生效：默认连接的隧道在无规则命中时不会自动连接。现在默认状态与规则的并集都会被评估。
-- **路由表显示修复** — macOS 省略写法的目的地现在展开为完整 CIDR（`2/7` → `2.0.0.0/7`）；目的与网关列的列宽修正，超长地址不再溢出混入相邻列或被截断（改为省略号 + 悬停显示完整值）。
-- **字段编辑器 Endpoint 标记必填** — Endpoint 现在与其余必填字段一样带红色 \* 标记。
+- **AllowedIPs conflict false positives fully fixed** (completing the incomplete 1.7.9 fix):
+  - The tunnel's own interface is now recognised **by address** (any scanned interface carrying the tunnel's own Address is skipped), removing the dependency on the helper's status round-trip — the CLI `connect` pre-check and any failed GUI status query no longer count the tunnel's own routes as conflicts.
+  - A new CIDR lying **strictly inside an existing wider route** no longer warns: under longest-prefix match the more-specific route always wins, deterministically. Previously the near-default split of a Clash/Mihomo TUN (e.g. `8.0.0.0/5` covering all of `10.0.0.0/8`) flagged every private range as "conflicting". Equal prefixes (two tunnels claiming the same range) and new supersets (full-tunnel over an existing route) are still reported.
+- **Tunnels with only a default state were never evaluated** — the engine only iterated tunnels that had rules, so 1.7.9's "default state alone takes effect" did not actually work: a default-connect tunnel without rules never auto-connected. Default states are now evaluated together with rules.
+- **Route table display fixes** — macOS abbreviated destinations are expanded to full CIDRs (`2/7` → `2.0.0.0/7`); destination and gateway columns no longer overflow into each other or truncate (ellipsis + full value on hover instead).
+- **Endpoint marked as required** — Endpoint now carries the red \* marker like the other required fields.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 新增冲突检测回归测试（子网抑制 / 相等前缀 / 新超集 / 实机验证）、macOS 路由目的地展开测试与自动化评估触发测试；多语言文件 456 键对齐。
+- Regression tests for conflict detection (subnet suppression / equal prefixes / new supersets / live-system verification), macOS route expansion tests and automation re-evaluation trigger tests; i18n files aligned at 456 keys.
 
 ## [1.7.9] - 2026-09-08
 
-### ✨ 新增
+### ✨ New
 
-- **托盘菜单显示版本号** — 状态栏菜单第一行「WireGuide Plus」后面现在带上当前版本号，一眼确认正在运行的构建。
-- **字段编辑器必填项标记** — PrivateKey、Address、PublicKey、AllowedIPs 等必填字段现在带红色 \* 标记，悬停显示本地化提示。
+- **Tray menu shows the version** — the first row of the menu bar menu now reads "WireGuide Plus" followed by the running version, so the active build is obvious at a glance.
+- **Required-field markers in the field editor** — required keys such as PrivateKey, Address, PublicKey and AllowedIPs now carry a red \* marker with a localised tooltip on hover.
 
-### 🔧 变更
+### 🔧 Changed
 
-- **默认状态单独即可生效** — 只设置默认状态、不添加任何规则的隧道，现在会**始终收敛到该默认状态**（此前这种配置会被完全忽略）；「规则与默认状态都没有」的隧道依然完全不干预。相应地，`automation default` 不再要求隧道先有规则，把规则删光也会保留默认状态。
-- **编辑器布局优化** — 配置编辑弹窗加大（860×620 → 900×760），配置编辑区更宽裕；脚本编辑器的四个钩子改为两列排布（PreUp+PostUp 一行、PreDown+PostDown 一行），面板整体更紧凑；字段编辑器标签列加宽，PersistentKeepalive 不再与输入框重叠。
+- **A Default State now works on its own** — a tunnel with only a Default State and zero rules now **always converges to that state** (previously such a configuration was ignored entirely); tunnels with neither rules nor a Default State are still never touched. Accordingly, `automation default` no longer requires existing rules, and removing the last rule keeps the Default State.
+- **Editor layout improvements** — the config editor dialog is larger (860×620 → 900×760); the four script hooks in the scripts editor now sit in two columns (PreUp+PostUp on one row, PreDown+PostDown on another) inside a more compact panel; the field editor's label column is wider so PersistentKeepalive no longer overlaps the input.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **修复 macOS 开机自启动失效** — launchd 为登录启动项提供的环境变量里没有 `HOME`，应用被拉起后立刻因无法定位数据目录而退出（plist 确实被触发了，但进程秒退）。路径解析现在回退到系统账户信息（getpwuid），不再依赖环境变量；LaunchAgent 同时显式注入 `HOME`、声明为 Aqua 会话的交互式进程；取消自启动时先注销再删除。
-- **默认连接的隧道开机后仍不自动连接** — 启动时现在总会投递一次自动化评估；但网络尚未识别（无 SSID 且无物理网卡地址）时不凭空动作，等 SSID 上报或路由事件到达后，再按真实条件完成决策。开机自动连接依然生效，且每一个决策都经过条件判断。
-- **修复 AllowedIPs 冲突检测误报** — 隧道已连接时不再把**自己的接口**当成冲突源（此前每次检查都会把全部 CIDR 报成与自己重叠）；网段重叠判定收紧为严格相交，兄弟前缀（如 `10.30.30.0/24` 与 `10.30.35.0/24`）不再被误判为包含冲突，跨地址族（IPv4 vs IPv6）也不再比较。
+- **Fixed macOS launch-at-login not working** — launchd does not provide `HOME` in the LaunchAgent environment, so the app was killed moments after spawn because it could not locate its data directories (the plist did fire; the process just exited instantly). Path resolution now falls back to the system account database (getpwuid) instead of environment variables; the LaunchAgent also injects `HOME` explicitly, declares itself an Aqua-session interactive process, and removal now unregisters the job before deleting it.
+- **Default-connect tunnels did not auto-connect after login** — a startup automation evaluation is now always posted; while the network is still unidentified (no SSID and no physical-interface addresses) it takes no action, and the decision completes with real conditions once the SSID report or a route event arrives. Autostart connecting still works, and every decision is condition-judged.
+- **Fixed AllowedIPs conflict-detection false positives** — a connected tunnel no longer counts **its own interface** as a conflict source (previously every check flagged all of its CIDRs as overlapping themselves); overlap detection now requires strict intersection, so sibling prefixes (e.g. `10.30.30.0/24` and `10.30.35.0/24`) are no longer reported as containment conflicts, and address families (IPv4 vs IPv6) are never compared across.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 测试脚本与文档同步已移除的「否则」条件与默认状态语义；新增网段重叠回归测试与引擎默认态单元测试。
+- Test scripts and docs updated for the removed "otherwise" condition and the Default State semantics; new regression tests for CIDR overlap and engine-level default-only policies.
 
 ## [1.7.8] - 2026-09-08
 
-### ✨ 新增
+### ✨ New
 
-- **自动化规则改为「默认状态 + 有序规则」** — 每条隧道现在是一份按优先级排列的规则列表：自上而下逐条匹配，**首个命中的规则生效**，规则内的多个条件为「与」关系；所有规则都不命中时收敛到该隧道的**默认状态**（连接 / 断开），不再有「否则（Otherwise）」分支。默认状态在自动化编辑器顶部设置，规则卡可拖拽调整优先级，动作徽章点击即可在连接 / 断开之间切换。
-- **按期望状态收敛（Desired State → Reconcile）** — 引擎现在把每条隧道持续推向它应有的状态：命中「连接」就连接，命中「断开」就断开，与隧道当初是如何建立起来的无关；没有配置任何规则的隧道依然完全不干预。
-- **命令行新增 `automation move` 与 `automation default`** — `wireguideplus ctl automation move <隧道> <原序号> <新序号>` 调整规则优先级，`wireguideplus ctl automation default <隧道> <connect|disconnect>` 设置默认状态。
+- **Automation is now "default state + ordered rules"** — each tunnel owns one priority-ordered rule list: rules are matched top-down and the **first match wins**, with multiple conditions inside a rule combined with AND; when nothing matches the tunnel converges on its **default state** (connect / disconnect). The "otherwise" branch is gone. The default state is picked at the top of the automation editor, rules can be drag-reordered, and the action badge on a rule toggles between connect and disconnect with one click.
+- **Convergence on the desired state (Desired State → Reconcile)** — the engine now drives every tunnel toward the state it should be in: a "connect" match connects, a "disconnect" match disconnects, regardless of how the tunnel was brought up. A tunnel with no rules is still never touched.
+- **New CLI commands `automation move` and `automation default`** — `wireguideplus ctl automation move <tunnel> <from> <to>` reorders rules, and `wireguideplus ctl automation default <tunnel> <connect|disconnect>` sets the default state.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **网络事件风暴不再重复触发自动化** — 一次 Wi-Fi 接入产生的多个 SSID / 路由事件会合并成一次评估：触发源只向单槽邮箱投递请求，评估开始时总是重新采样最新的网络上下文，评估期间到达的事件只保留一个并在结束后再跑一次。既不会积压，也不会拿过期的网络状态做决策。
-- **退出时的自动化收尾竞争** — 关闭应用后仍处于待处理状态的评估请求不再执行，避免它与「断开所有隧道」的清理流程争抢同一条隧道。
-- **旧配置的「否则」规则自动迁移** — 读取旧配置时，第一条有效的「否则（none_match）」规则会被转换成该隧道的默认状态，排在它后面、被它完全遮蔽的规则一并移除；没有任何「否则」规则的老配置迁移为默认「断开」。迁移是幂等的，结果与原行为一致。
+- **Network event storms no longer re-trigger automation repeatedly** — the burst of SSID / route events produced by joining a Wi-Fi network now collapses into a single evaluation: triggers only post into a one-slot mailbox, each evaluation re-samples the freshest network context when it starts, and events arriving during an evaluation leave at most one follow-up pass. Nothing queues up, and no decision is ever made from a stale context.
+- **Shutdown race in the automation teardown** — an evaluation request still pending after the app begins shutting down no longer runs, so it can't fight the "disconnect all tunnels" cleanup over the same tunnel.
+- **Legacy "otherwise" rules migrate automatically** — when an old config is read, its first valid `none_match` rule becomes the tunnel's default state and every rule after it (fully shadowed by it) is dropped; configs without any "otherwise" rule migrate to a default of disconnected. The migration is idempotent and preserves the previous behaviour.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **评估动作抽取为纯函数并补充幂等性测试** — 同一网络上下文连续评估两次不得产生第二次状态变更动作；被手动关闭的隧道在任何路径下都不会被自动重连。
-- **配置迁移 / 命令行 / 界面三条写入路径一致性测试** — 三条路径落盘后必须得到同一份归一化模型：无 `none_match` 残留、有规则必有合法默认状态、无规则必无默认状态。
-- **文档同步** — 设计文档补齐默认状态与有序规则语义、事件合并机制与锁序说明；手工测试清单移除已废弃的「否则」用例，新增事件风暴与关闭时序两项验证。
+- **Reconcile action extracted into a pure function with idempotency tests** — evaluating the same network context twice must not produce a second state-changing action, and a tunnel switched off manually is never auto-reconnected on any path.
+- **Config-migration / CLI / GUI write-path consistency tests** — all three paths must land on the same normalised model: no `none_match` left on disk, a valid default state whenever rules exist, and no default state when there are none.
+- **Docs updated** — the design document now covers the default state and ordered-rule semantics, event coalescing and lock ordering; the manual test checklist drops the obsolete "otherwise" case and adds event-storm and shutdown-timing checks.
 
 ## [1.7.6] - 2026-09-07
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **新建隧道时立即显示出口绑定面板** — 开启「固定接口」后，新建隧道的编辑弹窗此前要等输入隧道名称后才出现绑定选项（面板显示条件被隧道名误拦截）；现在打开弹窗即显示，所选出口在保存成功后写入，失败不影响隧道本身的创建。
+- **Egress binding panel shows immediately for new tunnels** — with Pin Interface enabled, the binding option in the new-tunnel editor used to appear only after typing a tunnel name (the panel was wrongly gated on the name); it now shows as soon as the dialog opens, and the picked NIC is written after a successful save without affecting tunnel creation.
 
 ## [1.7.5] - 2026-09-07
 
-### ✨ 新增
+### ✨ New
 
-- **隧道脚本（PreUp / PostUp / PreDown / PostDown）编辑器** — 隧道编辑弹窗底部新增脚本面板：可为每个钩子选择已有脚本文件（不限目录）、新建空白脚本（默认放在 scripts 目录，可重命名）、直接编辑代码或一键清除；写入采用纯文本改写，不破坏 conf 中注释与手工排序。
-- **独立 scripts 文件夹与设置导入/导出** — 新增与 tunnels、logs 并列的 scripts 数据目录；设置中新增「导出设置」（打包 tunnels + scripts + config.json，不含日志）与「导入设置」，方便整机迁移。
-- **字段编辑视图** — 隧道编辑弹窗新增 conf / 字段双页签：字段页按 conf 键逐项提供输入框（interface / peer 分组），AmneziaWG 混淆参数仅在其开关开启时显示；保存时仍写回 conf 文本，注释与自定义行原样保留。
-- **每隧道物理出口绑定（Windows / Linux / macOS）** — 开启 Pin Interface 后，可在隧道编辑中把该隧道的加密流量固定到指定物理网卡：Windows 使用套接字级 IP_UNICAST_IF 绑定，Linux 使用 `ip route … dev <网卡>` 旁路路由，macOS 旁路路由附加 `-ifscope`；绑定失败即连接失败，不回退默认路由，避免流量泄漏。
-- **绑定网卡失效处理弹窗** — 绑定的出口网卡丢失时不再静默回退：弹窗提供「保持绑定等待恢复」「自动切换到可用网卡」「打开隧道编辑手动指定」三种处理方式，且每次失效事件只提示一次。
-- **AmneziaWG 开关二次确认与统一徽章** — 设置中开启 AmneziaWG 支持时要求与 Pre/Post Scripts 相同的高亮二次确认；隧道列表与详情页的徽章统一为 AmneziaWG ON（紫）/ AmneziaWG OFF（红）两种样式。
+- **Tunnel script (PreUp / PostUp / PreDown / PostDown) editor** — the tunnel editor now has a script panel: pick an existing script file (any folder), create a blank script (placed in the scripts folder by default, renameable), edit the code in place, or clear a hook in one click; hooks are rewritten as plain text so comments and hand-ordered lines in the conf survive.
+- **Dedicated scripts folder and settings export/import** — a new scripts data folder sits next to tunnels and logs; Settings gains "Export settings" (bundles tunnels + scripts + config.json, excluding logs) and "Import settings" for easy migration to a new machine.
+- **Field editor view** — the tunnel editor now has conf / fields tabs: the fields tab renders one input per conf key (interface / peer groups), with the AmneziaWG obfuscation parameters shown only while the AmneziaWG switch is on; saving still writes back to the conf text, preserving comments and custom lines.
+- **Per-tunnel physical egress binding (Windows / Linux / macOS)** — with Pin Interface enabled, each tunnel can pin its encrypted traffic to a specific physical NIC: socket-level IP_UNICAST_IF binding on Windows, `ip route … dev <iface>` bypass routes on Linux, and `-ifscope` scoped routes on macOS; a failed bind fails the connection instead of falling back to the default route, preventing traffic leaks.
+- **NIC-loss handling dialog** — when the bound egress NIC disappears, the tunnel no longer silently falls back: a dialog offers keep the binding and wait, switch to the best available NIC, or open the tunnel editor to pick one manually, and each loss episode is reported only once.
+- **AmneziaWG switch confirmation and unified badge** — enabling AmneziaWG support in Settings now requires the same highlight-and-confirm step as Pre/Post Scripts; the tunnel list and detail badges are unified as AmneziaWG ON (purple) / AmneziaWG OFF (red).
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **网卡列表改用通用名称** — Windows 网卡下拉此前显示硬件描述（如 Realtek…），现优先显示系统通用名称（以太网、WLAN 等），硬件型号作辅助信息；Linux 按 Wi-Fi / Ethernet / 蜂窝分类，并修正默认路由判定导致所有网卡都被标为默认出口的问题；macOS 读取系统网络设置中的端口名称。
-- **字段编辑器无法打开** — 页签切换引用了未定义的变量，点击「字段编辑」直接报错；已补齐声明并在切换时按当前 conf 文本重新解析。
-- **AmneziaWG 徽章首次进入误显示 ON** — 徽章此前按默认值渲染、未等待设置加载完成；现严格以已加载的设置为准，读不到开关状态时不渲染。
-- **Pin Interface 误报「当前平台不支持」** — 有活跃隧道时切换开关会被误判为平台不支持并回滚；现在活跃隧道保持当前绑定、重连后生效，仅记录日志。
-- **Linux 出口绑定不再回退默认路由** — 旁路路由安装失败时连接直接失败，避免流量走默认出口造成泄漏。
+- **NIC list now shows common names** — the Windows dropdown used to show hardware descriptions (e.g. Realtek…); it now prefers system common names (Ethernet, WLAN, …) with the hardware model as secondary info. Linux classifies devices as Wi-Fi / Ethernet / Cellular and no longer marks every NIC as carrying the default route; macOS reads port names from system network setup.
+- **Fields editor failed to open** — the tab switcher referenced undefined variables and threw on click; the declarations are in place and switching now re-parses the current conf text.
+- **AmneziaWG badge showed ON on first launch** — badges used to render from a default value before settings loaded; they now render only from loaded settings and are hidden while the switch state is unknown.
+- **Pin Interface falsely reported "not supported on this platform"** — toggling the switch with an active tunnel was treated as unsupported and rolled back; active tunnels now keep their current binding (effective on reconnect) and the outcome is only logged.
+- **Linux egress binding no longer falls back to the default route** — if the bypass route cannot be installed, the connection fails outright instead of leaking traffic through the default egress.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **弹窗统一支持拖动与缩放** — 设置 / 自动化 / 隧道编辑弹窗可按标题栏拖动位置、右下角自由缩放；编辑弹窗默认尺寸加大、右上角新增关闭按钮，「conf 文本」页签更名为「conf 编辑器」，字段页按钮样式与 conf 页统一。
-- **字段编辑分组全宽显示** — interface / AmneziaWG / peer 分组统一填满编辑区宽度，长值不再被挤在半栏。
-- **本地构建补齐图标与版本资源** — 手动构建时按 CI 同款流程生成资源文件，测试包不再缺图标；正式发布仍由 CI 构建。
+- **Dialogs are now draggable and resizable** — the Settings, Automation and tunnel editor dialogs can be moved by their title bar and resized from the corner; the editor dialog opens larger, gained a corner close button, its "conf text" tab was renamed "conf editor", and the fields tab buttons now match the conf tab styling.
+- **Field editor groups span the full width** — interface / AmneziaWG / peer groups all fill the editor width so long values are no longer squeezed into half a column.
+- **Icon and version resources for local builds** — local builds now generate the resource file the same way CI does, so test executables no longer lack the icon; official releases remain CI-built.
 
 ## [1.7.1] - 2026-09-06
 
-### ✨ 新增
+### ✨ New
 
-- **旧版本数据提醒改版** — 检测到旧版本（存于 "wireguide" 目录）遗留的数据时，改为弹出对话框让用户自行选择：打开旧文件夹或新配置文件夹查看、移动到新的配置文件夹、不再提醒，或本次取消并在下次启动时再次提醒。
-- **移动时的同名文件冲突提示** — 目标配置文件夹已存在同名文件时，对话框会列出冲突文件，并提供「覆盖并移动」「打开新文件夹查看内容」「取消并不再提醒」「本次取消、下次再提醒」四种处理方式。
+- **Reworked older-version data prompt** — when data left behind by a pre-rename ("wireguide") install is detected, the dialog now lets you open the old or the new config folder to inspect it, move everything into the new config folder, choose never to be reminded again, or dismiss for now and be reminded on the next launch.
+- **Name-conflict handling when moving** — if the destination config folder already contains files with the same names, the dialog lists them and offers overwrite and move, open the new folder to inspect its contents, dismiss permanently, or dismiss until the next launch.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **跳过迁移时旧数据被误删** — 此前每次调用迁移都会无条件清理旧目录，导致选择「稍后再看」或因同名冲突被跳过时，尚未迁移的旧数据被悄悄销毁，且之后再也扫描不到。现在只有在全部文件真正移动完成（无任何跳过）后，才清理旧目录并停止提醒。
+- **Old data was destroyed when migration was skipped** — the legacy folder used to be cleaned up unconditionally on every migration call, so choosing "remind me later" or having files skipped because of name conflicts silently deleted data that had not been migrated yet, and it could never be detected again. The old folder is now removed only after every file has actually been moved (nothing skipped).
 
-### 🛠 内部
+### 🛠 Internal
 
-- **移除设置中的旧版本数据迁移入口** — 旧版本文件检测仅在软件首次运行时自动进行，无需在设置里手动重新检测；对应的设置区块、后端重置接口及其状态存储一并移除。
-- **迁移相关文案全语言补齐** — 新增的冲突提示与操作按钮已补齐 5 种语言。
+- **Removed the migration entry from Settings** — older-version files are now detected automatically on first launch only, so there is no need to re-check manually; the settings section, its backend reset call and the underlying state store have been removed.
+- **Migration strings completed for all languages** — the new conflict prompt and action buttons are localized in all five languages.
 
 ## [1.7.0] - 2026-09-04
 
-### ✨ 新增
+### ✨ New
 
-- **Automation 实时网络看板** — 按当前隧道显示硬件接口、Wi-Fi SSID、网关 MAC、网关 IP 和子网，并标注规则命中情况；接口列表排除虚拟网卡，区分使用中与未使用的硬件接口。
-- **Automation 编辑器交互优化** — 说明和看板可分别折叠，整个编辑器支持滚动，保留条件拖动排序。
+- **Automation live network panel** — shows the current tunnel's hardware interfaces, Wi-Fi SSID, gateway MAC, gateway IP, and subnets, with rule-match counts; virtual adapters are excluded and hardware interfaces are marked in use or not in use.
+- **Automation editor interaction improvements** — help and network panels can collapse independently, the whole editor scrolls, and condition drag sorting remains available.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Automation 状态语义统一** — `match` 表示条件匹配，`in use` 表示首条命中规则被选中，`active` 表示隧道实际运行状态；修正 otherwise 条件在被降权时仍应显示匹配的问题。
-- **设置错误提示多语言化** — Pin Interface、日志级别、Kill Switch、DNS 保护和健康检查的失败提示及平台不支持提示不再硬编码中文。
+- **Unified Automation status semantics** — `match` means a condition matches, `in use` means the first matching rule was selected, and `active` means the tunnel is actually running; otherwise conditions still show as matched when shadowed.
+- **Localized settings error feedback** — failures and unsupported-platform messages for Pin Interface, log level, Kill Switch, DNS Protection, and Health Check no longer contain hardcoded Chinese.
 
-### 📝 文档
+### 📝 Documentation
 
-- **5 种语言 README 与 CHANGELOG 同步更新** — 补充实时网络看板、接口状态、编辑器交互和 Pin Interface 的平台支持范围。
+- **Synchronized all five README and CHANGELOG languages** with the live network panel, interface status, editor interaction, and Pin Interface platform support scope.
 
 ## [1.6.5] - 2026-09-02
 
-### ✨ 新增
+### ✨ New
 
-- **自动化编辑器：草稿变更即时重判读** — 每次编辑规则、条件、拖拽排序都会在约 250ms 防抖后立即通过 IPC 调用后台评估引擎，match / in use / 顶部裁决条 不等 3 秒轮询就能更新；仍然与 helper 实际控制共用同一引擎，UI 与真实行为始终一致。
-- **自动化编辑器 UI 紧凑化** — 规则卡片内上下间距缩小，条件行内输入控件、星期按钮更紧凑，同一可视高度可容纳约 20% 更多的规则。
+- **Automation editor: draft edits re-evaluate live, without waiting for the 3 s poll.** Any edit (new rule, reorder, condition switch, typing into a field, weekday toggle) triggers a ~250 ms debounced re-evaluation through the same backend engine the helper uses, so match / in-use badges and the top decision strip update immediately instead of stalling on a stale snapshot until the next 3-second poll cycle.
+- **Tighter automation editor layout.** Rule-card padding, inter-rule gaps, condition-row padding, input controls and weekday pills are all reduced; the same visible area now fits roughly 20 % more rules.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **高级设置四项开关与日志级别 统一落盘策略** — Kill Switch / DNS 保护 / 固定接口 / 健康检查 / 日志级别 从「先乐观写盘再回滚」改为统一的「先 IPC 调用 helper 实时应用 → 成功才写内存+落盘」：失败时 settings.json 不再落脏值、UI 复选框自动回弹并显示失败原因 toast；日志级别 select 同样应用该流程。
-- **Wg Scripts 开关「取消」不回写盘** — 启用时的安全确认对话框，如果用户点取消，之前确认前的 scheduleSave() 已把 `enable_wg_scripts=true` 写入磁盘，取消只回滚内存，造成下次打开显示"已启用"却实际没生效；现在仅在确认/取消按键按下后才写盘。
-- **Pin Interface 开关「点击轨道不触发」** — `.toggle input` 缺少显式 inset，导致 0x0 透明 input 命中区偏离到 track 可视区外，点击轨道/滑块时偶尔无响应（尤其尾部设置卡）。现在 input 铺满整个 `.toggle` 容器，任意位置都可点击。
-- **Automation live matching 指示不稳定** — 同一网络环境下每次打开编辑器 match / active / 顶部决策标签显示内容均不相同：原因是多个异步刷新入口（onMount、load、轮询、关闭暂停）间没有会话边界，再加上关闭时清空了定时器但再次打开时不会重建；现在使用 `previewEpoch + AbortController` 建立会话幂等键，`open && !previewTimer` 响应式守卫自动重启轮询，关闭/销毁时彻底清理三件套，杜绝任何过期在途请求污染当前会话。
-- **DNS 泄漏测试 public-dns.info 频繁超时** — 原 HTTP client 超时 10s 与 UI 层 ctx 超时同量级，拥塞链路上下载 4-8MB 的 nameservers.json 常在 body 读到一半时触发"parse JSON: context deadline exceeded"（看起来像解析失败，实际是传输超时）；客户端超时放宽至 30s，LimitReader 由 16MB 收紧到 4MB（前几百条高可靠条目就足够，更多条目无意义），UI 的 10s ctx 仍可优先取消。
+- **Advanced-setting toggles and log level share a single "IPC-then-persist" policy.** Kill Switch / DNS protection / Pin Interface / Health Check / log level previously used the "write settings optimistically, roll back on error" pattern, which left the wrong value on disk and never surfaced failure feedback. All five now call the helper's live-apply IPC first; only on success do they write the in-memory setting and persist it. Failures snap the control back to the previously persisted value and show a toast with the exact error. The log-level `<select>` follows exactly the same flow.
+- **Wg Scripts confirmation dialog now only writes disk after Confirm / Cancel.** Until now, clicking the switch to enable scripts would *immediately* persist `enable_wg_scripts = true` before the user had answered the security prompt. Cancelling the dialog only flipped memory back to false, leaving settings.json with a stale `true` on disk — next launch the switch appeared "on" while no scripts were actually honoured. Persist now happens exclusively from the two dialog buttons.
+- **Pin Interface toggle track was a dead click surface.** `.toggle input` used absolute positioning but had no `inset`, so its 0×0 hit surface drifted outside the track/slider visual bounds. When the user clicked the slider body instead of the outer `<label for="…">` text, the click missed, especially on the last setting card in the section. The input now fills the whole `.toggle` container.
+- **Automation live-matching strip indicators flickered between opens.** With no session boundary the several refresh entry points (onMount, initial load, 3-second poll, close-paused timer) let stale in-flight responses overwrite the current tunnel's frame on reopen. A single unified refresh entry point now uses a `previewEpoch` session id + `AbortController` as an idempotency key, an `open && !previewTimer` reactive guard rebuilds the poll automatically on every reopen, and close/destroy tear down epoch/controller/timer together.
+- **DNS leak test public-dns.info downloads kept timing out mid-body.** The 10-second HTTP client timeout was in the same order of magnitude as the UI-level ctx timeout; on congested links the 4–8 MB `nameservers.json` would very often trigger a transport-level cancel while `json.Decoder` was reading, which looked like a JSON parse failure ("parse JSON: context deadline exceeded"). Client timeout is relaxed to 30 s, the body `LimitReader` is tightened from 16 MB to 4 MB (only the first few hundred reliable entries matter — the rest are worse servers anyway), and the UI's 10 s ctx still aborts first if the user cancels.
 
-### 📝 文档
+### 📝 Docs
 
-- **README（5 种语言）新增「自动化规则」独立章节**：包含规则逻辑（规则内 AND、规则间 OR 首条命中、disconnect 先于 connect、otherwise 兜底）、7 种条件类型说明与典型场景、编辑中实时判读指示器与 CLI `automation` 命令说明。
+- **All five READMEs gain a dedicated "Automation rules" section.** Covers rule semantics (AND inside one rule, OR first-match across rules with disconnect rules evaluated before connect rules, otherwise fallback), all seven condition types with match definitions and real-world use cases, live match indicators, and the CLI `automation` command.
 
 ## [1.6.0] - 2026-09-02
 
-### ✨ 新增
+### ✨ New
 
-- **自动化规则新增四类条件** — 每隧道的 connect/disconnect 规则现在支持：网关 IP（gateway_ip）、网卡接口（interface，候选列表包含当前未连接的物理网卡）、在有线网络（ethernet）、时间段（time，起止时刻 + 星期几）。规则内条件为 AND、规则间为 OR，按落盘顺序首条命中生效；disconnect 组先于 connect 组评估，connect 命中会被降权不执行。
-- **自动化编辑器实时判读** — 编辑规则时逐条件显示是否命中（match）并高亮当前实际生效的规则（in use），顶部裁决指示条同步显示最终将执行的动作；判读与 helper 实际控制共用同一引擎，标记与真实行为一致。
-- **CLI 新增 `automation` 命令** — 终端查看每条规则的实时命中详情与裁决结果，新条件类型均有可读格式。
+- **Four new automation condition types** — per-tunnel connect/disconnect rules now support: gateway IP (`gateway_ip`), network interface (`interface`, the suggestion list includes currently-disconnected physical adapters), wired network (`ethernet`), and time window (`time`, start/end plus weekdays). Conditions inside one rule are AND; rules are OR'd with first-match-wins priority, disconnect rules evaluated before connect rules — a matching connect rule behind a matched disconnect rule is deprioritized and never executed.
+- **Live match indicators in the automation editor** — while editing, each condition shows whether it matches (match) and the currently effective rule is highlighted (in use); a decision strip at the top shows the action that would run. The indicators use the same engine the helper enforces, so the markers always agree with actual behavior.
+- **New `automation` CLI command** — inspect per-rule live match details and the resulting decision from the terminal, with readable formatting for all new condition types.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **SSID 改为全名精确匹配**（行为变更）— SSID 按字节全名比较：区分大小写，中间空格与特殊字符均参与匹配（符合 802.11 对 SSID 的定义）。此前不区分大小写；规则中填写的 SSID 必须与实际广播完全一致，编辑器实时判读会直接显示是否匹配。
-- **"在有线网络"条件无法保存** — ethernet 条件此前不会被持久化，保存后静默消失，实时判读的规则映射也随之错位。
-- **编辑器指示器多处修正** — 未完成的草稿规则导致其后规则高亮错位；手动关闭（manual-off）时不再把被抑制的 connect 规则标记为"生效中"；打开编辑器立即刷新判读，不再有最长 3 秒的过期数据窗口。
-- **Windows 路由冲突检测修复** — 冲突诊断的路由冲突此前在 Windows 上恒为空（`route print` 输出解析不可靠），全隧道（0.0.0.0/0）场景下的路由重叠警告因此失效；现改用 iphlpapi `GetIpForwardTable2` 路由表，与"诊断 → 路由"视图数据一致。
+- **SSIDs now match exactly** (behavior change) — SSIDs are compared byte-for-byte as full names: case-sensitive, with middle spaces and special characters significant (per the 802.11 definition of an SSID). Previously matching was case-insensitive; the SSID in a rule must now equal the broadcast name exactly, and the editor's live indicators show any mismatch immediately.
+- **"On wired network" condition was never saved** — ethernet conditions were silently dropped on save, and the live indicator mapping shifted as a result.
+- **Multiple editor indicator fixes** — incomplete draft rules shifted the winning highlight onto the wrong card; a connect rule suppressed by the manual-off latch is no longer marked as "in use"; indicators refresh immediately when the editor opens instead of showing up to 3 seconds of stale data.
+- **Windows routing-conflict detection fixed** — route-conflict warnings in the conflict diagnostics were always empty on Windows (`route print` parsing was unreliable), silently disabling overlap warnings in the full-tunnel (0.0.0.0/0) scenario where they matter most; detection now uses the iphlpapi `GetIpForwardTable2` table, consistent with the Diagnostics → Routes view.
 
-### 🛠 内部
+### 🛠 Internal
 
-- helper 中规则评估相关文件按实际职责改名：`wifi_rules.go` → `automation_rules.go`，平台文件 `wifi_rules_{windows,darwin,linux}.go` → `userdir_{windows,darwin,linux}.go`；物理网卡枚举拆分为 `iface_*.go` 平台实现。
+- helper rule-evaluation files renamed to match their actual roles: `wifi_rules.go` → `automation_rules.go`, platform files `wifi_rules_{windows,darwin,linux}.go` → `userdir_{windows,darwin,linux}.go`; physical-interface enumeration split into per-platform `iface_*.go` files.
 
-### 📝 文档
+### 📝 Docs
 
-- README（5 种语言）：macOS（Apple Silicon）支持状态由"实验性"升级为"完全支持"。
+- README (5 languages): macOS (Apple Silicon) support status upgraded from "experimental" to "fully supported".
 
 ## [1.5.3] - 2026-09-02
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **窗口位置记忆真正生效** — 1.5.2 已保存窗口大小与位置，但位置在重启后总被重置回屏幕居中：Wails 创建窗口时未显式指定定位模式，各平台默认执行居中而忽略保存的 X/Y 坐标。现在仅当存在有效的已保存位置时才应用绝对定位，Windows / macOS / Linux 重启后都能原样还原窗口位置。
-- **Linux 位置恢复偏移** — Linux 在窗口显示后会把保存的坐标当作相对于当前显示器工作区的偏移重新应用，导致窗口跑偏；现改为窗口显示后以绝对坐标重新设置一次位置。
+- **Saved window position is now actually restored** — 1.5.2 already saved the window size and position, but the position always reset to screen-centered after a restart: Wails' window creation did not opt into explicit positioning, so every platform defaulted to centering and ignored the saved X/Y. Absolute positioning is now applied only when a real saved position exists, so Windows / macOS / Linux all restore the window exactly where it was.
+- **Linux position restore offset** — Linux re-applied the saved coordinates as an offset relative to the current monitor's work area after showing the window, shifting it off its saved spot; the position is now re-applied once in absolute coordinates after the window is shown.
 
-### 🎨 UI 优化
+### 🎨 UI polish
 
-- **更小的窗口下限** — 最小窗口尺寸从 920×640 收窄至 720×560，并允许详情面板随窗口收缩（min-width: 0），小屏幕 / 低分辨率下窗口可缩得更小而不被内容撑开。
+- **Smaller window floor** — the minimum window size drops from 920×640 to 720×560 and the detail pane is allowed to shrink with the window (min-width: 0), so small screens / low resolutions can use a narrower window without the layout forcing it wider.
 
 ## [1.5.2] - 2026-09-02
 
-### ✨ 新增
+### ✨ New
 
-- **记住主窗口的位置和大小** — 窗口关闭到托盘、最小化或退出时保存当前几何状态，下次启动（含从托盘恢复）原样还原，无需每次重新拖动调整。
+- **Main window position and size are remembered** — the window's geometry is saved when it is closed to the tray, minimised, or the app quits, and restored on the next launch (including a tray restore), so it reopens exactly where you left it.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **GitHub Actions 升级到最新主版本** — checkout@v5、setup-go@v6、setup-node@v5、upload/download-artifact@v7、action-gh-release@v3。
+- **GitHub Actions upgraded to latest majors** — checkout@v5, setup-go@v6, setup-node@v5, upload/download-artifact@v7, action-gh-release@v3.
 
 ## [1.5.1] - 2026-09-02
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Windows 升级改回静默安装** — 撤销 1.5.0 的交互式安装向导：下载完成后只需确认一次 UAC 授权，即自动静默覆盖安装，完成后自动打开新版本。
-- **升级始终安装到原目录** — 向安装器传入当前安装位置，自定义安装目录的用户升级时不再在默认位置（Program Files）生成第二个副本。
-- **移除"自动静默升级"设置**（1.5.0 引入）— 更新行为三端一致：Windows 静默安装+自动打开、Linux 安装完成自动打开（仅系统 polkit 授权）、macOS 应用内原位替换（写 /Applications 时弹系统授权）。
+- **Windows updates go back to silent installs** — the interactive wizard from 1.5.0 is gone: after the download you only confirm the one UAC prompt, the new version installs headlessly in place, and the app relaunches.
+- **Updates always overwrite the original install location** — the current install directory is passed to the installer, so users who picked a custom folder no longer get a second copy in the default location (Program Files).
+- **The "Install updates silently" setting (from 1.5.0) is removed** — update behavior is now consistent on all platforms: silent install + relaunch on Windows, relaunch after a package-manager install on Linux (only the system polkit prompt), and the in-place bundle swap on macOS (a system authorization prompt appears when writing to /Applications).
 
 ## [1.5.0] - 2026-09-02
 
-### ✨ 新增
+### ✨ New
 
-- **Windows 更新改为交互式安装向导**（"立即更新"启动与普通安装相同的向导）。
-- **新增"自动静默升级"设置**。
+- **Windows updates switched to the interactive installation wizard** ("Update now" launches the same wizard as a manual install).
+- **Added an "Install updates silently" setting.**
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Linux 更新完成后自动打开软件** — deb/rpm 包管理器更新完成后会自动重启应用以加载新版本。
+- **Linux relaunches the app after an update** — deb/rpm package-manager updates now restart the app automatically so the new version loads.
 
-> 1.5.0 的交互式安装与静默设置项已在 1.5.1 回退为三端一致的静默更新。
+> 1.5.0's interactive installer and silent-update setting were reverted in 1.5.1 in favor of silent updates on all platforms.
 
 ## [1.4.1] - 2026-09-02
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Windows 应用内更新后自动启动软件** — 更新安装完成后自动重新打开软件。此前安装器以静默模式运行，会跳过完成页（"运行"复选框只在完成页上，静默模式下不生效），导致升级成功却没有任何窗口出现；现安装器检测到更新专用参数（`/AUTOSTART`）后，在安装完成时以普通用户权限（而非 UAC 管理员令牌）启动新版本。
+- **Windows relaunches the app after an in-app update** — The app now reopens automatically when the update finishes. Previously the silent installer skipped its finish page (the only place the "run now" checkbox lived), so an upgrade would complete with no window; the installer now detects the updater's `/AUTOSTART` flag and launches the new version with the user's token (not the UAC admin token).
 
 ## [1.4.0] - 2026-09-02
 
-macOS（非 Homebrew）应用内更新现与 Windows / Linux 完全一致：可直接在软件内下载新版本并覆盖安装，无需再跳转浏览器手动下载。
+In-app updates on macOS (non-Homebrew) now behave exactly like Windows / Linux: the new version is downloaded and installed right inside the app — no browser detour.
 
-### ✨ 新功能
+### ✨ Features
 
-- **macOS 应用内覆盖安装** — 非 Homebrew 安装的 macOS 用户点击「更新」后，应用会在软件内下载安装包（.dmg，含 .zip 备用），经「设置 → 更新」中配置的镜像 / 代理下载，校验 SHA256 与 Ed25519 签名后，再校验代码签名（`codesign --verify`），随后自动替换安装并重启。App 从任意位置（`/Applications`、`~/Applications` 或自定义目录）运行时都会原位覆盖，桌面图标与访达位置保持不变；安装在系统目录时弹出 macOS 系统授权提示（与 Windows UAC、Linux polkit 一致的体验），并自动移除 quarantine 属性避免 Gatekeeper 拦截。Homebrew 安装的 macOS 用户仍走 `brew upgrade`。
-- **镜像 / 代理覆盖全部平台** — macOS 应用内更新的下载与 Windows / Linux 一致，全部经由「设置 → 更新」中配置的镜像（GitHub 加速）或本地代理，全程不依赖浏览器。
+- **macOS in-place updates** — Non-Homebrew macOS users who click "Update" get the installer (.dmg, with .zip as fallback) downloaded in-app via the mirror / proxy configured under Settings → Updates, verified against SHA256 and the Ed25519 signature, then code-signature-verified (`codesign --verify`) before the bundle is replaced and the app relaunches. The upgrade is applied in place wherever the app runs from — `/Applications`, `~/Applications`, or a scratch folder — preserving the Dock icon and Finder placement. System locations prompt for the macOS password dialog (the same UX as Windows UAC and Linux polkit), and the quarantine xattr is stripped so Gatekeeper doesn't block the fresh copy. Homebrew-installed macOS users still upgrade via `brew upgrade`.
+- **Mirror / proxy now covers every platform** — macOS in-app update downloads go through the same mirror (GitHub acceleration) or local proxy configured under Settings → Updates as Windows / Linux. No browser involvement anywhere in the flow.
 
-### 🐛 修复
+### 🐛 Bug Fixes
 
-- **macOS 菜单栏整理** — 修复 Wails 默认菜单栏 Help → Learn More 会把 WebView 导航到 wails.io、导致无法返回主界面的问题：Learn More 现改为在系统默认浏览器中打开 GitHub 项目页面，WebView 不再被劫持；同时移除无实际用途的 File / Edit / View / Window 菜单（缩放、全屏、最小化均可在应用界面与窗口标题栏完成），仅保留 App 与自定义 Help。Windows / Linux 不显示该菜单栏，不受影响。
+- **macOS menu bar cleanup** — Wails' default menu bar's Help → Learn More navigated the WebView itself to wails.io, leaving no way back to the GUI; it now opens the GitHub project page in the system default browser and the WebView is never touched. The useless File, Edit, View and Window menus are removed (zoom, fullscreen and minimise are already available in the app's UI and on the title bar) — only App and the custom Help remain. Windows / Linux don't show that menu bar and are unaffected.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 新增 `internal/update/installer_darwin.go`：macOS 应用包原位替换安装器（dmg 挂载 / zip 解压 → 代码签名校验 → 提权脚本执行 killall + 替换 + 去 quarantine + 重启），与 Windows / Linux 安装器共用同一套下载、校验与进度管线。
+- Added `internal/update/installer_darwin.go`: an in-place app-bundle installer for macOS (dmg mount / zip extract → code-signature verification → elevated script doing killall + swap + de-quarantine + relaunch), sharing the download, verification and progress pipeline with the Windows / Linux installers.
 
 ## [1.3.7] - 2026-09-01
 
-### 🐛 修复
+### 🐛 Bug Fixes
 
-- **Windows 应用内更新安装器启动失败** — 用 Windows ShellExecute `runas` 替代 PowerShell `Start-Process -Verb RunAs`，避免 PowerShell 执行策略/路径问题导致的 `exit status 1`；同时将下载的安装器复制到 `%LOCALAPPDATA%\wireguideplus\updates` 持久目录，防止 `Install` 返回后临时文件被清理，导致 UAC 确认后安装器找不到 exe。
-- **Linux 应用内更新健壮性** — 安装资产同样先复制到持久目录（`$XDG_DATA_HOME/wireguideplus/updates`）再启动，消除 AppImage 异步启动与临时文件清理的竞态；扩展名匹配改为大小写不敏感并支持 `.AppImage`；`.tar.gz` 等未知格式不再被当作可执行文件运行，而是明确失败并回退到下载页；`pkexec` 失败时保留其输出，便于判断是否为 polkit 代理缺失。
+- **Windows in-app updater installer launch failure** — Replaced PowerShell `Start-Process -Verb RunAs` with Windows ShellExecute `runas`, avoiding `exit status 1` caused by PowerShell execution policy/path issues. Also copies the downloaded installer to a persistent directory (`%LOCALAPPDATA%\wireguideplus\updates`) so the temporary file is not deleted before the UAC-confirmed installer starts.
+- **Linux in-app updater robustness** — The update asset is also staged to a persistent directory (`$XDG_DATA_HOME/wireguideplus/updates`) before launching, removing the race between asynchronous AppImage startup and temp-file cleanup; extension matching is now case-insensitive and handles `.AppImage`; unknown formats like `.tar.gz` are no longer executed as programs but fail clearly and fall back to the download page; `pkexec` failures now keep their output so a missing polkit agent is easy to diagnose.
 
 ## [1.3.6] - 2026-09-01
 
-本版本将更名前旧版（"wireguide"）数据的迁移改为**用户可见的交互式引导**：启动时扫描旧版遗留的配置、隧道与日志，由你决定迁移哪些、如何处理重名冲突，并可先对比新旧目录再动手，不再静默覆盖。
+This release turns migration of pre-rename ("wireguide") data into a **user-visible interactive flow**: on startup the app scans for legacy configs, tunnels and logs, lets you choose what to migrate and how to handle name conflicts, and lets you compare the old and new folders before committing — no more silent overwrites.
 
-### ✨ 新功能
+### ✨ New Features
 
-- **旧版数据迁移弹窗** — 启动时自动检测更名前 "wireguide" 目录中的 config.json、history.json、tunnels/*.conf 与日志；弹窗内按类别显示数量与重名冲突，可一键「全部迁移」，迁移成功即清理旧目录并记录状态，之后不再打扰。
-- **新旧目录对比** — 弹窗内可直接打开旧版 / 当前配置目录与日志目录，先核对内容再迁移。
-- **迁移选项** — 重名冲突时可勾选「覆盖现有文件」；日志默认不迁移，可按需开启。
-- **暂缓与不再提醒** — 「下次启动再提醒」仅关闭弹窗不写任何标记，下次启动重新检测；「不再提醒」持久化选择，之后不再弹出，仍可在「设置 → 高级 → 旧数据」重新触发扫描。
+- **Legacy data migration dialog** — on startup, automatically detects config.json, history.json, tunnels/*.conf and logs left in the pre-rename "wireguide" directories; the dialog shows counts and name conflicts by category and offers a one-click "Migrate all" that cleans up the old directory and records the state once done.
+- **Compare old vs new folders** — open the legacy / current config and log directories directly from the dialog to verify contents before migrating.
+- **Migration options** — tick "Overwrite existing files" for name conflicts; logs are not migrated by default and can be opted in.
+- **Remind later & never ask again** — "Remind me next launch" just closes the dialog without persisting anything (the next launch re-detects the data); "Don't ask again" persists the choice so the dialog stays hidden, and Settings → Advanced → "legacy data" can re-trigger the scan anytime.
 
-### 🎨 UI 优化
+### 🎨 UI Polish
 
-- **主题化滚动条** — 全局滚动条改用主题 token 绘制（细滚动条 + 圆角滑块），长列表（隧道、日志、历史）在 Windows WebView 下不再回退到系统默认样式。
-- **弹窗样式 token 化** — 更新提示等弹窗的背景、卡片、阴影改用主题变量（`--overlay-bg` / `--bg-card` / `--shadow-md`），移除手写暗色模式 media query，亮/暗主题表现统一。
-- **AWG 徽章主题一致** — 隧道列表与详情中的 AmneziaWG 标识改用主题色 token（`var(--purple)`），替代硬编码颜色，暗色主题下不再突兀。
+- **Themed scrollbars** — global scrollbars are painted with theme tokens (thin track, rounded thumb), so long lists (tunnels, logs, history) no longer fall back to the stock WebView chrome on Windows.
+- **Dialog styles tokenized** — popups (e.g. update notice) use theme variables (`--overlay-bg`, `--bg-card`, `--shadow-md`) instead of hard-coded colors and the hand-written dark-mode media query; consistent across light/dark themes.
+- **AWG badge theme consistency** — the AmneziaWG badge in the tunnel list and details uses the `var(--purple)` token instead of hard-coded colors, fitting both themes.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 移除旧版在首次启动时静默自动迁移的逻辑（原在 `GetPaths` 中自动复制），改由显式的 `DetectLegacyData` / `MigrateLegacyData` 交互流程驱动；CLI 命令不再自动迁移，首次 GUI 启动负责引导。
+- Removed the old silent first-launch auto-migration (previously ran inside `GetPaths`), replaced by the explicit `DetectLegacyData` / `MigrateLegacyData` interactive flow; CLI commands no longer auto-migrate — the first GUI launch drives the prompt.
 
 ## [1.3.5] - 2026-09-01
 
-本版本新增 **AmneziaWG（AWG）协议支持**——抗 DPI 识别的混淆版 WireGuard。AWG 配置通过混淆参数（Jc/Jmin/Jmax/S1-S4/H1-H4）自动识别，运行于 amneziawg-go 后端，界面以「AmneziaWG」徽标标注；可在「设置 → 高级」中关闭支持。
+This release adds **AmneziaWG (AWG) protocol support** — the obfuscated WireGuard fork that resists DPI. AWG configs are auto-detected from their obfuscation parameters (Jc/Jmin/Jmax/S1-S4/H1-H4), run on the amneziawg-go backend, and are marked with an "AmneziaWG" badge in the UI. Support can be disabled in Settings → Advanced on machines where the AWG backend misbehaves.
 
-### ✨ 新功能
+### ✨ New Features
 
-- **AmneziaWG（AWG）协议支持** — 导入并连接 AmneziaWG 配置；由 Jc/Jmin/Jmax/S1-S4/H1-H4 键自动识别，列表与详情页显示「AmneziaWG」徽标，握手 / 流量等状态与 WireGuard 隧道一致。
-- **启用 AmneziaWG 设置** — 「设置 → 高级」新增「启用 AmneziaWG 支持」开关（默认开启）；关闭后连接 AWG 隧道会直接给出明确错误，而不是连接中途失败。
+- **AmneziaWG (AWG) protocol support** — import and connect AmneziaWG configs; auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 keys, tunnels show an "AmneziaWG" badge in the list and detail views, and status (handshake / traffic) works exactly like WireGuard tunnels.
+- **Enable AmneziaWG setting** — Settings → Advanced gains an "Enable AmneziaWG support" switch (on by default); turning it off refuses AWG connects with a clear error instead of failing mid-connect.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 基于 amneziawg-go 的新协议后端接入引擎抽象层 — 两种协议共用同一条连接流水线；AWG 隧道状态始终走进程内 UAPI；Windows socket 固定对两种后端同样生效。
+- New amneziawg-go backend wired through the engine abstraction — both protocols share one connect pipeline; AWG status is always served in-process; Windows socket pinning works for both backends.
 
 ## [1.3.1] - 2026-09-01
 
-本版本修复 Windows 应用内更新启动安装器前未请求 UAC 提权的问题，并正式记录 macOS 已在 Apple Silicon 真机验证。
+This release fixes Windows in-app updates launching the installer without requesting UAC elevation, and formally records that macOS is verified on real Apple Silicon hardware.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Windows 安装器 UAC 提权** — 应用内更新启动安装器前先请求提权，与手动双击安装包的行为一致。
+- **UAC elevation for the Windows installer** — in-app updates now request an elevated context before launching the installer, matching manual double-click behaviour.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **macOS 实机验证** — 平台支持说明更新：macOS（Apple Silicon）已在真机验证。
+- **macOS verified on real hardware** — platform support now states that macOS (Apple Silicon) has been verified on real machines.
 
 ## [1.3.0] - 2026-09-01
 
-本版本将应用更名为 **WireGuide Plus**：窗口标题、托盘、自启动项、helper 日志、Homebrew cask、更新临时文件与 nftables 表名等全链路统一为 plus 命名，并在升级时自动清理旧版残留的启动项、守护进程与防火墙表。同时改进 macOS 托盘图标（改用应用图标红色变体）与路由诊断显示。
+This release rebrands the application as **WireGuide Plus** end-to-end: window title, tray, autostart items, helper log, Homebrew cask, update temp files and nftables table names all use the plus naming, and upgrades now clean up the legacy items left behind by older installs (launch agents, daemon, firewall tables). It also improves the macOS menu-bar icon and route diagnostics.
 
-### ✨ 新功能
+### ✨ New Features
 
-- **macOS 托盘图标改用应用图标** — 菜单栏图标使用应用图标的红色变体，在浅色 / 深色菜单栏下都清晰可辨；未内嵌图标时回退到原单色 W 模板。
-- **macOS 路由诊断规范化** — `netstat -rn` 会把 127.0.0.0/8 显示成 "127"、192.168.1.0/24 显示成 "192.168.1"；诊断页现在会展开回规范点分十进制 + 前缀，显示不再像截断。
+- **macOS menu-bar icon now uses the app icon** — the tray shows a red-tinted variant of the app icon that stays legible on both light and dark menu bars; it falls back to the monochrome W template when no icon was embedded.
+- **Canonical macOS route display** — `netstat -rn` prints compressed network routes (127.0.0.0/8 as "127", 192.168.1.0/24 as "192.168.1"); the diagnostics page now expands them back to canonical dotted-quad + prefix form.
 
-### 🛠 内部
+### 🛠 Internals
 
-- **全链路更名 WireGuide Plus**：macOS 自启动 `com.wireguideplus.gui`、LaunchDaemon 与 helper 日志路径、pf anchor `com.apple/wireguideplus`、Linux 桌面图标、Windows 自启动注册表值、wintun 适配器名 `WireGuidePlus-<hash>`、FWPM 会话 / Provider / SubLayer 名、nftables 表 `wireguideplus` / `wireguideplus_dns`、Homebrew cask `wireguideplus` 与 Caskroom 路径、更新临时文件与冲突检测 socket 路径、发布机密钥目录 `~/.wireguideplus`、测试环境变量 `WIREGUIDEPLUS_RESOURCE_*`、macOS 授权弹窗文案全部统一。
-- **升级兼容清理**：升级 / 卸载时移除旧版残留的 `com.wireguide.gui` LaunchAgent、`com.wireguide.helper` LaunchDaemon 与 helper、旧 helper 日志、旧 pf anchor `com.apple/wireguide`、`wireguide.desktop` 自启动项、旧 wintun 适配器 `WireGuide-<hash>`、旧 nft 表与旧 FWPM Provider。
-- **发布产物改名**：macOS zip / dmg 与 Linux deb 资产名改为 `WireGuidePlus-*`；NSIS PATH 提示与 MSIX 模板可执行文件名同步。
-- **测试脚本同步**：systemd unit 与测试 socket 统一为 `wireguideplus-*` 前缀。
+- **Rebrand to WireGuide Plus** — macOS autostart `com.wireguideplus.gui`, LaunchDaemon and helper log paths, pf anchor `com.apple/wireguideplus`, Linux desktop icon, Windows autostart registry value, wintun adapter name `WireGuidePlus-<hash>`, FWPM session / provider / sublayer names, nftables tables `wireguideplus` / `wireguideplus_dns`, Homebrew cask `wireguideplus` and Caskroom paths, update temp file and conflict-scan socket paths, release-machine key dir `~/.wireguideplus`, test env vars `WIREGUIDEPLUS_RESOURCE_*`, and the macOS authorization prompt all unified.
+- **Upgrade cleanup** — upgrades/uninstalls remove the legacy `com.wireguide.gui` LaunchAgent, `com.wireguide.helper` LaunchDaemon and helper, old helper log, the old pf anchor `com.apple/wireguide`, `wireguide.desktop`, the old wintun adapter `WireGuide-<hash>`, old nft tables and the old FWPM provider.
+- **Release asset renames** — macOS zip/dmg and Linux deb assets are now named `WireGuidePlus-*`; the NSIS PATH hint and MSIX template executable names follow.
+- **Test script sync** — systemd units and test sockets use the `wireguideplus-*` prefix.
 
 ## [1.2.5] - 2026-09-01
 
-本版本重构 DNS 泄漏检测：新增「公共 DNS 交叉验证」——测试时除本机配置的解析器外，还会向知名公共 DNS 发送探测以交叉核实；系统解析器按来源网卡分类标记「本机 / VPN / 公共」；公共列表支持从网络刷新与自由编辑。新增「浏览器检测」按钮，一键打开 browserleaks.com 做浏览器级 DNS 与 WebRTC 泄漏检测。同时修复 Windows 连接通知弹窗可能冻结无响应的问题，并更新应用图标。
+This release rebuilds the DNS leak test around public-resolver cross-checking: alongside the resolvers from the host's own network configuration, the test now also probes well-known public DNS servers for cross-verification, tags every resolver by its source (Local / VPN / Public), and lets you refresh or customize the public list. A new "Browser test" button opens browserleaks.com for browser-level DNS and WebRTC leak checks. It also fixes Windows connection popups that could freeze, and ships a new app icon.
 
-### ✨ 新功能
+### ✨ New features
 
-- **公共 DNS 交叉验证** — 测试时除本机配置的 DNS 外，还会向知名公共解析器（Google、Cloudflare、OpenDNS、Quad9、阿里、腾讯 DNSPod、114DNS、百度、AdGuard、NextDNS、Comodo 及常用 IPv6 地址）发送探测，交叉核实 DNS 查询是否仍只经过隧道。公共解析器的应答仅表示「可达」，并不是泄漏。
-- **从网络获取公共列表** — 点击「从网络获取」从 public-dns.info 拉取当前可靠性最高的解析器（上限 30 个，10 秒超时），并缓存上次成功获取的列表，离线时仍可使用。
-- **自定义公共解析器列表** — 可自由添加 / 删除 / 编辑公共解析器条目（IP 或域名），保存在设置中；清空列表会恢复默认交叉验证列表，公共探测始终开启。
-- **系统解析器分类标记** — 按来源网卡分类：物理网卡（无线 / 有线）标记「本机」，隧道接口标记「VPN」，其余为「公共」；本机解析器排在最前，并显示来源接口名（Windows 按网卡枚举 DNS，Linux 解析 resolvectl 输出）。
-- **浏览器检测** — 新增「浏览器检测」按钮，一键打开 browserleaks.com 执行浏览器级 DNS 与 WebRTC 泄漏检测（将打开默认浏览器，检测数据会发送给第三方网站）。
+- **Public DNS cross-check** — the test now also probes well-known public resolvers (Google, Cloudflare, OpenDNS, Quad9, Alibaba, DNSPod, 114DNS, Baidu, AdGuard, NextDNS, Comodo, plus common IPv6 addresses) so answers can be cross-verified against traffic leaving the tunnel. A public resolver answering only means it is reachable — not a leak.
+- **Refresh from the network** — "Fetch from network" pulls the currently most reliable resolvers from public-dns.info (up to 30, 10-second timeout) and caches the last successful fetch so the list stays usable offline.
+- **Custom public resolver list** — add, edit or remove entries (IP or hostname) freely; the list is persisted in settings. Clearing it restores the built-in defaults — public probing always stays on.
+- **Resolver source tags** — system resolvers are now tagged by the interface they come from: physical adapters (WLAN / Ethernet) are "Local", tunnel interfaces are "VPN", the rest are "Public". Local resolvers are listed first, with the source interface name (Windows enumerates per-adapter DNS, Linux parses resolvectl output).
+- **Browser test** — a new "Browser test" button opens browserleaks.com in your default browser for browser-level DNS and WebRTC leak detection (probe data is sent to the third-party site).
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **Windows 通知弹窗冻结** — 弹窗的消息循环之前没有绑定创建它的操作系统线程，goroutine 在线程间迁移后收不到点击 / 关闭 / 定时器消息，弹窗会看起来「卡死」。现已锁定线程，弹窗可正常点击关闭与自动关闭。
-- **通知文本绘制加固** — 弹窗文本绘制改用 `UTF16FromString` 并处理错误，避免非法 UTF-16 字符串导致崩溃。
+- **Windows connection popup freeze** — the popup's message loop was not pinned to the OS thread that created it; after the goroutine migrated threads, click / close / timer messages stopped arriving and the popup looked frozen. The thread is now locked for the popup's lifetime, so it can be dismissed and auto-closes normally.
+- **Popup text drawing hardening** — text drawing now uses `UTF16FromString` with error handling, so an invalid UTF-16 string can no longer crash the popup.
 
-### 🛠 内部
+### 🛠 Internal
 
-- CLI `dnsleak` 命令同步增强：解析器行显示 `vpn / local / public` 标记与状态，并读取设置中的自定义公共列表。
-- 泄漏判定修正：只有物理接口（非 VPN）解析器应答才判定为泄漏；VPN 解析器标记为 VPN 状态；公共解析器应答显示「正常」而非泄漏。
-- 新增 `dnsleak` 探测计划与解析测试；重新生成 bindings。
-- 更新应用图标（各平台），简化构建任务。
+- The CLI `dnsleak` command is enhanced in sync: each resolver row shows a `vpn / local / public` tag and its status, and the customized public list from settings is used.
+- Leak detection corrected: only a physical (non-VPN) resolver answering is a leak; VPN resolvers are tagged as VPN; public resolvers answering show "OK" rather than a leak.
+- New probe-plan and parsing tests for the DNS leak module; bindings regenerated.
+- New app icon across platforms; build tasks simplified.
 
 ## [1.1.10] - 2026-08-31
 
-本版本修复 1.1.9 反馈的三个界面问题并优化设置交互：DNS 泄漏测试页不再限制显示宽度并标记本机 DNS；日志级别筛选改为精确匹配；设置中的通知时长与代理选择恢复正常保存与回显，自定义镜像 / 本地代理输入框会记住上次使用的地址。
+This release fixes the three UI issues reported on 1.1.9 and improves the settings interaction: the DNS leak test page no longer constrains its width and marks the host's own DNS servers; log level filtering is now exact; notification duration and proxy selection save and display correctly again, and custom mirror / local proxy inputs remember the last saved address.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **DNS 泄漏测试页宽度** — 移除页面内容 640px 的最大宽度限制，与「历史」「路由」页面一样随窗口自适应铺满。
-- **本机 DNS 标示** — 测试列表中的每台服务器都来自系统解析器配置（无论手动设置还是 DHCP 获得），现在每行会显示「本机」标签，便于与 VPN 提供的 DNS 区分。
-- **日志级别筛选** — 点击「DEBUG / INFO / WARN / ERROR」按钮现在只显示该级别的记录（此前是「该级别及以上」，当某级别没有记录时看起来像筛选失效）。
-- **通知时长设置** — 下拉选项改为与「保留日志 / 保留历史 / 语言」一致的动态选项写法，确保修改后能正确保存并在下次打开时回显。
-- **代理模式回显** — 修复设置页重新打开后代理下拉框始终显示「直接」的问题（Svelte 无法追踪函数体读取的字段，导致 `<select value={函数()}>` 只在首次求值）。改为响应式计算后，选择保存的镜像 / 手动模式会在重新打开时正确显示。
-- **代理地址记忆** — 切换为「自定义镜像」或「本地代理」时，输入框会自动加载上次保存过的地址（例如曾经输入并保存的镜像前缀）；没有历史记录时显示空白与提示。
+- **DNS leak test width** — removed the 640px max-width so the page fills the window like the History and Routes pages.
+- **Host DNS marker** — every probed resolver comes from the host's own DNS configuration (manual or DHCP); each row now shows a "System" chip so they are easy to tell apart from VPN-provided DNS.
+- **Log level filtering** — clicking DEBUG / INFO / WARN / ERROR now shows only records of that level (previously "level and above", which looked like a no-op whenever a level had no records).
+- **Notification duration** — the dropdown now uses the same dynamic option pattern as log retention / history retention / language, so changes persist and are shown when reopening settings.
+- **Proxy mode display** — the proxy select no longer sticks on "Direct" after reopening settings (Svelte cannot track which fields a function body reads, so `value={fn()}` was only evaluated once). It now recomputes reactively and shows the saved mirror / manual mode.
+- **Proxy address memory** — switching back to "custom mirror" or a local proxy restores the last saved address in the input (e.g. a previously saved mirror prefix); empty history shows a blank input with a hint.
 
 ## [1.1.9] - 2026-08-31
 
-本版本修复应用内更新「下载成功却无法安装」的问题：更新流程在启动安装器之前就删除了临时下载文件，导致 Windows 上启动安装器时提示「找不到文件」并回退到浏览器页面。
+This release fixes in-app updates failing right after a successful download: the updater deleted the temp installer before launching it, so Windows reported the file as missing and fell back to the release page.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **应用内更新无法安装** — `runUpdateNative` 原来在 `Install` 之前就执行 `os.Remove(path)` 删除临时下载的安装包，而 Windows 安装流程是直接执行该文件（`fork/exec …wireguide-update-*.exe: The system cannot find the file specified`），因此下载 100% 后必然启动失败。现已调整为安装器启动成功后再释放临时文件；Windows 上安装器运行期间文件通常被锁定、删除可能失败，但由系统临时目录自动清理，无影响。
-- **需要手动升级一次** — 1.1.7 / 1.1.8 的更新流程存在同样问题；请从本版本起手动下载安装一次（设置 → 更新 → 打开发布页），此后应用内更新即可正常工作。
+- **In-app update could not install** — `runUpdateNative` removed the downloaded installer with `os.Remove(path)` *before* calling `Install`, while the Windows install path execs that very file (`fork/exec …wireguide-update-*.exe: The system cannot find the file specified`). A 100% download was therefore always followed by a launch failure. The temp file is now released only after the installer has been launched; on Windows the exe is usually locked while the installer runs, so removal may fail — harmless, since %TEMP% is cleaned up by the OS.
+- **One manual upgrade required** — the updater on 1.1.7 / 1.1.8 has the same flaw, so upgrading in-app from those versions still hits it. Please install 1.1.9 manually once (Settings → Updates → open the release page); from then on in-app updates work normally.
 
 ## [1.1.8] - 2026-08-31
 
-本版本对齐自动化规则的判定语义与界面引导，并进一步加固编辑器对旧格式规则的兼容：规则自上而下、首个匹配生效，同一动作的条件之间为「或」关系，「否则」作为兜底应放在最后并执行相反动作；磁盘上缺失条件类型的旧规则不再触发无谓重载。
+This release aligns the automation editor's guidance with the rule semantics and hardens old-format rule handling: rules run top to bottom with the first match winning, conditions of the same action are OR-ed, and "otherwise" acts as the fallback placed last, usually with the opposite action. Legacy rules that lack a condition type no longer trigger spurious reloads.
 
-### ✨ 优化
+### ✨ Improvements
 
-- **自动化规则语义引导对齐** — 编辑器说明与「否则」条目文案更新：明确「否则」在上方规则均不匹配时生效、建议放在最后作为兜底、动作通常与上方规则相反（五种语言同步）。判定逻辑本身保持不变：按顺序、首个匹配生效、`otherwise` 无条件兜底——与你期望的行为一致。
+- **Automation semantics guidance** — the editor hint and the "otherwise" row description now spell out the model: "otherwise" fires when no rule above it matched, keep it last as the fallback, and its action is usually the opposite of the rules above (updated in all five languages). The evaluation logic itself is unchanged: ordered first-match, `none_match` matches unconditionally — exactly the behaviour you described.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **旧格式规则不再触发无谓重载** — 编辑器对比磁盘与本地规则时统一使用与加载相同的类型推断（缺失 `type` 的旧「否则」规则不再回退为 network），避免每次配置变更都误判为外部修改而触发一次多余重载。
+- **Old-format rules no longer trigger spurious reloads** — the disk-vs-local comparison now uses the same type inference as loading (a legacy rule missing `type`, e.g. an old "otherwise", no longer falls back to `network`), so a config change is no longer misread as an external edit forcing an extra reload.
 
-### 🛠 内部
+### 🛠 Internal
 
-- 重新生成 bindings 并验证与 Go API 完全一致（无差异）。
-- 版本号更新至 **1.1.8**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、NSIS、MSIX、Linux nfpm 全部同步。
+- Regenerated bindings and verified they match the Go API exactly (no diff).
+- Version bumped to **1.1.8**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, NSIS, MSIX, Linux nfpm all in sync.
 
 ## [1.1.7] - 2026-08-31
 
-本版本集中修复 1.1.6 反馈的问题：自动化规则不再丢失、DNS 泄漏检测补全状态与加密方式、路由表区分 VPN / 直连、日志过滤修正、通知时长与代理显示问题；并新增连接历史保留时长设置与安装完成后「运行」选项。
+This release fixes the issues reported on 1.1.6: automation rules no longer go missing, DNS leak detection now reports status and encryption, the route table marks VPN vs. direct routes, log filtering is fixed, and the notification-duration & proxy display issues are resolved. It also adds a connection-history retention setting and a "Run" option after installation.
 
-### 🐛 修复
+### 🐛 Fixes
 
-- **自动化规则不再丢失（含 otherwise）** — 编辑器加载时不再把缺失条件类型的规则误判为不完整而丢弃；无法被表单表示的磁盘规则也会原样保留，杜绝「打开设置后规则消失」。
-- **DNS 泄漏检测补全结果** — 每台 DNS 服务器现在正确显示探测状态（VPN / 泄漏 / 正常 / 无响应）与延迟；新增「使用中」标记指出当前实际出口 DNS。
-- **DNS 加密方式探测** — 检测每台解析器支持的传输：明文 UDP/53、DoT（TCP/853 TLS）、DoH（TCP/443 候选），并在检测后给出结果解读与防泄漏建议（使用 VPN DNS、加密 DNS、全隧道模式等）。
-- **路由表区分 VPN / 直连** — 后端按活动隧道接口权威标记 `is_vpn`，路由明细正确显示 VPN / Direct 徽章，不再依赖接口名猜测。
-- **日志过滤修正** — 日志事件补传 `category` 字段，分类筛选真正生效；级别/分类按钮显示各档计数，直观看出当前日志分布。
-- **通知持续时间设置** — 修复下拉框在部分 Svelte 版本下渲染空白、无法显示所选时长的问题。
-- **代理显示一致性** — direct 模式下不再残留代理地址；CLI 修改代理模式后设置界面实时同步。
+- **Automation rules no longer get lost (including "otherwise")** — the editor no longer misreads rules that lack a condition type as incomplete and drops them; on-disk rules the form can't represent are preserved verbatim, so rules can't vanish just by opening settings.
+- **DNS leak detection completes its results** — each DNS server now correctly shows its probe status (VPN / Leak / OK / No reply) and latency, plus an "In use" marker identifying the current egress resolver.
+- **DNS encryption fingerprint** — per-resolver transport detection: plaintext UDP/53, DoT (TCP/853 TLS), DoH (TCP/443 candidate); after the test, the UI explains the result and lists leak-prevention steps (use VPN DNS, encrypted DNS, full-tunnel mode, etc.).
+- **Route table distinguishes VPN / Direct** — the backend authoritatively flags `is_vpn` by matching active tunnel interfaces, so rows show correct VPN / Direct badges instead of name guessing.
+- **Log filtering fixed** — log events now carry the `category` field so category filters actually work; level/category buttons show per-bucket counts so the distribution is visible at a glance.
+- **Notification duration setting** — fixed a dropdown that rendered blank under some Svelte versions, hiding the selected duration.
+- **Proxy display consistency** — direct mode no longer leaves a stale proxy address behind; proxy mode changes made via CLI now sync into the settings UI live.
 
-### ✨ 优化
+### ✨ Improvements
 
-- **连接历史保留时长** — 设置 → 高级新增「历史记录保留时长」（默认 7 天，可关闭），超出自动滚动清理（仍保留 200 条硬上限）。
-- **安装完成提示运行** — Windows 安装器完成页新增「运行 WireGuide Plus」选项（默认勾选）。
+- **Connection-history retention** — Settings → Advanced now offers "Keep history for" (default 7 days, can be disabled); older sessions are pruned automatically (the 200-record hard cap still applies).
+- **Run after install** — the Windows installer's finish page offers "Run WireGuide Plus" (checked by default).
 
-### 🛠 内部
+### 🛠 Internal
 
-- 版本号更新至 **1.1.7**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、NSIS、MSIX、Linux nfpm 全部同步。
+- Version bumped to **1.1.7**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, NSIS, MSIX, Linux nfpm all in sync.
 
 ## [1.1.6] - 2026-08-30
 
-本版本升级更新机制：Windows / Linux 支持应用内直接下载并安装更新（不再只能跳转 GitHub 页面），更新通知提供「直接升级」与「打开发布页」双按钮并展示实时下载进度；镜像模式下资产下载同样走加速镜像。
+This release upgrades the update mechanism: Windows / Linux can now download and install updates in-app (no longer just jumping to the GitHub page), the update notice offers both "Update Now" and "Open Release Page" buttons with a live download progress bar, and mirror mode now also accelerates asset downloads.
 
-### ✨ 新功能
+### ✨ Features
 
-- **应用内直接升级（Windows / Linux）** — 更新通知新增「直接升级」按钮：下载完成后自动校验 SHA256（发布版含 Ed25519 签名），通过后启动安装并退出应用；macOS 的 Homebrew 安装仍走 `brew upgrade`。
-- **「打开发布页」备选按钮** — 下载失败、校验不通过或想查看发布说明时，一键在浏览器打开对应版本的 GitHub Release 页面。
-- **实时下载进度** — 升级过程显示已下载 / 总大小与进度百分比（基于 GitHub API 报告的资产大小，分块传输时同样准确）。
-- **镜像模式覆盖资产下载** — 选择 GitHub 加速镜像（mirror）后，资产与校验和文件的下载同样经镜像前缀重写（此前仅 API 检查走镜像，二进制仍直连 GitHub）。
+- **In-app update (Windows / Linux)** — the update notice gained an "Update Now" button: after download completes, the SHA256 checksum (plus Ed25519 signature in release builds) is verified, then the installer runs and the app exits. Homebrew installs on macOS still go through `brew upgrade`.
+- **"Open Release Page" fallback button** — one click opens the matching GitHub Release page in the browser when the download fails, verification fails, or you just want to read the release notes.
+- **Live download progress** — the update flow shows downloaded / total bytes and a percentage (based on the asset size reported by the GitHub API, so it stays accurate even with chunked transfers).
+- **Mirror mode covers asset downloads** — with a GitHub accelerator mirror configured, asset and checksum downloads are rewritten through the mirror prefix too (previously only the API check used the mirror while binaries still hit GitHub directly).
 
-### 🛠 内部
+### 🛠 Internal
 
-- 下载或安装失败时不再静默：记录日志并回退到打开发布页，保证始终有可用路径。
-- 新增下载进度回调、镜像下载重写与 `RunUpdate` 防御分支的单元测试。
-- 版本号更新至 **1.1.6**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+- Download/install failures are no longer silent: they are logged and fall back to opening the release page, so a working path to the new version always exists.
+- Added unit tests for the progress callback, mirror download rewriting and the `RunUpdate` defensive branches.
+- Version bumped to **1.1.6**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
 
 ## [1.1.5] - 2026-08-30
 
-本版本全面增强日志系统（更新检查、设置审计、分类分级、保留期清理），修复若干设置问题，并重新加入默认关闭的 WireGuard 脚本支持。
+This release enriches the logging system (update checks, settings audits, categories, retention), fixes a few Settings issues, and brings back opt-in WireGuard scripts.
 
-### ✨ 新功能
+### ✨ Features
 
-- **更新检查全量日志** — 手动与自动检查均记录实际请求的 endpoint、本地版本、在线版本、`not_modified` 以及错误/重试信息；失败（403、超时等）带 `category=update`，可在 Log 界面查看与筛选。
-- **设置变更审计日志** — 每次保存都会记录哪些设置被修改（代理模式、kill switch 等）及关键值；代理凭据会脱敏（`http://***@host`）。
-- **日志分类与筛选** — `ipc.LogEntry` 新增 `category` 字段（app / update / settings / tunnel / network / system）；Log 界面新增分类筛选行（All 在最前、默认选中），每条日志显示分类，复制时也携带分类。
-- **日志保留期（默认 7 天）** — 按天滚动存储（`wireguideplus-YYYY-MM-DD.log`），超过可配置保留期自动清理。
-- **WireGuard 脚本支持（PreUp / PostUp / PreDown / PostDown，默认关闭）** — 与 wg-quick 行为一致（Unix 用 `sh -c`，Windows 用 `cmd.exe /C`），在 helper 内以 30 秒超时执行，输出截断到 1000 字符。默认关闭（设置 → 高级），开启时显示醒目的安全警告，因为命令以完整系统权限运行；PostUp 失败不会中断连接。
-- **DNS leak test 增强** — 每台 DNS 服务器显示探测状态（vpn / ok / leak / timeout）与延迟；Windows 收集 DNS 时同时包含 IPv4 与 IPv6。
-- **打开文件夹快捷链接** — 设置中新增可点击链接，直接打开隧道配置目录与日志存储目录（跨平台）。
+- **Full update-check logging** — manual and scheduled checks now log the endpoint actually queried, the local version, the latest version, `not_modified`, and error/retry details; failures (403, timeouts, …) are tagged with `category=update` so they show up and stay filterable in the Log viewer.
+- **Settings-change audit log** — every save records which settings changed (proxy mode, kill switch, …) together with key values; proxy credentials are redacted (`http://***@host`).
+- **Log categories & filtering** — `ipc.LogEntry` gained a `category` field (app / update / settings / tunnel / network / system); the Log viewer added a category filter row (All first, selected by default) and shows the category per line and when copying.
+- **Log retention (default 7 days)** — logs rotate per day (`wireguideplus-YYYY-MM-DD.log`) and are pruned after a configurable retention period.
+- **Opt-in WireGuard scripts (PreUp / PostUp / PreDown / PostDown)** — mirroring wg-quick (`sh -c` on Unix, `cmd.exe /C` on Windows), run inside the helper with a 30 s timeout and output capped at 1000 chars. Off by default (Settings → advanced); enabling shows a prominent security warning since the commands run with full system privileges. PostUp errors do not abort the connection.
+- **DNS leak test enrichment** — each resolver now reports probe status (`vpn` / `ok` / `leak` / `timeout`) and latency; Windows DNS discovery now collects both IPv4 and IPv6 resolvers.
+- **Open-folder shortcuts** — Settings now has clickable links that open the tunnel config folder and the log storage folder (cross-platform).
 
-### 🐛 修复
+### 🐛 Bug Fixes
 
-- **通知持续时间设置无法保存** — 离开设置再进入时不再重置。
-- **设置中日志分级缺少 All** — 下拉新增 `All`（与 Log 界面默认一致），源头不再过滤任何记录。
+- **Notification duration could not be saved** — the value no longer resets after leaving and reopening Settings.
+- **Settings log-level picker missed "All"** — the dropdown now offers `All` (matching the Log viewer's default) so no record is filtered at the sink level.
 
-### 🛠 内部
+### 🛠 Internal
 
-- **日志级别 All 全链路生效** — helper 与 GUI 日志处理器均支持 `all`（`slog.Level(-8)`），不会丢弃任何记录。
-- 版本号更新至 **1.1.5**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+- **Log level "All" honored everywhere** — helper and GUI log handlers parse `all` (`slog.Level(-8)`) so no record is dropped.
+- Version bumped to **1.1.5**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
 
 ## [1.1.3] - 2026-08-30
 
-本次版本修复 Windows 客户端自动更新失效的问题：自 v1.1.0 资产改名以来，Windows 发布资产（`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`）命名不含操作系统标识，而更新检查器要求资产名同时携带「OS 标识 + 架构」，导致 Windows 平台永远匹配不到自己的发布资产，已安装用户只会看到「发现新版本但无匹配资产」，无法自动更新。
+This release fixes broken Windows auto-update: since the v1.1.0 asset rename, Windows release assets (`wireguideplus-<arch>-installer.exe` / `wireguideplus-<arch>-portable.zip`) carry no OS token in their names, but the update checker required the asset name to carry both an OS token and the architecture. Windows could therefore never match its own assets, and installed clients only saw "update available but no matching asset" without being able to auto-update.
 
-### 🐛 修复（Bug Fixes）
+### 🐛 Bug Fixes
 
-- **修复 Windows 自动更新资产匹配失效** — `matchAsset`（`internal/update/checker.go`）在 Windows 平台下额外接受「架构锚定 + Windows 专属扩展名」（`.exe` / `.msi` / `.zip`）的资产名，无需 OS 标识；macOS / Linux 资产仍必须携带各自 OS 标识（`darwin` / `linux`），因此不会误匹配 Windows 的无标识资产。新增回归测试覆盖三种架构的正常匹配，以及 Linux / macOS 不得接受无标识 Windows 资产名的反向断言。
+- **Fixed Windows auto-update asset matching** — `matchAsset` (`internal/update/checker.go`) now also accepts arch-anchored Windows-native extensions (`.exe` / `.msi` / `.zip`) on Windows without an OS token; macOS / Linux assets still require their own OS token (`darwin` / `linux`), so they can never match a tokenless Windows asset name. Regression tests cover all three Windows architectures matching correctly and the reverse assertions that Linux / macOS must reject tokenless Windows asset names.
 
-### 🛠 内部（Internal）
+### 🛠 Internal
 
-- 版本号更新至 **1.1.3**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
+- Version bumped to **1.1.3**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS, MSIX, Linux nfpm and macOS `Info.plist` all in sync.
 
 ## [1.1.2] - 2026-08-30
 
-本次版本修复 Windows 安装包文件版本错位问题：此前发布的 1.1.1 安装包中，运行程序（`wireguideplus-<arch>.exe`）在资源管理器属性页显示的「文件版本」为 **1.1.0.1**（应为 **1.1.1.0**）。
+This release fixes a Windows file-version mismatch: in the published 1.1.1 installer, the running executable (`wireguideplus-<arch>.exe`) reported its "File version" as **1.1.0.1** instead of **1.1.1.0**.
 
-### 🐛 修复（Bug Fixes）
+### 🐛 Bug Fixes
 
-- **修复 Windows 运行程序文件版本错位** — 根因：`goversioninfo v1.7` 将 `FixedFileInfo` 结构体声明为 `Major/Minor/Patch/Build` 顺序（与 Windows 标准布局的 Build/Patch 相反），向 JSON 显式写入数字版本会得到被交换的二进制版本（`1.1.1.0` 变成 `1.1.0.1`）。现在 `build/windows/versioninfo.json` 的 `FixedFileInfo` 数字固定为 0，仅以 `StringFileInfo` 四段版本字符串为唯一输入，由 goversioninfo 推导二进制版本（布局无关、始终匹配）；`tools/genverinfo` 只渲染字符串版本，`tools/bumpversion` 不再触碰数字字段。已验证：传入 `1.1.2.0` 字符串时 goversioninfo 输出 `FixedFileInfo.FileVersion (1.1.2.0)`，安装后属性页与 `FileVersionInfo` 均正确显示。
+- **Fixed the Windows executable file-version mismatch** — root cause: `goversioninfo v1.7` declares its `FixedFileInfo` struct as `Major/Minor/Patch/Build` (Patch and Build swapped vs. the standard Windows layout), so explicitly writing numeric versions into the JSON produced a swapped binary version (`1.1.1.0` became `1.1.0.1`). `build/windows/versioninfo.json` now pins the `FixedFileInfo` numbers to 0 and feeds only the four-part `StringFileInfo` strings as the single input; goversioninfo derives the binary version from them (layout-independent, always matching). `tools/genverinfo` renders string versions only and `tools/bumpversion` no longer touches the numeric fields. Verified: parsing the `1.1.2.0` strings makes goversioninfo emit `FixedFileInfo.FileVersion (1.1.2.0)`, and both Explorer's Properties page and `FileVersionInfo` show the correct value after install.
 
-### 🛠 内部（Internal）
+### 🛠 Internal
 
-- 版本号更新至 **1.1.2**：`VERSION`、`build/config.yml`、`windows/info.json`、`windows/versioninfo.json`、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh` + `project.nsi`）、MSIX、Linux nfpm、macOS `Info.plist` 全部同步。
-- 修正 NSIS 安装/卸载描述（`project.nsi`），安装包与卸载程序的文件版本信息与运行程序保持一致。
+- Version bumped to **1.1.2**: `VERSION`, `build/config.yml`, `windows/info.json`, `windows/versioninfo.json`, `windows/wails.exe.manifest`, NSIS (`wails_tools.nsh` + `project.nsi`), MSIX, Linux nfpm and macOS `Info.plist` all in sync.
+- Corrected the NSIS installer/uninstaller descriptions (`project.nsi`) so the installer and uninstaller version info matches the shipped executable.
 
 ## [1.1.1] - 2026-08-30
 
-本次版本修复 Windows 托盘通知气泡「打开主界面」按钮在系统高负载下偶发导致 GUI 卡死的问题。
+This release fixes an intermittent GUI freeze when clicking "Open Window" on the Windows tray notification bubble under high system load.
 
-### 🐛 修复（Bug Fixes）
+### 🐛 Bug Fixes
 
-- **修复通知气泡「打开主界面」偶发卡死** — 当系统 CPU 争用激烈（例如 Windows 维护进程占满核心）或 WebView2 响应延迟时，点击托盘通知气泡的「Open Window」按钮会同步阻塞等待 UI 线程，整个 GUI 看似冻结（VPN 隧道不受影响）。`showDock`（`internal/gui/dock_other.go`）改为经 `application.InvokeAsync` 在 Wails UI 线程异步执行：调用方立即返回，窗口显示/聚焦均在 UI 线程内联完成，不再跨线程等待；同时加 recover 防护，意外 panic 不会打断主线程回调链。
+- **Notification bubble "Open Window" no longer freezes the GUI intermittently** — under heavy CPU contention (e.g. a Windows maintenance process pegging a core) or WebView2 latency, clicking "Open Window" on the tray notification bubble synchronously waited on the UI thread, making the whole GUI appear frozen (the VPN tunnel kept working). `showDock` (`internal/gui/dock_other.go`) now runs asynchronously via `application.InvokeAsync` on the Wails UI thread: the caller returns immediately, window show/focus execute inline on the UI thread, and no cross-thread wait remains; a recover guard also prevents an unexpected panic from breaking the main-thread callback chain.
 
-### 🛠 内部（Internal）
+### 🛠 Internal
 
-- 版本号更新至 **1.1.1**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.1.0`）、`windows/wails.exe.manifest`、NSIS（`wails_tools.nsh`）、MSIX、Linux nfpm、`tools/genverinfo` 全部同步。
+- Version bumped to **1.1.1**: `internal/update/checker.go` main version, `build/config.yml`, `windows/info.json` (`1.1.1.0`), `windows/wails.exe.manifest`, NSIS (`wails_tools.nsh`), MSIX, Linux nfpm and `tools/genverinfo` all in sync.
 
 ## [1.1.0] - 2026-08-28
 
-本次版本聚焦可辨识性、代理健壮性与启动自动化规则：托盘状态改用高辨识图标、代理三模式语义明确并新增连通性测试、无效代理 URL 不再破坏更新检查、启动时先按自动化规则判断再连接。
+This release focuses on distinguishability, proxy robustness and startup automation rules: tray state uses high-contrast glyphs, the proxy has three clearly defined modes with a connectivity test, invalid proxy URLs no longer break update checks, and startup now evaluates automation rules before connecting.
 
-### ✨ 新功能（Features）
+### ✨ Features
 
-- **托盘状态图标可辨识化（Tray state glyphs）** — Windows 托盘菜单中的连接状态改用纯文本字形区分：`●` 实心=已连接、`○` 空心=未连接（Windows 托盘弹窗由 GDI 绘制，无法渲染彩色 emoji，`🟢` 会退化成一圈灰色轮廓，新旧状态难分辨）；macOS 菜单栏（AppKit 原生渲染）继续使用彩色 emoji。启动中/过渡态另有专属标记。
-- **代理三模式语义明确 + 连通性测试（Proxy modes & test）** — 设置 → 代理 的选项统一为三种且语义不再混淆：**直连**（完全忽略系统/环境代理）、**GitHub 镜像**（`mirror`，如 `https://ghfast.top` 加速前缀）、**手动代理**（`manual`，http/https/socks5 完整 URL）。新增 **"测试连接"** 按钮：保存前先向 GitHub Releases API 发起往返请求，报告成功与延迟。
-- **代理设置即时生效（Proxy applies immediately）** — 保存代理配置后，下一次计划更新检查（及手动"立即检查"）无需重启即生效；GUI 启动时也直接套用已保存的代理，避免"启动即触发一次错误配置的检查"。
+- **Tray state glyphs** — connection state in the Windows tray menu now uses plain-text glyphs: `●` solid = connected, `○` hollow = disconnected (Windows tray popups are drawn by GDI and cannot render colored emoji — `🟢` degrades to a grey outline, making old/new states hard to tell apart); the macOS menu bar (native AppKit rendering) keeps colored emoji. Startup/transition states have their own markers.
+- **Proxy modes & connectivity test** — Settings → Proxy now offers three unambiguous modes: **Direct** (ignore system/environment proxy entirely), **GitHub mirror** (`mirror`, e.g. `https://ghfast.top` acceleration prefix), **Manual proxy** (`manual`, full http/https/socks5 URL). New **"Test Connection"** button: a round-trip request to the GitHub Releases API before saving, reporting success and latency.
+- **Proxy applies immediately** — after saving proxy settings, the next scheduled update check (and manual "Check Now") applies without restarting; on GUI startup the saved proxy is applied directly too, avoiding "one check with a broken config right at launch".
 
-### 🐛 修复（Bug Fixes）
+### 🐛 Bug Fixes
 
-- **修复无效代理 URL 拖垮更新检查** — `config.json` 中残缺的手动代理（如 `proxy_url = "https://"`）此前会被 `http.ProxyURL` 直接采用，导致每次更新检查报 `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config`。现在启动时与每次使用时均校验 URL（`internal/update/proxy.go`），无效值记录 `WARN update: ignoring invalid manual proxy URL` 并回退直连，检查不再失败。
-- **修复"先连接、后按规则断开"的启动观感** — 启动规则评估提前到 helper 启动后立即执行（日志 `startup rule re-evaluation`），确保每个隧道的目标状态由规则先行决定；同时新增 `scheduleRuleCheck` 兜底：启动 60 秒窗口内任何 RPC 手动连接（如恢复上次会话）都会在 3 秒后按规则重新评估并纠正，不等 30 秒轮询，日志记录触发来源便于排查。
-- **无效镜像前缀不再静默破坏检查** — `mirror` 模式下的加速前缀同样做 scheme/host 校验，非法值回退官方 API 端点。
+- **Invalid proxy URL no longer breaks update checks** — a broken manual proxy in `config.json` (e.g. `proxy_url = "https://"`) was previously consumed directly by `http.ProxyURL`, making every update check fail with `proxyconnect tcp: tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config`. The URL is now validated at startup and on every use (`internal/update/proxy.go`); invalid values log `WARN update: ignoring invalid manual proxy URL` and fall back to a direct connection — checks no longer fail.
+- **Fixed the "connect first, then rule-driven disconnect" startup feel** — startup rule evaluation moved to right after the helper starts (log `startup rule re-evaluation`), so each tunnel's target state is decided by the rules first; a `scheduleRuleCheck` fallback was added: within the first 60 s after startup, any RPC-driven manual connect (e.g. restoring the last session) is re-evaluated against the rules after 3 s and corrected, without waiting for the 30 s poll; the triggering source is logged for troubleshooting.
+- **Invalid mirror prefixes no longer silently break checks** — the acceleration prefix in `mirror` mode is scheme/host validated too; illegal values fall back to the official API endpoint.
 
-### 🛠 内部（Internal）
+### 🛠 Internal
 
-- 版本号更新至 **1.1.0**：`internal/update/checker.go` 主版本、`build/config.yml`、`windows/info.json`（`1.1.0.0`）、`windows/wails.exe.manifest`、NSIS、MSIX、Linux nfpm 全部同步。
-- **Windows 版本资源标准化** — `wails3 generate syso` 生成的版本资源语言为 `0x0000` 且 `VS_FIXEDFILEINFO.ProductVersion` 为零，Windows 资源管理器 / `FileVersionInfo` 无法读出（属性页版本字段空白）。改用 `goversioninfo`（配置：`build/windows/versioninfo.json`）生成标准 `0409/04B0` 资源，`generate:syso` 任务同步更新；exe 与安装包属性页现正确显示 `1.1.0`。
-- **新增 Windows x86（32 位）构建** — `task windows:build ARCH=386` 产出 32 位运行程序与 `wireguide-x86-installer.exe` 安装包（NSIS 脚本支持 x86 架构、安装到 `Program Files`、打包 x86 版 `wintun.dll`）。
-- **明确平台边界** — 移除 iOS 构建任务与配置注释；本项目不支持 Android / iOS（无法多通道并发、无法按 SSID 自动连接），README 已同步说明，macOS / Linux 增强版待开发。
-- **系统集成增强** — 新增「最小化启动」设置（启动时直接最小化到系统托盘，不显示主窗口，设置 → 启动）；新增「连接状况托盘通知」：启动后延迟 10 秒显示当前连接状况，网络变动（Wi-Fi 切换、网线插拔、网络断开等）导致隧道连接状态变化时也延迟 10 秒显示稳定后的最新状况；通知气泡带操作菜单（打开主界面 / 断开连接），可手动关闭或按设置自动关闭（默认停留 10 秒，可在 设置 → 启动 → 通知停留时长 调整，`internal/gui/notify_windows.go`）。
-- **双架构发布** — 每次构建同时产出 32 位（x86）与 64 位（amd64）程序及对应安装包（`task windows:build:all`，含 wintun.dll 架构自动刷新）；软件/安装包描述统一为「多隧道 + 自动化」重点，移除跨平台（cross-platform）表述。
-- **安装体验** — 安装包默认安装到 Program Files（32 位安装包自动选择 Program Files (x86)），安装过程中可自定义目录；开始菜单快捷方式（含「卸载 WireGuide Plus」入口，卸载入口图标与运行程序一致）默认创建，可在「快捷方式选项」页取消勾选；桌面快捷方式始终创建（`build/windows/nsis/project.nsi`）。
-- **开发与发布文档** — 构建/打包说明从 README 移至独立开发文档 `docs/DEVELOPMENT.md`；GitHub Release 工作流补齐 32 位 Windows 产物与 CI 工具链（goversioninfo），本地推送 `v*` 标签即可自动构建（Windows x86+amd64、macOS arm64、Linux amd64+arm64）、签名并发布（`docs/release.md`）。
-- Windows 网卡适配器名匹配逻辑调整（`internal/wifi/known_windows.go`、`detect_windows.go`），物理网卡识别更准确。
-- 窗口标题统一为 **WireGuide Plus**。
-- 更新检查在调度器内去重，避免同一轮多次触发（仅记录一次失败并给出重试间隔）。
+- Version bumped to **1.1.0**: `internal/update/checker.go` main version, `build/config.yml`, `windows/info.json` (`1.1.0.0`), `windows/wails.exe.manifest`, NSIS, MSIX and Linux nfpm all in sync.
+- **Windows version resources standardized** — resources generated by `wails3 generate syso` had language `0x0000` and a zeroed `VS_FIXEDFILEINFO.ProductVersion`, so Windows Explorer / `FileVersionInfo` could not read them (blank version field in the properties page). Switched to `goversioninfo` (config: `build/windows/versioninfo.json`) producing standard `0409/04B0` resources; the `generate:syso` task was updated accordingly; the exe and installer properties now correctly show `1.1.0`.
+- **New Windows x86 (32-bit) build** — `task windows:build ARCH=386` produces a 32-bit binary and the `wireguide-x86-installer.exe` installer (NSIS script supports x86, installs to Program Files, bundles the x86 `wintun.dll`).
+- **Platform boundaries clarified** — iOS build task and config comments removed; Android / iOS are not supported (no concurrent multi-tunnel, no SSID-based auto-connect); the README explains this; macOS / Linux enhanced editions are pending.
+- **System integration enhancements** — new **"Start minimized"** setting (launches directly into the system tray without the main window; Settings → Startup); new **tray connection notification**: the current connection state is shown 10 s after startup, and also 10 s after a network change (Wi-Fi switch, cable unplug, network loss, ...) alters tunnel connection state — the stable, latest state is shown. The bubble has an action menu (open main window / disconnect), can be dismissed manually, or auto-closes after the configured dwell time (default 10 s, adjustable in Settings → Startup → Notification dwell; `internal/gui/notify_windows.go`).
+- **Dual-architecture releases** — every build produces both 32-bit (x86) and 64-bit (amd64) binaries and installers (`task windows:build:all`, with automatic wintun.dll architecture refresh); app/installer descriptions unified on "multi-tunnel + automation", cross-platform wording removed.
+- **Install experience** — installers default to Program Files (the 32-bit installer auto-selects Program Files (x86)) and the directory can be changed during installation; a Start Menu shortcut (including the "Uninstall WireGuide Plus" entry, icon matching the running app) is created by default and can be unchecked on a "Shortcut options" page; a desktop shortcut is always created (`build/windows/nsis/project.nsi`).
+- **Development & release docs** — build/packaging docs moved from the README to the standalone `docs/DEVELOPMENT.md`; the GitHub Release workflow now includes the 32-bit Windows artifact and the CI toolchain (`goversioninfo`); pushing a local `v*` tag builds (Windows x86+amd64, macOS arm64, Linux amd64+arm64), signs and publishes automatically (`docs/release.md`).
+- Windows adapter-name matching adjusted (`internal/wifi/known_windows.go`, `detect_windows.go`) for more accurate physical-adapter detection.
+- Window title unified to **WireGuide Plus**.
+- Update checks deduplicated inside the scheduler to avoid multiple triggers in one round (only one failure logged, with a retry interval).
 
 ## [1.0.0] - 2026-08-28
 
-里程碑版本：A11y 无障碍语义重构、Windows 网络出口选路逻辑调整、Wails3 构建/图标/权限梳理，并新增简体中文界面与托盘开关。
+Milestone release: A11y accessibility semantic refactor, Windows network-egress routing logic changes, Wails3 build/icon/permission cleanup, plus a Simplified Chinese UI and tray toggles.
 
-### ✨ 新功能（Features）
+### ✨ Features
 
-- **简体中文界面（Chinese UI）** — 全界面新增简体中文翻译，覆盖隧道列表、历史、工具（DNS 泄漏测试/路由表）、日志、设置、更新、自动化编辑器等全部 199 条文案。首次启动自动跟随系统语言（`zh-*` 区域自动识别），也可在 设置 → 常规 → 语言 中手动切换并持久化。
-- **托盘菜单开关（Tray toggles）** — 系统托盘内每条隧道变为独立可点击的开关：勾选连接、取消勾选断开；连接状态 emoji（🟢 已连接/🟡 连接中/○ 断开）保留在标签旁。手动关闭的隧道保持豁免自动规则（manual-off），直到重新连接或重启 WireGuide。
+- **Simplified Chinese UI (Chinese UI)** — full Simplified Chinese translations across the whole interface, covering all 199 strings: tunnel list, history, tools (DNS leak test / route table), logs, settings, updates, automation editor. The first launch auto-follows the system language (`zh-*` locales detected), or you can switch manually in Settings → General → Language (persisted).
+- **Tray toggles** — every tunnel in the system tray is now an independent clickable toggle: check to connect, uncheck to disconnect; the connection emoji (🟢 connected / 🟡 connecting / ○ disconnected) stays next to the label. Manually disconnected tunnels remain exempt from automation rules (manual-off) until reconnected or WireGuide restarts.
 
-#### 前端 A11y 无障碍重构
+#### Frontend A11y accessibility refactor
 
-> 影响：全平台（Windows/macOS/Linux）Svelte 前端，不限于 Windows。
+> Scope: all platforms (Windows/macOS/Linux) Svelte frontend, not just Windows.
 
-- 全部模态弹窗移除蒙层 `role="button"` 与 `tabindex="0"`，蒙层回归纯粹遮罩语义，避免读屏器将全屏背景识别为可交互按钮。
-- 所有 dialog 统一 `tabindex="-1"` 并保留标准 `role="dialog" aria-modal="true"`，遵循 WCAG 弹窗语义规范。
-- ESC 关闭统一处理：缺失的弹窗（导入结果、历史、更新提示、自动化编辑器）在**组件顶层**挂 `<svelte:window on:keydown>`（handler 内以条件判断弹窗状态；Svelte 不允许在 `{#if}` 内挂载），其余弹窗复用 App.svelte 全局 capture 处理器——规避多弹窗 ESC 冲突，同时不破坏 CodeMirror 的按键捕获。
-- `Settings.svelte`：`<nav role="tablist">` 改为普通 `<div>`，消除标签语义不匹配警告；分割条 `pane-resizer` 保留 `role="separator"`，补 `tabindex="0"` 与真实键盘操作（方向键调整宽度、Enter/Space 复位）。
-- `frontend/vite.config.js` 的 svelte 插件 `onwarn` 过滤静态误报（`a11y_click_events_have_key_events`、`a11y_no_static_element_interactions`、`a11y_no_noninteractive_tabindex`、`a11y_no_noninteractive_element_interactions`），生产构建警告归零，业务逻辑无改动。
-- 涉及文件：`src/App.svelte`、`src/lib/History.svelte`、`src/lib/ConflictWarning.svelte`、`src/lib/TunnelDetail.svelte`、`src/lib/UpdateNotice.svelte`、`src/lib/Settings.svelte`、`src/lib/AutomationEditor.svelte`
+- All modal overlays dropped the `role="button"` and `tabindex="0"` from the scrim, returning it to a pure mask so screen readers no longer treat the fullscreen background as an interactive button.
+- All dialogs use `tabindex="-1"` and keep the standard `role="dialog" aria-modal="true"`, following WCAG dialog semantics.
+- ESC close unified: dialogs that lacked it (import result, history, update notice, automation editor) now mount `<svelte:window on:keydown>` at the component top level (the handler checks dialog state; Svelte does not allow mounting inside `{#if}`); the rest reuse App.svelte's global capture handler — avoiding multi-dialog ESC conflicts without breaking CodeMirror's key capture.
+- `Settings.svelte`: `<nav role="tablist">` replaced with a plain `<div>` to silence tab-semantics warnings; the `pane-resizer` splitter keeps `role="separator"` but gains `tabindex="0"` and real keyboard operation (arrow keys resize, Enter/Space reset).
+- `frontend/vite.config.js`: the svelte plugin `onwarn` now filters static false positives (`a11y_click_events_have_key_events`, `a11y_no_static_element_interactions`, `a11y_no_noninteractive_tabindex`, `a11y_no_noninteractive_element_interactions`); production build warnings are zeroed, with no logic changes.
+- Files touched: `src/App.svelte`, `src/lib/History.svelte`, `src/lib/ConflictWarning.svelte`, `src/lib/TunnelDetail.svelte`, `src/lib/UpdateNotice.svelte`, `src/lib/Settings.svelte`, `src/lib/AutomationEditor.svelte`
 
-#### Windows 后台 helper：网络出口选路逻辑调整
+#### Windows background helper: network egress routing logic
 
-> 影响：仅 Windows 平台 Go helper 代码，其他平台不受改动。
+> Scope: Windows-only Go helper code; other OSes are unaffected.
 
-- helper 启动阶段采集主上游物理网卡 LUID，用于记录系统初始默认出站物理接口；该 LUID 为启动时刻快照，运行时网络切换不会自动刷新缓存。
-- 修正网络接口筛选逻辑：过滤 TUN/隧道/回环虚拟网卡，仅选取物理网卡作为上游候选；TUN 虚拟网卡本身不做物理网卡绑定锁定。
-- WireGuard UDP 报文出站完全交由 Windows 路由表 + 网卡 InterfaceMetric 跃点数完成选路；软件不再强制绑定固定物理网卡。
-- 分流模式（`full_tunnel=false`）逻辑约束补充：Peer Endpoint IP 需要显式加入 `AllowedIPs`，防止握手 UDP 报文路由丢弃导致 `no-handshake`。
-- 日志增强：`network primary upstream interface initial luid` 输出主物理网卡 LUID 用于问题排查；明确日志中 `tunnel connected` 仅代表 TUN 适配器就绪，不等同于远端 Peer 握手成功。
-- 排查工具提示：Windows 下优先使用 `Find-NetRoute -RemoteIPAddress <peer-ip>` 判断目标 IP 实际出站网卡；PowerShell `Get-NetAdapter.Luid` 为结构体，不可直接与 Go 输出 uint64 数值做等值比对。
+- At startup the helper captures the primary upstream physical adapter's LUID to record the system's initial default egress physical interface; this LUID is a boot-time snapshot and does not auto-refresh on runtime network switches.
+- Fixed the network-interface filtering: TUN/tunnel/loopback virtual adapters are filtered out, only physical adapters are upstream candidates; TUN virtual adapters are no longer bound/locked as if they were physical.
+- WireGuard UDP egress is fully delegated to the Windows routing table + per-adapter InterfaceMetric hop counts; the software no longer force-binds a fixed physical adapter.
+- Split-tunnel (`full_tunnel=false`) constraint added: the Peer Endpoint IP must be explicitly included in `AllowedIPs`, preventing handshake UDP packets from being route-dropped (`no-handshake`).
+- Logging: `network primary upstream interface initial luid` outputs the primary physical adapter LUID for troubleshooting; the log line `tunnel connected` only means the TUN adapter is ready, not that the remote peer handshake succeeded.
+- Troubleshooting hints: on Windows prefer `Find-NetRoute -RemoteIPAddress <peer-ip>` to determine the actual egress adapter for a target IP; PowerShell's `Get-NetAdapter.Luid` is a struct and cannot be compared directly to Go's uint64 output.
 
-### 🛠 构建与工程（Build & Project）
+### 🛠 Build & Project
 
-主要为 Windows 构建行为，跨平台部分已标注。
+Mostly Windows build behavior; cross-platform parts are marked.
 
-1. **Wails3 Windows 图标构建行为**（仅 Windows）——`task build` 完整构建会自动执行 `wails3 generate icons`，读取 `build/appicon.png` 并覆盖输出 `windows/icon.ico`；手动修改的 `windows/icon.ico` 会被完整构建覆盖。`windows/icon.ico` 是最终嵌入 exe 的图标，`build/appicon.png` 仅作源素材；`task windows:build` 调试构建跳过图标生成，保留现有 `windows/icon.ico`。exe / 窗口标题栏 / 任务栏图标复用 exe 内 ico 资源；系统托盘图标需要 Go `embed` 独立资源。
-2. **Windows 版本信息管理**（仅 Windows）——exe 文件详细信息由 `windows/info.json` 控制，`FileVersion` 必须 4 段数字格式 `major.minor.patch.build`。UI 展示版本由 Go 常量维护（`internal/update/checker.go`），需与 `info.json` 手动保持同步；后续可通过 ldflags 编译注入实现单处版本源。
-3. **Windows UAC / 管理员权限梳理**（仅 Windows）——当前架构为 GUI 进程拉起 helper 子进程；helper 操作 TUN 网卡、修改路由需要管理员权限，子进程提权会触发 UAC 弹窗，Windows 安全机制无法完全静默绕过。短期方案：`windows/wails.exe.manifest` 添加 `requireAdministrator`，将 UAC 弹窗转移到 exe 双击启动（仍需用户确认）；长期建议：helper 重构为 Windows System Service（LocalSystem 权限后台运行），GUI 以普通用户权限通过 IPC 通信，彻底消除 UAC 弹窗。
+1. **Wails3 Windows icon build behavior** (Windows only) — `task build` full builds automatically run `wails3 generate icons`, reading `build/appicon.png` and overwriting `windows/icon.ico`; manual edits to `windows/icon.ico` are overwritten by full builds. `windows/icon.ico` is the icon ultimately embedded in the exe; `build/appicon.png` is only the source asset; `task windows:build` debug builds skip icon generation and keep the existing `windows/icon.ico`. The exe / window title bar / taskbar icons reuse the ico resource inside the exe; the system tray icon needs a separate Go `embed` resource.
+2. **Windows version info management** (Windows only) — exe file details come from `windows/info.json`; `FileVersion` must be 4-part numeric `major.minor.patch.build`. The UI-displayed version is maintained as a Go constant (`internal/update/checker.go`) and must be kept in sync with `info.json` manually; later, ldflags build-time injection could give a single version source.
+3. **Windows UAC / admin privileges** (Windows only) — current architecture: the GUI launches a helper subprocess; the helper operates TUN adapters and modifies routes, which requires admin rights, and elevating the subprocess triggers the UAC prompt — Windows security cannot be fully bypassed silently. Short term: `windows/wails.exe.manifest` adds `requireAdministrator`, moving the UAC prompt to double-click exe launch (still requires user confirmation); long term: refactor the helper into a Windows System Service (LocalSystem, running in the background) with the GUI communicating over IPC as a normal user, eliminating the UAC prompt entirely.
 
-### 🐛 问题排查记录（Investigation）
+### 🐛 Investigation
 
-排查记录，无代码变更，供开发参考。
+Investigation notes, no code changes, for developer reference.
 
-- 现象：helper 日志输出 `tunnel connected`，但 GUI 显示 `no handshake`。
-  - 根因区分：TUN 设备创建完成 ≠ WireGuard 与远端 Peer 完成加密握手；需读取 wg 内核 `latest handshake` 状态判断真实连通性。
-  - 分流模式高频踩坑：Peer IP 不在 `AllowedIPs`，握手 UDP 报文路由丢弃。
-  - 其他可能：Windows 出站防火墙拦截 WireGuard UDP、endpoint 域名 DNS 解析异常。
-- 本地代理监听 `0.0.0.0`：代理进程流量独立，不会自动流入 WireGuard 隧道；流量走向由 Windows 路由表与隧道 `AllowedIPs` 共同决定。
+- Symptom: helper logs `tunnel connected`, but the GUI shows `no handshake`.
+  - Root-cause: a TUN device being created ≠ the WireGuard encrypted handshake with the remote peer having completed; read the wg kernel `latest handshake` state to judge real connectivity.
+  - Split-tunnel pitfall: Peer IP not in `AllowedIPs` → handshake UDP packets route-dropped.
+  - Other possibilities: Windows outbound firewall blocking WireGuard UDP, endpoint domain DNS resolution failure.
+- A local proxy listening on `0.0.0.0`: proxy process traffic is independent and does not automatically flow into the WireGuard tunnel; traffic direction is decided jointly by the Windows routing table and the tunnel's `AllowedIPs`.
 
-### 📝 说明（Notes）
+### 📝 Notes
 
-1. **改动影响范围区分**
-   - Svelte 前端 A11y 代码：**全平台生效（Windows / Linux / macOS）**；弹窗 ESC、无障碍语义变更所有桌面平台都会生效。
-   - helper 网络出口选路逻辑：**仅 Windows 平台 Go 代码修改**，其他 OS 不受影响。
-   - 构建、manifest、ico、info.json、UAC 相关：**仅 Windows 平台**。
-2. 前端 A11y 修改与 helper 后台网络逻辑完全解耦，不影响隧道创建、路由、自动化 Wi-Fi 规则运行。
-3. helper 记录的上游 LUID 仅为启动瞬间快照；Wi-Fi/有线网络切换时不会自动更新该值。
+1. **Scope of the changes**
+   - Svelte frontend A11y code: **applies on all platforms (Windows / Linux / macOS)** — ESC handling and accessibility semantics affect every desktop platform.
+   - Helper network egress routing: **Windows-only Go code changes**; other OSes are unaffected.
+   - Build, manifest, ico, info.json, UAC: **Windows only**.
+2. The frontend A11y changes are fully decoupled from the helper's background network logic; they do not affect tunnel creation, routing, or automation Wi-Fi rules.
+3. The helper's recorded upstream LUID is only a boot-time snapshot; it does not auto-update when switching between Wi-Fi/wired networks.
 
 ## [0.5.1] - 2026-08-11
 

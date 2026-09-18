@@ -61,7 +61,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 3. **Standardized Windows version resources** — fixed the blank version info in the exe
    properties page (now generated with `goversioninfo`).
 4. **Stability fixes** — deduplicated update-check scheduling, more accurate physical
-   adapter detection, and more (see [CHANGELOG](CHANGELOG.en.md)).
+   adapter detection, and more (see [CHANGELOG](CHANGELOG.md)).
 
 ### Enhancements
 
