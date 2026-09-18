@@ -1,10 +1,9 @@
 name: Refresh release notes
 
-# One-off utility: regenerate the release body of an already-published tag
-# using git-cliff (the same generator release.yml uses) and overwrite it via
-# `gh release edit`. Mainly used when a noise commit (e.g. GitHub's
-# "Add files via upload") slipped into a published changelog after a cliff.toml
-# parser change. Run manually via Actions -> "Refresh release notes".
+# One-off utility: overwrite the release body of an already-published tag with
+# the curated, English-by-default CHANGELOG.md via `gh release edit`. Run
+# manually via Actions -> "Refresh release notes" (e.g. to fix a release whose
+# body was left in the wrong language).
 #
 #   tag input: the tag whose body should be regenerated (default v1.1.1).
 on:
@@ -40,15 +39,10 @@ jobs:
             exit 1
           fi
 
-      - name: Regenerate release notes for tag
-        uses: orhun/git-cliff-action@v4.9.0
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        env:
-          OUTPUT: RELEASE_NOTES.md
-
+      # Use the curated, English-by-default CHANGELOG.md as the release body.
+      # We no longer regenerate from git-cliff (its output followed commit
+      # subject language, so a Chinese commit made the notes Chinese).
       - name: Overwrite release body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ inputs.tag }}" --notes-file RELEASE_NOTES.md
+        run: gh release edit "${{ inputs.tag }}" --notes-file CHANGELOG.md

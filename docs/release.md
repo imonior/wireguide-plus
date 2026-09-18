@@ -4,8 +4,8 @@
 
 No manual GitHub steps needed: pushing a `v*` tag triggers
 `.github/workflows/release.yml`, which in parallel builds every artifact,
-verifies/signs them (SignPath optional), generates release notes with
-git-cliff (config: `cliff.toml`), creates the GitHub Release, attaches all
+verifies/signs them (SignPath optional), uses the curated, English-by-default
+`CHANGELOG.md` as the release body, creates the GitHub Release, attaches all
 assets plus the Ed25519-signed `SHA256SUMS` / `SHA256SUMS.sig`, and bumps
 the Homebrew cask.
 
@@ -21,10 +21,10 @@ The workflows fire on **events**, not on any analysis of what changed:
   sniffing: any `v*` tag triggers the full cross-platform build, regardless
   of what the diff contains.
 - `.github/workflows/fix-release-notes.yml` — manual `workflow_dispatch`
-  utility: regenerates the body of an **already-published tag** with git-cliff
-  (the tag is a required input) and overwrites it via `gh release edit`. Used
-  when a noise commit (e.g. GitHub's "Add files via upload") slipped into a
-  published changelog after a `cliff.toml` parser change.
+  utility: overwrites the body of an **already-published tag** with the curated
+  `CHANGELOG.md` via `gh release edit` (the tag is a required input). Used to
+  fix a release whose body was left in the wrong language or otherwise needs a
+  refresh without rebuilding.
 
 To build without a tag, trigger `ci.yml` manually via `workflow_dispatch`.
 
@@ -62,7 +62,7 @@ task bump:version                      # rewrites every static build/package met
 #    (or, one step: task bump:version 1.1.2)
 #    Go binaries need no edits: build/*/Taskfile.yml inject VERSION at build time.
 
-# 3. make sure CHANGELOG.md (and its en / zh-TW / ja / ko siblings) already
+# 3. make sure CHANGELOG.md (and its zh / zh-TW / ja / ko siblings) already
 #    describe the new version, then cut:
 git tag v1.1.2 && git push origin v1.1.2
 

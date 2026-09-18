@@ -543,19 +543,13 @@ jobs:
           go run ./tools/updatesign sign -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
           go run ./tools/updatesign verify -pub "$UPDATE_SIGNING_PUBKEY" -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
 
-      - name: Generate release notes with git-cliff
-        # GitHub's built-in generate_release_notes only enumerates merged
-        # PRs — most of our work lands as direct pushes to main, so the
-        # auto-generated body was nearly empty (v0.3.0 shipped showing
-        # one bullet despite ~30 commits). git-cliff reads the actual
-        # git log, grouped by subject-line prefix per cliff.toml.
-        uses: orhun/git-cliff-action@v4.9.0
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        env:
-          OUTPUT: CHANGELOG.md
-
+      # Release body: the curated, English-by-default CHANGELOG.md (the
+      # root file, same convention as README.md). We intentionally do NOT
+      # run git-cliff here — it derived the body from commit subject lines,
+      # so a Chinese commit message made the whole release notes Chinese
+      # (that is what shipped on v2.2.7). The hand-written CHANGELOG is the
+      # source of truth (release-check verifies each version's entries) and
+      # is kept English by default.
       - name: Publish release
         uses: softprops/action-gh-release@v3.0.3
         with:

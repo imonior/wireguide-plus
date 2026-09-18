@@ -161,7 +161,7 @@ task bump:version 1.1.2    # 可选传参；不传则按 VERSION 文件同步
 
 ## 7. 发布流程（推送 tag 即发布）
 
-GitHub Actions 工作流 `.github/workflows/release.yml` 会在推送 `v*` 标签时自动构建 **Windows（x86 + amd64 + arm64）、macOS（arm64）、Linux（amd64 + arm64）** 产物、验证/签名、生成 Release Notes（git-cliff）并创建 GitHub Release，同时更新 Homebrew Cask。
+GitHub Actions 工作流 `.github/workflows/release.yml` 会在推送 `v*` 标签时自动构建 **Windows（x86 + amd64 + arm64）、macOS（arm64）、Linux（amd64 + arm64）** 产物、验证/签名、生成 Release Notes（取自英文默认的 `CHANGELOG.md`）并创建 GitHub Release，同时更新 Homebrew Cask。
 
 完整步骤（打 tag、签名密钥配置、可选 SignPath 校验）见 [docs/release.md](release.md)。
 
