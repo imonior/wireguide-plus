@@ -543,20 +543,27 @@ jobs:
           go run ./tools/updatesign sign -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
           go run ./tools/updatesign verify -pub "$UPDATE_SIGNING_PUBKEY" -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
 
-      # Release body: the curated, English-by-default CHANGELOG.md (the
-      # root file, same convention as README.md). We intentionally do NOT
-      # run git-cliff here — it derived the body from commit subject lines,
-      # so a Chinese commit message made the whole release notes Chinese
-      # (that is what shipped on v2.2.7). The hand-written CHANGELOG is the
-      # source of truth (release-check verifies each version's entries) and
-      # is kept English by default.
+      # Release body: ONLY the latest version's section from the curated,
+      # English-by-default CHANGELOG.md (same convention as README.md). We
+      # intentionally do NOT run git-cliff here — it derived the body from
+      # commit subject lines, so a Chinese commit message made the whole
+      # release notes Chinese (that is what shipped on v2.2.7), AND it
+      # rendered the entire file into the body. Slicing out just the
+      # `## [X.Y.Z]` block for the current tag keeps the body scoped to this
+      # release (matching what v2.2.6 had) while staying English.
+      - name: Extract latest release-notes section
+        run: |
+          set -euo pipefail
+          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md > RELEASE_NOTES.md
+          echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
+          cat RELEASE_NOTES.md
       - name: Publish release
         uses: softprops/action-gh-release@v3.0.3
         with:
           files: artifacts/*
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          body_path: CHANGELOG.md
+          body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
 
   update-cask:

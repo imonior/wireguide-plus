@@ -5,14 +5,14 @@ name: Refresh release notes
 # manually via Actions -> "Refresh release notes" (e.g. to fix a release whose
 # body was left in the wrong language).
 #
-#   tag input: the tag whose body should be regenerated (default v1.1.1).
+#   tag input: the tag whose body should be regenerated (default v2.2.7).
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag whose release body should be regenerated (e.g. v1.1.1)'
+        description: 'Tag whose release body should be regenerated (e.g. v2.2.7)'
         required: true
-        default: 'v1.1.1'
+        default: 'v2.2.7'
 
 permissions:
   contents: write
@@ -28,9 +28,9 @@ jobs:
           fetch-depth: 0
 
       - name: Ensure input tag is the latest tag
-        # git-cliff renders ALL version sections by default; a release body
-        # must contain only the latest one, so this workflow only supports
-        # refreshing the latest tag (same --latest mode release.yml uses).
+        # A release body must contain only the latest version's section, so
+        # this workflow only supports refreshing the latest tag (the same
+        # block release.yml extracts when it publishes).
         run: |
           latest="$(git describe --tags --abbrev=0)"
           echo "latest tag: $latest"
@@ -39,10 +39,18 @@ jobs:
             exit 1
           fi
 
-      # Use the curated, English-by-default CHANGELOG.md as the release body.
-      # We no longer regenerate from git-cliff (its output followed commit
-      # subject language, so a Chinese commit made the notes Chinese).
+      # Overwrite the published release body with ONLY the latest version's
+      # section from the curated, English-by-default CHANGELOG.md (not the
+      # whole file). We no longer regenerate from git-cliff — its output
+      # followed commit subject language, so a Chinese commit made the notes
+      # Chinese, and it rendered every version section into the body.
+      - name: Extract latest release-notes section
+        run: |
+          set -euo pipefail
+          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md > RELEASE_NOTES.md
+          echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
+          cat RELEASE_NOTES.md
       - name: Overwrite release body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ inputs.tag }}" --notes-file CHANGELOG.md
+        run: gh release edit "${{ inputs.tag }}" --notes-file RELEASE_NOTES.md
