@@ -24,6 +24,7 @@
   import { startLogListener, stopLogListener } from './stores/logs.js';
   import { compactList, listSort, listActiveOnTop, listPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_MAX, LIST_PANE_DEFAULT } from './stores/ui.js';
   import { errText, localizeValidation } from './lib/errors.js';
+  import { sanitizeTunnelName, validateTunnelName } from './lib/tunnel-name.js';
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
   import { TunnelService } from '../bindings/github.com/imonior/wireguide-plus/internal/app';
   import Icon from './lib/Icon.svelte';
