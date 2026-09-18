@@ -12,7 +12,14 @@
     "connecting": "连接中…",
     "connected": "已连接",
     "no_handshake": "无握手",
-    "handshake_stale": "握手超时"
+    "handshake_stale": "握手超时",
+    "helper_disconnected": "⚠ Helper 进程已断开",
+    "helper_reconnected": "Helper 已重新连接",
+    "wifi_switched": "Wi-Fi：{ssid}",
+    "unsupported_drop": "仅支持 .conf、.zip 和二维码图片文件",
+    "export_done": "已导出到 {path}",
+    "export_failed": "导出失败：{err}",
+    "connect_failed": "连接失败：{err}"
   },
   "nav": {
     "tunnels": "隧道",
@@ -138,7 +145,11 @@
     "rename_rollback_failed": "重命名回滚失败：{err}",
     "tab_conf": "conf 编辑器",
     "tab_fields": "字段编辑",
-    "close": "关闭"
+    "close": "关闭",
+    "open_failed": "无法打开编辑器：{err}",
+    "op_timeout": "操作超时——后端没有响应，请重试。",
+    "save_failed_detail": "保存失败：{err}",
+    "invalid_config": "配置存在问题，请修正后再保存"
   },
   "settings": {
     "about": "关于",
@@ -360,7 +371,9 @@
     "dns_path_title": "DNS 解析通道已被占用",
     "message": "连接可能影响上述接口的流量路由。更具体的路由将优先。",
     "proceed": "仍然连接",
-    "title": "检测到路由冲突"
+    "title": "检测到路由冲突",
+    "dns_path_resolve_failed": "处理失败：{err}",
+    "dns_path_cancel_failed": "取消失败：{err}"
   },
   "update": {
     "available": "有新版本 v{version}",
@@ -393,7 +406,9 @@
     "open_release_page_title": "在浏览器中打开最新版发布页面",
     "progress_download": "正在下载… {percent}%",
     "progress_refresh": "正在检查软件包仓库…",
-    "progress_install": "正在下载并安装…"
+    "progress_install": "正在下载并安装…",
+    "failed": "更新失败：{err}",
+    "open_release_failed": "无法打开发布页：{err}"
   },
   "migration": {
     "title": "检测到旧版本数据",
@@ -578,7 +593,8 @@
     "wait": "保持绑定等待连接",
     "auto": "自动切换到可用网卡",
     "manual": "手动指定其他网卡",
-    "switched": "已清除「{tunnel}」的绑定——重新连接后将自动选择最优网卡。"
+    "switched": "已清除「{tunnel}」的绑定——重新连接后将自动选择最优网卡。",
+    "clear_failed": "清除绑定失败：{err}"
   },
   "policy": {
     "blocked_toast": "{tunnel}：已跳过自动连接（{reason} 冲突）—— 可手动连接以覆盖",
@@ -599,5 +615,23 @@
     "traffic_protect_hint": "通往本隧道 AllowedIPs 的流量必须走本隧道；隧道断开时该流量被阻断，不会从其他出口泄漏。",
     "use_as_default_dns": "作为默认 DNS",
     "use_as_default_dns_hint": "将本隧道的 DNS 服务器设为系统默认解析器。该角色应只由一个隧道承担。"
+  },
+  "validator": {
+    "parse_error": "配置无法解析",
+    "need_peer": "至少需要一个 [Peer] 段",
+    "required": "{field} 是必填项",
+    "bad_key": "{field}：密钥格式无效（必须是 Base64 编码的 32 字节）",
+    "bad_cidr": "{field}：无效的 CIDR 格式",
+    "cidr_zero": "{field}：/0 不是有效的接口地址——你是不是想填到 AllowedIPs？",
+    "bad_dns": "{field}：无效的 DNS 条目（不是 IP 或主机名）",
+    "range_mtu": "{field}：MTU 必须在 576–65535 之间",
+    "range_listenport": "{field}：ListenPort 必须在 1–65535 之间",
+    "awg_range": "{field}：必须在 0–{max} 之间，当前为 {got}",
+    "jmin_jmax": "{field}：Jmin 不能大于 Jmax",
+    "bad_h_range": "{field}：取值无效（应为数字或「最小值-最大值」区间）",
+    "bad_endpoint": "{field}：无效的 Endpoint 格式（应为 host:port）",
+    "endpoint_host_empty": "{field}：Endpoint 主机为空",
+    "bad_endpoint_port": "{field}：无效的 Endpoint 端口",
+    "keepalive_range": "{field}：PersistentKeepalive 必须在 0–65535 之间，当前为 {got}"
   }
 }

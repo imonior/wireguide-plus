@@ -23,6 +23,7 @@ func IsValidHostOrIP(s string) bool {
 // ValidationError represents a single validation issue.
 type ValidationError struct {
 	Field   string // e.g., "Interface.PrivateKey", "Peer[0].PublicKey"
+	Code    string // stable machine-readable code, e.g. "bad_cidr" — the GUI maps it to a localised message
 	Message string // Human-readable error
 }
 
@@ -35,8 +36,8 @@ type ValidationResult struct {
 	Errors []ValidationError
 }
 
-func (r *ValidationResult) addError(field, message string) {
-	r.Errors = append(r.Errors, ValidationError{Field: field, Message: message})
+func (r *ValidationResult) addError(field, code, message string) {
+	r.Errors = append(r.Errors, ValidationError{Field: field, Code: code, Message: message})
 }
 
 // IsValid returns true if no errors were found.
@@ -53,7 +54,7 @@ func Validate(cfg *WireGuardConfig) *ValidationResult {
 
 	// Must have at least one peer
 	if len(cfg.Peers) == 0 {
-		result.addError("Peer", "at least one [Peer] section is required")
+		result.addError("Peer", "need_peer", "at least one [Peer] section is required")
 	}
 
 	// Peer validation
@@ -67,9 +68,9 @@ func Validate(cfg *WireGuardConfig) *ValidationResult {
 func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 	// PrivateKey: required, Base64-encoded 32 bytes
 	if iface.PrivateKey == "" {
-		result.addError("Interface.PrivateKey", "PrivateKey is required")
+		result.addError("Interface.PrivateKey", "required", "PrivateKey is required")
 	} else if !isValidWireGuardKey(iface.PrivateKey) {
-		result.addError("Interface.PrivateKey", "invalid key format (must be Base64-encoded 32 bytes)")
+		result.addError("Interface.PrivateKey", "bad_key", "invalid key format (must be Base64-encoded 32 bytes)")
 	}
 
 	// Address: required, valid CIDR. We additionally reject /0
@@ -79,16 +80,16 @@ func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 	// Such a value is almost certainly a misconfiguration where the
 	// user pasted AllowedIPs into Address.
 	if len(iface.Address) == 0 {
-		result.addError("Interface.Address", "Address is required")
+		result.addError("Interface.Address", "required", "Address is required")
 	} else {
 		for _, addr := range iface.Address {
 			_, network, err := net.ParseCIDR(addr)
 			if err != nil {
-				result.addError("Interface.Address", fmt.Sprintf("invalid CIDR format: %q", addr))
+				result.addError("Interface.Address", "bad_cidr", fmt.Sprintf("invalid CIDR format: %q", addr))
 				continue
 			}
 			if ones, _ := network.Mask.Size(); ones == 0 {
-				result.addError("Interface.Address",
+				result.addError("Interface.Address", "cidr_zero",
 					fmt.Sprintf("/0 is not a valid Interface address (%q) — did you mean to put this in AllowedIPs?", addr))
 			}
 		}
@@ -99,18 +100,18 @@ func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 	// syntax. The network adapter splits them at apply time.
 	for _, dns := range iface.DNS {
 		if net.ParseIP(dns) == nil && !hostnameRegex.MatchString(dns) {
-			result.addError("Interface.DNS", fmt.Sprintf("invalid DNS entry (not an IP or hostname): %q", dns))
+			result.addError("Interface.DNS", "bad_dns", fmt.Sprintf("invalid DNS entry (not an IP or hostname): %q", dns))
 		}
 	}
 
 	// MTU: optional, valid range
 	if iface.MTU != 0 && (iface.MTU < 576 || iface.MTU > 65535) {
-		result.addError("Interface.MTU", fmt.Sprintf("MTU must be between 576 and 65535, got %d", iface.MTU))
+		result.addError("Interface.MTU", "range_mtu", fmt.Sprintf("MTU must be between 576 and 65535, got %d", iface.MTU))
 	}
 
 	// ListenPort: optional, valid range
 	if iface.ListenPort != 0 && (iface.ListenPort < 1 || iface.ListenPort > 65535) {
-		result.addError("Interface.ListenPort", fmt.Sprintf("ListenPort must be between 1 and 65535, got %d", iface.ListenPort))
+		result.addError("Interface.ListenPort", "range_listenport", fmt.Sprintf("ListenPort must be between 1 and 65535, got %d", iface.ListenPort))
 	}
 
 	// AmneziaWG obfuscation parameters. These keys are what mark a config
@@ -121,7 +122,7 @@ func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 	validateAWGKey(result, "Interface.Jmin", iface.Jmin, 1<<32-1)
 	validateAWGKey(result, "Interface.Jmax", iface.Jmax, 1<<32-1)
 	if iface.Jmin > 0 && iface.Jmax > 0 && iface.Jmin > iface.Jmax {
-		result.addError("Interface.Jmin", fmt.Sprintf("Jmin (%d) cannot be greater than Jmax (%d)", iface.Jmin, iface.Jmax))
+		result.addError("Interface.Jmin", "jmin_jmax", fmt.Sprintf("Jmin (%d) cannot be greater than Jmax (%d)", iface.Jmin, iface.Jmax))
 	}
 	validateAWGKey(result, "Interface.S1", iface.S1, 65535)
 	validateAWGKey(result, "Interface.S2", iface.S2, 65535)
@@ -136,7 +137,7 @@ func validateInterface(iface *InterfaceConfig, result *ValidationResult) {
 // validateAWGKey checks an integer AmneziaWG parameter against a non-negative bound.
 func validateAWGKey(result *ValidationResult, field string, value int, max uint64) {
 	if value < 0 || uint64(value) > max {
-		result.addError(field, fmt.Sprintf("must be between 0 and %d, got %d", max, value))
+		result.addError(field, "awg_range", fmt.Sprintf("must be between 0 and %d, got %d", max, value))
 	}
 }
 
@@ -146,7 +147,7 @@ func validateHKey(result *ValidationResult, field, value string) {
 	if value == "" || isValidHValue(value) {
 		return
 	}
-	result.addError(field, fmt.Sprintf("invalid value %q (expected a number or \"min-max\" range)", value))
+	result.addError(field, "bad_h_range", fmt.Sprintf("invalid value %q (expected a number or \"min-max\" range)", value))
 }
 
 func isValidHValue(v string) bool {
@@ -167,37 +168,37 @@ func validatePeer(peer *PeerConfig, index int, result *ValidationResult) {
 
 	// PublicKey: required
 	if peer.PublicKey == "" {
-		result.addError(prefix+".PublicKey", "PublicKey is required")
+		result.addError(prefix+".PublicKey", "required", "PublicKey is required")
 	} else if !isValidWireGuardKey(peer.PublicKey) {
-		result.addError(prefix+".PublicKey", "invalid key format (must be Base64-encoded 32 bytes)")
+		result.addError(prefix+".PublicKey", "bad_key", "invalid key format (must be Base64-encoded 32 bytes)")
 	}
 
 	// PresharedKey: optional, but if present must be valid
 	if peer.PresharedKey != "" && !isValidWireGuardKey(peer.PresharedKey) {
-		result.addError(prefix+".PresharedKey", "invalid key format (must be Base64-encoded 32 bytes)")
+		result.addError(prefix+".PresharedKey", "bad_key", "invalid key format (must be Base64-encoded 32 bytes)")
 	}
 
 	// Endpoint: optional, but if present must be host:port
 	if peer.Endpoint != "" {
-		if err := validateEndpoint(peer.Endpoint); err != nil {
-			result.addError(prefix+".Endpoint", err.Error())
+		if code, msg := validateEndpoint(peer.Endpoint); msg != "" {
+			result.addError(prefix+".Endpoint", code, msg)
 		}
 	}
 
 	// AllowedIPs: required, valid CIDR
 	if len(peer.AllowedIPs) == 0 {
-		result.addError(prefix+".AllowedIPs", "AllowedIPs is required")
+		result.addError(prefix+".AllowedIPs", "required", "AllowedIPs is required")
 	} else {
 		for _, ip := range peer.AllowedIPs {
 			if _, _, err := net.ParseCIDR(ip); err != nil {
-				result.addError(prefix+".AllowedIPs", fmt.Sprintf("invalid CIDR format: %q", ip))
+				result.addError(prefix+".AllowedIPs", "bad_cidr", fmt.Sprintf("invalid CIDR format: %q", ip))
 			}
 		}
 	}
 
 	// PersistentKeepalive: optional, valid range
 	if peer.PersistentKeepalive < 0 || peer.PersistentKeepalive > 65535 {
-		result.addError(prefix+".PersistentKeepalive",
+		result.addError(prefix+".PersistentKeepalive", "keepalive_range",
 			fmt.Sprintf("must be between 0 and 65535, got %d", peer.PersistentKeepalive))
 	}
 }
@@ -210,20 +211,20 @@ func isValidWireGuardKey(key string) bool {
 	return len(decoded) == 32
 }
 
-func validateEndpoint(endpoint string) error {
+func validateEndpoint(endpoint string) (code, message string) {
 	// Endpoint can be host:port or [ipv6]:port
 	host, portStr, err := net.SplitHostPort(endpoint)
 	if err != nil {
-		return fmt.Errorf("invalid endpoint format: %q (expected host:port)", endpoint)
+		return "bad_endpoint", fmt.Sprintf("invalid endpoint format: %q (expected host:port)", endpoint)
 	}
 	if host == "" {
-		return fmt.Errorf("endpoint host is empty")
+		return "endpoint_host_empty", "endpoint host is empty"
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
-		return fmt.Errorf("invalid endpoint port: %q", portStr)
+		return "bad_endpoint_port", fmt.Sprintf("invalid endpoint port: %q", portStr)
 	}
-	return nil
+	return "", ""
 }
 
 // ErrorMessages returns human-readable error strings for all validation errors.
@@ -231,6 +232,19 @@ func (r *ValidationResult) ErrorMessages() []string {
 	msgs := make([]string, len(r.Errors))
 	for i, e := range r.Errors {
 		msgs[i] = e.Error()
+	}
+	return msgs
+}
+
+// EncodedMessages returns the validation errors in the wire format the GUI
+// localises from: "code|field|message". The trailing message stays English —
+// it is the fallback shown when the GUI has no translation for the code and
+// the line written to the log. Plain messages (no code) would never carry a
+// '|' because fields and messages never contain one.
+func (r *ValidationResult) EncodedMessages() []string {
+	msgs := make([]string, len(r.Errors))
+	for i, e := range r.Errors {
+		msgs[i] = e.Code + "|" + e.Field + "|" + e.Message
 	}
 	return msgs
 }

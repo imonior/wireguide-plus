@@ -23,7 +23,7 @@
   import { applyTheme, initThemeWatcher } from './stores/theme.js';
   import { startLogListener, stopLogListener } from './stores/logs.js';
   import { compactList, listSort, listActiveOnTop, listPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_MAX, LIST_PANE_DEFAULT } from './stores/ui.js';
-  import { errText } from './lib/errors.js';
+  import { errText, localizeValidation } from './lib/errors.js';
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
   import { TunnelService } from '../bindings/github.com/imonior/wireguide-plus/internal/app';
   import Icon from './lib/Icon.svelte';
@@ -254,7 +254,7 @@
         } else if (/\.(png|jpe?g|webp)$/.test(lower)) {
           await importQRFromPath(path);
         } else {
-          showToast('Only .conf, .zip, and QR image files are supported');
+          showToast($t('app.unsupported_drop'));
         }
       }
     });
@@ -263,9 +263,9 @@
     helperUnsub = Events.On('helper', (event) => {
       const { alive, message } = event.data || {};
       if (!alive) {
-        showToast('⚠ ' + (message || 'Helper process disconnected'));
+        showToast($t('helper.disconnected') + (message ? ' — ' + message : ''));
       } else {
-        showToast('Helper reconnected');
+        showToast($t('helper.reconnected'));
       }
     });
 
@@ -305,7 +305,7 @@
     wifiSsidUnsub = Events.On('wifi_ssid', (event) => {
       const { new_ssid } = event.data || {};
       if (new_ssid) {
-        showToast(`Wi-Fi: ${new_ssid}`);
+        showToast($t('wifi.switched', { ssid: new_ssid }));
       }
     });
 
@@ -373,7 +373,7 @@
       await TunnelService.SetTunnelBinding(name, 0, '');
       showToast($t('egress_lost.switched', { tunnel: name }));
     } catch (e) {
-      showToast('Failed to clear binding: ' + errText(e));
+      showToast($t('egress.clear_failed', { err: errText(e) }));
     }
   }
 
@@ -393,6 +393,19 @@
     if (toastTimer) clearTimeout(toastTimer);
     toast = msg;
     toastTimer = setTimeout(() => { toast = ''; toastTimer = null; }, 3000);
+  }
+
+  // Bounded RPC: races `p` against a timer so a wedged backend call can no
+  // longer hang the save chain into a silent "button does nothing" — the
+  // timeout rejects with a LOCALISED message (built here, where $t is in
+  // scope) that the surrounding catch shows like any other failure.
+  const SAVE_STEP_TIMEOUT_MS = 20000;
+  function withTimeout(p, ms = SAVE_STEP_TIMEOUT_MS) {
+    return Promise.race([
+      p,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error($t('editor.op_timeout'))), ms)),
+    ]);
   }
 
   // Toast text for a finished import. When sanitisation would have changed
@@ -464,9 +477,9 @@
   async function importFromPath(path) {
     try {
       const content = await TunnelService.ReadFile(path);
-      const errors = await TunnelService.ValidateConfig(content);
+      const errors = await withTimeout(TunnelService.ValidateConfig(content));
       if (errors && errors.length > 0) {
-        showToast($t('import.invalid', { err: errors[0] }));
+        showToast($t('import.invalid', { err: localizeValidation(errors, $t)[0] }));
         return;
       }
       const baseName = await TunnelService.BaseName(path);
@@ -529,9 +542,9 @@
     const baseName = file.name.replace(/\.conf$/i, '');
     const content = await file.text();
     try {
-      const errors = await TunnelService.ValidateConfig(content);
+      const errors = await withTimeout(TunnelService.ValidateConfig(content));
       if (errors && errors.length > 0) {
-        showToast($t('import.invalid', { err: errors[0] }));
+        showToast($t('import.invalid', { err: localizeValidation(errors, $t)[0] }));
         return;
       }
       const name = await uniqueName(baseName);
@@ -675,7 +688,7 @@
       // Surface the failure as a toast so the user knows why the
       // editor didn't open. Silently console.error'ing left them
       // clicking Edit repeatedly with no feedback.
-      showToast(`Edit failed: ${errText(err)}`);
+      showToast($t('editor.open_failed', { err: errText(err) }));
     }
   }
 
@@ -756,14 +769,19 @@
     // Nothing below may fail silently: an unexpected throw used to leave the
     // modal open with no message at all.
     try {
-      const errors = await TunnelService.ValidateConfig(saveContent);
+      const errors = await withTimeout(TunnelService.ValidateConfig(saveContent));
       if (errors && errors.length > 0) {
-        editorErrors = errors;
+        editorErrors = localizeValidation(errors, $t);
+        showToast($t('editor.invalid_config'));
         return;
       }
     } catch (err) {
       console.error('validate config failed:', err);
       editorErrors = [errText(err)];
+      // Inline bar AND toast: the bar can sit out of view in a scrolled
+      // editor, and an invisible failure is indistinguishable from a dead
+      // button — the exact "no reaction at all" report.
+      showToast($t('editor.save_failed_detail', { err: errText(err) }));
       return;
     }
     gateAWGReminder(saveContent, () => persistEditorSave(saveName, saveContent, originalName, wasNew));
@@ -792,18 +810,19 @@
     let stopped = false;
     if (wasLive) {
       try {
-        await TunnelService.DisconnectTunnel(liveName);
+        await withTimeout(TunnelService.DisconnectTunnel(liveName));
         stopped = true;
       } catch (err) {
         console.error('stop before save failed:', err);
         editorErrors = [$t('editor.stop_failed', { err: errText(err) })];
+        showToast($t('editor.save_failed_detail', { err: errText(err) }));
         return;
       }
     }
 
     try {
       if (wasNew) {
-        await TunnelService.ImportConfig(saveName, saveContent);
+        await withTimeout(TunnelService.ImportConfig(saveName, saveContent));
         // A NEW tunnel's egress binding was only staged in the editor
         // (no meta sidecar existed before the save). Apply it now with
         // the final tunnel name. Best-effort: the tunnel itself saved.
@@ -826,10 +845,10 @@
       } else {
         const renamed = saveName !== originalName;
         if (renamed) {
-          await TunnelService.RenameTunnel(originalName, saveName);
+          await withTimeout(TunnelService.RenameTunnel(originalName, saveName));
         }
         try {
-          await TunnelService.UpdateConfig(saveName, saveContent);
+          await withTimeout(TunnelService.UpdateConfig(saveName, saveContent));
         } catch (err) {
           // UpdateConfig failed AFTER the rename succeeded. Roll
           // the rename back so the file system matches the user's
@@ -858,7 +877,7 @@
         // conflict/policy dialogs here would stall an automatic reconnect
         // behind a modal they did not expect.
         try {
-          await TunnelService.Connect(saveName);
+          await withTimeout(TunnelService.Connect(saveName));
           await refreshTunnels(TunnelService);
           await refreshStatus(TunnelService);
           showToast($t('editor.saved_reconnected'));
@@ -880,6 +899,9 @@
     } catch (err) {
       console.error('persist editor save failed:', err);
       editorErrors = [errText(err)];
+      // Inline bar AND toast — a failure the user cannot see is the exact
+      // "Save does nothing" bug report, so make it impossible to miss.
+      showToast($t('editor.save_failed_detail', { err: errText(err) }));
       // We already took the tunnel down. Leaving it there would turn a failed
       // edit into a silent outage, so put back whatever still exists on disk.
       if (stopped) {
@@ -887,7 +909,7 @@
         for (const n of back) {
           if (!n) continue;
           try {
-            await TunnelService.Connect(n);
+            await withTimeout(TunnelService.Connect(n));
             await refreshTunnels(TunnelService);
             await refreshStatus(TunnelService);
             showToast($t('editor.save_stopped_no_change'));
@@ -909,10 +931,10 @@
     try {
       const path = await TunnelService.ExportTunnel(name);
       if (path) {
-        showToast(`Exported to ${path}`);
+        showToast($t('export.done', { path }));
       }
     } catch (err) {
-      showToast('Export failed: ' + err.toString());
+      showToast($t('export.failed', { err: errText(err) }));
     }
   }
 
@@ -923,7 +945,7 @@
       await refreshTunnels(TunnelService);
       await refreshStatus(TunnelService);
     } catch (e) {
-      showToast("Connect failed: " + errText(e));
+      showToast($t('connect.failed', { err: errText(e) }));
     }
   }
 
@@ -1011,7 +1033,7 @@
     try {
       await TunnelService.ResolveDNSPathConflict(name, 'disable');
     } catch (e) {
-      showToast('Resolve failed: ' + errText(e));
+      showToast($t('conflict.dns_path_resolve_failed', { err: errText(e) }));
     }
   }
 
@@ -1024,7 +1046,7 @@
       await TunnelService.ResolveDNSPathConflict(name, 'cancel');
       showToast($t('conflict.dns_path_cancelled', { tunnel: name }));
     } catch (e) {
-      showToast('Cancel failed: ' + errText(e));
+      showToast($t('conflict.dns_path_cancel_failed', { err: errText(e) }));
     }
   }
 
@@ -1060,7 +1082,7 @@
     try {
       await TunnelService.RunUpdate(updateInfo);
     } catch (e) {
-      showToast('Update failed: ' + (e?.message || e));
+      showToast($t('update.failed', { err: (e?.message || e) }));
       // Rethrow: modal-context callers (Settings → About, the banner)
       // render the failure inline — a toast alone can sit underneath an
       // open modal where it is never seen.
@@ -1072,7 +1094,7 @@
     try {
       await TunnelService.OpenReleasePage();
     } catch (e) {
-      showToast('Failed to open release page: ' + (e?.message || e));
+      showToast($t('update.open_release_failed', { err: (e?.message || e) }));
     }
   }
 

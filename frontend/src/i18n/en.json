@@ -12,7 +12,14 @@
     "connecting": "Connecting...",
     "connected": "Connected",
     "no_handshake": "No Handshake",
-    "handshake_stale": "No Recent Handshake"
+    "handshake_stale": "No Recent Handshake",
+    "helper_disconnected": "⚠ Helper process disconnected",
+    "helper_reconnected": "Helper reconnected",
+    "wifi_switched": "Wi-Fi: {ssid}",
+    "unsupported_drop": "Only .conf, .zip, and QR image files are supported",
+    "export_done": "Exported to {path}",
+    "export_failed": "Export failed: {err}",
+    "connect_failed": "Connect failed: {err}"
   },
   "nav": {
     "tunnels": "Tunnels",
@@ -138,7 +145,11 @@
     "rename_rollback_failed": "Rename rollback failed: {err}",
     "tab_conf": "conf editor",
     "tab_fields": "field editor",
-    "close": "Close"
+    "close": "Close",
+    "open_failed": "Could not open the editor: {err}",
+    "op_timeout": "Operation timed out — the backend did not respond. Try again.",
+    "save_failed_detail": "Save failed: {err}",
+    "invalid_config": "The config has problems — fix them before saving"
   },
   "settings": {
     "about": "About",
@@ -360,7 +371,9 @@
     "dns_path_title": "DNS resolve path is already taken",
     "message": "Connecting may affect traffic routing for the above interfaces. The more specific route will take priority.",
     "proceed": "Connect Anyway",
-    "title": "Routing Conflict Detected"
+    "title": "Routing Conflict Detected",
+    "dns_path_resolve_failed": "Resolve failed: {err}",
+    "dns_path_cancel_failed": "Cancel failed: {err}"
   },
   "update": {
     "available": "v{version} available",
@@ -393,7 +406,9 @@
     "open_release_page_title": "Open the latest release page in your browser",
     "progress_download": "Downloading… {percent}%",
     "progress_refresh": "Checking the package repository…",
-    "progress_install": "Downloading and installing…"
+    "progress_install": "Downloading and installing…",
+    "failed": "Update failed: {err}",
+    "open_release_failed": "Failed to open the release page: {err}"
   },
   "migration": {
     "title": "Found data from an older version",
@@ -578,7 +593,8 @@
     "wait": "Keep waiting on this interface",
     "auto": "Switch to best available interface",
     "manual": "Pick another interface",
-    "switched": "Binding cleared for \"{tunnel}\" — reconnect to apply auto-selection."
+    "switched": "Binding cleared for \"{tunnel}\" — reconnect to apply auto-selection.",
+    "clear_failed": "Failed to clear the binding: {err}"
   },
   "policy": {
     "blocked_toast": "{tunnel}: automatic connection skipped ({reason} conflict) — connect manually to override",
@@ -599,5 +615,23 @@
     "traffic_protect_hint": "Traffic to this tunnel's AllowedIPs must use this tunnel. If it is down, that traffic is blocked instead of leaking through another interface.",
     "use_as_default_dns": "Use as default DNS",
     "use_as_default_dns_hint": "Make this tunnel's DNS servers the system default resolver. Only one tunnel should hold this role."
+  },
+  "validator": {
+    "parse_error": "Config could not be parsed",
+    "need_peer": "At least one [Peer] section is required",
+    "required": "{field} is required",
+    "bad_key": "{field}: invalid key format (must be Base64-encoded 32 bytes)",
+    "bad_cidr": "{field}: invalid CIDR format",
+    "cidr_zero": "{field}: /0 is not a valid interface address — did you mean to put this in AllowedIPs?",
+    "bad_dns": "{field}: invalid DNS entry (not an IP or hostname)",
+    "range_mtu": "{field}: MTU must be between 576 and 65535",
+    "range_listenport": "{field}: ListenPort must be between 1 and 65535",
+    "awg_range": "{field}: must be between 0 and {max}, got {got}",
+    "jmin_jmax": "{field}: Jmin cannot be greater than Jmax",
+    "bad_h_range": "{field}: invalid value (expected a number or \"min-max\" range)",
+    "bad_endpoint": "{field}: invalid endpoint format (expected host:port)",
+    "endpoint_host_empty": "{field}: endpoint host is empty",
+    "bad_endpoint_port": "{field}: invalid endpoint port",
+    "keepalive_range": "{field}: PersistentKeepalive must be between 0 and 65535, got {got}"
   }
 }

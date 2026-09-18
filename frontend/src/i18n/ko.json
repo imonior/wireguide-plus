@@ -12,7 +12,14 @@
     "connecting": "연결 중…",
     "connected": "연결됨",
     "no_handshake": "핸드셰이크 없음",
-    "handshake_stale": "핸드셰이크 지연"
+    "handshake_stale": "핸드셰이크 지연",
+    "helper_disconnected": "⚠ Helper 프로세스 연결이 끊겼습니다",
+    "helper_reconnected": "Helper에 다시 연결되었습니다",
+    "wifi_switched": "Wi-Fi: {ssid}",
+    "unsupported_drop": ".conf, .zip, QR 이미지 파일만 지원됩니다",
+    "export_done": "{path} 에 내보냈습니다",
+    "export_failed": "내보내기 실패: {err}",
+    "connect_failed": "연결 실패: {err}"
   },
   "nav": {
     "tunnels": "터널",
@@ -138,7 +145,11 @@
     "rename_rollback_failed": "이름 변경 롤백 실패: {err}",
     "tab_conf": "conf 편집기",
     "tab_fields": "필드 편집",
-    "close": "닫기"
+    "close": "닫기",
+    "open_failed": "편집기를 열 수 없습니다: {err}",
+    "op_timeout": "작업 시간 초과 — 백엔드가 응답하지 않습니다. 다시 시도해 주세요.",
+    "save_failed_detail": "저장 실패: {err}",
+    "invalid_config": "설정에 문제가 있습니다. 수정한 후 저장하세요"
   },
   "settings": {
     "about": "정보",
@@ -360,7 +371,9 @@
     "dns_path_title": "DNS 조회 경로가 이미 사용 중입니다",
     "message": "연결하면 위 인터페이스들의 트래픽 라우팅에 영향이 있을 수 있습니다. 더 구체적인 경로가 우선 적용됩니다.",
     "proceed": "그래도 연결",
-    "title": "라우팅 충돌 감지"
+    "title": "라우팅 충돌 감지",
+    "dns_path_resolve_failed": "처리 실패: {err}",
+    "dns_path_cancel_failed": "취소 실패: {err}"
   },
   "update": {
     "available": "v{version} 업데이트 가능",
@@ -393,7 +406,9 @@
     "open_release_page_title": "브라우저에서 최신 릴리스 페이지 열기",
     "progress_download": "다운로드 중… {percent}%",
     "progress_refresh": "패키지 저장소 확인 중…",
-    "progress_install": "다운로드 및 설치 중…"
+    "progress_install": "다운로드 및 설치 중…",
+    "failed": "업데이트 실패: {err}",
+    "open_release_failed": "릴리스 페이지를 열 수 없습니다: {err}"
   },
   "migration": {
     "title": "이전 버전의 데이터를 찾았습니다",
@@ -578,7 +593,8 @@
     "wait": "이 인터페이스를 기다리기",
     "auto": "사용 가능한 인터페이스로 자동 전환",
     "manual": "다른 인터페이스 직접 지정",
-    "switched": "\"{tunnel}\"의 바인딩을 해제했습니다. 다시 연결하면 자동 선택이 적용됩니다."
+    "switched": "\"{tunnel}\"의 바인딩을 해제했습니다. 다시 연결하면 자동 선택이 적용됩니다.",
+    "clear_failed": "바인딩 해제 실패: {err}"
   },
   "policy": {
     "blocked_toast": "{tunnel}: 자동 연결을 건너뛰었습니다({reason} 충돌) — 수동 연결로 재정의할 수 있습니다",
@@ -599,5 +615,23 @@
     "traffic_protect_hint": "이 터널의 AllowedIPs로 향하는 트래픽은 반드시 이 터널을 통과합니다. 터널이 내려가면 다른 인터페이스로 새지 않고 차단됩니다.",
     "use_as_default_dns": "기본 DNS로 사용",
     "use_as_default_dns_hint": "이 터널의 DNS 서버를 시스템 기본 리졸버로 지정합니다. 이 역할은 하나의 터널만 담당해야 합니다."
+  },
+  "validator": {
+    "parse_error": "설정을 구문 분석할 수 없습니다",
+    "need_peer": "[Peer] 섹션이 하나 이상 필요합니다",
+    "required": "{field} 은(는) 필수 항목입니다",
+    "bad_key": "{field}: 키 형식이 잘못되었습니다(Base64로 인코딩된 32바이트여야 합니다)",
+    "bad_cidr": "{field}: CIDR 형식이 잘못되었습니다",
+    "cidr_zero": "{field}: /0 은 인터페이스 주소로 유효하지 않습니다 — AllowedIPs 에 넣으려던 것이 아닌가요?",
+    "bad_dns": "{field}: DNS 항목이 잘못되었습니다(IP 또는 호스트 이름이 아닙니다)",
+    "range_mtu": "{field}: MTU 는 576–65535 사이여야 합니다",
+    "range_listenport": "{field}: ListenPort 는 1–65535 사이여야 합니다",
+    "awg_range": "{field}: 0–{max} 사이여야 합니다(현재 {got})",
+    "jmin_jmax": "{field}: Jmin 은 Jmax 보다 클 수 없습니다",
+    "bad_h_range": "{field}: 값이 잘못되었습니다(숫자 또는 \"최소값-최대값\" 범위여야 합니다)",
+    "bad_endpoint": "{field}: Endpoint 형식이 잘못되었습니다(host:port 형식이어야 합니다)",
+    "endpoint_host_empty": "{field}: Endpoint 호스트가 비어 있습니다",
+    "bad_endpoint_port": "{field}: Endpoint 포트가 잘못되었습니다",
+    "keepalive_range": "{field}: PersistentKeepalive 는 0–65535 사이여야 합니다(현재 {got})"
   }
 }

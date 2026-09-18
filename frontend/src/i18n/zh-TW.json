@@ -12,7 +12,14 @@
     "connecting": "連線中…",
     "connected": "已連線",
     "no_handshake": "無握手",
-    "handshake_stale": "握手逾時"
+    "handshake_stale": "握手逾時",
+    "helper_disconnected": "⚠ Helper 程序已斷線",
+    "helper_reconnected": "Helper 已重新連線",
+    "wifi_switched": "Wi-Fi：{ssid}",
+    "unsupported_drop": "僅支援 .conf、.zip 和 QR 圖片檔案",
+    "export_done": "已匯出到 {path}",
+    "export_failed": "匯出失敗：{err}",
+    "connect_failed": "連線失敗：{err}"
   },
   "nav": {
     "tunnels": "隧道",
@@ -138,7 +145,11 @@
     "rename_rollback_failed": "重新命名復原失敗：{err}",
     "tab_conf": "conf 編輯器",
     "tab_fields": "欄位編輯",
-    "close": "關閉"
+    "close": "關閉",
+    "open_failed": "無法開啟編輯器：{err}",
+    "op_timeout": "操作逾時——後端沒有回應，請再試一次。",
+    "save_failed_detail": "儲存失敗：{err}",
+    "invalid_config": "配置存在問題，請修正後再儲存"
   },
   "settings": {
     "about": "關於",
@@ -360,7 +371,9 @@
     "dns_path_title": "DNS 解析通道已被佔用",
     "message": "連線可能影響上述介面的流量路由。更具體的路由將優先。",
     "proceed": "仍然連線",
-    "title": "偵測到路由衝突"
+    "title": "偵測到路由衝突",
+    "dns_path_resolve_failed": "處理失敗：{err}",
+    "dns_path_cancel_failed": "取消失敗：{err}"
   },
   "update": {
     "available": "有新版本 v{version}",
@@ -393,7 +406,9 @@
     "open_release_page_title": "在瀏覽器中開啟最新版發佈頁面",
     "progress_download": "正在下載… {percent}%",
     "progress_refresh": "正在檢查軟體套件儲存庫…",
-    "progress_install": "正在下載並安裝…"
+    "progress_install": "正在下載並安裝…",
+    "failed": "更新失敗：{err}",
+    "open_release_failed": "無法開啟發布頁：{err}"
   },
   "migration": {
     "title": "偵測到舊版本資料",
@@ -578,7 +593,8 @@
     "wait": "保持綁定等待連線",
     "auto": "自動切換到可用網卡",
     "manual": "手動指定其他網卡",
-    "switched": "已清除「{tunnel}」的綁定——重新連線後將自動選擇最優網卡。"
+    "switched": "已清除「{tunnel}」的綁定——重新連線後將自動選擇最優網卡。",
+    "clear_failed": "清除綁定失敗：{err}"
   },
   "policy": {
     "blocked_toast": "{tunnel}：已跳過自動連線（{reason} 衝突）—— 可手動連線以覆寫",
@@ -599,5 +615,23 @@
     "traffic_protect_hint": "通往本隧道 AllowedIPs 的流量必須走本隧道；隧道中斷時該流量會被阻斷，不會從其他出口外洩。",
     "use_as_default_dns": "作為預設 DNS",
     "use_as_default_dns_hint": "將本隧道的 DNS 伺服器設為系統預設解析器。此角色應只由一個隧道承擔。"
+  },
+  "validator": {
+    "parse_error": "配置無法解析",
+    "need_peer": "至少需要一個 [Peer] 段",
+    "required": "{field} 是必填項",
+    "bad_key": "{field}：金鑰格式無效（必須是 Base64 編碼的 32 位元組）",
+    "bad_cidr": "{field}：無效的 CIDR 格式",
+    "cidr_zero": "{field}：/0 不是有效的介面位址——你是不是想填到 AllowedIPs？",
+    "bad_dns": "{field}：無效的 DNS 條目（不是 IP 或主機名稱）",
+    "range_mtu": "{field}：MTU 必須在 576–65535 之間",
+    "range_listenport": "{field}：ListenPort 必須在 1–65535 之間",
+    "awg_range": "{field}：必須在 0–{max} 之間，目前為 {got}",
+    "jmin_jmax": "{field}：Jmin 不能大於 Jmax",
+    "bad_h_range": "{field}：取值無效（應為數字或「最小值-最大值」區間）",
+    "bad_endpoint": "{field}：無效的 Endpoint 格式（應為 host:port）",
+    "endpoint_host_empty": "{field}：Endpoint 主機為空",
+    "bad_endpoint_port": "{field}：無效的 Endpoint 連接埠",
+    "keepalive_range": "{field}：PersistentKeepalive 必須在 0–65535 之間，目前為 {got}"
   }
 }

@@ -63,10 +63,12 @@ const maxZipEntrySize = 1 << 20
 // which provides a File object rather than a filesystem path).
 func (s *TunnelService) ImportZipData(data []byte) ([]ZipImportResult, error) {
 	if len(data) > maxZipDataSize {
+		slog.Warn("tunnel: zip import failed (too large)", "category", "tunnel", "bytes", len(data), "max", maxZipDataSize)
 		return nil, fmt.Errorf("zip too large: %d bytes (max %d)", len(data), maxZipDataSize)
 	}
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
+		slog.Warn("tunnel: zip import failed (read)", "category", "tunnel", "bytes", len(data), "error", err)
 		return nil, fmt.Errorf("reading zip: %w", err)
 	}
 	return s.importZipReader(r)
@@ -211,13 +213,16 @@ func (s *TunnelService) ImportQRFromBytes(data []byte, name string) (*TunnelInfo
 func (s *TunnelService) ReadFile(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
+		slog.Warn("tunnel: read file failed (stat)", "category", "tunnel", "path", path, "error", err)
 		return "", fmt.Errorf("reading %s: %w", path, err)
 	}
 	if info.Size() > maxReadFileSize {
+		slog.Warn("tunnel: read file failed (too large)", "category", "tunnel", "path", path, "bytes", info.Size(), "max", maxReadFileSize)
 		return "", fmt.Errorf("file %s is too large (%d bytes, max %d)", path, info.Size(), maxReadFileSize)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		slog.Warn("tunnel: read file failed (read)", "category", "tunnel", "path", path, "error", err)
 		return "", fmt.Errorf("reading %s: %w", path, err)
 	}
 	return string(data), nil
@@ -253,6 +258,7 @@ func (s *TunnelService) ValidateConfig(content string) ([]string, error) {
 func (s *TunnelService) GetConfigText(name string) (string, error) {
 	cfg, err := s.tunnelStore.Load(name)
 	if err != nil {
+		slog.Warn("tunnel: load config text failed", "category", "tunnel", "tunnel", name, "error", err)
 		return "", err
 	}
 	return config.Serialize(cfg), nil
@@ -319,9 +325,11 @@ func (s *TunnelService) ExportConfig(name string) (string, error) {
 func (s *TunnelService) ExportTunnel(name string) (string, error) {
 	content, err := s.GetConfigText(name)
 	if err != nil {
+		slog.Warn("tunnel: export failed (load)", "category", "tunnel", "tunnel", name, "error", err)
 		return "", err
 	}
 	if s.app == nil {
+		slog.Warn("tunnel: export failed (app not initialized)", "category", "tunnel", "tunnel", name)
 		return "", fmt.Errorf("app not initialized")
 	}
 
@@ -330,6 +338,7 @@ func (s *TunnelService) ExportTunnel(name string) (string, error) {
 		AddFilter("WireGuard Config", "*.conf").
 		PromptForSingleSelection()
 	if err != nil {
+		slog.Warn("tunnel: export failed (dialog)", "category", "tunnel", "tunnel", name, "error", err)
 		return "", err
 	}
 	if path == "" {
@@ -338,7 +347,9 @@ func (s *TunnelService) ExportTunnel(name string) (string, error) {
 
 	// Exported files contain private keys — write with 0600.
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		slog.Warn("tunnel: export failed (write)", "category", "tunnel", "tunnel", name, "path", path, "error", err)
 		return "", err
 	}
+	slog.Info("tunnel: exported", "category", "tunnel", "tunnel", name, "path", path, "bytes", len(content))
 	return path, nil
 }
