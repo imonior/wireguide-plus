@@ -425,14 +425,17 @@
   // scope) that the surrounding catch shows like any other failure.
   const SAVE_STEP_TIMEOUT_MS = 20000;
   function withTimeout(p, ms = SAVE_STEP_TIMEOUT_MS) {
-    return Promise.race([
-      p,
-      new Promise((_, reject) =>
-        setTimeout(() => {
-          logStep('rpc timeout fired after ' + ms + 'ms');
-          reject(new Error($t('editor.op_timeout')));
-        }, ms)),
-    ]);
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        logStep('rpc timeout fired after ' + ms + 'ms');
+        reject(new Error($t('editor.op_timeout')));
+      }, ms);
+    });
+    // Cancel the watchdog once the call settles, otherwise the timer keeps
+    // running and fires 20s later as a false "timeout" against an RPC that
+    // already succeeded (four phantom timeouts logged after every save).
+    return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
   }
 
   // Toast text for a finished import. When sanitisation would have changed
