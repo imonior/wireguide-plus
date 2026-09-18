@@ -116,6 +116,12 @@
   $: awgOn = $appSettings.enable_awg;
   $: currentPeer = peers[peerIdx] || {};
 
+  // Every row writes to the model on `input` (keystroke) and flushes to the
+  // conf text on `change` (blur). Keeping the two apart matters: a stale
+  // model loses what the user typed, and relying on `change` alone meant an
+  // edit whose blur never reached the input was silently dropped — the
+  // tunnel then "saved" with the previous value, which looks exactly like a
+  // broken Save button.
   function setIface(key, val) { iface = { ...iface, [key]: val }; }
   function setPeer(key, val) {
     peers = peers.map((p, i) => (i === peerIdx ? { ...p, [key]: val } : p));
@@ -128,16 +134,39 @@
   // user reaches for the button, and `content` is only rewritten when it
   // resolves — dispatching immediately hands the parent the body as it was
   // BEFORE those edits, so the tunnel saves and nothing changes.
+  //
+  // Every exit path leaves a visible message: a save that reports nothing
+  // reads as "the button is broken", which is indistinguishable from a
+  // genuine backend refusal.
+  const SAVE_TIMEOUT_MS = 12000;
   let saving = false;
   async function doSave() {
     if (saving) return;
     saving = true;
+    loadErr = '';
+    let timedOut = false;
     try {
-      const ok = await apply();
-      // Refuse to save on a failed rewrite rather than dispatching a stale
-      // body: silently writing the old text is worse than not writing at all.
-      if (!ok) return;
+      const guard = new Promise((resolve) => setTimeout(() => {
+        timedOut = true;
+        resolve(false);
+      }, SAVE_TIMEOUT_MS));
+      const ok = await Promise.race([
+        apply().catch((e) => {
+          loadErr = e?.message || String(e) || $t('editor.save_failed');
+          return false;
+        }),
+        guard,
+      ]);
+      if (!ok) {
+        // A hung RPC must not poison the chain for every later save either —
+        // drop the queue so the next attempt starts from a clean promise.
+        if (timedOut) applyChain = Promise.resolve();
+        if (!loadErr) loadErr = timedOut ? $t('editor.save_timeout') : $t('editor.save_failed');
+        return;
+      }
       dispatch('save', { name, content });
+    } catch (e) {
+      loadErr = e?.message || String(e) || $t('editor.save_failed');
     } finally {
       saving = false;
     }
@@ -192,8 +221,10 @@
           {#each IFACE_AWG as key}
             <div class="fe-row">
               <label class="fe-label" for="fe-awg-{key}">{key}</label>
-              <input class="fe-input" id="fe-awg-{key}" type="text" value={iface[key] ?? ''}
-                spellcheck="false" on:change={(e) => { setIface(key, e.target.value); apply(); }} />
+            <input class="fe-input" id="fe-awg-{key}" type="text" value={iface[key] ?? ''}
+              spellcheck="false"
+              on:input={(e) => setIface(key, e.target.value)}
+              on:change={apply} />
             </div>
           {/each}
         </div>

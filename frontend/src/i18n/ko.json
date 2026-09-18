@@ -77,7 +77,6 @@
     "probe_unreachable": "응답 없음: 모든 후보에 도달할 수 없습니다. 터널이 끊겼거나 ICMP가 차단된 것일 수 있습니다",
     "latency_target_retry": "다시 입력",
     "latency_preset": "프리셋",
-    "latency_custom": "사용자 지정",
     "probe_kind_public": "공용",
     "probe_kind_endpoint": "엔드포인트",
     "probe_kind_custom": "사용자 지정",
@@ -124,6 +123,9 @@
     "name_placeholder": "터널 이름",
     "name_required": "터널 이름을 입력하세요",
     "saving": "저장 중…",
+    "saved": "터널이 저장되었습니다",
+    "save_failed": "저장 실패 — 설정이 저장되지 않았습니다",
+    "save_timeout": "저장 시간 초과 — 설정이 저장되지 않았습니다",
     "tab_conf": "conf 편집기",
     "tab_fields": "필드 편집",
     "close": "닫기"

@@ -753,6 +753,19 @@
       showToast($t('name.auto_fixed', { from: fix.original, to: fix.name }));
     }
 
+    // The backend refuses to overwrite the conf of a tunnel that is up (the
+    // helper would keep running the old one). Say so HERE — before any
+    // round-trip and in the user's own language — instead of letting the raw
+    // English error surface afterwards, which read as "Save does nothing".
+    const activeNow = ($connectionStatus?.active_tunnels || [])
+      .concat($connectionStatus?.established_tunnels || []);
+    if (!wasNew && originalName && activeNow.includes(originalName)) {
+      editorErrors = [$t('confirm.disconnect_first')];
+      return;
+    }
+
+    // Nothing below may fail silently: an unexpected throw used to leave the
+    // modal open with no message at all.
     try {
       const errors = await TunnelService.ValidateConfig(saveContent);
       if (errors && errors.length > 0) {
@@ -760,6 +773,7 @@
         return;
       }
     } catch (err) {
+      console.error('validate config failed:', err);
       editorErrors = [errText(err)];
       return;
     }
@@ -819,7 +833,13 @@
       }
       showEditor = false;
       await refreshTunnels(TunnelService);
+      // Say it out loud. The modal closing on its own is the same visual as
+      // "nothing happened" when the user was expecting their edit to stick —
+      // without this line there is no way to tell a saved change from a lost
+      // one until reopening the editor.
+      showToast($t('editor.saved'));
     } catch (err) {
+      console.error('persist editor save failed:', err);
       editorErrors = [errText(err)];
     }
   }

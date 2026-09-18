@@ -77,7 +77,6 @@
     "probe_unreachable": "探测无响应:所有候选目标均不可达,隧道可能已断,或对端/网络禁用了 ICMP",
     "latency_target_retry": "重新输入",
     "latency_preset": "预设",
-    "latency_custom": "自定义",
     "probe_kind_public": "公共",
     "probe_kind_endpoint": "端点",
     "probe_kind_custom": "自定义",
@@ -124,6 +123,9 @@
     "name_placeholder": "隧道名称",
     "name_required": "隧道名称必填",
     "saving": "保存中…",
+    "saved": "隧道已保存",
+    "save_failed": "保存失败，配置未写入",
+    "save_timeout": "保存超时，配置未写入",
     "tab_conf": "conf 编辑器",
     "tab_fields": "字段编辑",
     "close": "关闭"

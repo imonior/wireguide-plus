@@ -77,7 +77,6 @@
     "probe_unreachable": "応答なし: すべての候補に到達できません。トンネルが切断している、または ICMP が遮断されている可能性があります",
     "latency_target_retry": "再入力",
     "latency_preset": "プリセット",
-    "latency_custom": "カスタム",
     "probe_kind_public": "公共",
     "probe_kind_endpoint": "端点",
     "probe_kind_custom": "カスタム",
@@ -124,6 +123,9 @@
     "name_placeholder": "トンネル名",
     "name_required": "トンネル名を入力してください",
     "saving": "保存中…",
+    "saved": "トンネルを保存しました",
+    "save_failed": "保存に失敗しました（設定は書き込まれていません）",
+    "save_timeout": "保存がタイムアウトしました（設定は書き込まれていません）",
     "tab_conf": "conf エディタ",
     "tab_fields": "フィールド編集",
     "close": "閉じる"

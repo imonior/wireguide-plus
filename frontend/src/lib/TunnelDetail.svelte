@@ -174,8 +174,21 @@
   // value from the probe stream wins — it is the more recent lookup, and a
   // hostname pointing somewhere new is exactly what the user needs to see —
   // with the save-time resolution filling the gap until the next cycle.
+  //
+  // Two things are deliberately NOT shown:
+  //   - the row's `target` used to be echoed back here, which reprinted the
+  //     address already sitting in the box (an IP is what you typed, not a
+  //     lookup result) and, for a row belonging to another tunnel, printed
+  //     that tunnel's address instead;
+  //   - a resolution equal to what is in the box is redundant — it is the
+  //     same string twice.
+  // A slot therefore only shows text when it really adds information: what a
+  // typed HOSTNAME currently points at.
   function slotResolved(i) {
-    return probeSlotLive[i] || probeSlotResolved[i] || '';
+    const typed = (probeSlots[i] || '').trim();
+    const live = probeSlotLive[i] || probeSlotResolved[i] || '';
+    if (!live || live === typed) return '';
+    return live;
   }
 
   // --- Probe target slots -------------------------------------------------
@@ -419,7 +432,27 @@
     return '';
   }
 
-  $: probeResults = status?.latency_probe_results || [];
+  // Probe rows belong to ONE tunnel, so they must never be read off a status
+  // that describes a different one.
+  //
+  // `status` above falls back to the whole connection status when it finds no
+  // entry for the selection — and `status.tunnels` is only populated while
+  // MORE than one tunnel is up (helper/events.go). With a single active
+  // tunnel, selecting any other tunnel therefore matched nothing and picked
+  // up the *primary* tunnel's probe rows: its latency numbers in the card,
+  // its resolved addresses beside the boxes. Those readings have nothing to
+  // do with the tunnel on screen, which is exactly how they look — leftover
+  // values leaking across tunnels.
+  //
+  // `ownStatus` resolves the selection strictly; no entry, no readings.
+  $: ownStatus = (() => {
+    const name = $selectedTunnel?.name;
+    if (!name) return null;
+    if ($connectionStatus?.tunnel_name === name) return $connectionStatus;
+    return ($connectionStatus?.tunnels || []).find(t => t.tunnel_name === name) || null;
+  })();
+
+  $: probeResults = ownStatus?.latency_probe_results || [];
 
   $: probeRows = probeResults.map((r, i) => {
     const resolved = r.resolved_ip || '';
@@ -455,7 +488,7 @@
     const out = ['', '', '', ''];
     for (const r of probeResults) {
       const slot = r.slot ?? -1;
-      if (slot >= 0 && slot < out.length) out[slot] = r.resolved_ip || r.target || '';
+      if (slot >= 0 && slot < out.length) out[slot] = r.resolved_ip || '';
     }
     return out;
   })();
@@ -1006,8 +1039,11 @@
                   {/each}
                 </div>
               {/if}
+              <!-- The custom column carries no heading of its own: the rows
+                   say what they are (the placeholder names an address a user
+                   picks themselves), so the extra line only pushed its two
+                   boxes down and made the two columns read as three-tall. -->
               <div class="probe-col">
-                <div class="probe-col-label">{$t('tunnel.latency_custom')}</div>
                 {#each [2, 3] as i (i)}
                   <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
                     <input
