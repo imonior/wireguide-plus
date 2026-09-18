@@ -106,7 +106,10 @@
     "zip_summary": "{ok}개 가져옴, {fail}개 실패",
     "zip_summary_ok": "{ok}개 가져옴",
     "imported": "\"{name}\"을(를) 가져왔습니다",
-    "name_adjusted": "\"{name}\"(으)로 가져왔습니다 — 파일 이름의 지원되지 않는 문자는 대체되었습니다."
+    "name_adjusted": "\"{name}\"(으)로 가져왔습니다 — 파일 이름의 지원되지 않는 문자는 대체되었습니다.",
+    "failed": "가져오기 실패: {err}",
+    "invalid": "설정이 유효하지 않습니다: {err}",
+    "qr_failed": "QR 코드 가져오기 실패: {err}"
   },
   "name": {
     "auto_fixed": "\"{from}\"이(가) \"{new}\"(으)로 자동 조정되었습니다 — 영문자, 숫자, 공백, \"-\", \"_\"만 사용할 수 있습니다.",
@@ -130,6 +133,9 @@
     "saved_reconnected": "터널이 저장되고 다시 연결되었습니다",
     "reconnect_failed": "터널은 저장되었지만 다시 연결하지 못했습니다: {err}",
     "save_stopped_no_change": "저장 실패 — 터널이 이전 설정으로 다시 시작되었습니다",
+    "egress_binding_failed": "이그레스 바인딩 저장 실패: {err}",
+    "policy_failed": "정책 저장 실패: {err}",
+    "rename_rollback_failed": "이름 변경 롤백 실패: {err}",
     "tab_conf": "conf 편집기",
     "tab_fields": "필드 편집",
     "close": "닫기"

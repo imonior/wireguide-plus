@@ -435,7 +435,7 @@
       const results = await TunnelService.ImportZip(path);
       showZipResults(results);
     } catch (e) {
-      showToast('Import failed: ' + errText(e));
+      showToast($t('import.failed', { err: errText(e) }));
     }
   }
 
@@ -456,7 +456,7 @@
       const results = await TunnelService.ImportZipData(btoa(binary));
       showZipResults(results);
     } catch (e) {
-      showToast('Import failed: ' + errText(e));
+      showToast($t('import.failed', { err: errText(e) }));
     }
   }
 
@@ -466,7 +466,7 @@
       const content = await TunnelService.ReadFile(path);
       const errors = await TunnelService.ValidateConfig(content);
       if (errors && errors.length > 0) {
-        showToast('Invalid config: ' + errors[0]);
+        showToast($t('import.invalid', { err: errors[0] }));
         return;
       }
       const baseName = await TunnelService.BaseName(path);
@@ -477,11 +477,11 @@
           showToast(importToast(baseName, name));
           await refreshTunnels(TunnelService);
         } catch (e) {
-          showToast("Import failed: " + errText(e));
+          showToast($t('import.failed', { err: errText(e) }));
         }
       });
     } catch (e) {
-      showToast("Import failed: " + errText(e));
+      showToast($t('import.failed', { err: errText(e) }));
     }
   }
 
@@ -496,7 +496,7 @@
       showToast(importToast(baseName, name));
       await refreshTunnels(TunnelService);
     } catch (e) {
-      showToast('QR import failed: ' + errText(e));
+      showToast($t('import.qr_failed', { err: errText(e) }));
     }
   }
 
@@ -519,7 +519,7 @@
       showToast(importToast(baseName, name));
       await refreshTunnels(TunnelService);
     } catch (e) {
-      showToast('QR import failed: ' + errText(e));
+      showToast($t('import.qr_failed', { err: errText(e) }));
     }
   }
 
@@ -531,7 +531,7 @@
     try {
       const errors = await TunnelService.ValidateConfig(content);
       if (errors && errors.length > 0) {
-        showToast('Invalid config: ' + errors[0]);
+        showToast($t('import.invalid', { err: errors[0] }));
         return;
       }
       const name = await uniqueName(baseName);
@@ -541,11 +541,11 @@
           showToast(importToast(baseName, name));
           await refreshTunnels(TunnelService);
         } catch (e) {
-          showToast("Import failed: " + errText(e));
+          showToast($t('import.failed', { err: errText(e) }));
         }
       });
     } catch (e) {
-      showToast("Import failed: " + errText(e));
+      showToast($t('import.failed', { err: errText(e) }));
     }
   }
 
@@ -811,7 +811,7 @@
           try {
             await TunnelService.SetTunnelBinding(saveName, pendingBinding.index, pendingBinding.ifName);
           } catch (bindErr) {
-            showToast(`Egress binding save failed: ${errText(bindErr)}`);
+            showToast($t('editor.egress_binding_failed', { err: errText(bindErr) }));
           }
         }
         pendingBinding = null;
@@ -819,7 +819,7 @@
           try {
             await TunnelService.SetTunnelPolicies(saveName, pendingPolicies);
           } catch (polErr) {
-            showToast(`Policy save failed: ${errText(polErr)}`);
+            showToast($t('editor.policy_failed', { err: errText(polErr) }));
           }
         }
         pendingPolicies = null;
@@ -841,7 +841,7 @@
             try {
               await TunnelService.RenameTunnel(saveName, originalName);
             } catch (rollbackErr) {
-              showToast(`Rename rollback failed: ${errText(rollbackErr)}`);
+              showToast($t('editor.rename_rollback_failed', { err: errText(rollbackErr) }));
             }
           }
           throw err;

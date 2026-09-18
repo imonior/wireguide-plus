@@ -106,7 +106,10 @@
     "zip_summary": "{ok} 成功，{fail} 失敗",
     "zip_summary_ok": "{ok} 已匯入",
     "imported": "已匯入 \"{name}\"",
-    "name_adjusted": "已匯入為 \"{name}\" —— 檔名中不支援的字元已被取代。"
+    "name_adjusted": "已匯入為 \"{name}\" —— 檔名中不支援的字元已被取代。",
+    "failed": "匯入失敗：{err}",
+    "invalid": "設定無效：{err}",
+    "qr_failed": "QR 碼匯入失敗：{err}"
   },
   "name": {
     "auto_fixed": "\"{from}\" 已自動調整為 \"{new}\" —— 僅支援字母、數字、空格、\"-\" 與 \"_\"。",
@@ -130,6 +133,9 @@
     "saved_reconnected": "隧道已儲存並重新連線",
     "reconnect_failed": "隧道已儲存，但重新連線失敗：{err}",
     "save_stopped_no_change": "儲存失敗，隧道已依原設定重新啟動",
+    "egress_binding_failed": "出口綁定儲存失敗：{err}",
+    "policy_failed": "原則儲存失敗：{err}",
+    "rename_rollback_failed": "重新命名復原失敗：{err}",
     "tab_conf": "conf 編輯器",
     "tab_fields": "欄位編輯",
     "close": "關閉"

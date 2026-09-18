@@ -1089,16 +1089,20 @@ func (s *TunnelService) RenameTunnel(oldName, newName string) error {
 	err := s.call(ipc.MethodRename, ipc.RenameRequest{OldName: oldName, NewName: newName}, nil)
 	if err != nil {
 		if !isMethodNotFound(err) {
+			slog.Warn("tunnel: rename failed", "category", "tunnel", "from", oldName, "to", newName, "error", err)
 			return err
 		}
 		active, activeErr := s.isActiveTunnel(oldName)
 		if activeErr != nil {
+			slog.Warn("tunnel: rename failed (helper unreachable)", "category", "tunnel", "from", oldName, "to", newName, "error", activeErr)
 			return fmt.Errorf("cannot verify tunnel state (helper unreachable): %w", activeErr)
 		}
 		if active {
+			slog.Warn("tunnel: rename rejected (tunnel connected)", "category", "tunnel", "from", oldName, "to", newName)
 			return fmt.Errorf("cannot rename connected tunnel %q — disconnect first", oldName)
 		}
 		if err := s.tunnelStore.Rename(oldName, newName); err != nil {
+			slog.Warn("tunnel: rename failed (storage)", "category", "tunnel", "from", oldName, "to", newName, "error", err)
 			return err
 		}
 	}

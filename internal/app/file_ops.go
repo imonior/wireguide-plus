@@ -233,13 +233,20 @@ func (s *TunnelService) BaseName(path string) string {
 func (s *TunnelService) ValidateConfig(content string) ([]string, error) {
 	cfg, err := config.Parse(content)
 	if err != nil {
+		// Logged on purpose: this is the shared front door for both "save an
+		// edited tunnel" and "import a .conf", and a parse failure here used
+		// to be reported to the GUI with no server-side trace at all, which
+		// made a rejected save impossible to diagnose from the logs.
+		slog.Warn("tunnel: validate failed (parse)", "category", "tunnel", "error", err)
 		return []string{err.Error()}, nil
 	}
 	result := config.Validate(cfg)
 	if result.IsValid() {
 		return nil, nil
 	}
-	return result.ErrorMessages(), nil
+	msgs := result.ErrorMessages()
+	slog.Warn("tunnel: validate failed (validation)", "category", "tunnel", "errors", strings.Join(msgs, "; "))
+	return msgs, nil
 }
 
 // GetConfigText returns the serialized form of a stored tunnel's config.
@@ -265,19 +272,29 @@ func (s *TunnelService) GetConfigText(name string) (string, error) {
 // config until the next connect — not corruption — which is why this is a
 // logged warning rather than an error.
 func (s *TunnelService) UpdateConfig(name, content string) error {
-	if active, err := s.isActiveTunnel(name); err != nil {
-		return fmt.Errorf("cannot verify tunnel state: %w", err)
+	// The state probe below only decides WHICH log line we write — it must
+	// never block the write itself. It used to return an error on any IPC
+	// hiccup, and a transient helper problem then made every edit fail with
+	// an English "cannot verify tunnel state" that the GUI could only echo
+	// verbatim and that left no trace in the log, so "helper slow for one
+	// call" was indistinguishable from "editing is broken".
+	if active, stateErr := s.isActiveTunnel(name); stateErr != nil {
+		slog.Warn("tunnel: could not determine tunnel state; saving anyway",
+			"category", "tunnel", "tunnel", name, "error", stateErr)
 	} else if active {
 		slog.Warn("tunnel: config edited while connected — reconnect to apply",
 			"category", "tunnel", "tunnel", name)
 	}
 	cfg, err := config.Parse(content)
 	if err != nil {
+		slog.Warn("tunnel: config rejected (parse)", "category", "tunnel", "tunnel", name, "error", err)
 		return err
 	}
 	result := config.Validate(cfg)
 	if !result.IsValid() {
-		return fmt.Errorf("validation failed: %s", strings.Join(result.ErrorMessages(), "; "))
+		msgs := strings.Join(result.ErrorMessages(), "; ")
+		slog.Warn("tunnel: config rejected (validation)", "category", "tunnel", "tunnel", name, "errors", msgs)
+		return fmt.Errorf("validation failed: %s", msgs)
 	}
 	cfg.Name = name
 	if err := s.tunnelStore.Save(cfg); err != nil {

@@ -106,7 +106,10 @@
     "zip_summary": "{ok} 成功，{fail} 失败",
     "zip_summary_ok": "{ok} 已导入",
     "imported": "已导入 \"{name}\"",
-    "name_adjusted": "已导入为 \"{name}\" —— 文件名中的不支持字符已被替换。"
+    "name_adjusted": "已导入为 \"{name}\" —— 文件名中的不支持字符已被替换。",
+    "failed": "导入失败：{err}",
+    "invalid": "配置无效：{err}",
+    "qr_failed": "二维码导入失败：{err}"
   },
   "name": {
     "auto_fixed": "\"{from}\" 已自动调整为 \"{new}\" —— 仅支持字母、数字、空格、\"-\" 和 \"_\"。",
@@ -130,6 +133,9 @@
     "saved_reconnected": "隧道已保存并重连",
     "reconnect_failed": "隧道已保存，但重连失败：{err}",
     "save_stopped_no_change": "保存失败，隧道已按原配置重新启动",
+    "egress_binding_failed": "出口绑定保存失败：{err}",
+    "policy_failed": "策略保存失败：{err}",
+    "rename_rollback_failed": "重命名回滚失败：{err}",
     "tab_conf": "conf 编辑器",
     "tab_fields": "字段编辑",
     "close": "关闭"

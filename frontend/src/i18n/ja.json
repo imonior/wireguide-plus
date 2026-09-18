@@ -106,7 +106,10 @@
     "zip_summary": "{ok}件インポート、{fail}件失敗",
     "zip_summary_ok": "{ok}件インポート",
     "imported": "「{name}」をインポートしました",
-    "name_adjusted": "「{name}」としてインポートしました — ファイル名の使用できない文字は置換されました。"
+    "name_adjusted": "「{name}」としてインポートしました — ファイル名の使用できない文字は置換されました。",
+    "failed": "インポートに失敗しました：{err}",
+    "invalid": "設定が無効です：{err}",
+    "qr_failed": "QR コードのインポートに失敗しました：{err}"
   },
   "name": {
     "auto_fixed": "「{from}」は「{new}」に自動調整されました — 使用できるのは英数字、スペース、「-」「_」のみです。",
@@ -130,6 +133,9 @@
     "saved_reconnected": "トンネルを保存し再接続しました",
     "reconnect_failed": "トンネルは保存されましたが、再接続に失敗しました：{err}",
     "save_stopped_no_change": "保存に失敗しました。トンネルは元の設定で再起動されています",
+    "egress_binding_failed": "出口バインディングの保存に失敗しました：{err}",
+    "policy_failed": "ポリシーの保存に失敗しました：{err}",
+    "rename_rollback_failed": "名前変更のロールバックに失敗しました：{err}",
     "tab_conf": "conf エディタ",
     "tab_fields": "フィールド編集",
     "close": "閉じる"

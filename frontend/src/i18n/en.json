@@ -106,7 +106,10 @@
     "zip_summary": "{ok} imported, {fail} failed",
     "zip_summary_ok": "{ok} imported",
     "imported": "Imported \"{name}\"",
-    "name_adjusted": "Imported as \"{name}\" — unsupported characters in the file name were replaced."
+    "name_adjusted": "Imported as \"{name}\" — unsupported characters in the file name were replaced.",
+    "failed": "Import failed: {err}",
+    "invalid": "Invalid config: {err}",
+    "qr_failed": "QR import failed: {err}"
   },
   "name": {
     "auto_fixed": "\"{from}\" was adjusted to \"{new}\" — only letters, digits, spaces, \"-\" and \"_\" are supported.",
@@ -130,6 +133,9 @@
     "saved_reconnected": "Tunnel saved and reconnected",
     "reconnect_failed": "Tunnel saved, but reconnect failed: {err}",
     "save_stopped_no_change": "Save failed — the tunnel was restarted with its previous config",
+    "egress_binding_failed": "Egress binding save failed: {err}",
+    "policy_failed": "Policy save failed: {err}",
+    "rename_rollback_failed": "Rename rollback failed: {err}",
     "tab_conf": "conf editor",
     "tab_fields": "field editor",
     "close": "Close"
