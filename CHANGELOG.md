@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.8] - 2026-09-19
+
+### 🐛 Fixed
+
+- **Editing a tunnel while it was connected silently did nothing (Windows and macOS)**: the backend rejected any config write on a connected tunnel and the failure was swallowed with no log and no toast, so a save looked like it worked while the old profile stayed in place. Editing is now allowed while connected: replacing the config disconnects the tunnel, writes the change, and reconnects automatically. Every outcome is surfaced — "saved and reconnected", "saved, but reconnect failed", or "save failed, restarted with the previous config" — instead of failing quietly.
+- **Latency probe rows leaked between tunnels**: with a single tunnel online, selecting another tunnel showed the main tunnel's probe latencies and resolved IPs — the helper only fills per-tunnel stats when more than one tunnel is up, and the detail view fell back to the global status when the selected tunnel was missing. Probe rows are now matched strictly to the selected tunnel and nothing is shown when there is no match; only genuinely resolved IPs are displayed, never the raw target echoed back from another tunnel.
+- **A dead upstream still looked connected with a healthy handshake**: when the Wi-Fi adapter or NIC stayed up but the router lost its uplink, the tunnel kept reporting "connected" with a normally-timed handshake. The status now carries a stale-handshake flag, set only when the tunnel has been connected past a threshold and no handshake has arrived within that window, so a briefly reconnecting tunnel is never mislabelled — the hero dot and handshake row turn amber and the list dot follows.
+- **Probe columns drifted out of alignment in a narrow window**: the left "preset" column header pushed the right column's inputs one row down. The column headers were removed so both columns line up.
+
+### 🛠 Internal
+
+- **Release notes are generated from the curated CHANGELOG again**: the body is the latest `## [x.y.z]` section of the English-by-default `CHANGELOG.md`, with the download / checksum / Full Changelog / SignPath footer appended from `build/release-tail.md.tmpl` — restoring the exact page structure every release used before v2.2.7. git-cliff (and `cliff.toml`) is gone, so the body follows the changelog instead of commit messages.
+
+### 📝 Docs
+
+- **CHANGELOG is English by default**: `CHANGELOG.md` is now English (matching the `README.md` convention) and the Simplified Chinese edition moved to `CHANGELOG.zh.md`.
+
 ## [2.2.7] - 2026-09-18
 
 ### 🐛 Fixed

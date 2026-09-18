@@ -32,7 +32,7 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
   自动关闭（默认 10 秒，可在设置中调整）。macOS 与 Linux 现已弹出同款气泡（此前仅 Windows）。
 - **隧道管理** — 导入 / 导出 `.conf`、连接历史、快速开关。
 - **AmneziaWG（AWG）隧道** — 支持导入并连接 AmneziaWG（混淆版 WireGuard）配置。AWG 由配置中的 Jc/Jmin/Jmax/S1-S4/H1-H4 混淆参数自动识别，对应隧道会显示「AmneziaWG」徽标；可在「设置 → 高级」中关闭支持。
-- **隧道编辑器：字段视图与脚本钩子** — 除 conf 文本外，提供逐字段表单（interface / peer 分组）编辑配置，并支持管理 PreUp / PostUp / PreDown / PostDown 脚本钩子（选择文件、新建空白、编辑代码、清除）。
+- **隧道编辑器：字段视图与脚本钩子** — 除 conf 文本外，提供逐字段表单（interface / peer 分组）编辑配置，并支持管理 PreUp / PostUp / PreDown / PostDown 脚本钩子（选择文件、新建空白、编辑代码、清除）。隧道连接中也可编辑：保存时会断开、应用改动并自动重连。
 - **每隧道物理出口绑定** — 开启「固定接口」后，可将单个隧道的加密流量固定到指定物理网卡（Windows / Linux / macOS）；绑定网卡失效时弹窗提供等待、自动切换或手动指定。
 - **设置导出与导入** — 将 tunnels、scripts 与 `config.json`（不含日志）打包为单个压缩包，便于迁移到其他机器。
 - **工具箱标签页** — 内置 **DNS 泄漏测试** 检查流量是否真的从配置的 DNS 服务器出去，以及 **路由可视化** 展示当前路由表，并为每条路由标注 VPN / Direct 徽标，支持局域网直连过滤与蜂窝接口标记。
