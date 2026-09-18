@@ -4,6 +4,20 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.9] - 2026-09-19
+
+### 🐛 Fixed
+
+- **Saving an edited tunnel could abort silently before anything was written**: the save path referenced a helper that was never imported (`sanitizeTunnelName is not defined`), and the resulting error never reached the UI — no toast, no log, the button just did nothing. The import is fixed and any unexpected error in the save chain is now caught and shown instead of vanishing.
+- **Save and import failures came back in English and left no trace in the log**: config-validation messages were raw Go strings; they are now code-keyed and localized in all five languages. Import (zip / QR / file), export and config-read failures now write to the log, so a rejected config can always be traced.
+- **A wedged save now fails visibly instead of hanging forever**: every step of the edit-save chain (validate → disconnect → write → reconnect) is bounded by a 20-second watchdog; on timeout you get a localized message instead of a frozen button.
+- **A failed status probe no longer blocks a save**: an unreachable connection-state probe during a save used to abort the whole operation with a raw English error.
+- **Phantom "rpc timeout" entries after every save**: the 20-second watchdog timer kept running after a successful call and fired as a false timeout four times per save. The timer is now cancelled as soon as the call settles.
+
+### 🛠 Internal
+
+- **Every save-chain step leaves a breadcrumb in the log**: frontend steps are logged through a new `LogFrontend` binding, unhandled webview errors and promise rejections are captured into the same log, and the config-update entry point logs each call — a silent save can now be reconstructed from the last breadcrumb.
+
 ## [2.2.8] - 2026-09-19
 
 ### 🐛 Fixed
