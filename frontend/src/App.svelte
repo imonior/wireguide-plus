@@ -753,17 +753,6 @@
       showToast($t('name.auto_fixed', { from: fix.original, to: fix.name }));
     }
 
-    // The backend refuses to overwrite the conf of a tunnel that is up (the
-    // helper would keep running the old one). Say so HERE — before any
-    // round-trip and in the user's own language — instead of letting the raw
-    // English error surface afterwards, which read as "Save does nothing".
-    const activeNow = ($connectionStatus?.active_tunnels || [])
-      .concat($connectionStatus?.established_tunnels || []);
-    if (!wasNew && originalName && activeNow.includes(originalName)) {
-      editorErrors = [$t('confirm.disconnect_first')];
-      return;
-    }
-
     // Nothing below may fail silently: an unexpected throw used to leave the
     // modal open with no message at all.
     try {
@@ -780,8 +769,38 @@
     gateAWGReminder(saveContent, () => persistEditorSave(saveName, saveContent, originalName, wasNew));
   }
 
+  // Is this tunnel currently up? Checked against both lists on purpose:
+  // active_tunnels also holds tunnels that are still dialling.
+  function isTunnelLive(name) {
+    if (!name) return false;
+    const s = $connectionStatus;
+    if (!s) return false;
+    return (s.active_tunnels || []).includes(name)
+      || (s.established_tunnels || []).includes(name);
+  }
+
   async function persistEditorSave(saveName, saveContent, originalName, wasNew) {
     editorErrors = [];
+    // Editing a LIVE tunnel is allowed — this is what made Save look broken.
+    // A running instance keeps serving the config it was handed when it
+    // connected, so simply writing the file would leave the two out of sync;
+    // we therefore stop the tunnel, save, then bring it back up. All three
+    // steps report failures in the user's language rather than letting the
+    // backend's English error (or silence) stand in for feedback.
+    const liveName = wasNew ? '' : originalName;
+    const wasLive = isTunnelLive(liveName);
+    let stopped = false;
+    if (wasLive) {
+      try {
+        await TunnelService.DisconnectTunnel(liveName);
+        stopped = true;
+      } catch (err) {
+        console.error('stop before save failed:', err);
+        editorErrors = [$t('editor.stop_failed', { err: errText(err) })];
+        return;
+      }
+    }
+
     try {
       if (wasNew) {
         await TunnelService.ImportConfig(saveName, saveContent);
@@ -833,14 +852,51 @@
       }
       showEditor = false;
       await refreshTunnels(TunnelService);
-      // Say it out loud. The modal closing on its own is the same visual as
-      // "nothing happened" when the user was expecting their edit to stick —
-      // without this line there is no way to tell a saved change from a lost
-      // one until reopening the editor.
-      showToast($t('editor.saved'));
+      if (stopped) {
+        // Restart what we stopped. Straight Connect, not doConnect: the edit
+        // was already validated and the user asked for it, so re-running the
+        // conflict/policy dialogs here would stall an automatic reconnect
+        // behind a modal they did not expect.
+        try {
+          await TunnelService.Connect(saveName);
+          await refreshTunnels(TunnelService);
+          await refreshStatus(TunnelService);
+          showToast($t('editor.saved_reconnected'));
+        } catch (connErr) {
+          // The edit is on disk; only the reconnect failed. Say which —
+          // "saved but not reconnected" and "not saved" are different
+          // problems and need different user action.
+          console.error('reconnect after save failed:', connErr);
+          await refreshStatus(TunnelService);
+          showToast($t('editor.reconnect_failed', { err: errText(connErr) }));
+        }
+      } else {
+        // Say it out loud. The modal closing on its own is the same visual as
+        // "nothing happened" when the user was expecting their edit to stick —
+        // without this line there is no way to tell a saved change from a lost
+        // one until reopening the editor.
+        showToast($t('editor.saved'));
+      }
     } catch (err) {
       console.error('persist editor save failed:', err);
       editorErrors = [errText(err)];
+      // We already took the tunnel down. Leaving it there would turn a failed
+      // edit into a silent outage, so put back whatever still exists on disk.
+      if (stopped) {
+        const back = [originalName, saveName];
+        for (const n of back) {
+          if (!n) continue;
+          try {
+            await TunnelService.Connect(n);
+            await refreshTunnels(TunnelService);
+            await refreshStatus(TunnelService);
+            showToast($t('editor.save_stopped_no_change'));
+            break;
+          } catch (restoreErr) {
+            console.error('restore connect after failed save failed:', restoreErr);
+          }
+        }
+      }
     }
   }
 

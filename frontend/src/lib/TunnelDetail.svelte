@@ -626,6 +626,11 @@
       && $connectionStatus?.tunnel_name === $selectedTunnel?.name)
       || (!$selectedTunnel?.is_connected && activeNames.includes($selectedTunnel?.name)));
   $: noHandshake = isConnected && !status?.last_handshake;
+  // The peer used to answer but stopped: the interface is up (the local NIC /
+  // WireGuard link never dropped) yet the last handshake is older than the
+  // stale threshold. The upstream (e.g. the router's WAN) is down, so the
+  // tunnel is NOT healthy even though StateConnected still reads true.
+  $: isStale = isConnected && !!status?.handshake_stale;
   // Use the primary status if it matches the selected tunnel (has full stats).
   // Otherwise fall back to the lightweight per-tunnel info from the tunnels array
   // (name + state + handshake only, no rx/tx/duration).
@@ -849,11 +854,13 @@
         </div>
         <div class="hero-status-line">
           <span class="hero-dot"
-            class:on={isConnected && !noHandshake}
-            class:warning={noHandshake}
+            class:on={isConnected && !noHandshake && !isStale}
+            class:warning={noHandshake || isStale}
             class:connecting={isConnecting}></span>
           <span class="hero-state-text">
-            {#if isConnected && noHandshake}
+            {#if isConnected && isStale}
+              {$t('app.handshake_stale')}
+            {:else if isConnected && noHandshake}
               {$t('app.no_handshake')}
             {:else if isConnected}
               {$t('app.connected')}
@@ -889,9 +896,10 @@
         </div>
         {#if isConnected && status.state === 'connected'}
           <div class="hero-meta">
-            <span class="meta-item">
+            <span class="meta-item" class:meta-stale={isStale}>
               <Icon name="clock" size={12} strokeWidth={2} />
               {$t('tunnel.handshake')}: {status.last_handshake || '—'}
+              {#if isStale}<span class="meta-stale-tag">{$t('app.handshake_stale')}</span>{/if}
             </span>
             <span class="meta-sep">·</span>
             <span class="meta-item">{$t('tunnel.duration')}: {status.duration || '—'}</span>
@@ -1010,11 +1018,15 @@
             {/if}
             <!-- Preset public-probe slots (left) and free-form slots (right),
                  two rows each. Split tunnels drop the preset column entirely,
-                 leaving the two custom rows full-width in a single column. -->
+                 leaving the two custom rows full-width in a single column.
+                 Neither column carries a heading: with one, the labelled
+                 column sat a row taller and the two boxes that should line up
+                 side by side ended up offset by exactly one line. The rows
+                 already say what they are — the placeholder names the kind of
+                 address each slot expects. -->
             <div class="probe-slots-grid" class:full={fullTunnel}>
               {#if fullTunnel}
                 <div class="probe-col">
-                  <div class="probe-col-label">{$t('tunnel.latency_preset')}</div>
                   {#each [0, 1] as i (i)}
                     <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
                       <input
@@ -1039,10 +1051,9 @@
                   {/each}
                 </div>
               {/if}
-              <!-- The custom column carries no heading of its own: the rows
-                   say what they are (the placeholder names an address a user
-                   picks themselves), so the extra line only pushed its two
-                   boxes down and made the two columns read as three-tall. -->
+              <!-- No heading here either — see the note above the grid: a
+                   label in either column is enough to knock the two columns
+                   out of alignment row-for-row. -->
               <div class="probe-col">
                 {#each [2, 3] as i (i)}
                   <div class="probe-slot" class:probe-slot-invalid={slotInvalid(i)}>
@@ -1473,6 +1484,16 @@
     gap: 5px;
   }
   .hero-meta .meta-item :global(svg) { opacity: 0.8; }
+  .hero-meta .meta-item.meta-stale { color: var(--orange, #FF9500); }
+  .hero-meta .meta-stale-tag {
+    margin-left: 5px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font: 600 10px/12px var(--font-sans);
+    letter-spacing: 0.03em;
+    color: #fff;
+    background: var(--orange, #FF9500);
+  }
   .hero-meta .mono {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -1963,13 +1984,8 @@
     gap: 6px;
     min-width: 0;
   }
-  .probe-col-label {
-    margin: 0 0 1px 2px;
-    font: 500 10px/13px var(--font-sans);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
+  /* No .probe-col-label: either column wearing a heading made it one row
+     taller and knocked the two columns out of line-by-line alignment. */
   .probe-slot {
     display: flex;
     align-items: center;

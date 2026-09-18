@@ -34,6 +34,22 @@ type ConnectionStatus struct {
 	TxBytes           int64     `json:"tx_bytes"`
 	LastHandshakeTime time.Time `json:"-"`
 	LastHandshake     string    `json:"last_handshake,omitempty"`
+	// LastHandshakeUnix is LastHandshakeTime as Unix seconds — the one
+	// handshake field that crosses the wire (LastHandshakeTime itself is
+	// internal). The UI ages it against its own clock so the rendered age
+	// keeps moving even when the status stream stalls, and so a tunnel whose
+	// peer stopped answering stops claiming a fresh handshake. 0 means no
+	// handshake has ever completed.
+	LastHandshakeUnix int64 `json:"last_handshake_unix,omitempty"`
+	// HandshakeStale is true when the tunnel has been up longer than the
+	// stale threshold yet its peer has not completed a WireGuard handshake
+	// within that window. A healthy tunnel re-handshakes on its keepalive
+	// interval (often 25s); a tunnel whose upstream dropped — the local NIC
+	// and WireGuard interface stay up, but the peer is unreachable — stops
+	// handshaking and this flips true. The UI renders it as a degraded
+	// "connected but no recent handshake" state instead of a falsely-healthy
+	// one, so a dead WAN link no longer reads as a working tunnel.
+	HandshakeStale bool `json:"handshake_stale,omitempty"`
 	Endpoint          string    `json:"endpoint,omitempty"`
 	// LatencyMs is the most recent measured round-trip time to the
 	// endpoint in milliseconds. 0 means "no measurement yet" or "endpoint

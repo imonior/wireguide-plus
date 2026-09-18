@@ -72,11 +72,15 @@
     const map = {};
     const tunnelStatuses = $connectionStatus?.tunnels || [];
     for (const ts of tunnelStatuses) {
-      map[ts.tunnel_name] = !!ts.last_handshake;
+      // A frozen handshake string (peer stopped answering, upstream down)
+      // is not "handshaking" — the backend marks handshake_stale so the dot
+      // reads warning instead of a falsely-green "connected".
+      map[ts.tunnel_name] = !!ts.last_handshake && !ts.handshake_stale;
     }
     // Primary tunnel status
     if ($connectionStatus?.tunnel_name) {
-      map[$connectionStatus.tunnel_name] = !!$connectionStatus.last_handshake;
+      map[$connectionStatus.tunnel_name] =
+        !!$connectionStatus.last_handshake && !$connectionStatus.handshake_stale;
     }
     return map;
   })();

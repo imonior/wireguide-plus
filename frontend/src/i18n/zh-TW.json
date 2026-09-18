@@ -11,7 +11,8 @@
     "disconnected": "已斷線",
     "connecting": "連線中…",
     "connected": "已連線",
-    "no_handshake": "無握手"
+    "no_handshake": "無握手",
+    "handshake_stale": "握手逾時"
   },
   "nav": {
     "tunnels": "隧道",
@@ -76,7 +77,6 @@
     "probe_target": "探測目標",
     "probe_unreachable": "探測無回應:所有候選目標皆不可達,隧道可能已斷,或對端/網路封鎖了 ICMP",
     "latency_target_retry": "重新輸入",
-    "latency_preset": "預設",
     "probe_kind_public": "公共",
     "probe_kind_endpoint": "端點",
     "probe_kind_custom": "自訂",
@@ -126,6 +126,10 @@
     "saved": "隧道已儲存",
     "save_failed": "儲存失敗，設定未寫入",
     "save_timeout": "儲存逾時，設定未寫入",
+    "stop_failed": "無法停止隧道以套用修改：{err}。未儲存任何內容。",
+    "saved_reconnected": "隧道已儲存並重新連線",
+    "reconnect_failed": "隧道已儲存，但重新連線失敗：{err}",
+    "save_stopped_no_change": "儲存失敗，隧道已依原設定重新啟動",
     "tab_conf": "conf 編輯器",
     "tab_fields": "欄位編輯",
     "close": "關閉"

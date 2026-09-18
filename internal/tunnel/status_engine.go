@@ -138,7 +138,14 @@ func GetStatusFromEngine(engine *Engine, tunnelName string, connectedAt time.Tim
 
 	if !status.LastHandshakeTime.IsZero() {
 		status.LastHandshake = domain.FormatDuration(time.Since(status.LastHandshakeTime))
+		// Absolute timestamp, so the GUI can age the handshake locally
+		// between broadcasts instead of trusting the string above (which
+		// freezes at its last computed value if the stream stalls).
+		status.LastHandshakeUnix = status.LastHandshakeTime.Unix()
 	}
+	// Flag a tunnel whose peer stopped answering while the link stayed up
+	// (dead upstream). The GUI renders this as a degraded state.
+	markHandshakeStale(status)
 	return status, nil
 }
 

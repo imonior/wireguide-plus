@@ -252,18 +252,24 @@ func (s *TunnelService) GetConfigText(name string) (string, error) {
 }
 
 // UpdateConfig parses, validates, and overwrites an existing tunnel's config.
-// Rejects edits of the connected tunnel.
+//
+// Editing a CONNECTED tunnel is allowed. It used to be rejected outright, and
+// that refusal is exactly what made saving impossible: the GUI could not
+// translate the English error into anything actionable, so Save looked dead
+// unless you already knew the tunnel had to be stopped first.
+//
+// Editing != applying. The running instance keeps using the configuration it
+// was handed at connect time, so whoever changes the file owns the restart:
+// stop the tunnel, save, then reconnect it. persistEditorSave does this for
+// the GUI. The price of getting it wrong is a tunnel that runs the previous
+// config until the next connect — not corruption — which is why this is a
+// logged warning rather than an error.
 func (s *TunnelService) UpdateConfig(name, content string) error {
-	// Use the multi-tunnel ActiveTunnels list, not ActiveName which
-	// only returns the lexicographically-first connected tunnel —
-	// editing a non-primary connected tunnel was previously
-	// permitted and silently desynced helper state from disk.
-	active, err := s.isActiveTunnel(name)
-	if err != nil {
+	if active, err := s.isActiveTunnel(name); err != nil {
 		return fmt.Errorf("cannot verify tunnel state: %w", err)
-	}
-	if active {
-		return fmt.Errorf("cannot edit connected tunnel %q — disconnect first", name)
+	} else if active {
+		slog.Warn("tunnel: config edited while connected — reconnect to apply",
+			"category", "tunnel", "tunnel", name)
 	}
 	cfg, err := config.Parse(content)
 	if err != nil {

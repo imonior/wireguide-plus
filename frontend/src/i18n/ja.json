@@ -11,7 +11,8 @@
     "disconnected": "未接続",
     "connecting": "接続中…",
     "connected": "接続済み",
-    "no_handshake": "ハンドシェイクなし"
+    "no_handshake": "ハンドシェイクなし",
+    "handshake_stale": "ハンドシェイクが停滞"
   },
   "nav": {
     "tunnels": "トンネル",
@@ -76,7 +77,6 @@
     "probe_target": "測定先",
     "probe_unreachable": "応答なし: すべての候補に到達できません。トンネルが切断している、または ICMP が遮断されている可能性があります",
     "latency_target_retry": "再入力",
-    "latency_preset": "プリセット",
     "probe_kind_public": "公共",
     "probe_kind_endpoint": "端点",
     "probe_kind_custom": "カスタム",
@@ -126,6 +126,10 @@
     "saved": "トンネルを保存しました",
     "save_failed": "保存に失敗しました（設定は書き込まれていません）",
     "save_timeout": "保存がタイムアウトしました（設定は書き込まれていません）",
+    "stop_failed": "変更を適用するためにトンネルを停止できませんでした：{err}。保存は行われていません。",
+    "saved_reconnected": "トンネルを保存し再接続しました",
+    "reconnect_failed": "トンネルは保存されましたが、再接続に失敗しました：{err}",
+    "save_stopped_no_change": "保存に失敗しました。トンネルは元の設定で再起動されています",
     "tab_conf": "conf エディタ",
     "tab_fields": "フィールド編集",
     "close": "閉じる"
