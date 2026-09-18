@@ -547,8 +547,8 @@ jobs:
       # English-by-default CHANGELOG.md (same convention as README.md) +
       # the static "📦 Downloads" asset guide / checksums / Full Changelog
       # / SignPath footer. That footer is the exact structure every release
-      # used before v2.2.7 (it lives in cliff.toml's body template, kept
-      # here as build/release-tail.md.tmpl) so we no longer depend on
+      # used before v2.2.7; we keep that exact structure in
+      # build/release-tail.md.tmpl so we no longer depend on
       # git-cliff — which rendered the body in the commit message's language
       # (a Chinese commit made v2.2.7's notes Chinese) and once dumped the
       # whole file into the body.

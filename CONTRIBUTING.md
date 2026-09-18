@@ -25,7 +25,7 @@ contract, not a suggestion. Local dev may run newer, CI will not.
 > together with this table. In practice that means: `go-version`,
 > `node-version`, the three `go install` steps (`wails3`, `task`,
 > `goversioninfo`), and every action pin (`checkout`, `setup-go`, `setup-node`,
-> `upload-artifact`, `git-cliff-action`). Bumping only one of them is the usual
+> `upload-artifact`). Bumping only one of them is the usual
 > cause of "works on my machine, fails in CI".
 
 ### Build & Run
