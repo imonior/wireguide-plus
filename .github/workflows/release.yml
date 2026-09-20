@@ -609,6 +609,9 @@ jobs:
           repository: imonior/homebrew-tap
           token: ${{ secrets.TAP_PUSH_TOKEN }}
           path: tap
+          # Full history so the rebase in the push step can fast-forward
+          # onto a tap main that another project (e.g. netsense) just bumped.
+          fetch-depth: 0
 
       - name: Compute sha256 + rewrite cask
         # No artifact download here any more — the macOS zip's SHA256 is
@@ -710,4 +713,15 @@ jobs:
           fi
           git add Casks/wireguideplus.rb
           git commit -m "wireguideplus ${TAG}: arm64 cask bump"
-          git push
+          # Another project sharing imonior/homebrew-tap (e.g. netsense)
+          # may have pushed a cask bump between our checkout and here, which
+          # would make a plain `git push` non-fast-forward and fail the job.
+          # Rebase onto the latest tap main, then retry the push to absorb
+          # the brief window between rebase and push under concurrent runs.
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            if git push origin main; then
+              break
+            fi
+            sleep 3
+          done
