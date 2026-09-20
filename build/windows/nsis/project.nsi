@@ -157,8 +157,6 @@ Section
     Pop $0
     Sleep 500
 
-    !insertmacro wails.webview2runtime
-
     SetOutPath $INSTDIR
 
     !insertmacro wails.files

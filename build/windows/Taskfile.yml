@@ -215,9 +215,7 @@ tasks:
           ARCH: '{{.ARCH}}'
           DEV: '{{.DEV}}'
     cmds:
-      # Create the Microsoft WebView2 bootstrapper if it doesn't exist
-      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
-      - | 
+      - |
         {{if eq OS "windows"}}
         makensis -DPRODUCT_EXECUTABLE="wireguideplus-{{.SUFFIX}}.exe" -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\wireguideplus-{{.SUFFIX}}.exe" project.nsi
         {{else}}

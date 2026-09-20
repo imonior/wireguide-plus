@@ -80,6 +80,11 @@ func init() {
 
 // Run starts the GUI process. Blocks until the Wails app exits.
 func Run(assetsHandler http.Handler, dataDir string) error {
+	// 0. WebView2 gate (Windows only). Wails cannot create a window without
+	// the runtime and would otherwise fail silently; check before anything
+	// else and, if missing, show a native download prompt and exit.
+	ensureWebView2()
+
 	// 0. Install the slog handler that broadcasts to the LogViewer. Do this
 	// first so every subsequent log call (path init, helper spawn, etc.) is
 	// captured. The Wails app isn't built yet; bindAppToLogHandler wires
