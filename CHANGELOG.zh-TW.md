@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.10] - 2026-09-20
+
+### 🐛 修復
+
+- **系統列圖示可能在背景程式仍執行時悄悄消失**：Windows 上 Wails 的托盤會先替換圖示控制代碼、再透過系統 Shell 重新套用；該處一次瞬時的 `Shell_NotifyIcon` 失敗會拋出 panic 並被吞掉，留下一個已失效的控制代碼——圖示消失而程式依然存活。觸發場景包括自動深色模式切換、顯示器休眠/喚醒、遠端桌面重連或快速使用者切換（`WM_TASKBARCREATED` 只能涵蓋檔案總管重啟）。現加入 60 秒心跳重新套用目前連線狀態圖示，且所有圖示更新串行化以免控制代碼交換競態；某次失敗僅在下個週期重試。
+
+### 🛠 內部
+
+- **托盤圖示更新串行化並加 panic 保護**：`safeSetIcon` 從 Win32 失敗中復原而非讓呼叫方死結，瞬時錯誤不會再凍結儲存/狀態流。
+
 ## [2.2.9] - 2026-09-19
 
 ### 🐛 修復

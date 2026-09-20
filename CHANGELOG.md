@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.10] - 2026-09-20
+
+### 🐛 Fixed
+
+- **The system tray icon could silently disappear while the app kept running**: on Windows, Wails' tray replaces the icon handle and then re-applies it through the shell; a transient `Shell_NotifyIcon` failure there raises a panic that is swallowed, leaving a dead handle — the icon vanishes while the process stays alive. This is triggered by an automatic dark-mode switch, display sleep/wake, remote-desktop reconnect, or a fast user switch (`WM_TASKBARCREATED` only covers an Explorer restart). A 60-second heartbeat now re-applies the connection-state icon; all icon updates are serialized so the unsynchronised handle swap can't race, and a failed beat simply retries on the next cycle.
+
+### 🛠 Internal
+
+- **Tray icon updates are serialized and panic-guarded**: `safeSetIcon` recovers from a Win32 failure instead of deadlocking the caller, so a transient error can never freeze the save/status stream.
+
 ## [2.2.9] - 2026-09-19
 
 ### 🐛 Fixed

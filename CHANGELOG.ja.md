@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.2.10] - 2026-09-20
+
+### 🐛 修正
+
+- **システムトレイのアイコンがアプリの動作中に突然消えることがあった**: Windows 上では、Wails のトレイはまずアイコンのハンドルを置き換え、その後シェル経由で再適用します。ここで `Shell_NotifyIcon` が一時的に失敗すると panic が発生し、それが握りつぶされることで無効なハンドルが残り——アイコンが消えてもプロセスは生きたままになります。自動ダークモード切り替え、ディスプレイのスリープ/復帰、リモートデスクトップの再接続、高速ユーザー切り替えで発生します（`WM_TASKBARCREATED` はエクスプローラーの再起動にしか対応しません）。60 秒ごとのハートビートで現在の接続状態アイコンを再適用し、すべてのアイコン更新を直列化してハンドル交換の競合を防ぎ、失敗した場合は次の周期で単に再試行します。
+
+### 🛠 内部
+
+- **トレイアイコンの更新を直列化し panic から守る**: `safeSetIcon` は Win32 の失敗から復帰し、呼び出し側をデッドロックさせないため、一時的なエラーが保存/状態ストリームをフリーズさせることはありません。
+
 ## [2.2.9] - 2026-09-19
 
 ### 🐛 修正
