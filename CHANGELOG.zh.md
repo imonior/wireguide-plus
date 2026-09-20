@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.0] - 2026-09-20
+
+### ✨ 新增
+- Windows：缺少 WebView2 运行时时弹出原生下载提示窗口（含下载链接），不再静默启动失败。
+
+### 🔧 變更
+- Windows 安装包不再捆绑 Microsoft Edge WebView2 引导程序，改由系统已安装的运行时加载。
+
+### 🛠 内部
+- 发布流程在推送 Homebrew cask 前先 rebase，避免共用 `imonior/homebrew-tap` 的其他项目并发改动导致推送失败。
+
 ## [2.2.10] - 2026-09-20
 
 ### 🐛 修复

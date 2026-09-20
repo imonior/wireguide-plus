@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.0] - 2026-09-20
+
+### ✨ Added
+- Windows: show a native dialog with the Microsoft WebView2 Runtime download link when the runtime is missing, instead of failing to start silently.
+
+### 🔧 Changed
+- Windows installer no longer bundles the Microsoft Edge WebView2 bootstrapper; the app loads the system-installed runtime.
+
+### 🛠 Internal
+- Release CI now rebases before pushing the Homebrew cask, so a concurrent bump from another project sharing `imonior/homebrew-tap` no longer fails the publish.
+
 ## [2.2.10] - 2026-09-20
 
 ### 🐛 Fixed

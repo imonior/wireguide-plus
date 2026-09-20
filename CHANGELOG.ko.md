@@ -4,6 +4,17 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.3.0] - 2026-09-20
+
+### ✨ 추가
+- Windows: WebView2 런타임이 없을 때 다운로드 안내를 네이티브 대화상자로 표시(링크 포함). 이전처럼 시작 시 조용히 실패하지 않음.
+
+### 🔧 변경
+- Windows 설치 프로그램이 Microsoft Edge WebView2 부트스트랩을 더 이상 포함하지 않고 시스템 런타임을 사용합니다.
+
+### 🛠 내부
+- 릴리스 파이프라인이 Homebrew cask 푸시 전 rebase하여 동일 tap(`imonior/homebrew-tap`)을 공유하는 다른 프로젝트의 동시 변경 충돌로 인한 실패를 방지합니다.
+
 ## [2.2.10] - 2026-09-20
 
 ### 🐛 수정

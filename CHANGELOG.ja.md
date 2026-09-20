@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.0] - 2026-09-20
+
+### ✨ 追加
+- Windows：WebView2 ランタイムが未インストールの場合、ダウンロード案内をネイティブダイアログで表示（リンク付き）。これまでのように起動時に暗黙的に失敗しなくなりました。
+
+### 🔧 変更
+- Windows インストーラーが Microsoft Edge WebView2 ブートストラップを同梱しなくなり、システムのランタイムを使用します。
+
+### 🛠 内部
+- リリース処理が Homebrew cask をプッシュする前に rebase するようになり、同一 tap（`imonior/homebrew-tap`）を共有する他プロジェクトの並行変更による失敗を防ぎます。
+
 ## [2.2.10] - 2026-09-20
 
 ### 🐛 修正

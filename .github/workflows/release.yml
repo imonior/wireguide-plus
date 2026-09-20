@@ -196,6 +196,24 @@ jobs:
           choco install -y nsis --version=3.12.0 --allow-downgrade --no-progress
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
+      - name: Guard — NSIS must not bundle WebView2
+        # Permanent hazard: `wails3 generate nsis` re-injects the
+        # wails.webview2runtime macro (and MicrosoftEdgeWebview2Setup.exe)
+        # into build/windows/nsis/wails_tools.nsh, bundling the WebView2
+        # bootstrapper into the installer. This repo ships WITHOUT a bundled
+        # runtime — the app shows a native download prompt when WebView2 is
+        # missing instead. Fail the build if that macro ever reappears, so a
+        # regenerated NSIS can't silently ship the installer again.
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -rEiq 'wails\.webview2runtime|MicrosoftEdgeWebview2Setup' build/windows/nsis/; then
+            echo "::error::NSIS still bundles the WebView2 runtime (wails.webview2runtime / MicrosoftEdgeWebview2Setup found). This repo ships without a bundled WebView2 installer; re-running 'wails3 generate nsis' regenerated the macro. Remove it and rebuild."
+            grep -rniE 'wails\.webview2runtime|MicrosoftEdgeWebview2Setup' build/windows/nsis/ || true
+            exit 1
+          fi
+          echo "NSIS guard OK: no bundled WebView2 runtime."
+
       - name: Build .exe + NSIS installer
         # Our Windows binary is pure-syscall (no cgo) so CGO_ENABLED=0
         # is correct. vendor:wintun pulls the pinned arch-specific wintun
