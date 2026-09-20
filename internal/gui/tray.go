@@ -466,6 +466,16 @@ type trayManager struct {
 	// bar) and updated by the KVO observer in startAppearanceWatch; it
 	// only ever becomes false when the menu bar is verifiably light.
 	darkMenuBar atomic.Bool
+	// iconMu serialises SetIcon calls to the underlying Wails tray. Wails'
+	// windowsSystemTray destroys the previous HICON and creates the new
+	// one inside SetIcon without its own lock, so concurrent callers
+	// (the status stream and the self-heal heartbeat) can race on the
+	// handle and destroy the wrong icon — exactly one of the ways the
+	// tray icon can go blank while the app stays alive.
+	iconMu sync.Mutex
+	// iconHeartbeatDone terminates the self-heal ticker on quit. nil until
+	// startIconHeartbeat has run (it is a no-op on macOS).
+	iconHeartbeatDone chan struct{}
 }
 
 // macIcons returns the on/off icon pair for the macOS menu bar. When the
@@ -542,6 +552,10 @@ func (t *trayManager) quitApp() {
 		t.notifyTimer.Stop()
 		t.notifyTimer = nil
 	}
+	if t.iconHeartbeatDone != nil {
+		close(t.iconHeartbeatDone)
+		t.iconHeartbeatDone = nil
+	}
 	t.mu.Unlock()
 	t.doShutdown()
 	t.tray.Destroy()
@@ -576,6 +590,7 @@ func newTrayManager(app *application.App, win *application.WebviewWindow, tray *
 func (t *trayManager) initialBuild() {
 	t.rebuildMenu()
 	t.startAppearanceWatch()
+	t.startIconHeartbeat()
 }
 
 // setIconState swaps the tray ICON (not a text label) based on connection
@@ -591,13 +606,22 @@ func (t *trayManager) initialBuild() {
 // InvokeSync's WaitGroup un-Done (deadlocking the caller). We therefore
 // run it fire-and-forget with a recover guard. The icon bytes themselves
 // are validated on startup (see ztraytest), so this is purely defensive.
+//
+// iconMu serialises concurrent callers so the underlying Wails tray's
+// non-atomic handle swap can't be raced by the status stream and the
+// self-heal heartbeat at the same instant.
 func (t *trayManager) safeSetIcon(icon []byte) {
+	if len(icon) == 0 {
+		return
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("tray SetIcon panicked", "err", r, "stack", string(debug.Stack()))
 			}
 		}()
+		t.iconMu.Lock()
+		defer t.iconMu.Unlock()
 		t.tray.SetIcon(icon)
 	}()
 }
@@ -721,6 +745,61 @@ func (t *trayManager) setIconState(activeNames []string, establishedNames []stri
 	if changed {
 		t.scheduleRebuild()
 	}
+}
+
+// iconForState returns the tray icon bytes matching the given connection
+// state, honouring the same platform-specific variant selection as
+// setIconState (macOS appearance-aware pair; Windows/Linux app-icon red-tile
+// pair). Returns nil if no usable icon is available, in which case callers
+// must not call SetIcon.
+func (t *trayManager) iconForState(anyConnected bool) []byte {
+	onIcon, offIcon := t.macIcons()
+	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") && len(trayOnIconWindows) > 0 {
+		onIcon, offIcon = trayOnIconWindows, trayOffIconWindows
+	}
+	if anyConnected {
+		return onIcon
+	}
+	return offIcon
+}
+
+// startIconHeartbeat re-applies the current tray icon on a fixed interval so
+// any transient loss — Explorer.exe restart, a failed Shell_NotifyIcon
+// (NIM_MODIFY) during a display/theme/DPI transition, or a concurrent HICON
+// race inside the underlying Wails tray — is healed automatically instead of
+// leaving a blank icon behind while the app keeps running. The process never
+// dies: safeSetIcon's recover guard makes a failing beat a no-op that the
+// next beat simply retries. macOS is excluded — its NSStatusItem has no
+// equivalent transient-loss path, and the appearance observer owns its icon
+// there.
+func (t *trayManager) startIconHeartbeat() {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return
+	}
+	if t.iconHeartbeatDone != nil {
+		return // already running (idempotent)
+	}
+	t.iconHeartbeatDone = make(chan struct{})
+	const period = 60 * time.Second
+	ticker := time.NewTicker(period)
+	go func() {
+		for {
+			select {
+			case <-t.iconHeartbeatDone:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				if t.quitting.Load() {
+					return
+				}
+				t.mu.Lock()
+				anyConnected := len(t.establishedTunnels) > 0
+				t.mu.Unlock()
+				t.safeSetIcon(t.iconForState(anyConnected))
+				slog.Debug("tray: icon heartbeat reapplied", "connected", anyConnected)
+			}
+		}
+	}()
 }
 
 // statusNotificationDelay is how long a connection-state change is left to
