@@ -1,0 +1,15 @@
+#!/bin/sh
+# Commit-msg hook, invoked via `git config core.hooksPath scripts/git-hooks`.
+#
+# git calls this hook with a single argument: the path to the file holding the
+# proposed commit message (normally .git/COMMIT_EDITMSG). That is exactly what
+# check-no-ai.sh expects in its non-CI mode, so this is where the commit-message
+# red line is actually enforced. Without this hook the guard can only ever see
+# the staged diff -- which is how a message like "test WorkBuddy leak" slips
+# through.
+#
+# (scripts/git-hooks/pre-commit covers the staged diff; this hook re-checks it
+#  alongside the message, which is harmless and keeps a single entry point.)
+#
+# Bypass once with `git commit --no-verify`.
+exec "$(git rev-parse --show-toplevel)/scripts/check-no-ai.sh" "$1"

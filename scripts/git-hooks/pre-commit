@@ -1,5 +1,15 @@
 #!/bin/sh
 # Pre-commit hook, invoked via `git config core.hooksPath scripts/git-hooks`.
-# Delegates to scripts/check-no-ai.sh with the commit message file path.
-# Bypass once with `git commit --no-verify` (e.g. when introducing this infra).
-exec "$(git rev-parse --show-toplevel)/scripts/check-no-ai.sh" "$1"
+#
+# Runs the publish-hygiene guard over the **staged diff** only.
+#
+# Why there is no commit-message argument here: git invokes a pre-commit hook
+# with *no* positional parameters ("It takes no parameters, and is invoked
+# before obtaining the proposed commit log message"). Writing
+# `check-no-ai.sh "$1"` here would always pass an empty string, so the guard
+# would silently fall back to the staged-diff scan and never look at the
+# message. The message is checked one step later by scripts/git-hooks/commit-msg,
+# which git *does* call with the message file as $1.
+#
+# Bypass once with `git commit --no-verify`.
+exec "$(git rev-parse --show-toplevel)/scripts/check-no-ai.sh"

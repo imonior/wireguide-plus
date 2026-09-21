@@ -41,25 +41,39 @@ task dev
 task build
 ```
 
-### Publish-hygiene pre-commit hook
+### Publish-hygiene git hooks
 
-Enable the hook **once per clone** (`core.hooksPath` is a local git setting and
+Enable the hooks **once per clone** (`core.hooksPath` is a local git setting and
 cannot be committed, so this is a manual step):
 
 ```bash
 sh scripts/setup-hooks.sh
 ```
 
-It points `core.hooksPath` at `scripts/git-hooks/`, so `scripts/check-no-ai.sh`
-runs before every commit and blocks commit messages or published files that
-contain assistant-tool names or the `AI_TOKEN` pattern. See
+It points `core.hooksPath` at `scripts/git-hooks/`, which installs **two**
+hooks — both are needed, because they see different things:
+
+| Hook | What git passes it | What it scans |
+| --- | --- | --- |
+| `pre-commit` | *nothing* (git passes no arguments) | the staged diff |
+| `commit-msg` | the message file path (`$1`) | the commit message, plus the staged diff |
+
+The split is not cosmetic. A `pre-commit` hook is invoked *before* the commit
+message is obtained, so `check-no-ai.sh "$1"` there would always pass an empty
+string and the guard would silently fall back to scanning only the diff — which
+is exactly how a message like `test WorkBuddy leak` used to slip through. Only
+`commit-msg` can see the message.
+
+Between them they block commit messages or published files that contain
+assistant-tool names or the standalone `AI` token. See
 `scripts/check-no-ai.sh` for the exact rules and its false-positive guards
-(CSS `cursor`, the legacy public-resolver description in the changelogs, and
-ignore files are all deliberately excluded).
+(CSS `cursor`, the legacy public-resolver description in the changelogs, the
+guard's own `*-no-ai-*` filenames, and ignore files are all deliberately
+excluded).
 
 The identical rule is enforced server-side by
 `.github/workflows/no-ai-scan.yml`, so pushes stay protected even on a machine
-where the local hook was never enabled.
+where the local hooks were never enabled.
 
 ### Project Structure
 
