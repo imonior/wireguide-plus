@@ -658,6 +658,13 @@ jobs:
           # "macOS-arm64", we want "darwin-arm64"). Easier and safer to
           # just regenerate the bits that change. Everything *outside*
           # the version/sha256/url block stays byte-identical.
+          #
+          # 这里故意不写 depends_on macos:。Homebrew 7.0（2026-09-13）起，低于其自身
+          # 运行下限（Big Sur / 11）的最低版本声明是**解析期硬报错**而不是警告：
+          #     Calling `depends_on macos: :catalina` is disabled! There is no replacement.
+          # 一旦写出这行，brew install --cask wireguideplus 会在下载前就失败。10.15
+          # 早已低于该下限，该声明既冗余又非法，官方 Cask Cookbook 的指引就是删掉。
+          # 也不要改成 ">= :catalina" —— 下限规则对比较表达式一样生效。
           cat > "$cask" <<EOF
           cask "wireguideplus" do
             version "$version"
@@ -668,8 +675,9 @@ jobs:
             desc "Multi-tunnel automated WireGuard VPN client"
             homepage "https://github.com/imonior/wireguide-plus"
 
-            depends_on macos: :catalina
-
+            # No depends_on macos: here -- WireGuide Plus needs 10.15+, which is at or
+            # below Homebrew's own floor (Big Sur), so it is redundant and Homebrew 7.0
+            # rejects it outright ("Calling depends_on macos: :catalina is disabled!").
             app "wireguideplus.app"
 
             # Symlink the CLI onto PATH (Homebrew's bin), so users get a
