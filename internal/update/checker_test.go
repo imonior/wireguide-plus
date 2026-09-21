@@ -457,10 +457,10 @@ func TestCheckUpdateURLStrict(t *testing.T) {
 	}{
 		{"https://github.com/imonior/wireguide-plus/releases/download/v1/asset.dmg", true},
 		{"https://objects.githubusercontent.com/x", true},
-		{"http://github.com/x", false},             // non-https
+		{"http://github.com/x", false},                // non-https
 		{"https://evil.example.com/asset.dmg", false}, // disallowed host
-		{"https://github.com.evil.com/x", false},   // lookalike host
-		{"ftp://github.com/x", false},              // non-https scheme
+		{"https://github.com.evil.com/x", false},      // lookalike host
+		{"ftp://github.com/x", false},                 // non-https scheme
 	}
 	for _, c := range cases {
 		u, err := url.Parse(c.url)

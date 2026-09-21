@@ -71,7 +71,19 @@ func (m *LinuxManager) SetPersistentStateDir(dataDir string) {
 
 func (m *LinuxManager) AssignAddress(ifaceName string, addresses []string) error {
 	for _, addr := range addresses {
+		ip, _, err := net.ParseCIDR(addr)
+		if err != nil {
+			return fmt.Errorf("invalid address %q: %w", addr, err)
+		}
 		if err := runCmd("ip", "addr", "add", addr, "dev", ifaceName); err != nil {
+			// The desired address may already be on this interface (a
+			// previous attempt died before rollback) — that is success.
+			if addressOnInterface(ifaceName, ip) {
+				continue
+			}
+			if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
+				return fmt.Errorf("assigning address %s: %w (address is already in use by interface %q — another WireGuard client appears to be running the same tunnel)", addr, err, holder)
+			}
 			return fmt.Errorf("assigning address %s: %w", addr, err)
 		}
 	}

@@ -37,6 +37,10 @@
   // the same way the DNS resolve path row does.
   let keepIdleMode = 'inherit';
   let keepIdleEnabled = false; // master switch from Settings
+  // Durable per-tunnel automation opt-out. Unlike the manual-off latch —
+  // which is cleared every time the app restarts — this survives restarts,
+  // so "leave this tunnel to me" actually sticks. Persisted in the sidecar.
+  let automationDisabled = false;
   let conflictWarn = '';
   let loadErr = '';
   let lastLoadedName = '';
@@ -62,6 +66,7 @@
         useAsDefaultDNS = false;
         dnsResolvePath = false;
         keepIdleMode = 'inherit';
+        automationDisabled = false;
         await loadMaster();
         return;
       }
@@ -73,6 +78,7 @@
       // undefined / null => inherit the global switch.
       const k = p?.keep_connection_on_idle;
       keepIdleMode = k === true ? 'on' : k === false ? 'off' : 'inherit';
+      automationDisabled = !!p?.automation_disabled;
       await loadMaster();
       loadErr = '';
     } catch (e) {
@@ -93,6 +99,7 @@
       dns_resolve_path: dnsResolvePath,
       // null => inherit (field omitted on the wire); true/false => override.
       keep_connection_on_idle: keepIdleMode === 'inherit' ? null : keepIdleMode === 'on',
+      automation_disabled: automationDisabled,
     };
   }
 
@@ -196,6 +203,14 @@
     </div>
   {/if}
 
+  <div class="divider"></div>
+
+  <label class="row">
+    <input type="checkbox" bind:checked={automationDisabled} on:change={persist} />
+    <span class="label-text">{$t('policy.automation_disabled')}</span>
+  </label>
+  <p class="desc">{$t('policy.automation_disabled_hint')}</p>
+
   {#if loadErr}
     <p class="err">{loadErr}</p>
   {/if}
@@ -237,6 +252,10 @@
     line-height: 1.45;
   }
   .field { margin-top: 6px; }
+  .divider {
+    border-top: 1px solid var(--border);
+    margin: 12px 0;
+  }
   .text-input,
   .select-input {
     width: 100%;

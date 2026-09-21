@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.2] - 2026-09-21
+
+### ✨ Added
+
+- **Exclude a tunnel from automation**: a per-tunnel policy switch (Automation → Exclude from automation) stops the engine from ever connecting or disconnecting that tunnel, while keeping its rules and default state. Use it for a tunnel that another WireGuard client also drives, where a manual override would only last until the next restart.
+
+### 🐛 Fixed
+
+- **Automation hammered a tunnel every 30 seconds and spammed the status tray**: when a connect failed — most often because another WireGuard client already held the tunnel's `Address` (Windows reports `The object already exists`) — the reconciler retried on every poll with no back-off, tearing down and rebuilding the Wintun adapter and re-popping the connection toast each cycle. Failed automation connects now back off (30 s → 1 m → 2 m → 5 m, capped) and clear as soon as the tunnel goes active, a manual latch is set, or the network rule changes.
+- **Repeated "connected" toasts for the same state**: the tray now de-duplicates status notifications by signature — a state that has already been announced (or just suppressed) is not re-shown, and the first suppression is logged as Info instead of re-toasting.
+- **A connect failed cryptically at the assign-address step**: `AssignAddress` now treats "address already on this interface" as success (idempotent) and, when the address is genuinely taken, names the conflicting adapter in the error so you can tell which other client is running the same tunnel.
+- **Startup now warns about the same tunnel running elsewhere**: on launch the helper checks every tunnel's `Address` against the machine's live interfaces (excluding its own adapters) and logs a named warning with the stop-service hint when another client already holds it.
+
+### 📝 Docs
+
+- The README documents the "one tunnel, one client" rule and the new per-tunnel "Exclude from automation" switch.
 ## [2.3.1] - 2026-09-21
 
 ### ✨ Added

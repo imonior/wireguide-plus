@@ -1031,6 +1031,17 @@ export class TunnelPolicies {
              */
             this["keep_connection_on_idle"] = undefined;
         }
+        if (!("automation_disabled" in $$source)) {
+            /**
+             * AutomationDisabled exempts this tunnel from the automation engine:
+             * its rules/Default State stay stored, but the helper never acts on
+             * them. Persisted (unlike the manual-off latch, which is per-session),
+             * so "leave this tunnel to me" survives an app restart.
+             * @member
+             * @type {boolean}
+             */
+            this["automation_disabled"] = false;
+        }
 
         Object.assign(this, $$source);
     }

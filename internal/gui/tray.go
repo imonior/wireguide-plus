@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -294,10 +295,18 @@ func trimAndSquare(src image.Image) *image.NRGBA {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			_, _, _, a := src.At(x, y).RGBA()
 			if a > 0 {
-				if x < minX { minX = x }
-				if y < minY { minY = y }
-				if x > maxX { maxX = x }
-				if y > maxY { maxY = y }
+				if x < minX {
+					minX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y > maxY {
+					maxY = y
+				}
 			}
 		}
 	}
@@ -308,7 +317,9 @@ func trimAndSquare(src image.Image) *image.NRGBA {
 	cropH := maxY - minY + 1
 	// Square canvas: use the larger dimension
 	side := cropW
-	if cropH > side { side = cropH }
+	if cropH > side {
+		side = cropH
+	}
 	dst := image.NewNRGBA(image.Rect(0, 0, side, side))
 	offX := (side - cropW) / 2
 	offY := (side - cropH) / 2
@@ -352,7 +363,9 @@ func buildTrayOnIcon(wColor color.NRGBA) []byte {
 	// Green badge: bottom-left corner.
 	w, h := bounds.Dx(), bounds.Dy()
 	cx, cy, r := w/5, h-h/5, h/8
-	if r < 3 { r = 3 }
+	if r < 3 {
+		r = 3
+	}
 	green := color.NRGBA{52, 199, 89, 255} // macOS systemGreen
 	for y := cy - r; y <= cy+r; y++ {
 		for x := cx - r; x <= cx+r; x++ {
@@ -439,9 +452,21 @@ type trayManager struct {
 	// bubble: when the window is closed the bubble is the only place the
 	// user can be told, and the editor's colour marking is invisible then.
 	outOfRange []string
-	hasHandshake       map[string]bool // per-tunnel handshake status
-	rebuildTimer       *time.Timer     // debounce timer for rebuildMenu
-	notifyTimer        *time.Timer     // debounce timer for the status notification
+	// lastNotifiedSig is the (state, names, out-of-range) triple of the last
+	// status bubble we actually showed, and lastSuppressedSig the signature
+	// of the last one we deliberately did NOT show. The bubble reports a
+	// SITUATION, so re-announcing an identical one is pure noise: before
+	// this gate, any churn that left the world exactly as it was — e.g. a
+	// tunnel whose automation connect keeps failing, cycling in and out of
+	// the active set on every poll — re-popped the same "X connected"
+	// bubble every cycle. Reporting is now edge-triggered: a bubble appears
+	// when the situation differs from the last one reported, and stays
+	// silent while it doesn't. Guarded by mu.
+	lastNotifiedSig   string
+	lastSuppressedSig string
+	hasHandshake      map[string]bool // per-tunnel handshake status
+	rebuildTimer      *time.Timer     // debounce timer for rebuildMenu
+	notifyTimer       *time.Timer     // debounce timer for the status notification
 	// menu is the ONE Menu object backing the tray for the app's whole
 	// lifetime. rebuildMenu clears and refills it in place instead of
 	// creating a fresh Menu: Wails reuses the same NSMenu instance on
@@ -597,8 +622,9 @@ func (t *trayManager) initialBuild() {
 // state, and updates the tooltip. Called from the status event stream, so
 // it must stay O(1) — no IPC, no disk I/O.
 //
-//   disconnected → W glyph (white on dark menu bars, black on light)
-//   connected    → same W with a green dot badge
+//	disconnected → W glyph (white on dark menu bars, black on light)
+//	connected    → same W with a green dot badge
+//
 // safeSetIcon updates the tray icon without letting a Win32 API failure
 // kill the app or hang the status stream. Wails' SystemTray.SetIcon
 // dispatches to the main thread via InvokeSync; a failing ShellNotifyIcon
@@ -871,6 +897,30 @@ func (t *trayManager) showStatusNotification() {
 		outOfRange = nil
 	}
 
+	// Edge-triggered reporting: the bubble announces a SITUATION, so an
+	// identical situation is not news. Any churn that leaves the world
+	// unchanged (a failing automation connect cycling the active set, an
+	// offline tunnel repeatedly retried) must not re-pop the same message —
+	// that is what turned "TS453Dmini is connected" into a 30s notification
+	// loop. decideNotification holds the rule; the first suppression of each
+	// distinct situation is logged at Info so "why did no bubble appear?"
+	// stays answerable from the log.
+	sig := notificationSignature(state, names, outOfRange)
+	t.mu.Lock()
+	d := decideNotification(sig, t.lastNotifiedSig, t.lastSuppressedSig)
+	t.lastNotifiedSig, t.lastSuppressedSig = d.NotifiedSig, d.SuppressedSig
+	t.mu.Unlock()
+	if !d.Show {
+		if d.FirstSuppression {
+			slog.Info("popup: connection situation unchanged — bubble suppressed",
+				"state", int(state), "names", strings.Join(names, ","))
+		} else {
+			slog.Debug("popup: connection situation still unchanged — bubble suppressed",
+				"state", int(state), "names", strings.Join(names, ","))
+		}
+		return
+	}
+
 	lang := "en"
 	duration := 10 * time.Second
 	if s, err := t.svc.GetSettings(); err == nil && s != nil {
@@ -894,6 +944,52 @@ func (t *trayManager) showStatusNotification() {
 			}
 		}
 	})
+}
+
+// notificationSignature renders what a status bubble would say as a
+// comparable string, so showStatusNotification can tell "the situation
+// changed" apart from "something churned and settled back where it was".
+// Callers pass already-sorted names; outOfRange is copied and sorted here so
+// a reordered probe-target list can't masquerade as a situation change.
+func notificationSignature(state popupState, names, outOfRange []string) string {
+	oor := append([]string(nil), outOfRange...)
+	sort.Strings(oor)
+	return strconv.Itoa(int(state)) + "|" + strings.Join(names, ",") + "|" + strings.Join(oor, ",")
+}
+
+// notificationDecision is the outcome of the bubble dedup gate.
+type notificationDecision struct {
+	// Show is true when this situation differs from the last one reported.
+	Show bool
+	// NotifiedSig / SuppressedSig are the memos to store back.
+	NotifiedSig   string
+	SuppressedSig string
+	// FirstSuppression marks the first repeat of a situation that was
+	// already reported, which is the one worth an Info log line.
+	FirstSuppression bool
+}
+
+// decideNotification decides whether a status bubble with signature sig
+// should be shown, given the last reported and last suppressed signatures.
+//
+// Pure and side-effect free on purpose (like reconcileAction): the reporting
+// contract — "announce a situation, stay quiet while it does not change" — is
+// the thing that regressed into a notification loop, so it is testable
+// without a live tray.
+func decideNotification(sig, lastNotifiedSig, lastSuppressedSig string) notificationDecision {
+	if sig != lastNotifiedSig {
+		// A new situation: show it, and let a future repeat be logged.
+		return notificationDecision{Show: true, NotifiedSig: sig}
+	}
+	if sig != lastSuppressedSig {
+		// Same as last reported, and this is the first time we suppress it.
+		return notificationDecision{
+			NotifiedSig:      lastNotifiedSig,
+			SuppressedSig:    sig,
+			FirstSuppression: true,
+		}
+	}
+	return notificationDecision{NotifiedSig: lastNotifiedSig, SuppressedSig: lastSuppressedSig}
 }
 
 // scheduleRebuild debounces rebuildMenu calls — multiple triggers within 100ms

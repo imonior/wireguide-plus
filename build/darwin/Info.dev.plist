@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.imonior.wireguide-plus</string>
         <key>CFBundleVersion</key>
-            <string>2.3.1</string>
+            <string>2.3.2</string>
         <key>CFBundleGetInfoString</key>
             <string>WireGuide Plus - WireGuard VPN Client (dev)</string>
         <key>CFBundleShortVersionString</key>
-            <string>2.3.1</string>
+            <string>2.3.2</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>

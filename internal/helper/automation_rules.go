@@ -287,10 +287,34 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 
 	for _, name := range auto.PolicyTunnelNames() {
+		// A tunnel the user exempted from automation is never touched: its
+		// rules stay stored and previewable, but the engine leaves it alone
+		// — the durable counterpart to the per-session manual latches.
+		if h.automationDisabled(name) {
+			slog.Debug("automation: tunnel exempted (automation disabled)",
+				"category", "network", "tunnel", name, "reason", reason)
+			continue
+		}
+		// The situation a back-off reacted to is over as soon as the tunnel
+		// is up, the user has taken over (either latch), or the network
+		// changed — let the next attempt through.
+		if active[name] || manualOff[name] || manualOn[name] || reason == "ssid-change" {
+			h.clearAutoConnectBackoff(name)
+		}
 		rules := auto.PerTunnel[name]
 		state := wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx)
 		switch reconcileAction(state, active[name], manualOff[name], manualOn[name]) {
 		case "connect":
+			// A tunnel stuck in a retry loop (its address held elsewhere,
+			// an unreachable endpoint) must not be re-hammered every poll;
+			// skip until its back-off window elapses. Logged at Debug so the
+			// steady-state poll stays quiet — the failure itself was already
+			// reported at Warn when it happened.
+			if h.autoConnectBackingOff(name) {
+				slog.Debug("automation: connect deferred (back-off after repeated failures)",
+					"category", "network", "tunnel", name, "reason", reason)
+				continue
+			}
 			h.automationConnect(name, reason, ctx.SSID)
 		case "disconnect":
 			slog.Info("automation: rule disconnect",
@@ -341,6 +365,88 @@ func decisionLabel(state wifi.DesiredState, manualOff, manualOn bool) string {
 	return "unmanaged"
 }
 
+// automationDisabled reports whether the tunnel is exempted from automation
+// by its sidecar flag. A read error or a missing store means "not disabled":
+// automation keeps its normal authority, and the user's opt-out is the
+// explicit exception rather than the default.
+func (h *Helper) automationDisabled(name string) bool {
+	if h.userTunnelStore == nil || name == "" {
+		return false
+	}
+	meta, err := h.userTunnelStore.LoadMeta(name)
+	if err != nil || meta == nil {
+		return false
+	}
+	return meta.AutomationDisabled
+}
+
+// autoConnectBackoff tracks consecutive automation-connect failures for one
+// tunnel so a tunnel that cannot come up (its address already held by
+// another WireGuard client, a bad endpoint, ...) is not re-attempted on
+// every poll tick. Each attempt tears down and recreates a Wintun adapter;
+// the churn is what turned "TS453Dmini is connected" into a 30s bubble loop.
+type autoConnectBackoff struct {
+	failures  int
+	nextRetry time.Time
+}
+
+// automationBackoffDelay is the pause after n consecutive failures:
+// 30s, 1m, 2m, then 5m (capped). Kept as an explicit table so the schedule
+// is obvious and testable.
+func automationBackoffDelay(failures int) time.Duration {
+	switch {
+	case failures <= 1:
+		return 30 * time.Second
+	case failures == 2:
+		return time.Minute
+	case failures == 3:
+		return 2 * time.Minute
+	default:
+		return 5 * time.Minute
+	}
+}
+
+// autoConnectBackingOff reports whether the tunnel is inside its back-off
+// window. Caller holds reevalMu (indirectly), the map is guarded by autoFailMu.
+func (h *Helper) autoConnectBackingOff(name string) bool {
+	h.autoFailMu.Lock()
+	defer h.autoFailMu.Unlock()
+	b, ok := h.autoConnectBackoff[name]
+	if !ok {
+		return false
+	}
+	return time.Now().Before(b.nextRetry)
+}
+
+// recordAutoConnectFailure increments the tunnel's failure streak and pushes
+// its next retry out along automationBackoffDelay.
+func (h *Helper) recordAutoConnectFailure(name string) {
+	h.autoFailMu.Lock()
+	defer h.autoFailMu.Unlock()
+	b := h.autoConnectBackoff[name]
+	b.failures++
+	delay := automationBackoffDelay(b.failures)
+	b.nextRetry = time.Now().Add(delay)
+	h.autoConnectBackoff[name] = b
+	slog.Info("automation: connect failure — backing off",
+		"category", "network", "tunnel", name,
+		"consecutive_failures", b.failures,
+		"retry_in", delay.String())
+}
+
+// clearAutoConnectBackoff drops the tunnel's failure streak so the next poll
+// may try again immediately. Called on success, on a manual action, and on a
+// network change — any of which means the situation we backed off from is
+// over.
+func (h *Helper) clearAutoConnectBackoff(name string) {
+	h.autoFailMu.Lock()
+	defer h.autoFailMu.Unlock()
+	if _, ok := h.autoConnectBackoff[name]; ok {
+		delete(h.autoConnectBackoff, name)
+		slog.Debug("automation: connect back-off cleared", "tunnel", name)
+	}
+}
+
 // handleAutomationPreview is a read-only dry-run of the Automation
 // engine: it reports the current network context and each rule-bearing
 // tunnel's evaluated decision, without connecting or disconnecting
@@ -385,6 +491,20 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 	if auto != nil {
 		for _, name := range auto.PolicyTunnelNames() {
 			rules := auto.PerTunnel[name]
+			// The engine skips an exempted tunnel outright, so the preview
+			// must say the same thing rather than show a decision that will
+			// never be acted on.
+			if h.automationDisabled(name) {
+				resp.Tunnels = append(resp.Tunnels, ipc.AutomationTunnelDecision{
+					Name:      name,
+					RuleCount: len(rules),
+					Decision:  "disabled",
+					Active:    active[name],
+					ManualOff: manualOff[name],
+					ManualOn:  manualOn[name],
+				})
+				continue
+			}
 			decision := "unmanaged"
 			switch wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx) {
 			case wifi.StateConnect:
@@ -473,8 +593,10 @@ func (h *Helper) automationConnect(name, reason, ssid string) {
 	h.connectMu.Unlock()
 	if err != nil {
 		slog.Warn("automation connect failed", "tunnel", name, "error", err)
+		h.recordAutoConnectFailure(name)
 		return
 	}
+	h.clearAutoConnectBackoff(name)
 	h.wifiMu.Lock()
 	h.autoConnectedBy[name] = ssid
 	h.wifiMu.Unlock()

@@ -130,6 +130,24 @@ decision re-evaluates the network. A latch indicator in the UI shows whether the
 tunnel action came from a manual override or from automation, so you always know what is
 really driving the connection.
 
+### Excluding a tunnel from automation
+
+A manual override only lasts until the app restarts. For a tunnel that automation must
+**never** drive — typically one that another WireGuard client also controls — set
+**Exclude from automation** in the tunnel's policy panel. The tunnel keeps its rules and
+default state, but the engine will neither connect nor disconnect it.
+
+### One tunnel, one client
+
+Two WireGuard clients cannot run the same tunnel at the same time: the tunnel's `Address`
+is claimed by whichever adapter gets there first, and the second client's connect fails at
+the assign-address step (Windows reports `The object already exists.` / 对象已存在). If you
+also run the official WireGuard client, stop its tunnel service before connecting the same
+tunnel here (e.g. `Stop-Service 'WireGuardTunnel$<tunnel-name>'`), or exclude the tunnel
+from automation (above). WireGuide Plus detects this at startup, names the conflicting
+adapter in the helper log, and retries failed automation connects with a back-off
+(30 s → 1 m → 2 m → 5 m) instead of hammering the adapter every poll.
+
 ### Condition types
 
 | Condition | What it matches | Use case |

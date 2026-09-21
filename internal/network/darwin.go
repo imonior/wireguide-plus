@@ -128,11 +128,25 @@ func (m *DarwinManager) AssignAddress(ifaceName string, addresses []string) erro
 		if ip.To4() != nil {
 			// IPv4: ifconfig <if> inet <cidr> <ip> alias
 			if err := run("ifconfig", ifaceName, "inet", addr, ip.String(), "alias"); err != nil {
+				if addressOnInterface(ifaceName, ip) {
+					// A previous attempt died before rollback; the desired
+					// state is already in place.
+					continue
+				}
+				if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
+					return fmt.Errorf("assigning address %s: %w (address is already in use by interface %q — another WireGuard client appears to be running the same tunnel)", addr, err, holder)
+				}
 				return fmt.Errorf("assigning address %s: %w", addr, err)
 			}
 		} else {
 			// IPv6: ifconfig <if> inet6 <cidr> alias
 			if err := run("ifconfig", ifaceName, "inet6", addr, "alias"); err != nil {
+				if addressOnInterface(ifaceName, ip) {
+					continue
+				}
+				if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
+					return fmt.Errorf("assigning address %s: %w (address is already in use by interface %q — another WireGuard client appears to be running the same tunnel)", addr, err, holder)
+				}
 				return fmt.Errorf("assigning address %s: %w", addr, err)
 			}
 		}

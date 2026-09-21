@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	githubRepo     = "imonior/wireguide-plus"
-	apiEndpoint    = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	githubRepo  = "imonior/wireguide-plus"
+	apiEndpoint = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
 
 	// GitHubReleasesURL is the human-facing releases page.
 	GitHubReleasesURL = "https://github.com/" + githubRepo + "/releases/latest"
@@ -285,14 +285,14 @@ type Asset struct {
 
 // UpdateInfo contains information about an available update.
 type UpdateInfo struct {
-	Available    bool   `json:"available"`
-	Version      string `json:"version"`
-	CurrentVer   string `json:"current_version"`
-	ReleaseURL   string `json:"release_url"`
-	DownloadURL  string `json:"download_url"`
-	ReleaseNotes string `json:"release_notes"`
-	AssetName    string `json:"asset_name"`
-	AssetSize    int64  `json:"asset_size"`
+	Available         bool   `json:"available"`
+	Version           string `json:"version"`
+	CurrentVer        string `json:"current_version"`
+	ReleaseURL        string `json:"release_url"`
+	DownloadURL       string `json:"download_url"`
+	ReleaseNotes      string `json:"release_notes"`
+	AssetName         string `json:"asset_name"`
+	AssetSize         int64  `json:"asset_size"`
 	ChecksumURL       string `json:"checksum_url,omitempty"`  // URL to SHA256SUMS file
 	ExpectedHash      string `json:"expected_hash,omitempty"` // pre-parsed SHA256 for this asset
 	HashVerified      bool   `json:"hash_verified"`           // set to true after successful checksum verification
@@ -307,11 +307,11 @@ type UpdateInfo struct {
 // 301 us to a server that serves a malicious binary plus matching
 // SHA256SUMS, defeating checksum verification.
 var allowedRedirectHosts = map[string]bool{
-	"api.github.com":              true,
-	"github.com":                  true,
-	"objects.githubusercontent.com": true,
+	"api.github.com":                       true,
+	"github.com":                           true,
+	"objects.githubusercontent.com":        true,
 	"release-assets.githubusercontent.com": true,
-	"codeload.github.com":         true,
+	"codeload.github.com":                  true,
 }
 
 // updateCheckRedirect rejects any redirect whose target host isn't in

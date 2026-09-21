@@ -245,6 +245,16 @@ type Helper struct {
 	userTunnelStore *storage.TunnelStore
 	userAppSupport  string
 
+	// autoFailMu guards autoConnectBackoff. A tunnel whose automation
+	// connect keeps failing (e.g. its address is held by another WireGuard
+	// client) must not be re-attempted on every 30s poll: each attempt
+	// churns a Wintun adapter, and the resulting churn in the active set is
+	// what made the tray re-announce "X connected" every cycle. Failed
+	// tunnels back off geometrically; a success, a manual action or a
+	// network change clears the entry.
+	autoFailMu         sync.Mutex
+	autoConnectBackoff map[string]autoConnectBackoff
+
 	// startedAt is when the helper process started. It bounds the
 	// post-connect rule re-check to the startup window (see
 	// scheduleRuleCheck in automation_rules.go): a tunnel that a GUI restore or
@@ -291,15 +301,16 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	manager.SetEndpointProtector(fw)
 
 	h := &Helper{
-		server:          ipc.NewServer(listener, ownerUID).WithOwnerSID(ownerSID),
-		manager:         manager,
-		firewall:        fw,
-		activeCfgs:      make(map[string]*domain.WireGuardConfig),
-		latencyByTunnel: make(map[string]float64),
-		autoConnectedBy: make(map[string]string),
-		logLevel:        new(slog.LevelVar), // defaults to Info
-		done:            make(chan struct{}),
-		startedAt:       time.Now(),
+		server:             ipc.NewServer(listener, ownerUID).WithOwnerSID(ownerSID),
+		manager:            manager,
+		firewall:           fw,
+		activeCfgs:         make(map[string]*domain.WireGuardConfig),
+		latencyByTunnel:    make(map[string]float64),
+		autoConnectedBy:    make(map[string]string),
+		autoConnectBackoff: make(map[string]autoConnectBackoff),
+		logLevel:           new(slog.LevelVar), // defaults to Info
+		done:               make(chan struct{}),
+		startedAt:          time.Now(),
 	}
 
 	// The eval mailbox MUST exist before anything can post into it (the
@@ -360,6 +371,14 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	if recovered := fw.RecoverFromCrash(); recovered {
 		slog.Warn("recovered firewall state from previous crash")
 	}
+
+	// Startup address-conflict self-check: a tunnel Address already held by
+	// some other adapter means another WireGuard client is running the same
+	// tunnel, and every connect attempt will die at the assign-address step
+	// with "The object already exists." Naming the competing adapter at
+	// startup turns that from a per-30s mystery failure into a one-line
+	// diagnosis. Read-only; never blocks startup.
+	h.goSafe("addr-conflict-check", h.checkAddressConflicts)
 
 	// Reconnect monitor — uses cached config
 	h.monitor = reconnect.NewMonitor(manager, h.reconnectFn, h.onReconnectState, reconnect.DefaultConfig())

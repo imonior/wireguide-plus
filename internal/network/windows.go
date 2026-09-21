@@ -80,20 +80,54 @@ func (m *WindowsManager) AssignAddress(ifaceName string, addresses []string) err
 		}
 		// netsh expects separate IP and subnet mask, not CIDR notation.
 		mask := net.IP(ipNet.Mask).String()
+		var args []string
 		if i == 0 {
 			// First address: use 'set' to transition from DHCP to static
-			if err := runWin("netsh", "interface", "ip", "set", "address",
-				ifaceName, "static", ip.String(), mask); err != nil {
-				return fmt.Errorf("assigning address %s: %w", addr, err)
-			}
+			args = []string{"interface", "ip", "set", "address",
+				ifaceName, "static", ip.String(), mask}
 		} else {
 			// Additional addresses: use 'add'
-			if err := runWin("netsh", "interface", "ip", "add", "address",
-				ifaceName, ip.String(), mask); err != nil {
-				return fmt.Errorf("assigning address %s: %w", addr, err)
-			}
+			args = []string{"interface", "ip", "add", "address",
+				ifaceName, ip.String(), mask}
+		}
+		if err := m.assignWithRetry(ifaceName, addr, ip, args); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// assignWithRetry runs one netsh address command and applies the two
+// documented recovery paths before giving up:
+//
+//  1. Retry the identical command once. Per MS KB 2555789, netsh against a
+//     freshly created adapter can fail with "The object already exists."
+//     (对象已存在) because a stale address object from the adapter's previous
+//     incarnation is parked in the TCP/IP stack; re-running the same command
+//     succeeds.
+//  2. If the retry still fails, treat an address that is already bound to
+//     THIS interface as success (a previous attempt died before rollback —
+//     the desired end state is already reached), and otherwise name the
+//     adapter that actually holds the IP so the user can see the conflict
+//     instead of a bare exit-status line.
+func (m *WindowsManager) assignWithRetry(ifaceName, addr string, ip net.IP, args []string) error {
+	err := runWin("netsh", args...)
+	if err == nil {
+		return nil
+	}
+	if err2 := runWin("netsh", args...); err2 != nil {
+		if addressOnInterface(ifaceName, ip) {
+			slog.Info("address already assigned to interface — treating as success",
+				"category", "network", "interface", ifaceName, "address", ip.String())
+			return nil
+		}
+		if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
+			return fmt.Errorf("assigning address %s: %w (address is already in use by adapter %q — another WireGuard client appears to be running the same tunnel)", addr, err2, holder)
+		}
+		return fmt.Errorf("assigning address %s: %w", addr, err2)
+	}
+	slog.Info("netsh address assignment succeeded on retry (KB 2555789 stale-object condition)",
+		"category", "network", "interface", ifaceName, "address", ip.String())
 	return nil
 }
 

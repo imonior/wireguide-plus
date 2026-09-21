@@ -20,6 +20,11 @@ type TunnelPolicies struct {
 	// (encoded as the field being absent); the GUI sends null for that
 	// state and true/false for an explicit override.
 	KeepConnectionOnIdle *bool `json:"keep_connection_on_idle,omitempty"`
+	// AutomationDisabled exempts this tunnel from the automation engine:
+	// its rules/Default State stay stored, but the helper never acts on
+	// them. Persisted (unlike the manual-off latch, which is per-session),
+	// so "leave this tunnel to me" survives an app restart.
+	AutomationDisabled bool `json:"automation_disabled"`
 }
 
 // GetTunnelPolicies returns the private policies of a tunnel.
@@ -34,6 +39,7 @@ func (s *TunnelService) GetTunnelPolicies(name string) (*TunnelPolicies, error) 
 		UseAsDefaultDNS:      meta.UseAsDefaultDNS,
 		DNSResolvePath:       meta.DNSResolvePath,
 		KeepConnectionOnIdle: meta.KeepConnectionOnIdle,
+		AutomationDisabled:   meta.AutomationDisabled,
 	}, nil
 }
 
@@ -58,6 +64,7 @@ func (s *TunnelService) SetTunnelPolicies(name string, policies TunnelPolicies) 
 		meta.UseAsDefaultDNS = policies.UseAsDefaultDNS
 		meta.DNSResolvePath = policies.DNSResolvePath
 		meta.KeepConnectionOnIdle = policies.KeepConnectionOnIdle
+		meta.AutomationDisabled = policies.AutomationDisabled
 	}); err != nil {
 		return err
 	}

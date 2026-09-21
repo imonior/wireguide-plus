@@ -479,6 +479,15 @@ type TunnelMeta struct {
 	// the sidecar, never the .conf, so standard WireGuard/AWG clients ignore
 	// it.
 	KeepConnectionOnIdle *bool `json:"keep_connection_on_idle,omitempty"`
+
+	// AutomationDisabled exempts this tunnel from the automation engine: its
+	// rules and Default State are still stored and previewable, but the
+	// helper never connects or disconnects it on their behalf. This is the
+	// durable answer to "my manual stop will not stick" — unlike the
+	// in-memory manual-off latch (settings.ManualOffTunnels), which is
+	// cleared on every app start, this survives restarts. Lives in the
+	// sidecar, never the .conf.
+	AutomationDisabled bool `json:"automation_disabled,omitempty"`
 }
 
 // ProbeTargetSlotCount is how many probe-target rows the tunnel editor
