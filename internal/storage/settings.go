@@ -50,11 +50,22 @@ type Settings struct {
 	// no per-tunnel toggle is shown, nothing is enforced, and no conflict
 	// is reported. Turning it on only reveals the per-tunnel switches —
 	// each tunnel still has to opt in on its own.
-	DNSResolvePath bool   `json:"dns_resolve_path"`
-	HealthCheck    bool   `json:"health_check"`  // periodic handshake age monitoring
-	PinInterface   bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
-	LogLevel       string `json:"log_level"`     // "debug", "info", "warn", "error"
-	CompactList    bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
+	DNSResolvePath bool `json:"dns_resolve_path"`
+	HealthCheck    bool `json:"health_check"` // periodic handshake age monitoring
+	// KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
+	// while the machine is idle — screen-saver, display sleep, session lock,
+	// or (after wake) a brief suspend. ON by default: when enabled, tunnels
+	// that have no PersistentKeepalive of their own get one forced at runtime
+	// (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
+	// instead of silently dying; a dead-but-interface-up link also freezes
+	// its uptime counter (Layer A) instead of inflating it. A tunnel may opt
+	// out via TunnelMeta.KeepConnectionOnIdle (per-tunnel override). Turning
+	// this off disables the feature for every tunnel (the per-tunnel switch
+	// is gated, exactly like DNSResolvePath).
+	KeepConnectionOnIdle bool   `json:"keep_connection_on_idle"`
+	PinInterface         bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
+	LogLevel             string `json:"log_level"`     // "debug", "info", "warn", "error"
+	CompactList          bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
 	// LogRetentionDays is how many days of daily log files to keep.
 	// 0 means the default (7). Files older than this are removed at
 	// startup and whenever settings are saved.
@@ -318,6 +329,7 @@ func DefaultSettings() *Settings {
 		TrayIconStyle:        "color",
 		NotifyDurationMs:     10000, // 10s default notification duration
 		HealthCheck:          false,
+		KeepConnectionOnIdle: true,  // keep tunnels alive through idle/screen-saver/lock by default
 		PinInterface:         false, // off by default — enable for dual-network setups
 		EnableAWG:            true,  // AWG support is on by default
 		LogLevel:             "info",
@@ -355,6 +367,30 @@ func (s *Settings) DisconnectOnQuitEnabled() bool {
 		return true
 	}
 	return *s.DisconnectOnQuit
+}
+
+// KeepConnectionOnIdleEnabled reports whether the master switch is on. When
+// off the per-tunnel override is inert and the feature does not exist (no
+// forced keepalive, no idle self-heal) — same gating model as DNSResolvePath.
+func (s *Settings) KeepConnectionOnIdleEnabled() bool {
+	return s != nil && s.KeepConnectionOnIdle
+}
+
+// KeepConnectionOnIdleEffective resolves the per-tunnel "keep connection on
+// idle" decision: the master switch must be on, and a tunnel may opt out (or
+// in) via its meta override. A nil override inherits the global ON default,
+// so both existing tunnels and newly-added ones keep their connection alive
+// through idle/screen-saver/lock by default — exactly the behaviour the user
+// asked for. A non-nil *false opts the tunnel out; *true opts it in
+// explicitly even if (hypothetically) the global default were ever flipped.
+func KeepConnectionOnIdleEffective(settings *Settings, meta *TunnelMeta) bool {
+	if !settings.KeepConnectionOnIdleEnabled() {
+		return false
+	}
+	if meta != nil && meta.KeepConnectionOnIdle != nil {
+		return *meta.KeepConnectionOnIdle
+	}
+	return true
 }
 
 // SettingsStore manages the app settings JSON file.

@@ -1084,3 +1084,65 @@ func TestDisconnectAll_IncludesConnecting(t *testing.T) {
 		t.Fatal("vpn1 should be disconnected after DisconnectAll")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Honest-duration accumulator (Layer A: freeze dead-upstream time)
+// ---------------------------------------------------------------------------
+
+func TestAdvanceDuration_FreezesWhenStale(t *testing.T) {
+	mgr := newTestManagerWithDir(&mockNetworkManager{}, succeedingFactory(), t.TempDir())
+	e := &tunnelEntry{state: domain.StateConnected}
+	mgr.tunnels["t"] = e
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Tick 1: first accounting tick — anchors baseline, no accumulation.
+	healthy := &domain.ConnectionStatus{HandshakeStale: false}
+	mgr.advanceDuration(e, healthy, t0)
+	if e.healthyAccum != 0 || e.paused {
+		t.Fatalf("first tick should anchor baseline: accum=%v paused=%v", e.healthyAccum, e.paused)
+	}
+
+	// Tick 2: 10s of healthy time → accumulator grows, not paused.
+	mgr.advanceDuration(e, healthy, t0.Add(10*time.Second))
+	if e.healthyAccum != 10*time.Second || e.paused {
+		t.Fatalf("healthy tick should add 10s: accum=%v paused=%v", e.healthyAccum, e.paused)
+	}
+
+	// Tick 3: peer goes stale for 30s → frozen, marked paused.
+	stale := &domain.ConnectionStatus{HandshakeStale: true}
+	mgr.advanceDuration(e, stale, t0.Add(40*time.Second))
+	if e.healthyAccum != 10*time.Second || !e.paused {
+		t.Fatalf("stale tick should freeze at 10s and pause: accum=%v paused=%v", e.healthyAccum, e.paused)
+	}
+
+	// Tick 4 + 5: still stale for another 20s → stays frozen.
+	mgr.advanceDuration(e, stale, t0.Add(60*time.Second))
+	if e.healthyAccum != 10*time.Second || !e.paused {
+		t.Fatalf("repeated stale should stay frozen: accum=%v paused=%v", e.healthyAccum, e.paused)
+	}
+
+	// Tick 6: peer recovers → resume counting from where we left off.
+	mgr.advanceDuration(e, healthy, t0.Add(90*time.Second))
+	if e.healthyAccum != 40*time.Second || e.paused {
+		t.Fatalf("recovery should resume to 40s total: accum=%v paused=%v", e.healthyAccum, e.paused)
+	}
+}
+
+func TestAdvanceDuration_IgnoresClockSkew(t *testing.T) {
+	mgr := newTestManagerWithDir(&mockNetworkManager{}, succeedingFactory(), t.TempDir())
+	e := &tunnelEntry{state: domain.StateConnected}
+	mgr.tunnels["t"] = e
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	healthy := &domain.ConnectionStatus{HandshakeStale: false}
+	mgr.advanceDuration(e, healthy, t0)
+	// A second call at the same instant (or clock moving backward) must not
+	// subtract or add — guards against the real-world "shows negative" class
+	// of bug and against double-accounting when call sites fire together.
+	mgr.advanceDuration(e, healthy, t0)
+	mgr.advanceDuration(e, healthy, t0.Add(-5*time.Second))
+	if e.healthyAccum != 0 {
+		t.Fatalf("zero/negative elapsed must not change accumulator: accum=%v", e.healthyAccum)
+	}
+}

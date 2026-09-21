@@ -163,6 +163,10 @@
     disconnect_on_quit: true,
     notify_duration_ms: DEFAULT_NOTIFY_DURATION,
     health_check: false,
+    // Backend default is true (a missing key means true); mirrored here so the
+    // toggle renders ON for a config.json written before the key existed,
+    // instead of showing an OFF the user never chose.
+    keep_connection_on_idle: true,
     dns_resolve_path: false,
     pin_interface: false,
     log_level: 'info',
@@ -201,6 +205,9 @@
           ? Number(s.notify_duration_ms)
           : DEFAULT_NOTIFY_DURATION;
         settings.health_check = s.health_check ?? false;
+        // Backend default is true; a pre-existing config.json has no key, so
+        // `?? true` keeps the toggle ON rather than silently flipping it off.
+        settings.keep_connection_on_idle = s.keep_connection_on_idle ?? true;
         settings.dns_resolve_path = s.dns_resolve_path ?? false;
         settings.pin_interface = s.pin_interface ?? false;
         settings.log_level = s.log_level || 'info';
@@ -277,6 +284,7 @@
         disconnect_on_quit: settings.disconnect_on_quit,
         notify_duration_ms: settings.notify_duration_ms,
         health_check: settings.health_check,
+        keep_connection_on_idle: settings.keep_connection_on_idle,
         dns_resolve_path: settings.dns_resolve_path,
         pin_interface: settings.pin_interface,
         log_level: settings.log_level,
@@ -574,6 +582,15 @@
     });
   }
 
+  function onKeepConnectionOnIdleChange(e) {
+    applyLiveToggle({
+      stateKey: 'keep_connection_on_idle',
+      domChecked: e.target.checked,
+      friendlyName: $t('settings.keep_connection_on_idle'),
+      call: (v) => TunnelService.SetKeepConnectionOnIdle(v),
+    });
+  }
+
   // --- Proxy (for update checks) ---
   // Two distinct outbound paths, both for networks that cannot reach
   // api.github.com directly (e.g. mainland China):
@@ -650,6 +667,7 @@
   function onSettingsChanged(event) {
     const p = event?.data || {};
     if (p.health_check != null) settings.health_check = p.health_check;
+    if (p.keep_connection_on_idle != null) settings.keep_connection_on_idle = p.keep_connection_on_idle;
     if (p.pin_interface != null) settings.pin_interface = p.pin_interface;
     if (p.log_level != null) settings.log_level = p.log_level;
     // Proxy fields too — otherwise a `wireguideplus ctl` mode switch
@@ -925,6 +943,18 @@
                   <input id="health-check" type="checkbox"
                     checked={settings.health_check}
                     on:change={onHealthCheckChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="keep-connection-on-idle">{$t('settings.keep_connection_on_idle')}</label>
+                  <p class="setting-desc">{$t('settings.keep_connection_on_idle_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="keep-connection-on-idle" type="checkbox"
+                    checked={settings.keep_connection_on_idle}
+                    on:change={onKeepConnectionOnIdleChange} />
                   <span class="toggle-track"></span>
                 </label>
               </div>

@@ -104,6 +104,17 @@ type Monitor struct {
 	running         bool
 	sleepDetector   SleepDetector
 	networkDetector NetworkChangeDetector
+	// sessionDetector fires on Windows session RESUME (display on / unlock)
+	// so the monitor can self-heal a tunnel that died while idle. nil on
+	// platforms without a session model.
+	sessionDetector SessionDetector
+
+	// keepAliveFor reports whether a given tunnel should be kept alive
+	// through idle (the global "keep connection on idle" switch gated by
+	// per-tunnel override). When a session resumes and the tunnel is dead,
+	// healIfNeeded only reconnects tunnels for which this returns true.
+	// nil means "heal everything" (conservative default if unset).
+	keepAliveFor func(string) bool
 
 	// retries holds in-flight reconnect goroutines keyed by tunnel
 	// name. Per-tunnel state preserves backoff across cross-cause
@@ -128,6 +139,7 @@ func NewMonitor(manager TunnelManager, reconnectFn ReconnectFunc, statusFn Statu
 		stopCh:             make(chan struct{}),
 		sleepDetector:      NewSleepDetector(),
 		networkDetector:    NewNetworkChangeDetector(),
+		sessionDetector:    NewSessionDetector(),
 		retries:            make(map[string]*retryState),
 		healthCheckEnabled: false, // default OFF — enable in Settings
 	}
@@ -150,6 +162,15 @@ func (m *Monitor) SetHealthCheck(enabled bool) {
 	defer m.mu.Unlock()
 	m.healthCheckEnabled = enabled
 	slog.Info("health check toggled", "enabled", enabled)
+}
+
+// SetKeepAlivePredicate installs the "keep connection on idle" resolver used
+// by healIfNeeded on session resume. Must be called before Start(). A nil
+// predicate means "heal every dead tunnel" (conservative default).
+func (m *Monitor) SetKeepAlivePredicate(fn func(string) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.keepAliveFor = fn
 }
 
 // Start begins monitoring the tunnel connection.
@@ -217,12 +238,16 @@ func (m *Monitor) Stop() {
 	// caller, which then prevents wg.Wait() from ever returning.
 	sd := m.sleepDetector
 	nd := m.networkDetector
+	ss := m.sessionDetector
 	m.mu.Unlock()
 	if sd != nil {
 		sd.Stop()
 	}
 	if nd != nil {
 		nd.Stop()
+	}
+	if ss != nil {
+		ss.Stop()
 	}
 
 	// Wait for goroutines to exit outside the lock to avoid deadlock.
@@ -649,6 +674,9 @@ func (m *Monitor) triggerLoop() {
 	if m.networkDetector != nil {
 		m.networkDetector.Start()
 	}
+	if m.sessionDetector != nil {
+		m.sessionDetector.Start()
+	}
 
 	var wakeCh <-chan struct{}
 	if m.sleepDetector != nil {
@@ -657,6 +685,10 @@ func (m *Monitor) triggerLoop() {
 	var netCh <-chan struct{}
 	if m.networkDetector != nil {
 		netCh = m.networkDetector.ChangeChan()
+	}
+	var resumeCh <-chan struct{}
+	if m.sessionDetector != nil {
+		resumeCh = m.sessionDetector.ResumeChan()
 	}
 
 	for {
@@ -675,7 +707,45 @@ func (m *Monitor) triggerLoop() {
 			if m.manager.IsConnected() || m.manager.ActiveTunnel() != "" {
 				m.triggerReconnect()
 			}
+		case <-resumeCh:
+			// Session resumed (display on / unlock). Only heal tunnels
+			// that are actually dead — a healthy tunnel is left alone so
+			// the user doesn't see a needless reconnect blip. Respects the
+			// per-tunnel "keep connection on idle" opt-out.
+			slog.Info("session resume detected, self-healing dead tunnels")
+			m.healIfNeeded()
 		}
+	}
+}
+
+// healIfNeeded reconnects any tunnel that is currently dead or has a stale
+// handshake, but only when the tunnel hasn't opted out of "keep connection on
+// idle". A healthy tunnel is left untouched. Called on session resume (and is
+// a no-op on platforms without a session monitor, since resumeCh is never
+// signalled there).
+func (m *Monitor) healIfNeeded() {
+	m.mu.Lock()
+	keepAlive := m.keepAliveFor
+	m.mu.Unlock()
+
+	statuses := m.manager.AllStatuses()
+	for _, s := range statuses {
+		if s == nil {
+			continue
+		}
+		dead := s.State != domain.StateConnected || s.HandshakeStale
+		if !dead {
+			continue
+		}
+		name := s.TunnelName
+		if keepAlive != nil && !keepAlive(name) {
+			slog.Info("session resume: tunnel opted out of keep-alive, not healing",
+				"tunnel", name)
+			continue
+		}
+		slog.Info("session resume: tunnel dead, triggering reconnect",
+			"tunnel", name, "state", string(s.State), "handshake_stale", s.HandshakeStale)
+		m.triggerReconnectTunnel(name)
 	}
 }
 

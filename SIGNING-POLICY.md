@@ -33,9 +33,9 @@ the primary, user-verifiable trust anchor for the Windows installers.
 The signing policy applies to the Windows NSIS installer artifacts (every release
 ships all three architectures):
 
-- `wireguideplus-x86-installer.exe` (32-bit installer)
-- `wireguideplus-amd64-installer.exe` (64-bit installer)
-- `wireguideplus-arm64-installer.exe` (ARM64 installer)
+- `wireguideplus-<version>-x86-installer.exe` (32-bit installer)
+- `wireguideplus-<version>-amd64-installer.exe` (64-bit installer)
+- `wireguideplus-<version>-arm64-installer.exe` (ARM64 installer)
 
 macOS and Linux artifacts are not in scope (macOS uses ad-hoc signing
 via `codesign`; Linux ships unsigned).

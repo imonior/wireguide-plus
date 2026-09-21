@@ -4,6 +4,25 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.1] - 2026-09-21
+
+### ✨ Added
+
+- **Keep the tunnel alive while the screen is off, locked, or the machine sleeps**: a new *Keep connection while idle* setting (on by default, overridable per tunnel) forces a persistent keepalive when a tunnel connects, so it survives display-off, screen-saver and lock instead of dying quietly. After a suspend, the app re-probes on wake and reconnects automatically. Windows now watches display power and session lock/unlock in addition to system suspend, so a screen-saver or a locked screen no longer leaves a dead tunnel behind.
+
+### 🐛 Fixed
+
+- **The app claimed WebView2 was missing on machines where it was installed (Windows)**: the start-up check read only the 64-bit registry view, but the Evergreen runtime registers under the 32-bit view (`WOW6432Node`) — so a 64-bit build always concluded the runtime was absent and popped a bogus "download WebView2" prompt, and cancelling it exited the app. The probe now checks both registry views in both hives plus the on-disk install folder, with a post-launch fallback for the rare case where the runtime looks present but still fails to start.
+- **A dead tunnel kept showing a growing connected time**: the duration counted wall-clock time from connect, so when the machine slept or the screen-saver stopped the handshake the timer kept climbing — a tunnel that had actually died overnight showed "22 hours". The duration now freezes while the peer stops answering and resumes when it recovers, and the detail view labels the frozen state.
+
+### 🔧 Changed
+
+- **Release artifacts now embed the version**: installers, portable archives and the `.deb` / `.dmg` carry the release version (e.g. `wireguideplus-2.3.1-amd64-installer.exe`), so a download is self-identifying and multiple versions no longer overwrite each other in the same folder. The update checker already matches by name tokens, so older builds keep updating normally.
+
+### 🛠 Internal
+
+- **Idle-session monitoring is a first-class, cross-platform seam**: a `SessionDetector` reports resume (display-on / unlock) on Windows and is a no-op elsewhere, feeding the existing reconnect monitor — which only reconnects dead or stale tunnels, so a healthy tunnel is never disturbed.
+
 ## [2.3.0] - 2026-09-20
 
 ### ✨ Added

@@ -22,6 +22,7 @@ WireGuide Plus 是對開源專案 [`korjwl1/wireguide`](https://github.com/korjw
 - **條件自動連接** — 以 Wi-Fi SSID / 時間段 / 系統啟動為觸發條件，自動連接或斷開隧道；
   規則支援優先級與互斥。
 - **自動重連** — 意外斷線後隧道自動恢復，連線狀態即時顯示。
+- **螢幕熄滅、鎖定或睡眠時保持連線** — 一項設定（預設開啟，可依隧道覆寫），讓隧道在螢幕熄滅、螢幕保護與鎖定下保持存活，並在機器從睡眠喚醒後自動重連。
 - **登入時自動啟動** — 登入後自動啟動 WireGuide Plus 並依規則連接（搭配「最小化啟動」
   視窗啟動即收攏）。
 - **最小化啟動** — Windows 上啟動後最小化到工作列（工作列圖示保留，主視窗隨時可重新
@@ -122,11 +123,11 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 
 **安裝程式（建議）**
 
-- Windows x64 安裝程式：`wireguideplus-amd64-installer.exe`
-- Windows x86（32 位元）安裝程式：`wireguideplus-x86-installer.exe`
-- Windows ARM64 安裝程式：`wireguideplus-arm64-installer.exe`
+- Windows x64 安裝程式：`wireguideplus-<version>-amd64-installer.exe`
+- Windows x86（32 位元）安裝程式：`wireguideplus-<version>-x86-installer.exe`
+- Windows ARM64 安裝程式：`wireguideplus-<version>-arm64-installer.exe`
 
-安裝程式檔名內嵌架構（`wireguideplus-<arch>-installer.exe`，arch 為 `x86` / `amd64` /
+安裝程式檔名內嵌版本與架構（`wireguideplus-<version>-<arch>-installer.exe`，arch 為 `x86` / `amd64` /
 `arm64`），安裝後程式檔名同樣帶架構（`wireguideplus-<arch>.exe`，在檔案內容→詳細資料中
 亦顯示）。64 位元安裝程式預設安裝至 `C:\Program Files\WireGuide Plus`；32 位元安裝程式
 預設安裝至 `C:\Program Files (x86)\WireGuide Plus`（32 位元系統為
@@ -152,8 +153,8 @@ Android / iOS 上，系統核心與權限限制使 WireGuard 實作無法**同�
 
 驅動 DLL 來自 `wintun-0.14.1.zip`（見
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)）。Release 提供打包好的
-免安裝 zip（`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
-`wireguideplus-arm64-portable.zip`），內含 exe **與**相符架構的驅動 DLL——下載後解壓縮
+免安裝 zip（`wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-x86-portable.zip` /
+`wireguideplus-<version>-arm64-portable.zip`），內含 exe **與**相符架構的驅動 DLL——下載後解壓縮
 即可執行。Release 不再單獨附驅動 DLL（請使用免安裝 zip 或安裝程式）。缺少相符的驅動
 DLL 時無法建立隧道。
 
@@ -163,8 +164,8 @@ DLL 時無法建立隧道。
 
 每個 Release 提供兩個產物：
 
-- `WireGuidePlus-darwin-arm64.dmg` — 拖曳至「應用程式」的安裝器。
-- `WireGuidePlus-darwin-arm64.zip` — 免安裝 `.app` 套件。
+- `WireGuidePlus-<version>-darwin-arm64.dmg` — 拖曳至「應用程式」的安裝器。
+- `WireGuidePlus-<version>-darwin-arm64.zip` — 免安裝 `.app` 套件。
 
 開啟 `.dmg`，將 **WireGuide Plus** 拖入「應用程式」，再從聚焦或啟動台開啟。免安裝版 `.zip` 解壓後即為 `wireguideplus.app`，可直接執行。
 
@@ -175,17 +176,17 @@ DLL 時無法建立隧道。
   ```sh
   xattr -dr com.apple.quarantine /Applications/wireguideplus.app
   ```
-- 同時提供 Homebrew cask（arm64 版）：`brew install --cask wireguideplus` 取得的也是同一個 `WireGuidePlus-darwin-arm64.zip`。
+- 同時提供 Homebrew cask（arm64 版）：`brew install --cask wireguideplus` 取得的也是同一個 `WireGuidePlus-<version>-darwin-arm64.zip`。
 - **位置服務授權（用於依 SSID 自動化）**。依 SSID 自動連接會讀取目前 Wi-Fi SSID，而在 macOS 上這需要 **位置服務** 權限。請在 **系統設定 → 隱私權與安全性 → 位置服務** 中開啟（先打開總開關，再允許 WireGuide Plus）；否則 SSID 條件無法評估，基於 SSID 的規則不會觸發。
 
 ### Linux（實驗性）
 
 每個架構（`amd64`、`arm64`）提供兩個產物：
 
-- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu 安裝套件。
-- `WireGuidePlus-linux-<arch>-portable.tar.gz` — 免安裝二進位。
+- `WireGuidePlus-<version>-linux-<arch>.deb` — Debian / Ubuntu 安裝套件。
+- `WireGuidePlus-<version>-linux-<arch>-portable.tar.gz` — 免安裝二進位。
 
-用套件管理員安裝 `.deb`，例如 `sudo apt install ./WireGuidePlus-linux-amd64.deb`；或解壓免安裝包後執行 `./wireguideplus`。免安裝版需要 GTK3 / WebKitGTK 執行期函式庫，`.deb` 會自動安裝；裸系統請先安裝：
+用套件管理員安裝 `.deb`，例如 `sudo apt install ./WireGuidePlus-<version>-linux-amd64.deb`；或解壓免安裝包後執行 `./wireguideplus`。免安裝版需要 GTK3 / WebKitGTK 執行期函式庫，`.deb` 會自動安裝；裸系統請先安裝：
 
 ```sh
 sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1

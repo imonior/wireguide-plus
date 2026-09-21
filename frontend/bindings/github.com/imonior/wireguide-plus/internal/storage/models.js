@@ -503,6 +503,23 @@ export class Settings {
              */
             this["health_check"] = false;
         }
+        if (!("keep_connection_on_idle" in $$source)) {
+            /**
+             * KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
+             * while the machine is idle — screen-saver, display sleep, session lock,
+             * or (after wake) a brief suspend. ON by default: when enabled, tunnels
+             * that have no PersistentKeepalive of their own get one forced at runtime
+             * (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
+             * instead of silently dying; a dead-but-interface-up link also freezes
+             * its uptime counter (Layer A) instead of inflating it. A tunnel may opt
+             * out via TunnelMeta.KeepConnectionOnIdle (per-tunnel override). Turning
+             * this off disables the feature for every tunnel (the per-tunnel switch
+             * is gated, exactly like DNSResolvePath).
+             * @member
+             * @type {boolean}
+             */
+            this["keep_connection_on_idle"] = false;
+        }
         if (!("pin_interface" in $$source)) {
             /**
              * pin bypass routes to upstream interface (-ifscope)
@@ -730,30 +747,30 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField20_0 = $$createType3;
-        const $$createField21_0 = $$createType5;
-        const $$createField22_0 = $$createType2;
+        const $$createField21_0 = $$createType3;
+        const $$createField22_0 = $$createType5;
         const $$createField23_0 = $$createType2;
-        const $$createField26_0 = $$createType2;
+        const $$createField24_0 = $$createType2;
         const $$createField27_0 = $$createType2;
+        const $$createField28_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField20_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField21_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField21_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField22_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField22_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField23_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField23_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField24_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField26_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField27_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField27_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField28_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

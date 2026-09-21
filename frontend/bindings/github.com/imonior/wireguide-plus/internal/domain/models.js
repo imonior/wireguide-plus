@@ -102,6 +102,21 @@ export class ConnectionStatus {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Paused is true when Duration is frozen because the tunnel's peer
+             * stopped answering (handshake went stale) while the WireGuard
+             * interface itself stayed up — a dead upstream behind a live NIC
+             * (e.g. the laptop lid closed / screen-saver put the NIC to sleep).
+             * The UI shows this as "timer paused" rather than a falsely-growing
+             * uptime; the real connection time only resumes once handshakes
+             * recover (or the tunnel is reconnected). Distinct from State≠connected:
+             * the interface is still up, only the path is dead.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["paused"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * @member
              * @type {string | undefined}
              */
@@ -205,22 +220,22 @@ export class ConnectionStatus {
      * @returns {ConnectionStatus}
      */
     static createFrom($$source = {}) {
-        const $$createField14_0 = $$createType1;
-        const $$createField15_0 = $$createType2;
+        const $$createField15_0 = $$createType1;
         const $$createField16_0 = $$createType2;
-        const $$createField17_0 = $$createType4;
+        const $$createField17_0 = $$createType2;
+        const $$createField18_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("latency_probe_results" in $$parsedSource) {
-            $$parsedSource["latency_probe_results"] = $$createField14_0($$parsedSource["latency_probe_results"]);
+            $$parsedSource["latency_probe_results"] = $$createField15_0($$parsedSource["latency_probe_results"]);
         }
         if ("active_tunnels" in $$parsedSource) {
-            $$parsedSource["active_tunnels"] = $$createField15_0($$parsedSource["active_tunnels"]);
+            $$parsedSource["active_tunnels"] = $$createField16_0($$parsedSource["active_tunnels"]);
         }
         if ("established_tunnels" in $$parsedSource) {
-            $$parsedSource["established_tunnels"] = $$createField16_0($$parsedSource["established_tunnels"]);
+            $$parsedSource["established_tunnels"] = $$createField17_0($$parsedSource["established_tunnels"]);
         }
         if ("tunnels" in $$parsedSource) {
-            $$parsedSource["tunnels"] = $$createField17_0($$parsedSource["tunnels"]);
+            $$parsedSource["tunnels"] = $$createField18_0($$parsedSource["tunnels"]);
         }
         return new ConnectionStatus(/** @type {Partial<ConnectionStatus>} */($$parsedSource));
     }

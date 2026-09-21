@@ -15,6 +15,11 @@ type TunnelPolicies struct {
 	Domains         []string `json:"domains"`
 	UseAsDefaultDNS bool     `json:"use_as_default_dns"`
 	DNSResolvePath  bool     `json:"dns_resolve_path"`
+	// KeepConnectionOnIdle is the per-tunnel override of the global
+	// "keep connection on idle" switch. nil in JSON means "inherit global"
+	// (encoded as the field being absent); the GUI sends null for that
+	// state and true/false for an explicit override.
+	KeepConnectionOnIdle *bool `json:"keep_connection_on_idle,omitempty"`
 }
 
 // GetTunnelPolicies returns the private policies of a tunnel.
@@ -24,10 +29,11 @@ func (s *TunnelService) GetTunnelPolicies(name string) (*TunnelPolicies, error) 
 		return nil, err
 	}
 	return &TunnelPolicies{
-		TrafficProtect:  meta.TrafficProtect,
-		Domains:         meta.Domains,
-		UseAsDefaultDNS: meta.UseAsDefaultDNS,
-		DNSResolvePath:  meta.DNSResolvePath,
+		TrafficProtect:       meta.TrafficProtect,
+		Domains:              meta.Domains,
+		UseAsDefaultDNS:      meta.UseAsDefaultDNS,
+		DNSResolvePath:       meta.DNSResolvePath,
+		KeepConnectionOnIdle: meta.KeepConnectionOnIdle,
 	}, nil
 }
 
@@ -51,6 +57,7 @@ func (s *TunnelService) SetTunnelPolicies(name string, policies TunnelPolicies) 
 		meta.Domains = domains
 		meta.UseAsDefaultDNS = policies.UseAsDefaultDNS
 		meta.DNSResolvePath = policies.DNSResolvePath
+		meta.KeepConnectionOnIdle = policies.KeepConnectionOnIdle
 	}); err != nil {
 		return err
 	}

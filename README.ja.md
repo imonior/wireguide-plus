@@ -28,6 +28,9 @@ WireGuide Plus はオープンソースプロジェクト
   自動で接続・切断します。ルールは優先度と排他（相互排除）をサポートします。
 - **自動再接続** — 予期しない切断後もトンネルが自動復旧し、接続状態がリアルタイムに
   表示されます。
+- **画面オフ・ロック・スリープ中も接続を維持** — 設定（既定でオン、トンネル単位で上書き可）
+  により、画面オフ・スクリーンセーバー・ロックを越えてトンネルを維持し、スリープから
+  復帰すると自動で再接続します。
 - **ログイン時自動起動** — ログイン後に WireGuide Plus を起動し、ルールに従って接続する
   設定（「最小化で起動」と組み合わせれば、起動直後にウィンドウをたたんだ状態にできます）。
 - **最小化で起動** — Windows では起動時にタスクバーへ最小化します（タスクバーのアイコンは
@@ -132,11 +135,11 @@ WireGuard 実装が**複数トンネルの同時実行**や**Wi-Fi SSID によ�
 
 **インストーラー（推奨）**
 
-- Windows x64 インストーラー: `wireguideplus-amd64-installer.exe`
-- Windows x86（32ビット）インストーラー: `wireguideplus-x86-installer.exe`
-- Windows ARM64 インストーラー: `wireguideplus-arm64-installer.exe`
+- Windows x64 インストーラー: `wireguideplus-<version>-amd64-installer.exe`
+- Windows x86（32ビット）インストーラー: `wireguideplus-<version>-x86-installer.exe`
+- Windows ARM64 インストーラー: `wireguideplus-<version>-arm64-installer.exe`
 
-インストーラー名にはアーキテクチャが含まれます（`wireguideplus-<arch>-installer.exe`、
+インストーラー名にはバージョンとアーキテクチャが含まれます（`wireguideplus-<version>-<arch>-installer.exe`、
 arch は `x86` / `amd64` / `arm64`）。インストールされるプログラムのファイル名にも
 アーキテクチャが付きます（`wireguideplus-<arch>.exe` — ファイルのプロパティ → 詳細でも
 表示されます）。64ビット版インストーラーは既定で `C:\Program Files\WireGuide Plus` に、32ビット版は
@@ -165,8 +168,8 @@ arch は `x86` / `amd64` / `arm64`）。インストールされるプログラ�
 
 ドライバー DLL は `wintun-0.14.1.zip` に含まれます（
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) を参照）。リリースでは
-`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
-`wireguideplus-arm64-portable.zip` のポータブル zip も提供しています。各 zip には
+`wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-x86-portable.zip` /
+`wireguideplus-<version>-arm64-portable.zip` のポータブル zip も提供しています。各 zip には
 exe と対応するドライバー DLL が**同梱**されており、解凍するだけで実行できます。
 リリースで個別 DLL の添付は廃止しました（ポータブル zip またはインストーラーを
 ご利用ください）。対応するドライバー DLL が exe の隣にない場合、トンネルを作成できません。
@@ -177,8 +180,8 @@ exe と対応するドライバー DLL が**同梱**されており、解凍す�
 
 リリースごとに 2 種類のアーティファクトを提供しています：
 
-- `WireGuidePlus-darwin-arm64.dmg` — アプリケーションフォルダへドラッグするインストーラー。
-- `WireGuidePlus-darwin-arm64.zip` — ポータブル `.app` バンドル。
+- `WireGuidePlus-<version>-darwin-arm64.dmg` — アプリケーションフォルダへドラッグするインストーラー。
+- `WireGuidePlus-<version>-darwin-arm64.zip` — ポータブル `.app` バンドル。
 
 `.dmg` を開き、**WireGuide Plus** を「アプリケーション」へドラッグし、Spotlight または Launchpad から起動します。ポータブル `.zip` は展開すると `wireguideplus.app` になり、そのまま実行できます。
 
@@ -189,18 +192,18 @@ exe と対応するドライバー DLL が**同梱**されており、解凍す�
   ```sh
   xattr -dr com.apple.quarantine /Applications/wireguideplus.app
   ```
-- arm64 ビルドの Homebrew cask も提供しています — `brew install --cask wireguideplus` でも同じ `WireGuidePlus-darwin-arm64.zip` を取得できます。
+- arm64 ビルドの Homebrew cask も提供しています — `brew install --cask wireguideplus` でも同じ `WireGuidePlus-<version>-darwin-arm64.zip` を取得できます。
 - **位置情報サービスの許可（SSID ごとの自動化用）。** SSID ごとの自動接続は現在の Wi-Fi SSID を読み取りますが、macOS ではこれに **位置情報サービス** の権限が必要です。**システム設定 → プライバシーとセキュリティ → 位置情報サービス** で許可（まず総スイッチを入れ、次に WireGuide Plus を許可）してください。ない場合、SSID 条件を評価できず SSID ベースのルールは発動しません。
 
 ### Linux（実験的）
 
 各アーキテクチャ（`amd64`、`arm64`）ごとに 2 種類のアーティファクトを提供しています：
 
-- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu インストーラー。
-- `WireGuidePlus-linux-<arch>-portable.tar.gz` — ポータブルバイナリ。
+- `WireGuidePlus-<version>-linux-<arch>.deb` — Debian / Ubuntu インストーラー。
+- `WireGuidePlus-<version>-linux-<arch>-portable.tar.gz` — ポータブルバイナリ。
 
 `.deb` はパッケージマネージャーでインストールします（例：
-`sudo apt install ./WireGuidePlus-linux-amd64.deb`）。ポータブル tarball は展開して
+`sudo apt install ./WireGuidePlus-<version>-linux-amd64.deb`）。ポータブル tarball は展開して
 `./wireguideplus` を実行します。ポータブル版には GTK3 / WebKitGTK ランタイムが必要です
 （`.deb` は自動でインストールします）。最小構成のシステムでは先にインストールしてください：
 

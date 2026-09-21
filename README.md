@@ -29,6 +29,9 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   exclusion.
 - **Auto-reconnect** — tunnels recover automatically after unexpected drops, with the
   connection state visible in real time.
+- **Keep connection while the screen is off, locked, or asleep** — a setting (on by
+  default, overridable per tunnel) that keeps a tunnel alive through display-off,
+  screen-saver and lock, and reconnects automatically after the machine wakes from sleep.
 - **Start on login** — a setting that launches WireGuide Plus after login and connects
   according to your rules (combined with "Start minimized" the window starts tucked away).
 - **Start minimized** — a setting that starts the app minimized to the **taskbar** on
@@ -171,11 +174,11 @@ applying any update.
 
 **Installers (recommended)**
 
-- Windows x64 installer: `wireguideplus-amd64-installer.exe`
-- Windows x86 (32-bit) installer: `wireguideplus-x86-installer.exe`
-- Windows ARM64 installer: `wireguideplus-arm64-installer.exe`
+- Windows x64 installer: `wireguideplus-<version>-amd64-installer.exe`
+- Windows x86 (32-bit) installer: `wireguideplus-<version>-x86-installer.exe`
+- Windows ARM64 installer: `wireguideplus-<version>-arm64-installer.exe`
 
-Installer names embed the architecture (`wireguideplus-<arch>-installer.exe`, arch ∈
+Installer names embed the release version and the architecture (`wireguideplus-<version>-<arch>-installer.exe`, where `<version>` is the release version, e.g. `2.3.1`, and arch ∈
 `x86` / `amd64` / `arm64`), and the executable installed inside carries it too
 (`wireguideplus-<arch>.exe` — also visible in the file's Properties → Details). The
 64-bit installer installs to `C:\Program Files\WireGuide Plus` by default; the 32-bit
@@ -204,8 +207,8 @@ rename is ever needed:
 
 The driver DLLs come from `wintun-0.14.1.zip` (see
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)). Releases provide ready-made
-portable zips (`wireguideplus-amd64-portable.zip` /
-`wireguideplus-x86-portable.zip` / `wireguideplus-arm64-portable.zip`), each already
+portable zips (`wireguideplus-<version>-amd64-portable.zip` /
+`wireguideplus-<version>-x86-portable.zip` / `wireguideplus-<version>-arm64-portable.zip`), each already
 containing the exe **and** the matching driver DLL — download one zip, extract, and run.
 Releases no longer attach bare DLLs (use the portable zip or the installer above). Without
 the matching driver DLL, tunnels cannot be created.
@@ -216,8 +219,8 @@ the matching driver DLL, tunnels cannot be created.
 
 Two artifacts per release:
 
-- `WireGuidePlus-darwin-arm64.dmg` — drag-to-Applications installer.
-- `WireGuidePlus-darwin-arm64.zip` — portable `.app` bundle.
+- `WireGuidePlus-<version>-darwin-arm64.dmg` — drag-to-Applications installer.
+- `WireGuidePlus-<version>-darwin-arm64.zip` — portable `.app` bundle.
 
 Open the `.dmg`, drag **WireGuide Plus** to `Applications`, then launch it from
 Spotlight or Launchpad. The portable `.zip` extracts straight to `wireguideplus.app`
@@ -233,7 +236,7 @@ Notes:
   xattr -dr com.apple.quarantine /Applications/wireguideplus.app
   ```
 - A Homebrew cask ships the arm64 build too — `brew install --cask wireguideplus` pulls
-  the same `WireGuidePlus-darwin-arm64.zip`.
+  the same `WireGuidePlus-<version>-darwin-arm64.zip`.
 - **Location Services permission (for per-SSID automation).** Per-SSID auto-connect reads the
   current Wi-Fi SSID, which on macOS requires **Location Services** access. Grant it in
   **System Settings → Privacy & Security → Location Services** (enable it, then allow
@@ -243,11 +246,11 @@ Notes:
 
 Two artifacts per architecture (`amd64`, `arm64`):
 
-- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu installer.
-- `WireGuidePlus-linux-<arch>-portable.tar.gz` — portable binary.
+- `WireGuidePlus-<version>-linux-<arch>.deb` — Debian / Ubuntu installer.
+- `WireGuidePlus-<version>-linux-<arch>-portable.tar.gz` — portable binary.
 
 Install the `.deb` with your package manager, e.g.
-`sudo apt install ./WireGuidePlus-linux-amd64.deb`, or extract the portable tarball and
+`sudo apt install ./WireGuidePlus-<version>-linux-amd64.deb`, or extract the portable tarball and
 run `./wireguideplus`. The portable build needs the GTK3 / WebKitGTK runtime, which the
 `.deb` installs automatically; on a bare system install them first:
 

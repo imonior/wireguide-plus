@@ -31,9 +31,13 @@
 !define UNINST_KEY_NAME     "WireGuide Plus"
 # Override the wails default ("wireguide") so every artifact name starts with
 # the branded "wireguideplus" prefix — OutFile below becomes
-# wireguideplus-<arch>-installer.exe. The built program itself is installed as
-# PRODUCT_EXECUTABLE, which makensis receives via -DPRODUCT_EXECUTABLE=...
-# (arch-suffixed), see build/windows/Taskfile.yml create:nsis:installer.
+# wireguideplus-<version>-<arch>-installer.exe. The version segment comes from
+# INFO_PRODUCTVERSION, which tools/bumpversion keeps in sync with the
+# repository-root VERSION file (it rewrites the fallback in wails_tools.nsh),
+# so the published name always carries the release version. The built program
+# itself is installed as PRODUCT_EXECUTABLE, which makensis receives via
+# -DPRODUCT_EXECUTABLE=... (arch-suffixed), see
+# build/windows/Taskfile.yml create:nsis:installer.
 !define INFO_PROJECTNAME    "wireguideplus"
 ####
 ## !define INFO_PROJECTNAME    "my-project" # Default "wireguide"
@@ -96,7 +100,7 @@ Page custom StartMenuPage StartMenuPageLeave # 快捷方式选项页（默认创
 #!finalize 'signtool --file "%1"'
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
+OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-${ARCH}-installer.exe" # Name of the installer's file.
 # Single folder under Program Files — the wails default "<company>\<product>" nests
 # "imonior\WireGuide Plus" which is ugly when company is just a github handle.
 # The 32-bit build installs under $PROGRAMFILES (Program Files / Program Files (x86));

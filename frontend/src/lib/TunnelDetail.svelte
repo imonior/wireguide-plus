@@ -631,6 +631,12 @@
   // stale threshold. The upstream (e.g. the router's WAN) is down, so the
   // tunnel is NOT healthy even though StateConnected still reads true.
   $: isStale = isConnected && !!status?.handshake_stale;
+  // The peer stopped answering while the interface stayed up, so the duration
+  // counter is frozen (Manager.advanceDuration stops accumulating during a
+  // dead window). Annotate the timer so a large value reads as "healthy time
+  // served", not wall-clock uptime. Uses the strict per-tunnel status so it
+  // can't borrow another tunnel's state.
+  $: isPaused = isConnected && !!ownStatus?.paused;
   // Use the primary status if it matches the selected tunnel (has full stats).
   // Otherwise fall back to the lightweight per-tunnel info from the tunnels array
   // (name + state + handshake only, no rx/tx/duration).
@@ -902,7 +908,10 @@
               {#if isStale}<span class="meta-stale-tag">{$t('app.handshake_stale')}</span>{/if}
             </span>
             <span class="meta-sep">·</span>
-            <span class="meta-item">{$t('tunnel.duration')}: {status.duration || '—'}</span>
+            <span class="meta-item" class:meta-stale={isPaused}>
+              {$t('tunnel.duration')}: {status.duration || '—'}
+              {#if isPaused}<span class="meta-stale-tag">{$t('app.connection_paused')}</span>{/if}
+            </span>
             {#if status.interface_name}
               <span class="meta-sep">·</span>
               <span class="meta-item">

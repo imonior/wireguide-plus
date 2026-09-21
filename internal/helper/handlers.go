@@ -12,9 +12,16 @@ import (
 	"github.com/imonior/wireguide-plus/internal/diag"
 	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
+
+// defaultKeepaliveInterval is the PersistentKeepalive forced onto peers that
+// have none when "keep connection on idle" is enabled. 25s keeps the
+// WireGuard handshake flowing well inside the 150s stale threshold, so a
+// sleeping NIC (screen-saver / lock) no longer silently drops the tunnel.
+const defaultKeepaliveInterval = 25
 
 // registerHandlers binds every RPC method to a Helper method. Splitting the
 // handlers into named methods (vs inline closures) makes them directly unit
@@ -36,6 +43,7 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodResolveDNSPathConflict, h.handleResolveDNSPathConflict)
 	h.server.Handle(ipc.MethodClearDNSPathEnforcement, h.handleClearDNSPathEnforcement)
 	h.server.Handle(ipc.MethodSetHealthCheck, h.handleSetHealthCheck)
+	h.server.Handle(ipc.MethodSetKeepConnectionOnIdle, h.handleSetKeepConnectionOnIdle)
 	h.server.Handle(ipc.MethodSetPinInterface, h.handleSetPinInterface)
 	h.server.Handle(ipc.MethodReportSSID, h.handleReportSSID)
 	h.server.Handle(ipc.MethodAutomationPreview, h.handleAutomationPreview)
@@ -285,6 +293,21 @@ func (h *Helper) doConnectHeld(cfg *domain.WireGuardConfig) error {
 		if settings, err := h.loadUserSettings(); err == nil && settings != nil && settings.PinInterface {
 			cfg.BindIfIndex = idx
 			cfg.BindIfName = ifName
+		}
+	}
+
+	// Keep connection on idle: when enabled (global default, per-tunnel
+	// override), force a PersistentKeepalive on peers that have none so a
+	// sleeping NIC / screen-saver / lock cannot silently kill the
+	// handshake. Injected at runtime only — the user's .conf is never
+	// rewritten, keeping it a portable standard WireGuard/AWG document. The
+	// connect cache (activeCfgs) carries the mutated copy, so a reconnect
+	// reuses the same keepalive.
+	if h.keepConnectionOnIdle(cfg.Name) {
+		for i := range cfg.Peers {
+			if cfg.Peers[i].PersistentKeepalive <= 0 {
+				cfg.Peers[i].PersistentKeepalive = defaultKeepaliveInterval
+			}
 		}
 	}
 
@@ -627,6 +650,38 @@ func (h *Helper) handleSetPinInterface(params json.RawMessage) (interface{}, err
 	}
 	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{PinInterface: &req.Enabled})
 	return ipc.Empty{}, nil
+}
+
+// handleSetKeepConnectionOnIdle flips the master "keep connection on idle"
+// switch. Like handleSetHealthCheck it only broadcasts the change so a
+// running GUI reflects it (and any other client); the authoritative
+// persistence is Settings.SaveSettings, which the GUI calls on toggle. The
+// connect path and the session monitor read this setting live, so no
+// in-process state needs pushing here.
+func (h *Helper) handleSetKeepConnectionOnIdle(params json.RawMessage) (interface{}, error) {
+	var req ipc.SetKeepConnectionOnIdleRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{KeepConnectionOnIdle: &req.Enabled})
+	slog.Info("keep connection on idle changed", "enabled", req.Enabled)
+	return ipc.Empty{}, nil
+}
+
+// keepConnectionOnIdle resolves whether the named tunnel should be kept
+// alive through idle/screen-saver/lock: the master switch must be on and the
+// tunnel must not have opted out. Reads settings + meta live so a change made
+// from the GUI or CLI takes effect on the next connect without a restart.
+func (h *Helper) keepConnectionOnIdle(name string) bool {
+	settings, err := h.loadUserSettings()
+	if err != nil || settings == nil {
+		return false
+	}
+	var meta *storage.TunnelMeta
+	if h.userTunnelStore != nil {
+		meta, _ = h.userTunnelStore.LoadMeta(name)
+	}
+	return storage.KeepConnectionOnIdleEffective(settings, meta)
 }
 
 // handleReportSSID receives the current SSID from the GUI process.

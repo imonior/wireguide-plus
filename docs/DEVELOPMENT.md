@@ -83,12 +83,12 @@ task windows:build ARCH=arm64     # arm64（版本资源 syso 走 `-arm` 分支�
 | `bin/wireguideplus-x86.exe` | 32 位运行程序（文件名内嵌架构） |
 | `bin/wireguideplus-amd64.exe` | 64 位运行程序 |
 | `bin/wireguideplus-arm64.exe` | ARM64 运行程序 |
-| `bin/wireguideplus-x86-installer.exe` | 32 位安装包（含 32 位程序 + 32 位 wintun-x86.dll） |
-| `bin/wireguideplus-amd64-installer.exe` | 64 位安装包（含 64 位程序 + 64 位 wintun-amd64.dll） |
-| `bin/wireguideplus-arm64-installer.exe` | ARM64 安装包（含 ARM64 程序 + ARM64 wintun-arm64.dll） |
+| `bin/wireguideplus-<version>-x86-installer.exe` | 32 位安装包（含 32 位程序 + 32 位 wintun-x86.dll） |
+| `bin/wireguideplus-<version>-amd64-installer.exe` | 64 位安装包（含 64 位程序 + 64 位 wintun-amd64.dll） |
+| `bin/wireguideplus-<version>-arm64-installer.exe` | ARM64 安装包（含 ARM64 程序 + ARM64 wintun-arm64.dll） |
 | `bin/wintun-x86.dll` / `bin/wintun-amd64.dll` / `bin/wintun-arm64.dll` | 各架构的 wintun 驱动（文件名即架构，程序据此加载） |
 
-> 运行程序统一命名 `wireguideplus-<arch>.exe`，安装包 `wireguideplus-<arch>-installer.exe`；
+> 运行程序统一命名 `wireguideplus-<arch>.exe`，安装包 `wireguideplus-<version>-<arch>-installer.exe`；
 > 文件版本资源（exe 属性 → 详细信息）中的「说明 / 内部名称 / 原始文件名」同样内嵌
 > 架构信息（见 §6），由 `tools/genverinfo` 按构建架构动态生成。
 

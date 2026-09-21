@@ -56,6 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5.1.0
 
+      - name: Compute release version (tag without the leading v)
+        id: ver
+        shell: bash
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-go@v6.5.0
         with:
           go-version: '1.25.12'
@@ -98,7 +103,7 @@ jobs:
         # resulting .zip stays Gatekeeper-quarantine-friendly.
         run: |
           cd bin
-          ditto -c -k --sequesterRsrc --keepParent wireguideplus.app "WireGuidePlus-darwin-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent wireguideplus.app "WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.zip"
 
       - name: Create DMG (installer)
         # hdiutil builds the drag-and-drop .dmg installer from the .app
@@ -106,14 +111,14 @@ jobs:
         # mirroring Windows' installer + portable.zip split.
         run: |
           cd bin
-          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuidePlus-darwin-arm64.dmg"
+          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.dmg"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: macos-arm64
           path: |
-            bin/WireGuidePlus-darwin-arm64.zip
-            bin/WireGuidePlus-darwin-arm64.dmg
+            bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.zip
+            bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.dmg
           if-no-files-found: error
           retention-days: 7
 
@@ -125,7 +130,8 @@ jobs:
         # Every Windows release ships a 32-bit (x86), a 64-bit (amd64)
         # and an ARM64 installer. `arch` is the GOARCH handed to
         # `task windows:package`; `asset` is the suffix project.nsi uses
-        # for the installer filename (wireguideplus-<asset>-installer.exe).
+        # for the installer filename
+        # (wireguideplus-<version>-<asset>-installer.exe).
         include:
           - { arch: "386", asset: x86 }
           - { arch: amd64, asset: amd64 }
@@ -142,6 +148,11 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v5.1.0
+
+      - name: Compute release version (tag without the leading v)
+        id: ver
+        shell: bash
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6.5.0
         with:
@@ -254,7 +265,8 @@ jobs:
       - name: Verify NSIS installer exists
         shell: bash
         # project.nsi's OutFile writes directly to
-        # bin/wireguideplus-${ARCH}-installer.exe (ARCH set by wails_tools.nsh
+        # bin/wireguideplus-<version>-${ARCH}-installer.exe (version comes from
+        # INFO_PRODUCTVERSION, ARCH set by wails_tools.nsh
         # to "x86" / "amd64" / "arm64"). The filename already is the canonical
         # asset name — no rename needed. v0.3.0 used `find ... | head -1`
         # here and picked up build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
@@ -263,7 +275,7 @@ jobs:
         # and exited. Path is deterministic; assert it directly.
         run: |
           set -e
-          src="bin/wireguideplus-${{ matrix.asset }}-installer.exe"
+          src="bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-installer.exe"
           if [ ! -f "$src" ]; then
             echo "ERROR: NSIS installer not found at $src"
             find build/windows bin -type f
@@ -282,7 +294,7 @@ jobs:
         # the platform. The exe inside the zip is the unsigned build output
         # (SignPath only covers the installer).
         run: |
-          Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll" -DestinationPath "bin\wireguideplus-${{ matrix.asset }}-portable.zip" -Force
+          Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll" -DestinationPath "bin\wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-portable.zip" -Force
           Get-ChildItem bin | Where-Object { $_.Name -like 'wireguideplus-*' -or $_.Name -like 'wintun-*' } | Select-Object Name, Length
 
       # --- SignPath Foundation code signing ---------------------------
@@ -317,7 +329,7 @@ jobs:
           # the release job's download-artifact step excludes this one
           # via pattern '!unsigned-*'.
           name: unsigned-windows-${{ matrix.asset }}
-          path: bin/wireguideplus-${{ matrix.asset }}-installer.exe
+          path: bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-installer.exe
           if-no-files-found: error
           retention-days: 1
 
@@ -358,11 +370,11 @@ jobs:
           set -e
           signed=$(find bin/signed -type f -name "*.exe" | head -1)
           test -n "$signed" || { echo "no signed .exe found"; ls -laR bin/signed; exit 1; }
-          mv "$signed" "bin/wireguideplus-${{ matrix.asset }}-installer.exe"
+          mv "$signed" "bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-installer.exe"
           # Sanity check: Get-AuthenticodeSignature reports Valid on
           # a properly signed binary. Status NotSigned / HashMismatch
           # would mean the replacement didn't happen.
-          powershell -Command "(Get-AuthenticodeSignature 'bin/wireguideplus-${{ matrix.asset }}-installer.exe').Status" | tee /tmp/sigstatus
+          powershell -Command "(Get-AuthenticodeSignature 'bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-installer.exe').Status" | tee /tmp/sigstatus
           grep -q '^Valid' /tmp/sigstatus
       # --- end signing -------------------------------------------------
 
@@ -370,8 +382,8 @@ jobs:
         with:
           name: windows-${{ matrix.asset }}
           path: |
-            bin/wireguideplus-${{ matrix.asset }}-installer.exe
-            bin/wireguideplus-${{ matrix.asset }}-portable.zip
+            bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-installer.exe
+            bin/wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-portable.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -390,6 +402,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5.1.0
+
+      - name: Compute release version (tag without the leading v)
+        id: ver
+        shell: bash
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6.5.0
         with:
@@ -443,21 +460,21 @@ jobs:
           command -v wails3
           wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           dpkg-deb --info bin/wireguideplus.deb
-          mv bin/wireguideplus.deb "bin/WireGuidePlus-linux-${{ matrix.arch }}.deb"
+          mv bin/wireguideplus.deb "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}.deb"
 
       - name: Package portable tarball
         # Portable build = the bare binary in a tarball (no package manager
         # needed); pairs with the .deb installer, mirroring Windows'
         # installer + portable.zip split.
         run: |
-          tar -czf "bin/WireGuidePlus-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
+          tar -czf "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: linux-${{ matrix.arch }}
           path: |
-            bin/WireGuidePlus-linux-${{ matrix.arch }}.deb
-            bin/WireGuidePlus-linux-${{ matrix.arch }}-portable.tar.gz
+            bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}.deb
+            bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}-portable.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -534,7 +551,7 @@ jobs:
           cd artifacts
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
-          echo "macos_sha=$(awk '/WireGuidePlus-darwin-arm64\.zip$/ {print $1; exit}' SHA256SUMS)" >> "$GITHUB_OUTPUT"
+          echo "macos_sha=$(awk '/-darwin-arm64\.zip$/ {print $1; exit}' SHA256SUMS)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6.5.0
         with:
@@ -582,12 +599,13 @@ jobs:
           # Previous tag = the next-newest after $cur in descending version order.
           prev="$(git tag --sort=-v:refname | awk -v c="$cur" 'f{print; exit} $0==c{f=1}')"
           prev="${prev:-$cur}"
-          echo "current tag: $cur   previous tag: $prev"
+          ver="${cur#v}"
+          echo "current tag: $cur   previous tag: $prev   version: $ver"
           # Latest changelog section, with the "## [x.y.z] - date" header line
           # dropped so the body reads like a changelog (matches the old layout).
           awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 > RELEASE_NOTES.md
           # Append the asset/download/footer tail with version placeholders filled.
-          sed -e "s#__CUR__#$cur#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
+          sed -e "s#__CUR__#$cur#g" -e "s#__VER__#$ver#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
           echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
           cat RELEASE_NOTES.md
       - name: Publish release
@@ -670,7 +688,7 @@ jobs:
             version "$version"
             sha256 "$sha256"
 
-            url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuidePlus-darwin-arm64.zip"
+            url "https://github.com/imonior/wireguide-plus/releases/download/v#{version}/WireGuidePlus-#{version}-darwin-arm64.zip"
             name "WireGuide Plus"
             desc "Multi-tunnel automated WireGuard VPN client"
             homepage "https://github.com/imonior/wireguide-plus"

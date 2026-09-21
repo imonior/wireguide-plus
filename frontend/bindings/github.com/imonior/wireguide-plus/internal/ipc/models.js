@@ -95,6 +95,13 @@ export class SettingsChangedPayload {
              * @member
              * @type {boolean | null | undefined}
              */
+            this["keep_connection_on_idle"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | null | undefined}
+             */
             this["pin_interface"] = undefined;
         }
         if (/** @type {any} */(false)) {

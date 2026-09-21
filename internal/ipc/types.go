@@ -56,6 +56,12 @@ type SetHealthCheckRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+// SetKeepConnectionOnIdleRequest is the parameter for
+// Monitor.SetKeepConnectionOnIdle.
+type SetKeepConnectionOnIdleRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
 // SetLogLevelRequest is the parameter for Helper.SetLogLevel.
 type SetLogLevelRequest struct {
 	Level string `json:"level"` // "debug" | "info" | "warn" | "error"
@@ -156,9 +162,10 @@ type CriticalErrorPayload struct {
 // GUI can reflect a change made through another client (the CLI). Only
 // the field for the changed setting is non-nil.
 type SettingsChangedPayload struct {
-	HealthCheck  *bool   `json:"health_check,omitempty"`
-	PinInterface *bool   `json:"pin_interface,omitempty"`
-	LogLevel     *string `json:"log_level,omitempty"`
+	HealthCheck          *bool   `json:"health_check,omitempty"`
+	KeepConnectionOnIdle *bool   `json:"keep_connection_on_idle,omitempty"`
+	PinInterface         *bool   `json:"pin_interface,omitempty"`
+	LogLevel             *string `json:"log_level,omitempty"`
 }
 
 // AutomationPreviewResponse is the read-only result of Automation.Preview:

@@ -50,7 +50,16 @@ type ConnectionStatus struct {
 	// "connected but no recent handshake" state instead of a falsely-healthy
 	// one, so a dead WAN link no longer reads as a working tunnel.
 	HandshakeStale bool `json:"handshake_stale,omitempty"`
-	Endpoint          string    `json:"endpoint,omitempty"`
+	// Paused is true when Duration is frozen because the tunnel's peer
+	// stopped answering (handshake went stale) while the WireGuard
+	// interface itself stayed up — a dead upstream behind a live NIC
+	// (e.g. the laptop lid closed / screen-saver put the NIC to sleep).
+	// The UI shows this as "timer paused" rather than a falsely-growing
+	// uptime; the real connection time only resumes once handshakes
+	// recover (or the tunnel is reconnected). Distinct from State≠connected:
+	// the interface is still up, only the path is dead.
+	Paused   bool   `json:"paused,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
 	// LatencyMs is the most recent measured round-trip time to the
 	// endpoint in milliseconds. 0 means "no measurement yet" or "endpoint
 	// unreachable" — the frontend treats both the same (renders "—").

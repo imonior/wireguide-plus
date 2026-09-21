@@ -1020,6 +1020,17 @@ export class TunnelPolicies {
              */
             this["dns_resolve_path"] = false;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * KeepConnectionOnIdle is the per-tunnel override of the global
+             * "keep connection on idle" switch. nil in JSON means "inherit global"
+             * (encoded as the field being absent); the GUI sends null for that
+             * state and true/false for an explicit override.
+             * @member
+             * @type {boolean | null | undefined}
+             */
+            this["keep_connection_on_idle"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }

@@ -30,6 +30,21 @@ type tunnelEntry struct {
 	connectedAt time.Time
 	netMgr      network.NetworkManager // per-tunnel network state (routes, DNS, monitor)
 
+	// healthyAccum is the sum of wall-clock time this tunnel spent in a
+	// genuinely connected state (peer answering, handshake not stale). It
+	// drives the displayed "Duration" so a dead upstream behind a live
+	// interface freezes the uptime counter instead of falsely inflating it
+	// (the "shows 22h connected but actually dropped hours ago" bug).
+	healthyAccum time.Duration
+	// lastTick is the wall-clock time of the previous duration-accounting
+	// tick; elapsed since it is added to healthyAccum. Zero until the
+	// first connected tick after (re)connect.
+	lastTick time.Time
+	// paused is true when Duration is frozen (peer unreachable but the
+	// interface is still up) so the UI can label it instead of a growing
+	// number.
+	paused bool
+
 	// watchdogCancel stops the runaway-TX watchdog goroutine started
 	// after a successful full-tunnel connect. nil for split-tunnel and
 	// non-Windows where the watchdog is a no-op.
@@ -300,6 +315,11 @@ func (m *Manager) ConnectWithContext(ctx context.Context, cfg *domain.WireGuardC
 	entry.engine = engine
 	entry.connectedAt = time.Now()
 	entry.state = domain.StateConnected
+	// Reset the honest-duration accumulator on (re)connect so a fresh
+	// session does not inherit elapsed time from a previous one.
+	entry.healthyAccum = 0
+	entry.lastTick = time.Time{}
+	entry.paused = false
 
 	// Start the runaway-TX watchdog for full-tunnel connects. The
 	// watchdog is a no-op on non-Windows and on split-tunnel because

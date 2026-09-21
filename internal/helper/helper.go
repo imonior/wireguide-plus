@@ -364,6 +364,10 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// Reconnect monitor — uses cached config
 	h.monitor = reconnect.NewMonitor(manager, h.reconnectFn, h.onReconnectState, reconnect.DefaultConfig())
 	h.monitor.SetFirewallCallbacks(h.suspendFirewall, h.resumeFirewall)
+	// The session monitor (Windows) self-heals dead tunnels on display-on /
+	// unlock, but only for tunnels that haven't opted out of "keep
+	// connection on idle". Feed it the same resolver the connect path uses.
+	h.monitor.SetKeepAlivePredicate(h.keepConnectionOnIdle)
 	h.monitor.Start()
 
 	// Register RPC handlers

@@ -608,5 +608,13 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	// elevation dialog) must not hold the app open forever. The gate above
 	// normally prevents us from ever getting here with something stuck.
 	waitForShutdown(&healthWg, 5*time.Second)
+	// Fallback half of the WebView2 gate (Windows only). ensureWebView2()
+	// already pre-flighted the registry before app.Run, so getting a failure
+	// here means the runtime *looked* installed but app.Run() still could not
+	// use it. Surface the same download prompt instead of dying cryptically.
+	// Deliberately additive: it stays silent unless app.Run() actually
+	// failed, so a working install can never see the prompt. No-op off
+	// Windows.
+	reportWebView2RunFailure(err)
 	return err
 }

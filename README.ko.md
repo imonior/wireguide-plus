@@ -26,6 +26,9 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
   자동으로 연결·해제하며, 규칙은 우선순위와 상호 배제를 지원합니다.
 - **자동 재연결** — 터널이 예기치 않게 끊기면 자동으로 복구되며, 연결 상태를
   실시간으로 확인할 수 있습니다.
+- **화면 꺼짐·잠금·절전 중에도 연결 유지** — 설정(기본 켜짐, 터널별 재정의 가능)으로
+  화면 꺼짐, 화면 보호기, 잠금 상태에서도 터널을 유지하고, 절전에서 깨어나면 자동으로
+  다시 연결합니다.
 - **로그인 시 자동 시작** — 로그인 후 WireGuide Plus를 자동으로 실행하고 규칙에 따라
   연결합니다 (「최소화 시작」과 함께 쓰면 창이 시작 직후 접힌 상태로 실행됩니다).
 - **최소화 시작** — Windows에서는 시작 시 작업 표시줄로 최소화됩니다(작업 표시줄
@@ -129,11 +132,11 @@ Android / iOS에서는 시스템 커널과 권한 체계 때문에 WireGuard 구
 
 **설치 프로그램(권장)**
 
-- Windows x64 설치 프로그램: `wireguideplus-amd64-installer.exe`
-- Windows x86(32비트) 설치 프로그램: `wireguideplus-x86-installer.exe`
-- Windows ARM64 설치 프로그램: `wireguideplus-arm64-installer.exe`
+- Windows x64 설치 프로그램: `wireguideplus-<version>-amd64-installer.exe`
+- Windows x86(32비트) 설치 프로그램: `wireguideplus-<version>-x86-installer.exe`
+- Windows ARM64 설치 프로그램: `wireguideplus-<version>-arm64-installer.exe`
 
-설치 프로그램 파일 이름에는 아키텍처가 포함됩니다(`wireguideplus-<arch>-installer.exe`,
+설치 프로그램 파일 이름에는 버전과 아키텍처가 포함됩니다(`wireguideplus-<version>-<arch>-installer.exe`,
 arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 아키텍처가 붙습니다
 (`wireguideplus-<arch>.exe` — 파일 속성 → 자세히에서도 확인 가능). 64비트 설치
 프로그램은 기본적으로 `C:\Program Files\WireGuide Plus`에, 32비트 설치 프로그램은
@@ -162,8 +165,8 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
 
 드라이버 DLL은 `wintun-0.14.1.zip`에 들어 있습니다(
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) 참조). 릴리스에는
-`wireguideplus-amd64-portable.zip` / `wireguideplus-x86-portable.zip` /
-`wireguideplus-arm64-portable.zip` 포터블 zip도 제공됩니다. 각 zip에는 exe와 일치하는
+`wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-x86-portable.zip` /
+`wireguideplus-<version>-arm64-portable.zip` 포터블 zip도 제공됩니다. 각 zip에는 exe와 일치하는
 드라이버 DLL이 **함께** 들어 있어 압축을 풀기만 하면 실행할 수 있습니다. 릴리스에서
 더 이상 개별 DLL을 첨부하지 않습니다(포터블 zip 또는 설치 프로그램을 사용하세요).
 일치하는 드라이버 DLL이 exe 옆에 없으면 터널을 만들 수 없습니다.
@@ -174,8 +177,8 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
 
 릴리스마다 두 가지 아티팩트를 제공합니다：
 
-- `WireGuidePlus-darwin-arm64.dmg` — 응용 프로그램 폴더로 드래그하는 설치 프로그램.
-- `WireGuidePlus-darwin-arm64.zip` — 포터블 `.app` 번들.
+- `WireGuidePlus-<version>-darwin-arm64.dmg` — 응용 프로그램 폴더로 드래그하는 설치 프로그램.
+- `WireGuidePlus-<version>-darwin-arm64.zip` — 포터블 `.app` 번들.
 
 `.dmg`를 열고 **WireGuide Plus**를「응용 프로그램」으로 드래그한 뒤 Spotlight 또는 Launchpad에서 실행합니다. 포터블 `.zip`은 압축을 풀면 `wireguideplus.app`이 되며 바로 실행할 수 있습니다.
 
@@ -186,17 +189,17 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
   ```sh
   xattr -dr com.apple.quarantine /Applications/wireguideplus.app
   ```
-- arm64 빌드용 Homebrew cask도 제공합니다 — `brew install --cask wireguideplus`도 동일한 `WireGuidePlus-darwin-arm64.zip`을 받습니다.
+- arm64 빌드용 Homebrew cask도 제공합니다 — `brew install --cask wireguideplus`도 동일한 `WireGuidePlus-<version>-darwin-arm64.zip`을 받습니다.
 - **위치 서비스 권한 (SSID별 자동화용).** SSID별 자동 연결은 현재 Wi-Fi SSID를 읽는데, macOS에서는 **위치 서비스** 권한이 필요합니다. **시스템 설정 → 개인정보 보호 및 보안 → 위치 서비스**에서 허용하세요(먼저 마스터 스위치를 켜고, 그다음 WireGuide Plus를 허용). 없으면 SSID 조건을 평가할 수 없어 SSID 기반 규칙이 발동하지 않습니다.
 
 ### Linux（실험적）
 
 각 아키텍처(`amd64`, `arm64`)마다 두 가지 아티팩트를 제공합니다：
 
-- `WireGuidePlus-linux-<arch>.deb` — Debian / Ubuntu 설치 패키지.
-- `WireGuidePlus-linux-<arch>-portable.tar.gz` — 포터블 바이너리.
+- `WireGuidePlus-<version>-linux-<arch>.deb` — Debian / Ubuntu 설치 패키지.
+- `WireGuidePlus-<version>-linux-<arch>-portable.tar.gz` — 포터블 바이너리.
 
-`.deb`는 패키지 관리자로 설치합니다(예： `sudo apt install ./WireGuidePlus-linux-amd64.deb`). 포터블 tarball은 압축을 풀고 `./wireguideplus`를 실행합니다. 포터블 버전에는 GTK3 / WebKitGTK 런타임이 필요하며(`.deb`이 자동 설치), 최소 구성 시스템에서는 먼저 설치하세요：
+`.deb`는 패키지 관리자로 설치합니다(예： `sudo apt install ./WireGuidePlus-<version>-linux-amd64.deb`). 포터블 tarball은 압축을 풀고 `./wireguideplus`를 실행합니다. 포터블 버전에는 GTK3 / WebKitGTK 런타임이 필요하며(`.deb`이 자동 설치), 최소 구성 시스템에서는 먼저 설치하세요：
 
 ```sh
 sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1

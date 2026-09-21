@@ -76,22 +76,28 @@ Release assets produced per tag:
 
 | Asset | Job |
 | --- | --- |
-| `wireguideplus-x86-installer.exe` (32-bit installer) | build-windows (x86) |
-| `wireguideplus-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
-| `wireguideplus-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
-| `wireguideplus-x86-portable.zip` / `wireguideplus-amd64-portable.zip` / `wireguideplus-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 与 bare `wintun-<arch>.dll` 均不单独发布） | build-windows |
-| `WireGuidePlus-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
-| `WireGuidePlus-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
-| `WireGuidePlus-linux-amd64.deb` / `WireGuidePlus-linux-arm64.deb` (installers) | build-linux |
-| `WireGuidePlus-linux-amd64-portable.tar.gz` / `WireGuidePlus-linux-arm64-portable.tar.gz` (portable, bare `wireguideplus` binary) | build-linux |
+| `wireguideplus-<version>-x86-installer.exe` (32-bit installer) | build-windows (x86) |
+| `wireguideplus-<version>-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
+| `wireguideplus-<version>-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
+| `wireguideplus-<version>-x86-portable.zip` / `wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 与 bare `wintun-<arch>.dll` 均不单独发布） | build-windows |
+| `WireGuidePlus-<version>-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
+| `WireGuidePlus-<version>-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
+| `WireGuidePlus-<version>-linux-amd64.deb` / `WireGuidePlus-<version>-linux-arm64.deb` (installers) | build-linux |
+| `WireGuidePlus-<version>-linux-amd64-portable.tar.gz` / `WireGuidePlus-<version>-linux-arm64-portable.tar.gz` (portable, bare `wireguideplus` binary) | build-linux |
 | `SHA256SUMS` + `SHA256SUMS.sig` | release |
 
 > Windows always ships 32-bit, 64-bit and ARM64 installers per the release
 > policy; the CI matrix keys off the `arch` (GOARCH) / `asset` (x86/amd64/
 > arm64) pair defined in `release.yml`. Every artifact name embeds the
-> architecture (`wireguideplus-<arch>-installer.exe`, `-portable.zip`, bare
+> release version (`<version>` = the tag without its leading `v`, e.g. `2.3.1`)
+> and the architecture (`wireguideplus-<version>-<arch>-installer.exe`, `-portable.zip`, bare
 > exe `wireguideplus-<arch>.exe`), and the installed program is also
 > installed as `wireguideplus-<arch>.exe`.
+>
+> The in-app updater matches release assets by OS/arch **token**, not by exact
+> filename (`assetMatchesOSArch` / `matchTokenAnchored` in
+> `internal/update/checker.go`), so embedding the version in the asset name
+> does not break auto-update from older releases.
 
 ### Release notes
 

@@ -151,9 +151,10 @@ const (
 	// per-tunnel switches are hidden and gated, but firewall rules are
 	// runtime state, not config). A no-op when nothing is enforcing.
 	MethodClearDNSPathEnforcement = "Tunnel.ClearDNSPathEnforcement"
-	MethodSetHealthCheck         = "Monitor.SetHealthCheck"
-	MethodSetPinInterface        = "Network.SetPinInterface"
-	MethodReportSSID             = "Wifi.ReportSSID"
+	MethodSetHealthCheck          = "Monitor.SetHealthCheck"
+	MethodSetKeepConnectionOnIdle = "Monitor.SetKeepConnectionOnIdle"
+	MethodSetPinInterface         = "Network.SetPinInterface"
+	MethodReportSSID              = "Wifi.ReportSSID"
 	// MethodAutomationPreview is a read-only dry-run: it evaluates the
 	// current Automation rules against the current network context and
 	// returns each tunnel's decision WITHOUT connecting/disconnecting.

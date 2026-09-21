@@ -811,6 +811,14 @@ func (s *TunnelService) SetHealthCheck(enabled bool) error {
 	return s.call(ipc.MethodSetHealthCheck, ipc.SetHealthCheckRequest{Enabled: enabled}, nil)
 }
 
+// SetKeepConnectionOnIdle enables or disables the master "keep connection on
+// idle" switch (keep tunnels alive through screen-saver / display sleep /
+// session lock). Persistence is handled by Settings.SaveSettings; this call
+// only broadcasts the change so a running GUI reflects it immediately.
+func (s *TunnelService) SetKeepConnectionOnIdle(enabled bool) error {
+	return s.call(ipc.MethodSetKeepConnectionOnIdle, ipc.SetKeepConnectionOnIdleRequest{Enabled: enabled}, nil)
+}
+
 // ResolveDNSPathConflict answers a connect that the helper parked because
 // another connected tunnel already owns the system's DNS resolve path.
 // action is "disable" (waive this tunnel's claim, let it connect) or

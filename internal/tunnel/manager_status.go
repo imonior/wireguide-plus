@@ -57,7 +57,6 @@ func (m *Manager) Status() *ConnectionStatus {
 	state := primary.state
 	engine := primary.engine
 	connectedAt := primary.connectedAt
-	_ = primaryName // used for logging only
 	cfgName := ""
 	if primary.cfg != nil {
 		cfgName = primary.cfg.Name
@@ -100,6 +99,16 @@ func (m *Manager) Status() *ConnectionStatus {
 			ActiveTunnels: activeTunnels,
 		}
 	}
+	// Reuse the honest-duration accumulator maintained by AllStatuses' 1Hz
+	// loop so on-demand reads match the broadcasted uptime. The accumulator
+	// only advances while the peer is answering, so a dead upstream reads as
+	// paused rather than a growing number.
+	m.mu.Lock()
+	if e := m.tunnels[primaryName]; e != nil {
+		status.Duration = domain.FormatDuration(e.healthyAccum)
+		status.Paused = e.paused
+	}
+	m.mu.Unlock()
 	status.ActiveTunnels = activeTunnels
 	return status
 }
@@ -137,6 +146,13 @@ func (m *Manager) StatusFor(name string) *ConnectionStatus {
 	if err != nil {
 		return &ConnectionStatus{State: domain.StateError, TunnelName: cfgName}
 	}
+	// Reuse the honest-duration accumulator (see Status for rationale).
+	m.mu.Lock()
+	if e := m.tunnels[name]; e != nil {
+		status.Duration = domain.FormatDuration(e.healthyAccum)
+		status.Paused = e.paused
+	}
+	m.mu.Unlock()
 	return status
 }
 
@@ -177,12 +193,65 @@ func (m *Manager) AllStatuses() []*ConnectionStatus {
 			st, err := getStatusForEngine(s.engine, s.cfgName, s.connectedAt)
 			if err != nil {
 				out = append(out, &ConnectionStatus{State: domain.StateError, TunnelName: s.cfgName})
-			} else {
-				out = append(out, st)
+				break
 			}
+			// Advance the honest-duration accumulator (only counts time the
+			// peer was actually answering) and stamp it onto the status, so a
+			// dead upstream freezes the timer instead of inflating uptime.
+			m.mu.Lock()
+			if e := m.tunnels[s.name]; e != nil {
+				m.advanceDuration(e, st, time.Now())
+				st.Duration = domain.FormatDuration(e.healthyAccum)
+				st.Paused = e.paused
+			} else {
+				st.Duration = domain.FormatDuration(time.Since(s.connectedAt))
+			}
+			m.mu.Unlock()
+			out = append(out, st)
 		}
 	}
 	return out
+}
+
+// advanceDuration updates e.healthyAccum to reflect only the wall-clock time
+// this tunnel spent genuinely connected during the latest tick. Caller MUST
+// hold m.mu. `st` is the status computed for this tick (carries
+// HandshakeStale); `now` is the tick time.
+//
+// A WireGuard interface can stay UP while its peer is unreachable — the NIC
+// went to sleep, the lid closed, the upstream died — in which case handshakes
+// stop but StateConnected does not change. Counting that dead time as
+// "connected" is exactly the bug where the UI shows "22h connected" for a link
+// that dropped hours ago. So we only add elapsed time when the handshake is NOT
+// stale; otherwise we freeze the counter and mark it paused.
+//
+// The logic is idempotent across call sites: it is driven from AllStatuses()
+// (the 1Hz event loop) but also safe if Status()/StatusFor() or the reconnect
+// monitor call it again, because elapsed is measured from lastTick — a second
+// call in the same interval adds ≈0.
+func (m *Manager) advanceDuration(e *tunnelEntry, st *domain.ConnectionStatus, now time.Time) {
+	if e == nil || st == nil {
+		return
+	}
+	if e.lastTick.IsZero() {
+		// First accounting tick since (re)connect: anchor the baseline,
+		// don't count the pre-existing gap.
+		e.lastTick = now
+		e.healthyAccum = 0
+		e.paused = false
+		return
+	}
+	elapsed := now.Sub(e.lastTick)
+	e.lastTick = now
+	if elapsed <= 0 {
+		return
+	}
+	if !st.HandshakeStale {
+		e.healthyAccum += elapsed
+		e.paused = false
+	} else {
+		e.paused = true
+	}
 }
 
 // IsConnected returns true if ANY tunnel is fully established.

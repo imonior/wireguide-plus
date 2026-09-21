@@ -997,6 +997,18 @@ export function SetHookInText(content, hook, command) {
 }
 
 /**
+ * SetKeepConnectionOnIdle enables or disables the master "keep connection on
+ * idle" switch (keep tunnels alive through screen-saver / display sleep /
+ * session lock). Persistence is handled by Settings.SaveSettings; this call
+ * only broadcasts the change so a running GUI reflects it immediately.
+ * @param {boolean} enabled
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetKeepConnectionOnIdle(enabled) {
+    return $Call.ByID(1038497327, enabled);
+}
+
+/**
  * SetLogLevel updates both the GUI's and the helper's slog level
  * immediately. Exposed as a Wails method so the Settings view can call
  * it without waiting for a full SaveSettings round trip.

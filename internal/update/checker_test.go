@@ -668,14 +668,21 @@ func TestMatchAsset_EmptyAssets(t *testing.T) {
 }
 
 // Windows assets are published without an OS token
-// (wireguideplus-<arch>-installer.exe / -portable.zip, see docs/release.md),
-// so the arch anchor alone must be enough for them — while other OSes must
-// never accept a tokenless Windows asset name.
+// (wireguideplus-<version>-<arch>-installer.exe / -portable.zip, see
+// docs/release.md), so the arch anchor alone must be enough for them — while
+// other OSes must never accept a tokenless Windows asset name.
+//
+// Both the current versioned names and the pre-2.3.1 unversioned names are
+// covered: older releases stay on GitHub, and the same matcher must keep
+// resolving them so an in-flight update never regresses.
 func TestAssetMatchesOSArch_WindowsTokenlessNames(t *testing.T) {
 	winOS := []string{"windows", "win", "win64"}
 	for _, name := range []string{
-		"wireguideplus-amd64-installer.exe",
-		"wireguideplus-amd64-portable.zip",
+		"wireguideplus-2.3.1-amd64-installer.exe",
+		"wireguideplus-2.3.1-amd64-portable.zip",
+		"wireguideplus-2.4.0-amd64-installer.exe",
+		"wireguideplus-amd64-installer.exe", // pre-2.3.1 unversioned
+		"wireguideplus-amd64-portable.zip",  // pre-2.3.1 unversioned
 	} {
 		if !assetMatchesOSArch(name, winOS, "amd64") {
 			t.Errorf("assetMatchesOSArch(%q, %v, amd64) = false, want true", name, winOS)
@@ -685,11 +692,47 @@ func TestAssetMatchesOSArch_WindowsTokenlessNames(t *testing.T) {
 	if !assetMatchesOSArch("wireguideplus-windows-amd64-installer.exe", winOS, "amd64") {
 		t.Error("explicit OS token must match on Windows")
 	}
+	// The version segment must not shadow a *different* arch.
+	if assetMatchesOSArch("wireguideplus-2.3.1-arm64-installer.exe", winOS, "amd64") {
+		t.Error("versioned arm64 asset must not match an amd64 client")
+	}
+	if !assetMatchesOSArch("wireguideplus-2.3.1-arm64-installer.exe", winOS, "arm64") {
+		t.Error("versioned arm64 asset must match an arm64 client")
+	}
+	if !assetMatchesOSArch("wireguideplus-2.3.1-x86-installer.exe", winOS, "386") {
+		t.Error("versioned x86 asset must match a 386 client")
+	}
 	// Other OSes require their own token: a tokenless Windows asset
 	// name must not match them.
 	for _, osNames := range [][]string{{"linux"}, {"darwin", "macos", "osx"}} {
 		if assetMatchesOSArch("wireguideplus-amd64-installer.exe", osNames, "amd64") {
 			t.Errorf("assetMatchesOSArch tokenless name matched %v, want false", osNames)
+		}
+	}
+}
+
+// Versioned asset names (2.3.1+) must resolve on every platform, and the
+// version segment must never be mistaken for an OS/arch token.
+func TestAssetMatchesOSArch_VersionedNames(t *testing.T) {
+	darwin := []string{"darwin", "macos", "osx"}
+	cases := []struct {
+		name    string
+		osNames []string
+		arch    string
+		want    bool
+	}{
+		{"WireGuidePlus-2.3.1-darwin-arm64.dmg", darwin, "arm64", true},
+		{"WireGuidePlus-2.3.1-darwin-arm64.zip", darwin, "arm64", true},
+		{"WireGuidePlus-2.3.1-linux-amd64.deb", []string{"linux"}, "amd64", true},
+		{"WireGuidePlus-2.3.1-linux-arm64-portable.tar.gz", []string{"linux"}, "arm64", true},
+		// wrong arch must not match
+		{"WireGuidePlus-2.3.1-darwin-arm64.dmg", darwin, "amd64", false},
+		{"WireGuidePlus-2.3.1-linux-amd64.deb", []string{"linux"}, "arm64", false},
+	}
+	for _, c := range cases {
+		if got := assetMatchesOSArch(c.name, c.osNames, c.arch); got != c.want {
+			t.Errorf("assetMatchesOSArch(%q, %v, %q) = %v, want %v",
+				c.name, c.osNames, c.arch, got, c.want)
 		}
 	}
 }
