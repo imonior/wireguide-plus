@@ -20,6 +20,7 @@
   import { createEventDispatcher } from 'svelte';
   import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
   import { t } from '../i18n/index.js';
+  import { getAutomationDisabled } from './tunnel-automation.js';
 
   export let name = ''; // SAVED tunnel name — the meta sidecar key
   export let isNew = false;
@@ -37,10 +38,6 @@
   // the same way the DNS resolve path row does.
   let keepIdleMode = 'inherit';
   let keepIdleEnabled = false; // master switch from Settings
-  // Durable per-tunnel automation opt-out. Unlike the manual-off latch —
-  // which is cleared every time the app restarts — this survives restarts,
-  // so "leave this tunnel to me" actually sticks. Persisted in the sidecar.
-  let automationDisabled = false;
   let conflictWarn = '';
   let loadErr = '';
   let lastLoadedName = '';
@@ -66,7 +63,6 @@
         useAsDefaultDNS = false;
         dnsResolvePath = false;
         keepIdleMode = 'inherit';
-        automationDisabled = false;
         await loadMaster();
         return;
       }
@@ -78,7 +74,6 @@
       // undefined / null => inherit the global switch.
       const k = p?.keep_connection_on_idle;
       keepIdleMode = k === true ? 'on' : k === false ? 'off' : 'inherit';
-      automationDisabled = !!p?.automation_disabled;
       await loadMaster();
       loadErr = '';
     } catch (e) {
@@ -99,7 +94,12 @@
       dns_resolve_path: dnsResolvePath,
       // null => inherit (field omitted on the wire); true/false => override.
       keep_connection_on_idle: keepIdleMode === 'inherit' ? null : keepIdleMode === 'on',
-      automation_disabled: automationDisabled,
+      // automation_disabled is owned by the Automation editor + hero toggle,
+      // not this panel. SetTunnelPolicies replaces the whole sidecar, so
+      // persist() refreshes this field from the live sidecar before saving to
+      // avoid clobbering a toggle made elsewhere this session. New tunnels
+      // have no sidecar yet, so false (not excluded) is the correct default.
+      automation_disabled: false,
     };
   }
 
@@ -137,12 +137,21 @@
 
   async function persist() {
     if (!TunnelService) return;
+    const payload = current();
     if (isNew || !name) {
-      dispatch('policychange', current());
+      dispatch('policychange', payload);
       return;
     }
     try {
-      await TunnelService.SetTunnelPolicies(name, current());
+      // automation_disabled is owned by the Automation editor + hero toggle,
+      // not this panel. SetTunnelPolicies does a full sidecar replace, so a
+      // save here would otherwise reset a stopped tunnel back to
+      // automation-enabled. Refresh the field from the live sidecar first,
+      // via the same helper the other two controls use.
+      try {
+        payload.automation_disabled = await getAutomationDisabled(TunnelService, name);
+      } catch { /* fall back to current()'s default (false) */ }
+      await TunnelService.SetTunnelPolicies(name, payload);
       await warnOnConflict();
     } catch (e) {
       loadErr = e?.message || String(e);
@@ -203,14 +212,6 @@
     </div>
   {/if}
 
-  <div class="divider"></div>
-
-  <label class="row">
-    <input type="checkbox" bind:checked={automationDisabled} on:change={persist} />
-    <span class="label-text">{$t('policy.automation_disabled')}</span>
-  </label>
-  <p class="desc">{$t('policy.automation_disabled_hint')}</p>
-
   {#if loadErr}
     <p class="err">{loadErr}</p>
   {/if}
@@ -252,10 +253,6 @@
     line-height: 1.45;
   }
   .field { margin-top: 6px; }
-  .divider {
-    border-top: 1px solid var(--border);
-    margin: 12px 0;
-  }
   .text-input,
   .select-input {
     width: 100%;

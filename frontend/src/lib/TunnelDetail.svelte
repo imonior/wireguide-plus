@@ -5,6 +5,7 @@
   import { t } from '../i18n/index.js';
   import { errText } from './errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './tunnel-name.js';
+  import { getAutomationDisabled, setAutomationDisabled } from './tunnel-automation.js';
   import { classifyIPCoverage, parseIP, stripPort } from './ip-utils.js';
   import { createEventDispatcher, tick, onDestroy } from 'svelte';
   import AutomationEditor from './AutomationEditor.svelte';
@@ -16,12 +17,24 @@
   // Automation rule editor (issue #12) — replaces the old per-tunnel
   // Wi-Fi auto-connect UI, which is now handled by the general engine.
   let showAutomation = false;
+  // When the Automation Editor modal closes, re-read the durable automation
+  // opt-out so the hero bar reflects any change made inside the editor
+  // (previously the hero only refreshed on a tunnel-name change, so toggling
+  // there left it showing the stale "running" state until a tunnel switch).
+  let automationEditorWasOpen = false;
+  $: if (showAutomation) automationEditorWasOpen = true;
+  $: if (!showAutomation && automationEditorWasOpen) {
+    automationEditorWasOpen = false;
+    loadAutomationState($selectedTunnel?.name);
+  }
 
-  // Durable per-tunnel automation opt-out (mirrors TunnelPolicies'
-  // "Exclude from automation" checkbox, but surfaced here as an always-on
-  // toggle so the user can suppress automation on the fly — without opening
-  // the editor — the moment a tunnel starts thrashing). Writes the same
-  // sidecar flag the helper engine reads every poll cycle.
+  // Durable per-tunnel automation switch (mirrors the Automation editor's
+  // "Automation on/off" checkbox; both go through the shared read-modify-write
+  // helper so they cannot drift). Surfaced here as an always-on toggle so the
+  // user can suppress automation on the fly — without opening the editor —
+  // the moment a tunnel starts thrashing. Writes the same sidecar flag the
+  // helper engine reads every poll cycle. Note the polarity: `true` means
+  // automation is switched OFF.
   let automationDisabled = false;
   let autoBtnBusy = false;
   let autoBtnErr = '';
@@ -678,8 +691,7 @@
   async function loadAutomationState(name) {
     if (!name) return;
     try {
-      const p = await TunnelService.GetTunnelPolicies(name);
-      automationDisabled = !!p?.automation_disabled;
+      automationDisabled = await getAutomationDisabled(TunnelService, name);
       autoBtnErr = '';
     } catch (e) {
       automationDisabled = false;
@@ -697,11 +709,9 @@
     autoBtnBusy = true;
     autoBtnErr = '';
     try {
-      const p = (await TunnelService.GetTunnelPolicies(name)) || {};
-      const next = !automationDisabled;
-      p.automation_disabled = next;
-      await TunnelService.SetTunnelPolicies(name, p);
-      automationDisabled = next;
+      // Shared read-modify-write: it re-reads the sidecar so only this one
+      // flag changes, leaving every other policy field untouched.
+      automationDisabled = await setAutomationDisabled(TunnelService, name, !automationDisabled);
     } catch (e) {
       autoBtnErr = errText(e);
     } finally {
@@ -1003,12 +1013,16 @@
       {/if}
     </div>
 
-    <!-- AUTOMATION CONTROL: a durable, always-visible per-tunnel opt-out.
-         Mirrors the TunnelPolicies "Exclude from automation" checkbox but
-         lives in the detail view so the user can suppress automation the
-         instant a tunnel starts thrashing (the ts453dmini loop) without
-         opening the editor. The helper reads this flag every poll cycle, so
-         the change bites on the next tick — no restart. -->
+    <!-- AUTOMATION CONTROL: a durable, always-visible per-tunnel switch.
+         Mirrors the Automation editor's "Automation on/off" checkbox —
+         both controls read and write the same automation_disabled flag
+         through the shared helper — but lives in the detail view so the
+         user can suppress automation the instant a tunnel starts
+         thrashing (the ts453dmini loop) without opening the editor. The
+         helper reads this flag every poll cycle, so the change bites on
+         the next tick — no restart. Closing the editor re-reads the flag
+         (see the modal watcher above) so the two controls never show
+         different states. -->
     <div class="automation-bar" class:auto-off={automationDisabled}>
       <span class="automation-state">
         <Icon name="zap" size={13} strokeWidth={2} />
@@ -1703,8 +1717,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ========== AUTOMATION CONTROL BAR ==========
-     A compact, always-visible toggle that mirrors the TunnelPolicies
-     "Exclude from automation" checkbox. When automation is OFF (we hold the
+     A compact, always-visible toggle that mirrors the Automation editor's
+     "Automation on/off" checkbox. When automation is OFF (we hold the
      tunnel) the bar turns amber so the suppressed state reads at a glance. */
   .automation-bar {
     display: flex;

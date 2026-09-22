@@ -195,7 +195,7 @@
     "keep_connection_on_idle": "閒置時保持連線（關閉螢幕、鎖定、待機）",
     "keep_connection_on_idle_hint": "強制開啟 PersistentKeepalive，讓隧道在螢幕保護、關閉螢幕或鎖定期間保持連線，並在睡眠/休眠喚醒後自動重新連線。僅當你的網路會封鎖閒置保活探測時才需關閉。",
     "prevent_system_sleep": "保持背景執行（禁止系統休眠）",
-    "prevent_system_sleep_hint": "WireGuide Plus 執行期間阻止電腦休眠或關閉螢幕——忽略螢幕保護程式、熄屏與暫停。屬侵入性電源覆寫，預設關閉。",
+    "prevent_system_sleep_hint": "隧道連線期間阻止電腦休眠或關閉螢幕——忽略螢幕保護程式、熄屏與暫停。最後一條隧道中斷後立即釋放，不會讓閒置的電腦無法睡眠。屬侵入性電源覆寫，預設關閉。",
     "history_retention": "歷史記錄保留時長",
     "history_retention_hint": "超過此時長的連線歷史會被自動清理。清單始終最多保留 200 筆記錄。",
     "history_retention_off": "不限制時間",
@@ -637,7 +637,7 @@
     "keep_idle_off": "不保持連線",
     "keep_idle_on": "一律保持連線",
     "automation_disabled_hint": "保留此隧道的自動化規則與預設狀態，但引擎永遠不會自動連線或中斷它。手動停止在重新啟動應用程式後即失效，而此設定會持續生效——適合同時被其他程式接管的隧道。",
-    "automation_disabled": "從自動化中排除",
+    "automation_disabled": "自動化功能開/關",
     "domain_dns": "DNS",
     "domain_protection": "流量保護",
     "domain_route": "路由",

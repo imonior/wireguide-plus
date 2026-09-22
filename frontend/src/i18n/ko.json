@@ -195,7 +195,7 @@
     "keep_connection_on_idle": "유휴 시 연결 유지(화면 꺼짐·잠금·절전)",
     "keep_connection_on_idle_hint": "PersistentKeepalive를 강제로 켜서 화면 보호기·화면 꺼짐·세션 잠금 중에도 터널을 유지하고, 절전/최대 절전 모드에서 깨어나면 자동으로 다시 연결합니다. 네트워크가 유휴 상태의 킵얼라이브를 차단하는 경우에만 끄십시오.",
     "prevent_system_sleep": "백그라운드 실행 유지(시스템 절전 방지)",
-    "prevent_system_sleep_hint": "WireGuide Plus 실행 중에는 컴퓨터의 절전 및 화면 끄기를 막습니다 — 화면 보호기·화면 끄기·대기 모드를 무시합니다. 침투적인 전원 재정의이므로 기본값은 꺼짐입니다.",
+    "prevent_system_sleep_hint": "터널이 연결된 동안에는 컴퓨터의 절전 및 화면 끄기를 막습니다 — 화면 보호기·화면 끄기·대기 모드를 무시합니다. 마지막 터널 연결이 끊기면 즉시 해제되므로 유휴 상태의 컴퓨터가 계속 깨어 있지 않습니다. 침투적인 전원 재정의이므로 기본값은 꺼짐입니다.",
     "history_retention": "기록 보관 기간",
     "history_retention_hint": "이 기간보다 오래된 연결 기록은 자동으로 정리됩니다. 목록은 항상 최대 200개로 유지됩니다.",
     "history_retention_off": "기간 제한 없음",
@@ -637,7 +637,7 @@
     "keep_idle_off": "연결 유지 안 함",
     "keep_idle_on": "항상 연결 유지",
     "automation_disabled_hint": "터널의 자동화 규칙과 기본 상태는 유지되지만, 엔진이 자동으로 연결하거나 끊지 않습니다. 수동 중지는 앱 재시작 시 해제되지만 이 설정은 계속 유지되므로, 다른 프로그램이 함께 사용하는 터널에 적합합니다.",
-    "automation_disabled": "자동화에서 제외",
+    "automation_disabled": "자동화 켜기/끄기",
     "domain_dns": "DNS",
     "domain_protection": "보호",
     "domain_route": "라우팅",

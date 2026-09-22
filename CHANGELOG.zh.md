@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.5] - 2026-09-23
+
+### ✨ 新增
+
+- **「禁止系统休眠」现在在 macOS 与 Linux 上同样生效**：此前它只在 Windows 有效（调用 `SetThreadExecutionState`），在其他平台是空操作。macOS 现在持有 `caffeinate` 断言，Linux 持有 `systemd-inhibit` 锁，三个平台的网卡都能保持供电，后台隧道得以存活。
+
+### 🔧 变更
+
+- **仅在有隧道真正连通时才阻止休眠**：开启该设置不再让机器在整个应用生命周期内无法睡眠。helper（特权后台守护进程，关闭 GUI 后仍在运行）会在第一条隧道进入已连接状态时启用阻止，最后一条隧道断开后立即释放。设置项说明已在全部语言中同步更新。
+- **按隧道的自动化开关移入自动化编辑器**：「从自动化中排除」复选框已离开隧道策略面板，改为放在自动化编辑器顶部，作为明确的「自动化功能开/关」开关，与详情页开关并列。两个控件通过同一个共享的读改写辅助读写同一标志，编辑器关闭时会重新读取，二者不会再显示不同状态。
+
+### 🐛 修复
+
+- **「禁止系统休眠」无法持久化**：设置页的保存数据漏掉了该字段，开关会在重启后静默回到关闭，下次启动也不会恢复阻止休眠。
+- **Linux 每次关闭开关都会泄漏一个 `sleep infinity` 进程**：此前只杀了 `systemd-inhibit`，而它持有抑制锁所要运行的那条命令没被杀掉，每次切换都留下一个孤儿进程。现在改为杀掉整个进程组，并在 helper 崩溃时回收子进程。
+- **阻止休眠的子进程崩溃后，应用仍以为自己处于保护中**：现在启用前会先做存活探测，若 `caffeinate` 或 `systemd-inhibit` 已退出则重新拉起，而不是静默地让机器失去保护。
+
 ## [2.3.3] - 2026-09-22
 
 ### ✨ 新增

@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.5] - 2026-09-23
+
+### ✨ 新增
+
+- **「禁止系統休眠」現在於 macOS 與 Linux 同樣生效**：此前它只在 Windows 有效（呼叫 `SetThreadExecutionState`），在其他平台是空操作。macOS 現在持有 `caffeinate` 斷言，Linux 持有 `systemd-inhibit` 鎖，三個平台的網卡都能保持供電，背景通道得以存活。
+
+### 🔧 變更
+
+- **僅在有通道真正連線時才阻止休眠**：開啟該設定不再讓機器在整個應用程式生命週期內無法睡眠。helper（特權背景守護行程，關閉 GUI 後仍在執行）會在第一條通道進入已連線狀態時啟用阻止，最後一條通道中斷後立即釋放。設定項說明已在所有語言中同步更新。
+- **按通道的自動化開關移入自動化編輯器**：「從自動化中排除」核取方塊已離開通道原則面板，改為放在自動化編輯器頂端，作為明確的「自動化功能開/關」開關，與詳細頁開關並列。兩個控制項透過同一個共用的讀改寫輔助讀寫同一旗標，編輯器關閉時會重新讀取，兩者不會再顯示不同狀態。
+
+### 🐛 修復
+
+- **「禁止系統休眠」無法持久化**：設定頁的儲存資料漏掉該欄位，開關會在重新啟動後靜默回到關閉，下次啟動也不會恢復阻止休眠。
+- **Linux 每次關閉開關都會洩漏一個 `sleep infinity` 處理程序**：此前只殺掉 `systemd-inhibit`，而它持有抑制鎖所要執行的那條命令沒被殺掉，每次切換都留下一個孤兒處理程序。現在改為殺掉整個處理程序群組，並在 helper 崩潰時回收子處理程序。
+- **阻止休眠的子處理程序崩潰後，應用程式仍以為自己處於保護中**：現在啟用前會先做存活探測，若 `caffeinate` 或 `systemd-inhibit` 已結束則重新啟動，而不是靜默地讓機器失去保護。
+
 ## [2.3.3] - 2026-09-22
 
 ### ✨ 新增

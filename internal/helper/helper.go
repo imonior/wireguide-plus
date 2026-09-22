@@ -268,6 +268,17 @@ type Helper struct {
 	// the rules within seconds, instead of staying up until the 30s poll.
 	startedAt time.Time
 
+	// Sleep-override state (see sleep_refresh.go). sleepRequested is the
+	// user's persisted master switch; sleepActive is what the OS is actually
+	// doing right now. They differ while no tunnel is connected: the request
+	// is remembered but the override is released, so an idle laptop with no
+	// tunnel up is never held awake by this app. Guarded by sleepMu because
+	// the reconcile loop and the IPC handler touch it from different
+	// goroutines.
+	sleepMu        sync.Mutex
+	sleepRequested bool
+	sleepActive    bool
+
 	done        chan struct{}
 	cleanupOnce sync.Once
 }
@@ -439,6 +450,12 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// queues unattended.
 	h.goSafe("automationEvalLoop", h.automationEvalLoop)
 
+	// Reconcile the OS sleep override with connection state. Deliberately
+	// NOT tied to a GUI subscription: the helper is the long-lived
+	// privileged daemon, so a background tunnel must still hold the machine
+	// awake when the GUI is closed. See sleep_refresh.go.
+	h.goSafe("sleepPreventionLoop", h.sleepPreventionLoop)
+
 	// Start Wi-Fi SSID monitor. On change we broadcast the event for
 	// any GUI listener AND post an Automation re-evaluation request so
 	// auto-connect / auto-disconnect keep working when the GUI is
@@ -472,11 +489,14 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		if settings.LogLevel != "" {
 			h.logLevel.Set(parseLevel(settings.LogLevel))
 		}
-		if settings.PreventSystemSleep {
-			if err := applySystemSleepPrevention(true); err != nil {
-				slog.Warn("restore prevent system sleep failed", "error", err)
-			}
-		}
+		// Remember the master switch, then let the reconcile loop decide
+		// whether to actually engage: the override is only held while a
+		// tunnel is really connected. If a crash-recovery restore already
+		// brought a tunnel up, the first refresh engages it immediately.
+		h.sleepMu.Lock()
+		h.sleepRequested = settings.PreventSystemSleep
+		h.sleepMu.Unlock()
+		h.refreshSystemSleepPrevention()
 		slog.Info("restored persisted helper settings",
 			"health_check", settings.HealthCheck,
 			"pin_interface", settings.PinInterface,

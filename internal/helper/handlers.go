@@ -670,21 +670,27 @@ func (h *Helper) handleSetKeepConnectionOnIdle(params json.RawMessage) (interfac
 }
 
 // handleSetPreventSystemSleep flips the "keep running in background" master
-// switch. Unlike the keep-idle handler, this one has a real side effect: it
-// asks the OS to stop sleeping/suspending/turning the display off (Windows via
-// SetThreadExecutionState). The change is also broadcast so a running GUI (or
-// the CLI) reflects it; persistence is Settings.SaveSettings, which the GUI
-// calls on toggle. Failure to apply is logged but does not abort the toggle —
-// the user still sees the switch move and the setting is saved, so they can
+// switch. It records the user's request and then reconciles the OS override:
+// the override is held only while a tunnel is actually connected (see
+// sleep_refresh.go), so enabling it with nothing connected is remembered rather
+// than pinning an idle laptop awake. The change is also broadcast so a running
+// GUI (or the CLI) reflects it; persistence is Settings.SaveSettings, which the
+// GUI calls on toggle. Failure to apply is logged but does not abort the toggle
+// — the user still sees the switch move and the setting is saved, so they can
 // act on the warning rather than being stuck.
 func (h *Helper) handleSetPreventSystemSleep(params json.RawMessage) (interface{}, error) {
 	var req ipc.SetPreventSystemSleepRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, err
 	}
-	if err := applySystemSleepPrevention(req.Enabled); err != nil {
-		slog.Warn("apply prevent system sleep failed", "enabled", req.Enabled, "error", err)
-	}
+	h.sleepMu.Lock()
+	h.sleepRequested = req.Enabled
+	h.sleepMu.Unlock()
+	// Reconcile rather than applying directly: the override is only engaged
+	// while a tunnel is actually connected, so turning this on with nothing
+	// connected is remembered (and the loop engages it on the next connect)
+	// instead of pinning an idle laptop awake.
+	h.refreshSystemSleepPrevention()
 	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{PreventSystemSleep: &req.Enabled})
 	slog.Info("prevent system sleep changed", "enabled", req.Enabled)
 	return ipc.Empty{}, nil

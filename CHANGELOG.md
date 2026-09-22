@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.5] - 2026-09-23
+
+### ✨ Added
+
+- **"Prevent system sleep" now works on macOS and Linux**: it used to be a Windows-only setting (`SetThreadExecutionState`) and a no-op everywhere else. macOS now holds a `caffeinate` assertion and Linux holds a `systemd-inhibit` lock, so the network adapter keeps power and background tunnels survive on all three platforms.
+
+### 🔧 Changed
+
+- **The sleep override is held only while a tunnel is connected**: turning the setting on no longer pins the machine awake for the whole app lifetime. The helper — the privileged background daemon, which keeps running with the GUI closed — engages the override when the first tunnel reaches connected state and releases it as soon as the last one disconnects. The setting's description was updated in every language to match.
+- **The per-tunnel automation switch moved into the Automation editor**: the "Exclude from automation" checkbox left the tunnel policy panel and now sits at the top of the Automation editor as an explicit "Automation on/off" switch, alongside the detail-view toggle. Both controls read and write the same flag through one shared read-modify-write helper, and the editor re-reads it when it closes, so the two can never show different states.
+
+### 🐛 Fixed
+
+- **"Prevent system sleep" did not survive a restart**: the settings page left the field out of its save payload, so the switch silently reverted to off and the override was never restored on the next launch.
+- **Linux leaked a `sleep infinity` process every time the switch was turned off**: only `systemd-inhibit` was killed, not the command it holds the inhibitor lock for, orphaning a process on each toggle. The whole process group is now killed, and the child is reaped if the helper ever crashes.
+- **A crashed sleep-prevention child left the app believing it was still guarded**: enabling the override is now preceded by a liveness probe, so a dead `caffeinate` or `systemd-inhibit` is respawned instead of silently leaving the machine unguarded.
+
 ## [2.3.3] - 2026-09-22
 
 ### ✨ Added

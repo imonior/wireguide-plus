@@ -133,11 +133,11 @@ really driving the connection.
 ### Excluding a tunnel from automation
 
 A manual override only lasts until the app restarts. For a tunnel that automation must
-**never** drive — typically one that another WireGuard client also controls — set
-**Exclude from automation** in the tunnel's policy panel. The tunnel keeps its rules and
+**never** drive — typically one that another WireGuard client also controls — turn
+**Automation** off in the tunnel's Automation editor. The tunnel keeps its rules and
 default state, but the engine will neither connect nor disconnect it.
 
-The same exclusion is also a one-click **Stop automation** toggle at the top of the tunnel detail view, so you can suppress automation right where you are looking at the tunnel. A new global **Prevent system sleep** setting (off by default) keeps the machine awake while the app runs, so an idle or sleep power policy can't silently drop a tunnel. When another client has already taken a tunnel's address, WireGuide Plus now shows an interactive dialog naming the conflicting software and offering to stop that tunnel's automation — you decide, it never force-stops the other client.
+The same switch is also a one-click **Stop automation** toggle at the top of the tunnel detail view, so you can suppress automation right where you are looking at the tunnel. The global **Prevent system sleep** setting (off by default) keeps the machine awake **while a tunnel is connected** — on Windows, macOS and Linux alike — and releases the override the moment the last tunnel disconnects, so an idle or sleep power policy can't silently drop a tunnel. When another client has already taken a tunnel's address, WireGuide Plus now shows an interactive dialog naming the conflicting software and offering to stop that tunnel's automation — you decide, it never force-stops the other client.
 
 ### One tunnel, one client
 

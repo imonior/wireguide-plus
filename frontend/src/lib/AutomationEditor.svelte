@@ -21,6 +21,7 @@
   import SSIDPermissionBanner from './SSIDPermissionBanner.svelte';
   import { modalDrag } from './actions/modal-drag.js';
   import { loadPhysicalInterfaces, ifaceLabel } from './interface-utils.js';
+  import { getAutomationDisabled, setAutomationDisabled } from './tunnel-automation.js';
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
@@ -28,6 +29,12 @@
   let rules = [];
   // The state the tunnel converges to when NO rule matches.
   let defaultState = 'disconnect';
+  // Durable automation switch (TunnelMeta.AutomationDisabled). Note the
+  // polarity: `true` means automation is switched OFF. Lives in the tunnel
+  // sidecar, persisted via SetTunnelPolicies. Surfaced here as an
+  // "Automation on/off" checkbox and in the hero toggle, both writing the
+  // SAME flag through the shared read-modify-write helper.
+  let automationDisabled = false;
   // Local-only identity for {#each} keys; never persisted.
   let condId = 0;
   let ruleId = 0;
@@ -105,6 +112,14 @@
       // showing all badges as no-match/inactive until the load finished
       // — this was the direct cause of "every open looks different".
       loadedFor = name;
+      // Durable automation opt-out also lives in the tunnel sidecar
+      // (TunnelMeta.AutomationDisabled). Surface it here so the switch in
+      // this editor and the hero toggle both reflect the same flag.
+      try {
+        const disabled = await getAutomationDisabled(TunnelService, name);
+        if (gen !== loadGen) return;
+        automationDisabled = disabled;
+      } catch (_) { if (gen === loadGen) automationDisabled = false; }
     } catch (e) {
       if (gen === loadGen) {
         rules = [];
@@ -247,6 +262,21 @@
   function setDefaultState(v) {
     defaultState = v;
     save();
+  }
+  // Durable automation on/off toggle. The stored flag is
+  // `automation_disabled` (true = automation switched OFF), but the control
+  // the user sees is an "Automation on/off" checkbox, so the checkbox is
+  // CHECKED while automation is ENABLED. It goes through the shared
+  // read-modify-write helper so it writes the same flag, the same way, as
+  // the hero toggle in the detail view.
+  async function toggleAutomationDisabled() {
+    if (!TunnelService || !tunnelName) return;
+    const next = !automationDisabled;
+    try {
+      automationDisabled = await setAutomationDisabled(TunnelService, tunnelName, next);
+    } catch (e) {
+      console.error('toggle automation_disabled:', e);
+    }
   }
   // Rule-level drag & drop: reorder rules — position IS priority. Live
   // reorder while dragging (same feel as condition rows); persisted by
@@ -871,6 +901,19 @@
         <summary>{$t('automation.help_summary')}</summary>
         <p class="am-hint">{$t('automation.hint')}</p>
       </details>
+      <!-- Automation on/off. The stored flag is automation_disabled, so the
+           checkbox is CHECKED while automation is ENABLED — otherwise the
+           "on/off" label would read backwards. The trailing state text reuses
+           the hero toggle's own vocabulary (tunnel.automation_on / _off) so
+           the two controls say the same thing in the same words. -->
+      <div class="am-exclude" class:am-exclude-off={automationDisabled}>
+        <label class="am-exclude-row">
+          <input type="checkbox" style="width:15px;height:15px;accent-color:var(--accent)" checked={!automationDisabled} on:change={toggleAutomationDisabled} />
+          <span class="am-exclude-text">{$t('policy.automation_disabled')}</span>
+          <span class="am-exclude-state">{automationDisabled ? $t('tunnel.automation_off') : $t('tunnel.automation_on')}</span>
+        </label>
+        <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
+      </div>
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
         <SSIDPermissionBanner {TunnelService} />
@@ -1363,4 +1406,24 @@
   .am-remove:hover { background: color-mix(in srgb, var(--red, #ff3b30) 18%, transparent); color: var(--red, #ff3b30); }
   .am-priority-note { margin: 0; font: 400 10px/1.4 var(--font-sans); color: var(--text-muted); text-align: center; flex-shrink: 0; }
   .am-error { margin-top: 8px; font: 400 12px var(--font-sans); color: var(--error-text, #ff453a); flex-shrink: 0; }
+  /* Automation on/off switch — sits at the top of the editor so the durable
+     opt-out and the hero toggle are the same control, shown in the two places
+     the user reaches for it (no second, out-of-sync copy). The checkbox is
+     checked while automation is ENABLED; the trailing state text borrows the
+     hero's wording so both controls read the same. */
+  .am-exclude {
+    flex-shrink: 0; display: flex; flex-direction: column; gap: 4px;
+    margin: 6px 0 0; padding: 8px 10px;
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .am-exclude-off { border-color: color-mix(in srgb, var(--text-muted) 55%, transparent); }
+  .am-exclude-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .am-exclude-text { font: 600 12px/1.3 var(--font-sans); color: var(--text-primary); }
+  .am-exclude-state {
+    margin-left: auto; font: 400 11px/1.3 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .am-exclude-off .am-exclude-state { color: var(--text-muted); font-weight: 600; }
+  .am-exclude-hint { font: 400 11px/1.45 var(--font-sans); color: var(--text-muted); margin: 2px 0 0; }
 </style>

@@ -195,7 +195,7 @@
     "keep_connection_on_idle": "Keep connection while idle (screen off, lock, sleep)",
     "keep_connection_on_idle_hint": "Forces PersistentKeepalive so the tunnel stays up during screen-saver, display sleep or session lock, and reconnects automatically after sleep/hibernate. Turn off only if your network blocks idle keepalive probes.",
     "prevent_system_sleep": "Keep running in background (block system sleep)",
-    "prevent_system_sleep_hint": "Prevents the computer from sleeping or turning off the display while WireGuide Plus is running — ignores screen-saver, screen-off and suspend. Invasive power override: off by default.",
+    "prevent_system_sleep_hint": "Blocks system sleep and display-off while a tunnel is connected — ignores screen-saver, screen-off and suspend. Released the moment the last tunnel disconnects, so an idle machine is never held awake. Invasive power override: off by default.",
     "history_retention": "Keep history for",
     "history_retention_hint": "Connection history older than this is pruned automatically. The list is also always capped at 200 records.",
     "history_retention_off": "No time limit",
@@ -637,7 +637,7 @@
     "keep_idle_off": "Don't keep connected",
     "keep_idle_on": "Always keep connected",
     "automation_disabled_hint": "The tunnel keeps its Automation rules and Default State, but the engine never connects or disconnects it. A manual stop only lasts until the app restarts; this sticks — use it for a tunnel another program also drives.",
-    "automation_disabled": "Exclude from automation",
+    "automation_disabled": "Automation on/off",
     "domain_dns": "DNS",
     "domain_protection": "Protection",
     "domain_route": "Routing",

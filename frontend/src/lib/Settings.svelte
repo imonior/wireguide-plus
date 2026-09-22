@@ -682,6 +682,7 @@
     const p = event?.data || {};
     if (p.health_check != null) settings.health_check = p.health_check;
     if (p.keep_connection_on_idle != null) settings.keep_connection_on_idle = p.keep_connection_on_idle;
+    if (p.prevent_system_sleep != null) settings.prevent_system_sleep = p.prevent_system_sleep;
     if (p.pin_interface != null) settings.pin_interface = p.pin_interface;
     if (p.log_level != null) settings.log_level = p.log_level;
     // Proxy fields too — otherwise a `wireguideplus ctl` mode switch
