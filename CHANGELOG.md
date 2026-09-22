@@ -4,6 +4,15 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.6] - 2026-09-23
+
+### 🐛 Fixed
+
+- **"Keep running in background (block system sleep)" did not save**: the Settings screen left
+  the field out of its save payload. Saving replaces the whole settings object, so the missing
+  field was written back as `false` — the switch moved and the override applied for the session,
+  but every later save, and the next launch, reset it to off. Affects all three platforms.
+
 ## [2.3.5] - 2026-09-23
 
 ### ✨ Added

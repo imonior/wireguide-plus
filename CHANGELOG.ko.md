@@ -4,6 +4,15 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.3.6] - 2026-09-23
+
+### 🐛 수정
+
+- **"백그라운드 실행 유지(시스템 절전 방지)"가 저장되지 않음**: 설정 화면의 저장 payload에 이
+  필드가 빠져 있었습니다. 설정 저장은 객체 전체를 덮어쓰기 때문에 누락된 필드는 `false`로 기록됩니다
+  ——스위치는 움직이고 그 세션에서는 적용되지만, 이후 저장(및 다음 실행)마다 꺼짐으로 초기화됩니다.
+  세 플랫폼 모두 해당됩니다.
+
 ## [2.3.5] - 2026-09-23
 
 ### ✨ 추가

@@ -4,6 +4,15 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.6] - 2026-09-23
+
+### 🐛 修正
+
+- **「バックグラウンドで稼働（システムのスリープを禁止）」が保存されない**: 設定画面の保存
+  ペイロードにこの項目が含まれていませんでした。設定の保存は設定オブジェクト全体を置き換える
+  ため、欠けた項目は `false` として書き戻されます——スイッチは動きそのセッション中は有効でも、
+  以降の保存（および次回起動）のたびにオフへ戻っていました。3 プラットフォームすべてに影響します。
+
 ## [2.3.5] - 2026-09-23
 
 ### ✨ 追加

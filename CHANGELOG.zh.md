@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.6] - 2026-09-23
+
+### 🐛 修复
+
+- **「保持后台运行（禁止系统休眠）」无法保存**：设置页的保存载荷漏掉了该字段。保存是整份替换，
+  缺失字段会被写回 `false` —— 开关能切换、当次会话也生效，但每次保存（以及下次启动）都会把它
+  重置为关闭。三个平台均受影响。
+
 ## [2.3.5] - 2026-09-23
 
 ### ✨ 新增

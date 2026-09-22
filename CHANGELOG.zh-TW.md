@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.6] - 2026-09-23
+
+### 🐛 修復
+
+- **「保持背景執行（禁止系統休眠）」無法儲存**：設定頁的儲存內容漏掉了該欄位。儲存是整份覆寫，
+  缺失欄位會被寫回 `false` —— 開關能切換、當次工作階段也生效，但每次儲存（以及下次啟動）都會
+  把它重設為關閉。三個平台皆受影響。
+
 ## [2.3.5] - 2026-09-23
 
 ### ✨ 新增

@@ -290,6 +290,11 @@
         notify_duration_ms: settings.notify_duration_ms,
         health_check: settings.health_check,
         keep_connection_on_idle: settings.keep_connection_on_idle,
+        // Must be sent explicitly: SaveSettings replaces the whole settings
+        // object, so a field dropped from this payload is decoded as its
+        // zero value — omitting this one silently reset the switch to OFF
+        // on every save (macOS/Windows/Linux alike).
+        prevent_system_sleep: settings.prevent_system_sleep,
         dns_resolve_path: settings.dns_resolve_path,
         pin_interface: settings.pin_interface,
         log_level: settings.log_level,
