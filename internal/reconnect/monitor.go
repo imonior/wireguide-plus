@@ -116,6 +116,13 @@ type Monitor struct {
 	// nil means "heal everything" (conservative default if unset).
 	keepAliveFor func(string) bool
 
+	// automationDisabled reports whether a given tunnel has opted out of
+	// automation. When set, the dead-connection monitor never auto-reconnects
+	// that tunnel — a user's manual "stop automation" must override every
+	// automated reconnect path (see #2/#103). nil means "no tunnel is
+	// exempt", matching the conservative default if unset.
+	automationDisabled func(string) bool
+
 	// retries holds in-flight reconnect goroutines keyed by tunnel
 	// name. Per-tunnel state preserves backoff across cross-cause
 	// triggers (sleep/wake, network change, health check) and lets
@@ -171,6 +178,17 @@ func (m *Monitor) SetKeepAlivePredicate(fn func(string) bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.keepAliveFor = fn
+}
+
+// SetAutomationDisabledPredicate installs the "automation disabled" resolver
+// used by every auto-reconnect path (stale-handshake monitor, session-resume
+// heal, and explicit per-tunnel triggers). A tunnel for which this returns
+// true is never auto-reconnected. Must be called before Start(); the pointer
+// is read lock-free on the hot paths because it is installed once at startup.
+func (m *Monitor) SetAutomationDisabledPredicate(fn func(string) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.automationDisabled = fn
 }
 
 // Start begins monitoring the tunnel connection.
@@ -332,6 +350,7 @@ func (m *Monitor) monitorLoop() {
 		case <-ticker.C:
 			m.mu.Lock()
 			enabled := m.healthCheckEnabled
+			disabled := m.automationDisabled
 			m.mu.Unlock()
 			if !enabled {
 				continue
@@ -349,9 +368,15 @@ func (m *Monitor) monitorLoop() {
 				if status.State != domain.StateConnected {
 					continue
 				}
+				tunnelName := status.TunnelName
+				// A tunnel that has opted out of automation must not be
+				// auto-reconnected by the stale-handshake monitor — manual
+				// "stop automation" overrides it (see #2/#103).
+				if disabled != nil && disabled(tunnelName) {
+					continue
+				}
 				age := time.Since(status.LastHandshakeTime)
 				if age > handshakeStaleThreshold {
-					tunnelName := status.TunnelName
 					slog.Warn("handshake stale, triggering per-tunnel reconnect",
 						"tunnel", tunnelName,
 						"last_handshake_age", age.Round(time.Second),
@@ -369,6 +394,15 @@ func (m *Monitor) triggerReconnect() {
 }
 
 func (m *Monitor) triggerReconnectTunnel(tunnelName string) {
+	// Authoritative gate for named-tunnel reconnects: a tunnel that has opted
+	// out of automation must never be auto-reconnected by the dead-connection
+	// monitor (manual "stop automation" must override automation — #2/#103).
+	// The empty-string (all-tunnels) path is a deliberate global restore on
+	// wake/network change and is intentionally not gated here.
+	if tunnelName != "" && m.automationDisabled != nil && m.automationDisabled(tunnelName) {
+		slog.Info("automation disabled for tunnel, skipping reconnect", "tunnel", tunnelName)
+		return
+	}
 	m.mu.Lock()
 
 	// Cancel ONLY the previous retry for this same key — per-tunnel
@@ -726,6 +760,7 @@ func (m *Monitor) triggerLoop() {
 func (m *Monitor) healIfNeeded() {
 	m.mu.Lock()
 	keepAlive := m.keepAliveFor
+	disabled := m.automationDisabled
 	m.mu.Unlock()
 
 	statuses := m.manager.AllStatuses()
@@ -738,6 +773,14 @@ func (m *Monitor) healIfNeeded() {
 			continue
 		}
 		name := s.TunnelName
+		// A tunnel that has opted out of automation must not be auto-healed
+		// on session resume either — manual "stop automation" is honored
+		// everywhere (see #2/#103).
+		if disabled != nil && disabled(name) {
+			slog.Info("session resume: tunnel automation disabled, not healing",
+				"tunnel", name)
+			continue
+		}
 		if keepAlive != nil && !keepAlive(name) {
 			slog.Info("session resume: tunnel opted out of keep-alive, not healing",
 				"tunnel", name)

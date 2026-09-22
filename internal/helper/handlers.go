@@ -44,6 +44,7 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodClearDNSPathEnforcement, h.handleClearDNSPathEnforcement)
 	h.server.Handle(ipc.MethodSetHealthCheck, h.handleSetHealthCheck)
 	h.server.Handle(ipc.MethodSetKeepConnectionOnIdle, h.handleSetKeepConnectionOnIdle)
+	h.server.Handle(ipc.MethodSetPreventSystemSleep, h.handleSetPreventSystemSleep)
 	h.server.Handle(ipc.MethodSetPinInterface, h.handleSetPinInterface)
 	h.server.Handle(ipc.MethodReportSSID, h.handleReportSSID)
 	h.server.Handle(ipc.MethodAutomationPreview, h.handleAutomationPreview)
@@ -665,6 +666,27 @@ func (h *Helper) handleSetKeepConnectionOnIdle(params json.RawMessage) (interfac
 	}
 	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{KeepConnectionOnIdle: &req.Enabled})
 	slog.Info("keep connection on idle changed", "enabled", req.Enabled)
+	return ipc.Empty{}, nil
+}
+
+// handleSetPreventSystemSleep flips the "keep running in background" master
+// switch. Unlike the keep-idle handler, this one has a real side effect: it
+// asks the OS to stop sleeping/suspending/turning the display off (Windows via
+// SetThreadExecutionState). The change is also broadcast so a running GUI (or
+// the CLI) reflects it; persistence is Settings.SaveSettings, which the GUI
+// calls on toggle. Failure to apply is logged but does not abort the toggle —
+// the user still sees the switch move and the setting is saved, so they can
+// act on the warning rather than being stuck.
+func (h *Helper) handleSetPreventSystemSleep(params json.RawMessage) (interface{}, error) {
+	var req ipc.SetPreventSystemSleepRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	if err := applySystemSleepPrevention(req.Enabled); err != nil {
+		slog.Warn("apply prevent system sleep failed", "enabled", req.Enabled, "error", err)
+	}
+	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{PreventSystemSleep: &req.Enabled})
+	slog.Info("prevent system sleep changed", "enabled", req.Enabled)
 	return ipc.Empty{}, nil
 }
 

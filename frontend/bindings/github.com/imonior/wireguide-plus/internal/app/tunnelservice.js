@@ -1029,6 +1029,18 @@ export function SetPinInterface(enabled) {
 }
 
 /**
+ * SetPreventSystemSleep enables or disables the "keep running in background"
+ * master switch (ignore screensaver / screen-off / hibernation). Persistence is
+ * handled by Settings.SaveSettings; this call tells the helper to actually
+ * inhibit OS sleep on Windows live.
+ * @param {boolean} enabled
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetPreventSystemSleep(enabled) {
+    return $Call.ByID(2942152303, enabled);
+}
+
+/**
  * SetTunnelBinding persists (or clears, when ifIndex <= 0) the physical
  * egress binding of a tunnel in its meta sidecar.
  * @param {string} name

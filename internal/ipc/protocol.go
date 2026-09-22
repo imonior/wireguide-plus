@@ -153,6 +153,7 @@ const (
 	MethodClearDNSPathEnforcement = "Tunnel.ClearDNSPathEnforcement"
 	MethodSetHealthCheck          = "Monitor.SetHealthCheck"
 	MethodSetKeepConnectionOnIdle = "Monitor.SetKeepConnectionOnIdle"
+	MethodSetPreventSystemSleep   = "Monitor.SetPreventSystemSleep"
 	MethodSetPinInterface         = "Network.SetPinInterface"
 	MethodReportSSID              = "Wifi.ReportSSID"
 	// MethodAutomationPreview is a read-only dry-run: it evaluates the
@@ -229,6 +230,17 @@ const (
 	// "stop connecting". Automation never emits this: it has nobody to
 	// answer, so it skips and notifies instead.
 	EventDNSPathConflict = "event.dns_path_conflict"
+	// EventAddressConflict is broadcast when the helper finds that another
+	// client already holds one of our tunnel addresses on a different
+	// adapter — the classic "two WireGuard clients running the same tunnel"
+	// conflict (e.g. the official Windows WireGuard service client driving
+	// the same .conf we manage). The GUI raises an INTERACTIVE dialog naming
+	// the conflicting software/adapter and offering to stop automation for
+	// that tunnel. The helper NEVER auto-stops anything: the user decides
+	// (per the "don't forcibly stop, hand it to the user" rule). Detected at
+	// startup, de-duplicated per (tunnel, address, adapter) so the dialog
+	// appears once, not in a loop.
+	EventAddressConflict = "event.address_conflict"
 )
 
 // PolicyBlockedPayload describes a refused automatic connection.

@@ -102,6 +102,13 @@ export class SettingsChangedPayload {
              * @member
              * @type {boolean | null | undefined}
              */
+            this["prevent_system_sleep"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | null | undefined}
+             */
             this["pin_interface"] = undefined;
         }
         if (/** @type {any} */(false)) {

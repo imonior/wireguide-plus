@@ -62,6 +62,12 @@ type SetKeepConnectionOnIdleRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+// SetPreventSystemSleepRequest is the parameter for
+// Monitor.SetPreventSystemSleep.
+type SetPreventSystemSleepRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
 // SetLogLevelRequest is the parameter for Helper.SetLogLevel.
 type SetLogLevelRequest struct {
 	Level string `json:"level"` // "debug" | "info" | "warn" | "error"
@@ -150,6 +156,22 @@ type AutoConnectPayload struct {
 	TunnelName string `json:"tunnel_name"`
 }
 
+// AddressConflictPayload is broadcast (EventAddressConflict) when another
+// client already owns one of our tunnel addresses on a different adapter.
+// Software is the inferred owner ("WireGuard (official client)" for a
+// WireGuardTunnel$* service adapter, "unknown" otherwise); Adapter is the
+// conflicting interface name; State is the tunnel's current connection state
+// ("active", "down" or "unknown") so the dialog can describe what is happening
+// right now. The helper never acts on this — it is purely informational and
+// the user's decision (stop automation, or leave it) drives any change.
+type AddressConflictPayload struct {
+	Tunnel   string `json:"tunnel"`
+	Address  string `json:"address"`
+	Adapter  string `json:"adapter"`
+	Software string `json:"software"`
+	State    string `json:"state"`
+}
+
 // CriticalErrorPayload describes a permanently-dead helper goroutine.
 // Where is the goSafe name (e.g. "eventLoop", "latencyLoop"); Detail is a
 // short human-readable summary of the last panic / restart-budget breach.
@@ -164,6 +186,7 @@ type CriticalErrorPayload struct {
 type SettingsChangedPayload struct {
 	HealthCheck          *bool   `json:"health_check,omitempty"`
 	KeepConnectionOnIdle *bool   `json:"keep_connection_on_idle,omitempty"`
+	PreventSystemSleep   *bool   `json:"prevent_system_sleep,omitempty"`
 	PinInterface         *bool   `json:"pin_interface,omitempty"`
 	LogLevel             *string `json:"log_level,omitempty"`
 }

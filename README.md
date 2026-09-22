@@ -137,6 +137,8 @@ A manual override only lasts until the app restarts. For a tunnel that automatio
 **Exclude from automation** in the tunnel's policy panel. The tunnel keeps its rules and
 default state, but the engine will neither connect nor disconnect it.
 
+The same exclusion is also a one-click **Stop automation** toggle at the top of the tunnel detail view, so you can suppress automation right where you are looking at the tunnel. A new global **Prevent system sleep** setting (off by default) keeps the machine awake while the app runs, so an idle or sleep power policy can't silently drop a tunnel. When another client has already taken a tunnel's address, WireGuide Plus now shows an interactive dialog naming the conflicting software and offering to stop that tunnel's automation — you decide, it never force-stops the other client.
+
 ### One tunnel, one client
 
 Two WireGuard clients cannot run the same tunnel at the same time: the tunnel's `Address`

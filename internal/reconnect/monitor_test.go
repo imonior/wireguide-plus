@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/tunnel"
 )
 
@@ -910,4 +911,67 @@ func TestBackoffCapsAtMaxDelay(t *testing.T) {
 				lastGap, cfg.MaxDelay)
 		}
 	}
+}
+
+// TestAutomationDisabled_SkipsTriggerReconnect verifies the core #2/#103
+// guarantee: a tunnel that has opted out of automation is never auto-reconnected
+// by the dead-connection monitor. The gate is synchronous (it returns before
+// spawning the reconnect goroutine), so this is deterministic.
+func TestAutomationDisabled_SkipsTriggerReconnect(t *testing.T) {
+	var calls int32
+	reconnectFn := func(_ context.Context, name string) error {
+		atomic.AddInt32(&calls, 1)
+		return nil
+	}
+
+	mon, _, _ := newTestMonitor(testConfig(), reconnectFn)
+	mon.SetAutomationDisabledPredicate(func(n string) bool { return n == "TS451D" })
+	mon.mu.Lock()
+	mon.running = true
+	mon.mu.Unlock()
+
+	// Disabled tunnel: trigger must be a no-op (gate returns before the
+	// reconnect goroutine is even spawned, so this is deterministic).
+	mon.triggerReconnectTunnel("TS451D")
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("disabled tunnel was reconnected; reconnectFn calls = %d, want 0", got)
+	}
+
+	// Enabled tunnel: reconnect proceeds normally (async goroutine).
+	mon.triggerReconnectTunnel("TS453Dmini")
+	waitFor(t, 5*time.Second, "enabled tunnel reconnected", func() bool {
+		return atomic.LoadInt32(&calls) == 1
+	})
+}
+
+// TestAutomationDisabled_SkipsHealOnResume verifies the session-resume heal
+// path also honors the automation opt-out — a disabled tunnel is left dead
+// rather than auto-healed.
+func TestAutomationDisabled_SkipsHealOnResume(t *testing.T) {
+	var calls int32
+	reconnectFn := func(_ context.Context, name string) error {
+		atomic.AddInt32(&calls, 1)
+		return nil
+	}
+
+	mon, mgr, _ := newTestMonitor(testConfig(), reconnectFn)
+	mon.SetAutomationDisabledPredicate(func(n string) bool { return n == "TS451D" })
+	mon.mu.Lock()
+	mon.running = true
+	mon.mu.Unlock()
+
+	// TS451D disabled + dead; TS453Dmini enabled + dead. Only the enabled
+	// one should be healed.
+	mgr.allStatuses = []*tunnel.ConnectionStatus{
+		{TunnelName: "TS451D", State: domain.StateDisconnected},
+		{TunnelName: "TS453Dmini", State: domain.StateDisconnected},
+	}
+
+	mon.healIfNeeded()
+
+	// The enabled tunnel is healed in a goroutine; the disabled one is left
+	// dead. Wait for the single expected call.
+	waitFor(t, 5*time.Second, "enabled tunnel healed", func() bool {
+		return atomic.LoadInt32(&calls) == 1
+	})
 }

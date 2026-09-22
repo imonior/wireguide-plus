@@ -819,6 +819,14 @@ func (s *TunnelService) SetKeepConnectionOnIdle(enabled bool) error {
 	return s.call(ipc.MethodSetKeepConnectionOnIdle, ipc.SetKeepConnectionOnIdleRequest{Enabled: enabled}, nil)
 }
 
+// SetPreventSystemSleep enables or disables the "keep running in background"
+// master switch (ignore screensaver / screen-off / hibernation). Persistence is
+// handled by Settings.SaveSettings; this call tells the helper to actually
+// inhibit OS sleep on Windows live.
+func (s *TunnelService) SetPreventSystemSleep(enabled bool) error {
+	return s.call(ipc.MethodSetPreventSystemSleep, ipc.SetPreventSystemSleepRequest{Enabled: enabled}, nil)
+}
+
 // ResolveDNSPathConflict answers a connect that the helper parked because
 // another connected tunnel already owns the system's DNS resolve path.
 // action is "disable" (waive this tunnel's claim, let it connect) or

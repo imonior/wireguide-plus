@@ -126,6 +126,12 @@ type Helper struct {
 	firewall firewall.FirewallManager
 	monitor  *reconnect.Monitor
 
+	// reportedAddrConflicts de-duplicates address-conflict dialogs so a
+	// (tunnel, address, adapter) clash is surfaced to the GUI once per
+	// helper lifetime, not on every re-check. Guarded by addrConflictMu.
+	addrConflictMu        sync.Mutex
+	reportedAddrConflicts map[string]bool
+
 	// connectMu serializes Connect/Disconnect calls. Without this, two
 	// concurrent GUI connections could race on activeCfg, with the loser's
 	// rollback overwriting the winner's config.
@@ -387,6 +393,11 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// unlock, but only for tunnels that haven't opted out of "keep
 	// connection on idle". Feed it the same resolver the connect path uses.
 	h.monitor.SetKeepAlivePredicate(h.keepConnectionOnIdle)
+	// Feed the reconnect monitor the same automation-exemption resolver the
+	// automation engine uses. This makes the dead-connection monitor honor a
+	// "stop automation" decision — manual stop must override every automated
+	// reconnect path (see #2/#103).
+	h.monitor.SetAutomationDisabledPredicate(h.automationDisabled)
 	h.monitor.Start()
 
 	// Register RPC handlers
@@ -460,6 +471,11 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		}
 		if settings.LogLevel != "" {
 			h.logLevel.Set(parseLevel(settings.LogLevel))
+		}
+		if settings.PreventSystemSleep {
+			if err := applySystemSleepPrevention(true); err != nil {
+				slog.Warn("restore prevent system sleep failed", "error", err)
+			}
 		}
 		slog.Info("restored persisted helper settings",
 			"health_check", settings.HealthCheck,

@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -433,6 +432,19 @@ func buildTrayOffIcon(wColor color.NRGBA) []byte {
 // The previous design called the full rebuildMenu on every status event and
 // did an IPC round-trip to the helper inside ListTunnels — that blocked the
 // event stream, making the UI feel sluggish under a 1 Hz status broadcast.
+
+// tunnelConnState is the per-tunnel connection state the status bubble
+// tracks, so it can announce only *transitions* (see lastNotifiedConnected
+// in showStatusNotification). tcsUnknown means the tunnel is not currently
+// active (it was dropped or never started).
+type tunnelConnState int
+
+const (
+	tcsUnknown tunnelConnState = iota
+	tcsConnecting
+	tcsConnected
+)
+
 type trayManager struct {
 	app        *application.App
 	win        *application.WebviewWindow
@@ -447,23 +459,20 @@ type trayManager struct {
 	// bubble — reads this one so a tunnel whose connect attempt is still
 	// running (and may fail) is never announced as connected.
 	establishedTunnels map[string]bool
+	// lastNotifiedConnected records, per tunnel, the connection state the
+	// last status bubble announced. The bubble is gated on a *transition*
+	// (a tunnel going up/down/connecting) rather than on the raw established
+	// set, so a tunnel that is stably up is announced exactly once and never
+	// re-spammed on every 30s status poll (see #111: TS453Dmini was being
+	// re-announced "connected" every cycle because the churner TS451D kept
+	// dropping out of the set — the bubble must name the tunnel that
+	// actually changed, with the correct direction).
+	lastNotifiedConnected map[string]tunnelConnState
 	// outOfRange caches the probe targets that are no longer routed through
 	// their tunnel, as of the last status event. Surfaced in the status
 	// bubble: when the window is closed the bubble is the only place the
 	// user can be told, and the editor's colour marking is invisible then.
 	outOfRange []string
-	// lastNotifiedSig is the (state, names, out-of-range) triple of the last
-	// status bubble we actually showed, and lastSuppressedSig the signature
-	// of the last one we deliberately did NOT show. The bubble reports a
-	// SITUATION, so re-announcing an identical one is pure noise: before
-	// this gate, any churn that left the world exactly as it was — e.g. a
-	// tunnel whose automation connect keeps failing, cycling in and out of
-	// the active set on every poll — re-popped the same "X connected"
-	// bubble every cycle. Reporting is now edge-triggered: a bubble appears
-	// when the situation differs from the last one reported, and stays
-	// silent while it doesn't. Guarded by mu.
-	lastNotifiedSig   string
-	lastSuppressedSig string
 	hasHandshake      map[string]bool // per-tunnel handshake status
 	rebuildTimer      *time.Timer     // debounce timer for rebuildMenu
 	notifyTimer       *time.Timer     // debounce timer for the status notification
@@ -861,65 +870,55 @@ func (t *trayManager) scheduleStatusNotification() {
 // situation (connected tunnel list, or "not connected"). Its on-screen
 // duration comes from the notify_duration_ms setting (default 10s).
 //
-// The listed names and the green state come from the ESTABLISHED set. When
-// nothing is established yet but tunnels are still trying, the bubble says
-// "Connecting" instead of "Connected" — which is what actually happened.
+// The bubble is gated on a *per-tunnel transition*, not on the raw
+// established set. Each tunnel is announced only when its own connection
+// state actually changes (down→up, up→down, or a fresh connect attempt), and
+// the bubble names exactly the tunnel(s) that changed. This is what stops a
+// stably-connected tunnel from being re-announced "connected" on every 30s
+// status poll: when the churner TS451D keeps dropping out of the set, the
+// bubble must say "TS451D disconnected/connected" — naming the tunnel that
+// flapped — instead of re-spamming "TS453Dmini connected" for a neighbour
+// that never moved (see #111). Genuine connect/disconnect transitions are
+// still reported; only the spurious re-announcement of an unchanged tunnel
+// is suppressed — which is correctness, not popup suppression.
 func (t *trayManager) showStatusNotification() {
 	t.mu.Lock()
-	names := make([]string, 0, len(t.establishedTunnels))
-	for n := range t.establishedTunnels {
-		names = append(names, n)
-	}
-	pending := make([]string, 0, 1)
-	for n := range t.activeTunnels {
-		if !t.establishedTunnels[n] {
-			pending = append(pending, n)
-		}
-	}
+	prev := t.lastNotifiedConnected
+	tr, cur := computeStatusTransitions(prev, t.establishedTunnels, t.activeTunnels)
 	outOfRange := append([]string(nil), t.outOfRange...)
+	t.lastNotifiedConnected = cur
 	t.mu.Unlock()
-	sort.Strings(names)
 
+	ups, downs, trying := tr.ups, tr.downs, tr.trying
+
+	// Nothing actually changed since the last bubble → do not re-pop a
+	// stable tunnel. This is the root fix for the every-30s "X connected"
+	// spam: a tunnel that stays up is announced once, not on every poll.
+	if len(ups) == 0 && len(downs) == 0 && len(trying) == 0 {
+		return
+	}
+
+	// Announce the transition, naming the tunnel(s) that changed. A "down"
+	// (connection lost) always wins over an "up" so the user is told about
+	// the failure first; a fresh "connecting" attempt is reported only when
+	// there is no more urgent change.
+	var names []string
 	state := popupStateConnected
-	if len(names) > 0 {
+	switch {
+	case len(downs) > 0:
+		state = popupStateDisconnected
+		names = downs
+	case len(ups) > 0:
 		state = popupStateConnected
-	} else if len(pending) > 0 {
-		// Nothing is up yet, something is still dialling: say so, and name
-		// it so the bubble isn't an unexplained "Connecting".
+		names = ups
+	default:
 		state = popupStateConnecting
-		names = pending
-		sort.Strings(names)
+		names = trying
 		// The warning is about what the *established* tunnels route, so it
 		// makes no sense while nothing is established yet.
 		outOfRange = nil
-	} else {
-		state = popupStateDisconnected
-		outOfRange = nil
 	}
-
-	// Edge-triggered reporting: the bubble announces a SITUATION, so an
-	// identical situation is not news. Any churn that leaves the world
-	// unchanged (a failing automation connect cycling the active set, an
-	// offline tunnel repeatedly retried) must not re-pop the same message —
-	// that is what turned "TS453Dmini is connected" into a 30s notification
-	// loop. decideNotification holds the rule; the first suppression of each
-	// distinct situation is logged at Info so "why did no bubble appear?"
-	// stays answerable from the log.
-	sig := notificationSignature(state, names, outOfRange)
-	t.mu.Lock()
-	d := decideNotification(sig, t.lastNotifiedSig, t.lastSuppressedSig)
-	t.lastNotifiedSig, t.lastSuppressedSig = d.NotifiedSig, d.SuppressedSig
-	t.mu.Unlock()
-	if !d.Show {
-		if d.FirstSuppression {
-			slog.Info("popup: connection situation unchanged — bubble suppressed",
-				"state", int(state), "names", strings.Join(names, ","))
-		} else {
-			slog.Debug("popup: connection situation still unchanged — bubble suppressed",
-				"state", int(state), "names", strings.Join(names, ","))
-		}
-		return
-	}
+	sort.Strings(names)
 
 	lang := "en"
 	duration := 10 * time.Second
@@ -946,50 +945,73 @@ func (t *trayManager) showStatusNotification() {
 	})
 }
 
-// notificationSignature renders what a status bubble would say as a
-// comparable string, so showStatusNotification can tell "the situation
-// changed" apart from "something churned and settled back where it was".
-// Callers pass already-sorted names; outOfRange is copied and sorted here so
-// a reordered probe-target list can't masquerade as a situation change.
-func notificationSignature(state popupState, names, outOfRange []string) string {
-	oor := append([]string(nil), outOfRange...)
-	sort.Strings(oor)
-	return strconv.Itoa(int(state)) + "|" + strings.Join(names, ",") + "|" + strings.Join(oor, ",")
+// statusTransition is the per-tunnel change between two status snapshots,
+// as computed by computeStatusTransitions. Only the tunnels named here are
+// eligible for a bubble — a tunnel absent from all three slices stayed in
+// the same state and must not be re-announced.
+type statusTransition struct {
+	ups    []string // became connected (down/connecting → connected)
+	downs  []string // lost connection (connected → connecting/down)
+	trying []string // fresh connect attempt (down → connecting)
 }
 
-// notificationDecision is the outcome of the bubble dedup gate.
-type notificationDecision struct {
-	// Show is true when this situation differs from the last one reported.
-	Show bool
-	// NotifiedSig / SuppressedSig are the memos to store back.
-	NotifiedSig   string
-	SuppressedSig string
-	// FirstSuppression marks the first repeat of a situation that was
-	// already reported, which is the one worth an Info log line.
-	FirstSuppression bool
-}
-
-// decideNotification decides whether a status bubble with signature sig
-// should be shown, given the last reported and last suppressed signatures.
-//
-// Pure and side-effect free on purpose (like reconcileAction): the reporting
-// contract — "announce a situation, stay quiet while it does not change" — is
-// the thing that regressed into a notification loop, so it is testable
-// without a live tray.
-func decideNotification(sig, lastNotifiedSig, lastSuppressedSig string) notificationDecision {
-	if sig != lastNotifiedSig {
-		// A new situation: show it, and let a future repeat be logged.
-		return notificationDecision{Show: true, NotifiedSig: sig}
+// computeStatusTransitions compares the previously-announced connection
+// state (prev) with the current one — established tunnels are "connected",
+// active-but-not-established tunnels are "connecting" — and returns only the
+// tunnels whose state actually changed. A tunnel present in both snapshots
+// with the same state contributes nothing; that is exactly what stops a
+// stably-connected tunnel from being re-announced "connected" on every 30s
+// status poll (see #111). It returns the current state map too, so callers
+// can store it as the baseline for the next comparison.
+func computeStatusTransitions(prev map[string]tunnelConnState, established, active map[string]bool) (statusTransition, map[string]tunnelConnState) {
+	cur := make(map[string]tunnelConnState, len(established)+len(active))
+	for n := range established {
+		cur[n] = tcsConnected
 	}
-	if sig != lastSuppressedSig {
-		// Same as last reported, and this is the first time we suppress it.
-		return notificationDecision{
-			NotifiedSig:      lastNotifiedSig,
-			SuppressedSig:    sig,
-			FirstSuppression: true,
+	for n := range active {
+		if _, ok := cur[n]; !ok {
+			cur[n] = tcsConnecting
 		}
 	}
-	return notificationDecision{NotifiedSig: lastNotifiedSig, SuppressedSig: lastSuppressedSig}
+	var tr statusTransition
+	for n, s := range cur {
+		ps, ok := prev[n]
+		if !ok {
+			// First time we see this tunnel: announce the new state.
+			switch s {
+			case tcsConnected:
+				tr.ups = append(tr.ups, n)
+			case tcsConnecting:
+				tr.trying = append(tr.trying, n)
+			}
+			continue
+		}
+		if ps == s {
+			continue // no change — stay quiet (this is the spam fix)
+		}
+		// State changed.
+		switch s {
+		case tcsConnected:
+			tr.ups = append(tr.ups, n) // was connecting/down → now up
+		case tcsConnecting:
+			if ps == tcsConnected {
+				tr.downs = append(tr.downs, n) // lost connection, now retrying
+			}
+			// connecting→connecting: nothing new to report
+		case tcsUnknown:
+			tr.downs = append(tr.downs, n) // was up/connecting → now gone
+		}
+	}
+	// Tunnels that vanished entirely (were active, now not) count as a loss.
+	for n, ps := range prev {
+		if _, ok := cur[n]; !ok && ps != tcsUnknown {
+			tr.downs = append(tr.downs, n)
+		}
+	}
+	sort.Strings(tr.ups)
+	sort.Strings(tr.downs)
+	sort.Strings(tr.trying)
+	return tr, cur
 }
 
 // scheduleRebuild debounces rebuildMenu calls — multiple triggers within 100ms

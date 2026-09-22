@@ -4,6 +4,7 @@
   import TunnelList from './lib/TunnelList.svelte';
   import TunnelDetail from './lib/TunnelDetail.svelte';
   import ConflictWarning from './lib/ConflictWarning.svelte';
+  import AddressConflictDialog from './lib/AddressConflictDialog.svelte';
   import ConfigEditor from './lib/ConfigEditor.svelte';
   import ScriptEditor from './lib/ScriptEditor.svelte';
   import FieldsEditor from './lib/FieldsEditor.svelte';
@@ -51,6 +52,7 @@
   // owns the system's DNS resolve path. The helper holds the connect until
   // the user answers here (principle 33).
   let dnsPathConflict = null; // { tunnel, blockers }
+  let addressConflict = null; // { tunnel, address, adapter, software, state }
   let pendingConnectName = '';
   let editName = '';
   let editorContent = '';
@@ -104,6 +106,7 @@
   let tunnelsChangedUnsub = null;
   let policyBlockedUnsub = null;
   let dnsPathConflictUnsub = null;
+  let addressConflictUnsub = null;
   let criticalErrors = []; // array of { where, detail, at } — shown as a persistent banner
 
   // App-level ESC handler: close the editor modal. ConfigEditor wraps
@@ -253,6 +256,22 @@
       dnsPathConflict = { tunnel: d.tunnel, blockers: d.blockers || [] };
     });
 
+    // Another client already holds one of our tunnel addresses on a
+    // different adapter ("two WireGuard clients, same tunnel"). Interactive
+    // dialog — the user decides whether to stop automation. De-duplicated
+    // server-side so it surfaces once, not in a loop.
+    addressConflictUnsub = Events.On('address_conflict', (event) => {
+      const d = event?.data || {};
+      if (!d?.tunnel) return;
+      addressConflict = {
+        tunnel: d.tunnel,
+        address: d.address || '',
+        adapter: d.adapter || '',
+        software: d.software || 'unknown',
+        state: d.state || 'unknown',
+      };
+    });
+
     // Wails v3 native file drop — HTML5 dragdrop doesn't work in WebKit.
     // Event payload: { files: string[], details: {...} }
     filesDroppedUnsub = Events.On('files-dropped', async (event) => {
@@ -369,6 +388,7 @@
     if (configChangedUnsub) configChangedUnsub();
     if (tunnelsChangedUnsub) tunnelsChangedUnsub();
     if (dnsPathConflictUnsub) dnsPathConflictUnsub();
+    if (addressConflictUnsub) addressConflictUnsub();
     if (toastTimer) clearTimeout(toastTimer);
   });
 
@@ -1106,6 +1126,13 @@
     }
   }
 
+  // Address-conflict dialog: "Stop auto-connect" sets the durable per-tunnel
+  // automation opt-out, so the helper stops fighting the other client for the
+  // address. The user action is the ONLY thing that changes.
+  function onAddressConflictResolved() {
+    addressConflict = null;
+  }
+
   // Legacy migration finished — reload tunnels/settings so the migrated data
   // shows up immediately.
   function handleLegacyMigrated() {
@@ -1442,6 +1469,10 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if addressConflict}
+    <AddressConflictDialog conflict={addressConflict} on:resolved={onAddressConflictResolved} />
   {/if}
 
   <EgressLostDialog

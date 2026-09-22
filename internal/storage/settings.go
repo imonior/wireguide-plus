@@ -63,6 +63,14 @@ type Settings struct {
 	// this off disables the feature for every tunnel (the per-tunnel switch
 	// is gated, exactly like DNSResolvePath).
 	KeepConnectionOnIdle bool   `json:"keep_connection_on_idle"`
+	// PreventSystemSleep is the master switch for "keep running in the
+	// background": while on, WireGuide Plus asks the OS not to sleep, suspend,
+	// or turn the display off (ignore screensaver / screen-off / hibernation).
+	// OFF by default — this is an invasive power behaviour the user must opt
+	// into (it overrides the system's own sleep policy and can keep a laptop
+	// awake on battery). The helper applies it via SetThreadExecutionState on
+	// Windows; other platforms persist the flag but have no equivalent call.
+	PreventSystemSleep bool `json:"prevent_system_sleep"`
 	PinInterface         bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
 	LogLevel             string `json:"log_level"`     // "debug", "info", "warn", "error"
 	CompactList          bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
@@ -330,6 +338,7 @@ func DefaultSettings() *Settings {
 		NotifyDurationMs:     10000, // 10s default notification duration
 		HealthCheck:          false,
 		KeepConnectionOnIdle: true,  // keep tunnels alive through idle/screen-saver/lock by default
+		PreventSystemSleep:   false, // opt-in: an invasive power override, leave it to the user
 		PinInterface:         false, // off by default — enable for dual-network setups
 		EnableAWG:            true,  // AWG support is on by default
 		LogLevel:             "info",
@@ -374,6 +383,13 @@ func (s *Settings) DisconnectOnQuitEnabled() bool {
 // forced keepalive, no idle self-heal) — same gating model as DNSResolvePath.
 func (s *Settings) KeepConnectionOnIdleEnabled() bool {
 	return s != nil && s.KeepConnectionOnIdle
+}
+
+// PreventSystemSleepEnabled reports whether the "keep running in background"
+// master switch is on. When off the OS is free to sleep/suspend/turn the
+// display off as usual; when on the helper inhibits those transitions.
+func (s *Settings) PreventSystemSleepEnabled() bool {
+	return s != nil && s.PreventSystemSleep
 }
 
 // KeepConnectionOnIdleEffective resolves the per-tunnel "keep connection on

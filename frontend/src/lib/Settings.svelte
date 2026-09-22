@@ -167,6 +167,9 @@
     // toggle renders ON for a config.json written before the key existed,
     // instead of showing an OFF the user never chose.
     keep_connection_on_idle: true,
+    // Backend default is false (opt-in): an invasive power override that
+    // blocks system sleep — leave it OFF until the user chooses it.
+    prevent_system_sleep: false,
     dns_resolve_path: false,
     pin_interface: false,
     log_level: 'info',
@@ -208,6 +211,8 @@
         // Backend default is true; a pre-existing config.json has no key, so
         // `?? true` keeps the toggle ON rather than silently flipping it off.
         settings.keep_connection_on_idle = s.keep_connection_on_idle ?? true;
+        // Opt-in power override: OFF unless explicitly persisted as true.
+        settings.prevent_system_sleep = s.prevent_system_sleep ?? false;
         settings.dns_resolve_path = s.dns_resolve_path ?? false;
         settings.pin_interface = s.pin_interface ?? false;
         settings.log_level = s.log_level || 'info';
@@ -591,6 +596,15 @@
     });
   }
 
+  function onPreventSystemSleepChange(e) {
+    applyLiveToggle({
+      stateKey: 'prevent_system_sleep',
+      domChecked: e.target.checked,
+      friendlyName: $t('settings.prevent_system_sleep'),
+      call: (v) => TunnelService.SetPreventSystemSleep(v),
+    });
+  }
+
   // --- Proxy (for update checks) ---
   // Two distinct outbound paths, both for networks that cannot reach
   // api.github.com directly (e.g. mainland China):
@@ -955,6 +969,18 @@
                   <input id="keep-connection-on-idle" type="checkbox"
                     checked={settings.keep_connection_on_idle}
                     on:change={onKeepConnectionOnIdleChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="prevent-system-sleep">{$t('settings.prevent_system_sleep')}</label>
+                  <p class="setting-desc">{$t('settings.prevent_system_sleep_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="prevent-system-sleep" type="checkbox"
+                    checked={settings.prevent_system_sleep}
+                    on:change={onPreventSystemSleepChange} />
                   <span class="toggle-track"></span>
                 </label>
               </div>

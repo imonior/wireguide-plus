@@ -4,6 +4,23 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.3] - 2026-09-22
+
+### ✨ Added
+
+- **Per-tunnel "Stop automation" toggle in the tunnel detail view**: a prominent one-click switch that mirrors the settings-page "Exclude from automation" option — once on, the engine never connects or disconnects that tunnel until you turn it off.
+- **Global "Prevent system sleep" (keep running in background)**: a new opt-in setting that keeps the machine awake while the app is running, so an idle/sleep power policy can’t silently kill a tunnel. Off by default — it does not override your system power policy unless you turn it on. On Windows it calls `SetThreadExecutionState`.
+- **Interactive address-conflict dialog**: when another VPN client already holds one of your tunnel addresses, the app now names the conflicting software and adapter and offers to stop auto-connect for that tunnel. You decide — it never force-stops the other client.
+
+### 🐛 Fixed
+
+- **Status tray re-announcing a tunnel that was already connected**: the connection toast now reports only a tunnel whose state actually changed (connected/disconnected), so a tunnel that stays up is announced exactly once instead of popping "X connected" on every 30-second status poll. This was the root cause of the repeated "TS453Dmini connected" toasts — a different tunnel was the one churning, and the toast was naming whatever happened to still be up.
+- **Manual "stop automation" now overrides every automated reconnect**: the dead-connection monitor also honors the per-tunnel opt-out, so disabling automation on a tunnel truly stops it from being auto-reconnected (previously the monitor could still re-connect it on a stale handshake).
+
+### 🔧 Changed
+
+- **Removed the old signature-based status-toast de-duplication**: it only hid the bubble, which masked real connection changes. Volume is now reduced at the source by reporting genuine per-tunnel transitions instead.
+
 ## [2.3.2] - 2026-09-21
 
 ### ✨ Added

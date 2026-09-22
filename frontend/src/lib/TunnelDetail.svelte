@@ -17,6 +17,15 @@
   // Wi-Fi auto-connect UI, which is now handled by the general engine.
   let showAutomation = false;
 
+  // Durable per-tunnel automation opt-out (mirrors TunnelPolicies'
+  // "Exclude from automation" checkbox, but surfaced here as an always-on
+  // toggle so the user can suppress automation on the fly — without opening
+  // the editor — the moment a tunnel starts thrashing). Writes the same
+  // sidecar flag the helper engine reads every poll cycle.
+  let automationDisabled = false;
+  let autoBtnBusy = false;
+  let autoBtnErr = '';
+
   let detail = null;
   let loading = false;
   let error = '';
@@ -54,6 +63,7 @@
     notesError = '';
     loadProbeSlots($selectedTunnel);
     loadDetail($selectedTunnel.name);
+    loadAutomationState($selectedTunnel.name);
   }
 
   // Per-tunnel notes. Populated from TunnelInfo.notes in the store, edited
@@ -662,6 +672,43 @@
     }
   }
 
+  // Load the durable automation opt-out flag for the selected tunnel. A read
+  // failure must never break the panel, so it degrades to "automation on"
+  // (the safe default — the engine keeps its normal authority).
+  async function loadAutomationState(name) {
+    if (!name) return;
+    try {
+      const p = await TunnelService.GetTunnelPolicies(name);
+      automationDisabled = !!p?.automation_disabled;
+      autoBtnErr = '';
+    } catch (e) {
+      automationDisabled = false;
+      autoBtnErr = '';
+      console.error('loadAutomationState for', name, e);
+    }
+  }
+
+  // Toggle the durable opt-out. Fetches the current policies so we only flip
+  // the one flag (the other policy fields are left untouched), then writes
+  // the sidecar. Takes effect on the next helper poll — no app restart needed.
+  async function toggleAutomation() {
+    if (!TunnelService || !$selectedTunnel || autoBtnBusy) return;
+    const name = $selectedTunnel.name;
+    autoBtnBusy = true;
+    autoBtnErr = '';
+    try {
+      const p = (await TunnelService.GetTunnelPolicies(name)) || {};
+      const next = !automationDisabled;
+      p.automation_disabled = next;
+      await TunnelService.SetTunnelPolicies(name, p);
+      automationDisabled = next;
+    } catch (e) {
+      autoBtnErr = errText(e);
+    } finally {
+      autoBtnBusy = false;
+    }
+  }
+
   function connect() {
     dispatch('connect', {
       name: $selectedTunnel.name
@@ -955,6 +1002,41 @@
         </button>
       {/if}
     </div>
+
+    <!-- AUTOMATION CONTROL: a durable, always-visible per-tunnel opt-out.
+         Mirrors the TunnelPolicies "Exclude from automation" checkbox but
+         lives in the detail view so the user can suppress automation the
+         instant a tunnel starts thrashing (the ts453dmini loop) without
+         opening the editor. The helper reads this flag every poll cycle, so
+         the change bites on the next tick — no restart. -->
+    <div class="automation-bar" class:auto-off={automationDisabled}>
+      <span class="automation-state">
+        <Icon name="zap" size={13} strokeWidth={2} />
+        {#if automationDisabled}
+          <span class="automation-state-text">{$t('tunnel.automation_off')}</span>
+        {:else}
+          <span class="automation-state-text">{$t('tunnel.automation_on')}</span>
+        {/if}
+      </span>
+      <button
+        class="btn-automation"
+        class:btn-automation-off={automationDisabled}
+        on:click={toggleAutomation}
+        disabled={autoBtnBusy || !$selectedTunnel}
+        title={$t('tunnel.automation_toggle_tip')}>
+        {#if autoBtnBusy}
+          <span class="spinner"></span>
+        {:else if automationDisabled}
+          <Icon name="rotate-ccw" size={13} strokeWidth={2} />
+        {:else}
+          <Icon name="x" size={13} strokeWidth={2.25} />
+        {/if}
+        <span>{automationDisabled ? $t('tunnel.automation_resume') : $t('tunnel.automation_stop')}</span>
+      </button>
+    </div>
+    {#if autoBtnErr}
+      <div class="automation-err">{autoBtnErr}</div>
+    {/if}
 
     <!-- LATENCY ROW: probe display + target editor on ONE row.
          The headline number and the editable targets sit side by side so the
@@ -1619,6 +1701,75 @@
     animation: spin 0.7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ========== AUTOMATION CONTROL BAR ==========
+     A compact, always-visible toggle that mirrors the TunnelPolicies
+     "Exclude from automation" checkbox. When automation is OFF (we hold the
+     tunnel) the bar turns amber so the suppressed state reads at a glance. */
+  .automation-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    box-sizing: border-box;
+  }
+  .automation-bar.auto-off {
+    background: color-mix(in srgb, var(--yellow) 12%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--yellow) 36%, var(--border));
+  }
+  .automation-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: 600 12px/16px var(--font-sans);
+    color: var(--text-secondary);
+    min-width: 0;
+  }
+  .automation-state :global(svg) {
+    color: var(--green);
+    flex-shrink: 0;
+  }
+  .automation-bar.auto-off .automation-state :global(svg) {
+    color: var(--yellow, #f59e0b);
+  }
+  .automation-state-text { color: var(--text-primary); }
+  .btn-automation {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 0.5px solid color-mix(in srgb, var(--red, #ef4444) 45%, var(--border));
+    background: color-mix(in srgb, var(--red, #ef4444) 12%, transparent);
+    color: var(--red, #ef4444);
+    font: 600 12px/16px var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-automation:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--red, #ef4444) 20%, transparent);
+  }
+  .btn-automation:disabled { opacity: 0.6; cursor: not-allowed; }
+  /* Resume state — green, the inverse of "stop". */
+  .btn-automation-off {
+    border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+    background: color-mix(in srgb, var(--green) 12%, transparent);
+    color: var(--green);
+  }
+  .btn-automation-off:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--green) 20%, transparent);
+  }
+  .automation-err {
+    margin: -4px 0 10px;
+    font: 500 12px/16px var(--font-sans);
+    color: var(--red, #ef4444);
+  }
 
   /* ========== STATS HERO ==========
      One row: RX / TX / latency counters plus the throughput graph.

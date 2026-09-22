@@ -520,6 +520,20 @@ export class Settings {
              */
             this["keep_connection_on_idle"] = false;
         }
+        if (!("prevent_system_sleep" in $$source)) {
+            /**
+             * PreventSystemSleep is the master switch for "keep running in the
+             * background": while on, WireGuide Plus asks the OS not to sleep, suspend,
+             * or turn the display off (ignore screensaver / screen-off / hibernation).
+             * OFF by default — this is an invasive power behaviour the user must opt
+             * into (it overrides the system's own sleep policy and can keep a laptop
+             * awake on battery). The helper applies it via SetThreadExecutionState on
+             * Windows; other platforms persist the flag but have no equivalent call.
+             * @member
+             * @type {boolean}
+             */
+            this["prevent_system_sleep"] = false;
+        }
         if (!("pin_interface" in $$source)) {
             /**
              * pin bypass routes to upstream interface (-ifscope)
@@ -747,30 +761,30 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField21_0 = $$createType3;
-        const $$createField22_0 = $$createType5;
-        const $$createField23_0 = $$createType2;
+        const $$createField22_0 = $$createType3;
+        const $$createField23_0 = $$createType5;
         const $$createField24_0 = $$createType2;
-        const $$createField27_0 = $$createType2;
+        const $$createField25_0 = $$createType2;
         const $$createField28_0 = $$createType2;
+        const $$createField29_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField21_0($$parsedSource["wifi_rules"]);
+            $$parsedSource["wifi_rules"] = $$createField22_0($$parsedSource["wifi_rules"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField22_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField23_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField23_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField24_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField24_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField25_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField27_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField28_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField28_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField29_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
