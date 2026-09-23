@@ -62,7 +62,7 @@ type Settings struct {
 	// out via TunnelMeta.KeepConnectionOnIdle (per-tunnel override). Turning
 	// this off disables the feature for every tunnel (the per-tunnel switch
 	// is gated, exactly like DNSResolvePath).
-	KeepConnectionOnIdle bool   `json:"keep_connection_on_idle"`
+	KeepConnectionOnIdle bool `json:"keep_connection_on_idle"`
 	// PreventSystemSleep is the master switch for "keep running in the
 	// background": while on, WireGuide Plus asks the OS not to sleep, suspend,
 	// or turn the display off (ignore screensaver / screen-off / hibernation).
@@ -70,10 +70,10 @@ type Settings struct {
 	// into (it overrides the system's own sleep policy and can keep a laptop
 	// awake on battery). The helper applies it via SetThreadExecutionState on
 	// Windows; other platforms persist the flag but have no equivalent call.
-	PreventSystemSleep bool `json:"prevent_system_sleep"`
-	PinInterface         bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
-	LogLevel             string `json:"log_level"`     // "debug", "info", "warn", "error"
-	CompactList          bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
+	PreventSystemSleep bool   `json:"prevent_system_sleep"`
+	PinInterface       bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
+	LogLevel           string `json:"log_level"`     // "debug", "info", "warn", "error"
+	CompactList        bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
 	// LogRetentionDays is how many days of daily log files to keep.
 	// 0 means the default (7). Files older than this are removed at
 	// startup and whenever settings are saved.

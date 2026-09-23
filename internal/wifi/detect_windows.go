@@ -67,15 +67,15 @@ func startWindowsWlanWatcher(onChange func()) (stop func(), attached bool) {
 }
 
 var (
-	modWlanapi                      = windows.NewLazySystemDLL("wlanapi.dll")
-	procWlanOpenHandle              = modWlanapi.NewProc("WlanOpenHandle")
-	procWlanRegisterNotification    = modWlanapi.NewProc("WlanRegisterNotification")
-	procWlanEnumInterfaces          = modWlanapi.NewProc("WlanEnumInterfaces")
-	procWlanQueryInterface          = modWlanapi.NewProc("WlanQueryInterface")
-	procWlanGetProfileList          = modWlanapi.NewProc("WlanGetProfileList")
-	procWlanFreeMemory              = modWlanapi.NewProc("WlanFreeMemory")
+	modWlanapi                   = windows.NewLazySystemDLL("wlanapi.dll")
+	procWlanOpenHandle           = modWlanapi.NewProc("WlanOpenHandle")
+	procWlanRegisterNotification = modWlanapi.NewProc("WlanRegisterNotification")
+	procWlanEnumInterfaces       = modWlanapi.NewProc("WlanEnumInterfaces")
+	procWlanQueryInterface       = modWlanapi.NewProc("WlanQueryInterface")
+	procWlanGetProfileList       = modWlanapi.NewProc("WlanGetProfileList")
+	procWlanFreeMemory           = modWlanapi.NewProc("WlanFreeMemory")
 
-	wlanHandle uintptr
+	wlanHandle   uintptr
 	wlanOpenOnce sync.Once
 	wlanOpenErr  error
 )

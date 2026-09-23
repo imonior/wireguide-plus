@@ -309,7 +309,7 @@ func findAppBundle(dir string) string {
 }
 
 // shellQuote wraps s in single quotes so it is safe as one POSIX shell
-// word. Embedded single quotes are closed and re-opened ('\'').
+// word. Embedded single quotes are closed and re-opened ('\”).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
@@ -352,4 +352,3 @@ func darwinInstallScript(newApp, targetApp string) string {
 		"",
 	}, "\n")
 }
-

@@ -263,14 +263,23 @@
   load();
 
   async function save() {
-    // Re-fetch the freshest settings.json before writing so per-tunnel
-    // wifi rule edits made in TunnelDetail (which calls SaveSettings
-    // independently with its own modified per_tunnel map) aren't
-    // silently overwritten. This screen owns NO part of wifi_rules —
-    // both halves are carried from the fresh fetch. If the fresh fetch fails
-    // (helper restarting, IPC flake) we abort rather than write our
-    // potentially-stale per_tunnel snapshot — a deferred save is far
-    // better than clobbering the user's per-tunnel edits.
+    // Read-modify-write: re-fetch the freshest settings.json and spread it
+    // as the BASE of the payload, then overlay only the fields this screen
+    // actually renders (the same pattern stores/ui.js uses for the list
+    // prefs).
+    //
+    // SaveSettings replaces the whole settings object, so every field NOT
+    // listed below rides along from `fresh` and every field listed below is
+    // owned here. There is no third state — which is exactly why this
+    // shape: a field can no longer be silently dropped. Enumerating the
+    // payload by hand is what caused prevent_system_sleep to reset to OFF
+    // on every save (v2.3.6) and would equally have wiped the manual on/off
+    // latches and the DNS-leak-test resolver lists, none of which this
+    // screen owns.
+    //
+    // If the fresh fetch fails (helper restarting, IPC flake) we abort
+    // rather than write a partial payload — a deferred save is far better
+    // than clobbering state another screen owns.
     let fresh;
     try {
       fresh = await TunnelService.GetSettings();
@@ -278,9 +287,14 @@
       console.warn('settings save aborted: fresh fetch failed (will retry on next change)', e);
       return;
     }
-    const perTunnel = fresh?.wifi_rules?.per_tunnel || {};
     try {
       await TunnelService.SaveSettings({
+        // Everything this screen does not own: wifi_rules (both halves) and
+        // automation (per-tunnel rule editor), the list prefs (tunnel-list
+        // header), the manual on/off latches (connect / disconnect), and
+        // the DNS leak-test public resolver lists (diagnostics panel).
+        ...fresh,
+        // ---- owned by this screen ----
         language: settings.language,
         theme: settings.theme,
         tray_icon_style: settings.tray_icon_style,
@@ -290,10 +304,6 @@
         notify_duration_ms: settings.notify_duration_ms,
         health_check: settings.health_check,
         keep_connection_on_idle: settings.keep_connection_on_idle,
-        // Must be sent explicitly: SaveSettings replaces the whole settings
-        // object, so a field dropped from this payload is decoded as its
-        // zero value — omitting this one silently reset the switch to OFF
-        // on every save (macOS/Windows/Linux alike).
         prevent_system_sleep: settings.prevent_system_sleep,
         dns_resolve_path: settings.dns_resolve_path,
         pin_interface: settings.pin_interface,
@@ -306,25 +316,6 @@
         history_retention_days: settings.history_retention_days,
         enable_wg_scripts: settings.enable_wg_scripts,
         enable_awg: settings.enable_awg,
-        // List-ordering prefs are owned by the tunnel-list header, not
-        // this screen — carry them from the fresh fetch so saving any
-        // Settings toggle doesn't wipe them back to defaults.
-        list_sort: fresh?.list_sort || 'name_asc',
-        list_active_on_top: fresh?.list_active_on_top ?? true,
-        list_pane_width: fresh?.list_pane_width || 0,
-        // Automation rules are owned by the per-tunnel editor — carry
-        // them from the fresh fetch so saving a Settings toggle never
-        // wipes them.
-        automation: fresh?.automation,
-        // Legacy Wi-Fi trust rules have no UI on this screen — carry both
-        // halves from the fresh fetch (not a load-time snapshot) so a
-        // Settings toggle can't clobber CLI edits made while it is open.
-        // The Go side still migrates trusted_ssids/per_tunnel into the
-        // Automation model, so the round-trip itself must stay.
-        wifi_rules: {
-          trusted_ssids: fresh?.wifi_rules?.trusted_ssids || [],
-          per_tunnel: perTunnel,
-        },
       });
     } catch (e) {
       console.error('save settings:', e);

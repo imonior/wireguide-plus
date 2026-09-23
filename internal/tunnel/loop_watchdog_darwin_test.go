@@ -9,12 +9,12 @@ import (
 
 func TestParseNetstatIB(t *testing.T) {
 	tests := []struct {
-		name      string
-		output    string
-		iface     string
-		wantIn    uint64
-		wantOut   uint64
-		wantOK    bool
+		name    string
+		output  string
+		iface   string
+		wantIn  uint64
+		wantOut uint64
+		wantOK  bool
 	}{
 		{
 			name: "single interface, single row",

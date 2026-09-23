@@ -32,15 +32,15 @@ type DNSLeakResult struct {
 
 // DNSServer represents a detected DNS resolver.
 type DNSServer struct {
-	IP         string `json:"ip"`
-	Hostname   string `json:"hostname"`
-	IsVPN      bool   `json:"is_vpn"`     // true if this is the expected VPN DNS (tunnel config) or lives on a virtual tunnel interface
-	IsLocal    bool   `json:"is_local"`   // true if this resolver is configured on a physical hardware interface (WLAN/Ethernet)
+	IP          string `json:"ip"`
+	Hostname    string `json:"hostname"`
+	IsVPN       bool   `json:"is_vpn"`                 // true if this is the expected VPN DNS (tunnel config) or lives on a virtual tunnel interface
+	IsLocal     bool   `json:"is_local"`               // true if this resolver is configured on a physical hardware interface (WLAN/Ethernet)
 	SourceIface string `json:"source_iface,omitempty"` // name of the interface the resolver was found on (ipconfig /all style)
-	Responds   bool   `json:"responds"`   // did the probe get a DNS reply (NXDOMAIN)?
-	LatencyMs  int    `json:"latency_ms"` // probe round-trip; 0 if it timed out
-	Status     string `json:"status"`     // "vpn" | "ok" | "leak" | "timeout"
-	Encryption string `json:"encryption"` // "plain" | "dot" | "doh" | "plain+dot" | "plain+doh" | "none"
+	Responds    bool   `json:"responds"`               // did the probe get a DNS reply (NXDOMAIN)?
+	LatencyMs   int    `json:"latency_ms"`             // probe round-trip; 0 if it timed out
+	Status      string `json:"status"`                 // "vpn" | "ok" | "leak" | "timeout"
+	Encryption  string `json:"encryption"`             // "plain" | "dot" | "doh" | "plain+dot" | "plain+doh" | "none"
 }
 
 // systemResolver is a DNS server found in the host's own network

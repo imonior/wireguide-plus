@@ -12,10 +12,10 @@ func TestBuildProbePlanSystemDNSAlwaysFirst(t *testing.T) {
 	}
 
 	cases := []struct {
-		name     string
-		public   []string
-		wantIPs  []string
-		wantLen  int
+		name    string
+		public  []string
+		wantIPs []string
+		wantLen int
 	}{
 		{
 			name:    "nil public list falls back to built-in defaults",

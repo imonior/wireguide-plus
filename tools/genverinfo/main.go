@@ -27,15 +27,15 @@ import (
 
 type info struct {
 	Major, Minor, Build, Patch int
-	Version                     string
-	Version4                    string
-	Suffix                      string
-	Description                 string
-	Executable                  string
-	ProductName                 string
-	CompanyName                 string
-	Copyright                   string
-	Comments                    string
+	Version                    string
+	Version4                   string
+	Suffix                     string
+	Description                string
+	Executable                 string
+	ProductName                string
+	CompanyName                string
+	Copyright                  string
+	Comments                   string
 }
 
 func main() {
@@ -66,11 +66,11 @@ func main() {
 	}
 
 	data := info{
-		Major:       v[0],
-		Minor:       v[1],
-		Build:       v[2],
-		Patch:       v[3],
-		Version:     *version,
+		Major:   v[0],
+		Minor:   v[1],
+		Build:   v[2],
+		Patch:   v[3],
+		Version: *version,
 		// 4-part form (e.g. "1.1.1.0") for StringFileInfo. The FixedFileInfo
 		// numbers in the template are left at 0 on purpose: goversioninfo v1.7
 		// declares its FileVersion struct as Major/Minor/Patch/Build (Patch and

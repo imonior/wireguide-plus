@@ -29,7 +29,7 @@ type guiLogHandler struct {
 	levelVar *slog.LevelVar
 	stderr   slog.Handler
 	file     *logging.DailyHandler // may be nil until setGUILogFile runs
-	app      *application.App // may be nil before Wails finishes bootstrap
+	app      *application.App      // may be nil before Wails finishes bootstrap
 
 	mu    sync.Mutex
 	attrs []slog.Attr

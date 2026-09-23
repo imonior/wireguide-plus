@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.7] - 2026-09-23
+
+### 🐛 修復
+
+- **Linux「禁止系統休眠」重新真正生效**：一次本地修改誤刪了 `systemd-inhibit` 呼叫，只剩一個不持有抑制鎖的空轉 shell，導致該設定在 Linux 上悄無聲息地失效。現已恢復 `systemd-inhibit` 對自守望 shell 的包裹，覆蓋鎖重新生效。
+- **代理變更（用於更新檢查）現在即時廣播**：`proxy_mode` / `proxy_url` 從未進入 `settings_changed` 載體，導致設定介面的代理反射程式碼形同虛設，從其他用戶端或 CLI 修改代理也不會重新整理。現已將兩欄位加入載體並在變更時廣播。
+- **設定儲存加固，杜絕欄位被重設**：儲存路徑改為先讀取最新設定、再僅覆蓋本畫面欄位（展開），新增加的設定項不會再被舊儲存路徑寫回零值。這從機制上消除了 2.3.6「無法儲存」的根因。
+
+### 🔧 變更
+
+- **全倉 gofmt 格式整理**（無行為變更）。
+
 ## [2.3.6] - 2026-09-23
 
 ### 🐛 修復

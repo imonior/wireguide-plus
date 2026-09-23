@@ -53,49 +53,49 @@ import (
 // this saves the boilerplate of importing GUID and several enum types
 // while preserving the C struct's overall size and field-offset layout.
 type mibIfRow2 struct {
-	InterfaceLuid              uint64
-	InterfaceIndex             uint32
-	InterfaceGuid              [16]byte // GUID
-	Alias                      [257]uint16
-	Description                [257]uint16
-	PhysicalAddressLength      uint32
-	PhysicalAddress            [32]byte
-	PermanentPhysicalAddress   [32]byte
-	Mtu                        uint32
-	Type                       uint32
-	TunnelType                 uint32
-	MediaType                  uint32
-	PhysicalMediumType         uint32
-	AccessType                 uint32
-	DirectionType              uint32
+	InterfaceLuid               uint64
+	InterfaceIndex              uint32
+	InterfaceGuid               [16]byte // GUID
+	Alias                       [257]uint16
+	Description                 [257]uint16
+	PhysicalAddressLength       uint32
+	PhysicalAddress             [32]byte
+	PermanentPhysicalAddress    [32]byte
+	Mtu                         uint32
+	Type                        uint32
+	TunnelType                  uint32
+	MediaType                   uint32
+	PhysicalMediumType          uint32
+	AccessType                  uint32
+	DirectionType               uint32
 	InterfaceAndOperStatusFlags uint8
-	_padFlags                  [3]uint8
-	OperStatus                 uint32
-	AdminStatus                uint32
-	MediaConnectState          uint32
-	NetworkGuid                [16]byte
-	ConnectionType             uint32
-	_padToU64                  [4]byte
-	TransmitLinkSpeed          uint64
-	ReceiveLinkSpeed           uint64
-	InOctets                   uint64
-	InUcastPkts                uint64
-	InNUcastPkts               uint64
-	InDiscards                 uint64
-	InErrors                   uint64
-	InUnknownProtos            uint64
-	InUcastOctets              uint64
-	InMulticastOctets          uint64
-	InBroadcastOctets          uint64
-	OutOctets                  uint64
-	OutUcastPkts               uint64
-	OutNUcastPkts              uint64
-	OutDiscards                uint64
-	OutErrors                  uint64
-	OutUcastOctets             uint64
-	OutMulticastOctets         uint64
-	OutBroadcastOctets         uint64
-	OutQLen                    uint64
+	_padFlags                   [3]uint8
+	OperStatus                  uint32
+	AdminStatus                 uint32
+	MediaConnectState           uint32
+	NetworkGuid                 [16]byte
+	ConnectionType              uint32
+	_padToU64                   [4]byte
+	TransmitLinkSpeed           uint64
+	ReceiveLinkSpeed            uint64
+	InOctets                    uint64
+	InUcastPkts                 uint64
+	InNUcastPkts                uint64
+	InDiscards                  uint64
+	InErrors                    uint64
+	InUnknownProtos             uint64
+	InUcastOctets               uint64
+	InMulticastOctets           uint64
+	InBroadcastOctets           uint64
+	OutOctets                   uint64
+	OutUcastPkts                uint64
+	OutNUcastPkts               uint64
+	OutDiscards                 uint64
+	OutErrors                   uint64
+	OutUcastOctets              uint64
+	OutMulticastOctets          uint64
+	OutBroadcastOctets          uint64
+	OutQLen                     uint64
 }
 
 // init asserts that Go's struct layout reproduces the well-known C

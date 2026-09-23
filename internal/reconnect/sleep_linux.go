@@ -30,10 +30,10 @@ type linuxSleepDetector struct {
 	// conn is shared with wifi/detect_linux.go via dbus.SystemBus(). We
 	// keep a reference so Stop() can RemoveMatchSignal / Signal-remove
 	// our subscription, but we never Close() it.
-	conn      *dbus.Conn
-	signalCh  chan *dbus.Signal // the channel we registered for our signal pump
-	wakeCh    chan struct{}
-	stopCh    chan struct{}
+	conn     *dbus.Conn
+	signalCh chan *dbus.Signal // the channel we registered for our signal pump
+	wakeCh   chan struct{}
+	stopCh   chan struct{}
 }
 
 func NewSleepDetector() SleepDetector {

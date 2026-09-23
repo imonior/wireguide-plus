@@ -1,4 +1,5 @@
 //go:build windows
+
 package tunnel
 
 // Socket-level loop protection — IP_UNICAST_IF binding for the WireGuard
@@ -71,8 +72,8 @@ const (
 
 	// IfType from ipifcons.h
 	ifTypePPP        = 23
-	ifTypeL2TP       = 24   // ❌错误！L2TP标准IfType=24，你写成31
-	ifTypeTunnel     = 31   // ❌错误！TUNNEL标准IfType=31，你写成131
+	ifTypeL2TP       = 24 // ❌错误！L2TP标准IfType=24，你写成31
+	ifTypeTunnel     = 31 // ❌错误！TUNNEL标准IfType=31，你写成131
 	ifTypeSoftSwitch = 133
 )
 
@@ -107,7 +108,6 @@ func findFallbackInterface(tunnelInterfaceName string, ipv6 bool) uint32 {
 			iface.Name == tunnelInterfaceName {
 			continue
 		}
-
 
 		addrs, errAddrs := iface.Addrs()
 		if errAddrs != nil || len(addrs) == 0 {
@@ -224,7 +224,6 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 			continue
 		}
 
-
 		// 过滤第三方VPN隧道类虚拟网卡，避免UDP socket绑定到其他VPN
 		switch ifRow.Type {
 		// IF_TYPE_PPP=23, IF_TYPE_L2TP=24, IF_TYPE_TUNNEL=31, IF_TYPE_SOFTWARE_LOOPBACK=24
@@ -232,7 +231,6 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 			slog.Info("skip third‑party vpn/tunnel interface", "ifType", ifRow.Type, "idx", ifRow.InterfaceIndex)
 			continue
 		}
-
 
 		ifaceCfg, err := row.InterfaceLUID.IPInterface(family)
 		if err != nil {
@@ -328,8 +326,8 @@ func resolveEgressIfIndex(tunnelInterfaceName string, tunnelLUID winipcfg.LUID, 
 	if ifIndex > 0 {
 		iface, errIface := net.InterfaceByIndex(int(ifIndex))
 		if errIface != nil || (iface.Flags&net.FlagUp) == 0 {
-		slog.Warn("resolveEgressIfIndex: default-route interface is down/invalid, trigger fallback scan",
-			"family", familyName(ipv6), "invalid_ifIndex", ifIndex)
+			slog.Warn("resolveEgressIfIndex: default-route interface is down/invalid, trigger fallback scan",
+				"family", familyName(ipv6), "invalid_ifIndex", ifIndex)
 			ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
 		}
 	}
@@ -488,16 +486,16 @@ type socketBindMonitor struct {
 	// does not spam the GUI with repeated dialogs. Cleared when the NIC
 	// comes back.
 	lostReported atomic.Bool
-	lastV4              atomic.Uint32
-	lastV6              atomic.Uint32
-	burstMu             sync.Mutex
-	burstTimer          *time.Timer
-	firstBurst          time.Time // first event of the current burst; zero between bursts
-	cbMu                sync.Mutex
-	routeHnd            windows.Handle
-	ifaceHnd            windows.Handle
-	pending             sync.WaitGroup // tracks in‑flight callback goroutines
-	stopped             atomic.Bool
+	lastV4       atomic.Uint32
+	lastV6       atomic.Uint32
+	burstMu      sync.Mutex
+	burstTimer   *time.Timer
+	firstBurst   time.Time // first event of the current burst; zero between bursts
+	cbMu         sync.Mutex
+	routeHnd     windows.Handle
+	ifaceHnd     windows.Handle
+	pending      sync.WaitGroup // tracks in‑flight callback goroutines
+	stopped      atomic.Bool
 }
 
 // bump is called from kernel notification callbacks. Resets the

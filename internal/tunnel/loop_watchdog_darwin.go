@@ -78,10 +78,10 @@ import (
 )
 
 const (
-	loopWatchdogSampleInterval               = 5 * time.Second
-	loopWatchdogThresholdBytesPerSec  uint64 = 50 * 1024 * 1024
-	loopWatchdogTxToRxRatio           uint64 = 10
-	loopWatchdogSustainedSamples             = 3
+	loopWatchdogSampleInterval              = 5 * time.Second
+	loopWatchdogThresholdBytesPerSec uint64 = 50 * 1024 * 1024
+	loopWatchdogTxToRxRatio          uint64 = 10
+	loopWatchdogSustainedSamples            = 3
 	// netstatCmdTimeout bounds each netstat invocation. The Mac
 	// network manager already uses 30 s for the heavier route-table
 	// commands, but netstat -ibnI <iface> is a tight kernel query

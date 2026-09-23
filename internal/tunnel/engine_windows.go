@@ -1,4 +1,5 @@
 //go:build windows
+
 package tunnel
 
 // TunnelLUID 返回wintun适配器LUID，返回uint64。

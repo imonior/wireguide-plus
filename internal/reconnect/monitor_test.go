@@ -120,8 +120,8 @@ func newMockSleepDetector() *mockSleepDetector {
 	}
 }
 
-func (d *mockSleepDetector) Start() { d.started.Store(true) }
-func (d *mockSleepDetector) Stop()  { d.stopped.Store(true) }
+func (d *mockSleepDetector) Start()                    { d.started.Store(true) }
+func (d *mockSleepDetector) Stop()                     { d.stopped.Store(true) }
 func (d *mockSleepDetector) WakeChan() <-chan struct{} { return d.wakeCh }
 
 func (d *mockSleepDetector) sendWake() {

@@ -13,17 +13,19 @@ type stubFirewall struct {
 	disableDNSErr   error
 }
 
-func (s *stubFirewall) EnableKillSwitch(string, []string, []string) error          { panic("not used in test") }
-func (s *stubFirewall) AddKillSwitchTunnel(string, []string, []string) error       { panic("not used in test") }
-func (s *stubFirewall) RemoveKillSwitchTunnel(string) error                        { panic("not used in test") }
-func (s *stubFirewall) DisableKillSwitch() error                                   { panic("not used in test") }
-func (s *stubFirewall) EnableEndpointProtection(string, []string) error            { panic("not used in test") }
-func (s *stubFirewall) DisableEndpointProtection(string) error                     { panic("not used in test") }
-func (s *stubFirewall) EnableDNSProtection(string, []string) error                 { panic("not used in test") }
-func (s *stubFirewall) IsKillSwitchEnabled() bool                                  { return false }
-func (s *stubFirewall) IsDNSProtectionEnabled() bool                               { return false }
-func (s *stubFirewall) Cleanup() error                                             { panic("not used in test") }
-func (s *stubFirewall) RecoverFromCrash() bool                                     { return false }
+func (s *stubFirewall) EnableKillSwitch(string, []string, []string) error { panic("not used in test") }
+func (s *stubFirewall) AddKillSwitchTunnel(string, []string, []string) error {
+	panic("not used in test")
+}
+func (s *stubFirewall) RemoveKillSwitchTunnel(string) error             { panic("not used in test") }
+func (s *stubFirewall) DisableKillSwitch() error                        { panic("not used in test") }
+func (s *stubFirewall) EnableEndpointProtection(string, []string) error { panic("not used in test") }
+func (s *stubFirewall) DisableEndpointProtection(string) error          { panic("not used in test") }
+func (s *stubFirewall) EnableDNSProtection(string, []string) error      { panic("not used in test") }
+func (s *stubFirewall) IsKillSwitchEnabled() bool                       { return false }
+func (s *stubFirewall) IsDNSProtectionEnabled() bool                    { return false }
+func (s *stubFirewall) Cleanup() error                                  { panic("not used in test") }
+func (s *stubFirewall) RecoverFromCrash() bool                          { return false }
 func (s *stubFirewall) DisableDNSProtection() error {
 	s.disableDNSCalls++
 	return s.disableDNSErr

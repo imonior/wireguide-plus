@@ -261,7 +261,6 @@ func (d *darwinSleepDetector) poll() {
 	}
 }
 
-
 //export goWakeCallback
 func goWakeCallback(handle C.uintptr_t) {
 	d, ok := cgo.Handle(handle).Value().(*darwinSleepDetector)

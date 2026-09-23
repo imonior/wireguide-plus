@@ -38,12 +38,12 @@ const (
 	swShowNoActivate = 4
 
 	// Messages
-	wmEraseBkgnd = 0x0014
-	wmPaint      = 0x000F
-	wmClose      = 0x0010
-	wmDestroy    = 0x0002
-	wmTimer      = 0x0113
-	wmMouseMove  = 0x0200
+	wmEraseBkgnd  = 0x0014
+	wmPaint       = 0x000F
+	wmClose       = 0x0010
+	wmDestroy     = 0x0002
+	wmTimer       = 0x0113
+	wmMouseMove   = 0x0200
 	wmLButtonDown = 0x0201
 	wmLButtonUp   = 0x0202
 	wmMouseLeave  = 0x02A3
@@ -66,9 +66,9 @@ const (
 	idcArrow = 32512
 
 	// DrawText flags
-	dtTop          = 0x00000008
-	dtSingleLine   = 0x00000020
-	dtEndEllipsis  = 0x00008000
+	dtTop         = 0x00000008
+	dtSingleLine  = 0x00000020
+	dtEndEllipsis = 0x00008000
 )
 
 var (
@@ -77,52 +77,52 @@ var (
 	shell32dll  = windows.NewLazySystemDLL("shell32.dll")
 	kernel32dll = windows.NewLazySystemDLL("kernel32.dll")
 
-	procCreateWindowExW      = user32dll.NewProc("CreateWindowExW")
-	procDefWindowProcW       = user32dll.NewProc("DefWindowProcW")
-	procDestroyWindow        = user32dll.NewProc("DestroyWindow")
-	procRegisterClassExW     = user32dll.NewProc("RegisterClassExW")
-	procSetTimer             = user32dll.NewProc("SetTimer")
-	procKillTimer            = user32dll.NewProc("KillTimer")
-	procPostQuitMessage      = user32dll.NewProc("PostQuitMessage")
-	procGetMessageW          = user32dll.NewProc("GetMessageW")
-	procTranslateMessage     = user32dll.NewProc("TranslateMessage")
-	procDispatchMessageW     = user32dll.NewProc("DispatchMessageW")
+	procCreateWindowExW       = user32dll.NewProc("CreateWindowExW")
+	procDefWindowProcW        = user32dll.NewProc("DefWindowProcW")
+	procDestroyWindow         = user32dll.NewProc("DestroyWindow")
+	procRegisterClassExW      = user32dll.NewProc("RegisterClassExW")
+	procSetTimer              = user32dll.NewProc("SetTimer")
+	procKillTimer             = user32dll.NewProc("KillTimer")
+	procPostQuitMessage       = user32dll.NewProc("PostQuitMessage")
+	procGetMessageW           = user32dll.NewProc("GetMessageW")
+	procTranslateMessage      = user32dll.NewProc("TranslateMessage")
+	procDispatchMessageW      = user32dll.NewProc("DispatchMessageW")
 	procSystemParametersInfoW = user32dll.NewProc("SystemParametersInfoW")
-	procShowWindow           = user32dll.NewProc("ShowWindow")
-	procGetDpiForSystem      = user32dll.NewProc("GetDpiForSystem")
-	procGetModuleHandleW     = kernel32dll.NewProc("GetModuleHandleW")
-	procLoadCursorW          = user32dll.NewProc("LoadCursorW")
-	procGetClientRect        = user32dll.NewProc("GetClientRect")
-	procGetDC                = user32dll.NewProc("GetDC")
-	procReleaseDC            = user32dll.NewProc("ReleaseDC")
-	procInvalidateRect       = user32dll.NewProc("InvalidateRect")
-	procBeginPaint           = user32dll.NewProc("BeginPaint")
-	procEndPaint             = user32dll.NewProc("EndPaint")
-	procSetCapture           = user32dll.NewProc("SetCapture")
-	procReleaseCapture       = user32dll.NewProc("ReleaseCapture")
-	procTrackMouseEvent      = user32dll.NewProc("TrackMouseEvent")
-	procPostMessageW         = user32dll.NewProc("PostMessageW")
-	procSHAppBarMessage      = shell32dll.NewProc("SHAppBarMessage")
-	procSetWindowRgn         = user32dll.NewProc("SetWindowRgn")
+	procShowWindow            = user32dll.NewProc("ShowWindow")
+	procGetDpiForSystem       = user32dll.NewProc("GetDpiForSystem")
+	procGetModuleHandleW      = kernel32dll.NewProc("GetModuleHandleW")
+	procLoadCursorW           = user32dll.NewProc("LoadCursorW")
+	procGetClientRect         = user32dll.NewProc("GetClientRect")
+	procGetDC                 = user32dll.NewProc("GetDC")
+	procReleaseDC             = user32dll.NewProc("ReleaseDC")
+	procInvalidateRect        = user32dll.NewProc("InvalidateRect")
+	procBeginPaint            = user32dll.NewProc("BeginPaint")
+	procEndPaint              = user32dll.NewProc("EndPaint")
+	procSetCapture            = user32dll.NewProc("SetCapture")
+	procReleaseCapture        = user32dll.NewProc("ReleaseCapture")
+	procTrackMouseEvent       = user32dll.NewProc("TrackMouseEvent")
+	procPostMessageW          = user32dll.NewProc("PostMessageW")
+	procSHAppBarMessage       = shell32dll.NewProc("SHAppBarMessage")
+	procSetWindowRgn          = user32dll.NewProc("SetWindowRgn")
 
-	procCreateSolidBrush    = gdi32dll.NewProc("CreateSolidBrush")
-	procCreateFontIndirectW = gdi32dll.NewProc("CreateFontIndirectW")
-	procSelectObject        = gdi32dll.NewProc("SelectObject")
-	procDeleteObject        = gdi32dll.NewProc("DeleteObject")
-	procSetTextColor        = gdi32dll.NewProc("SetTextColor")
-	procSetBkMode           = gdi32dll.NewProc("SetBkMode")
-	procGetStockObject      = gdi32dll.NewProc("GetStockObject")
-	procTextOutW            = gdi32dll.NewProc("TextOutW")
-	procFillRect            = user32dll.NewProc("FillRect") // FillRect is a user32 export, not GDI
-	procCreateRoundRectRgn  = gdi32dll.NewProc("CreateRoundRectRgn")
+	procCreateSolidBrush      = gdi32dll.NewProc("CreateSolidBrush")
+	procCreateFontIndirectW   = gdi32dll.NewProc("CreateFontIndirectW")
+	procSelectObject          = gdi32dll.NewProc("SelectObject")
+	procDeleteObject          = gdi32dll.NewProc("DeleteObject")
+	procSetTextColor          = gdi32dll.NewProc("SetTextColor")
+	procSetBkMode             = gdi32dll.NewProc("SetBkMode")
+	procGetStockObject        = gdi32dll.NewProc("GetStockObject")
+	procTextOutW              = gdi32dll.NewProc("TextOutW")
+	procFillRect              = user32dll.NewProc("FillRect") // FillRect is a user32 export, not GDI
+	procCreateRoundRectRgn    = gdi32dll.NewProc("CreateRoundRectRgn")
 	procGetTextExtentPoint32W = gdi32dll.NewProc("GetTextExtentPoint32W")
-	procCreatePen           = gdi32dll.NewProc("CreatePen")
-	procMoveToEx            = gdi32dll.NewProc("MoveToEx")
-	procLineTo              = gdi32dll.NewProc("LineTo")
-	procRectangle           = gdi32dll.NewProc("Rectangle")
-	procRoundRect           = gdi32dll.NewProc("RoundRect")
-	procEllipse             = gdi32dll.NewProc("Ellipse")
-	procDrawTextW           = user32dll.NewProc("DrawTextW") // DrawTextW is a user32 export, not GDI
+	procCreatePen             = gdi32dll.NewProc("CreatePen")
+	procMoveToEx              = gdi32dll.NewProc("MoveToEx")
+	procLineTo                = gdi32dll.NewProc("LineTo")
+	procRectangle             = gdi32dll.NewProc("Rectangle")
+	procRoundRect             = gdi32dll.NewProc("RoundRect")
+	procEllipse               = gdi32dll.NewProc("Ellipse")
+	procDrawTextW             = user32dll.NewProc("DrawTextW") // DrawTextW is a user32 export, not GDI
 )
 
 // ---- Win32 structs (not provided by x/sys/windows) ----
@@ -178,12 +178,12 @@ type trackMouseEvent struct {
 type popupPoint struct{ X, Y int32 }
 
 type popupMsg struct {
-	HWND    uintptr
-	Message uint32
-	WParam  uintptr
-	LParam  uintptr
-	Time    uint32
-	Pt      popupPoint
+	HWND     uintptr
+	Message  uint32
+	WParam   uintptr
+	LParam   uintptr
+	Time     uint32
+	Pt       popupPoint
 	LPrivate uint32
 }
 
@@ -274,17 +274,17 @@ func systemLightTheme() bool {
 // ---- Per-window state ----
 
 type popupData struct {
-	names     []string
-	state     popupState
+	names []string
+	state popupState
 	// outOfRange lists probe targets that are currently NOT routed through
 	// the tunnel (an AllowedIPs edit or a moved DDNS name can invalidate a
 	// target that was accepted when it was saved). Rendered as an amber
 	// warning line under the tunnel list — the companion to the editor's
 	// colour marking, for the case where the app window is closed and the
 	// only thing on screen is this bubble.
-	outOfRange []string
-	lang       string
-	onOpen     func()
+	outOfRange   []string
+	lang         string
+	onOpen       func()
 	onDisconnect func()
 
 	themeLight bool
@@ -527,9 +527,9 @@ func popupPosition(w, h int32, scale float32) (uintptr, uintptr) {
 
 func createPopupFont(d *popupData, px int, bold bool) uintptr {
 	lf := logFont{
-		lfHeight:       -int32(float32(px) * d.scale),
-		lfWeight:       400,
-		lfCharSet:      1, // DEFAULT_CHARSET
+		lfHeight:        -int32(float32(px) * d.scale),
+		lfWeight:        400,
+		lfCharSet:       1, // DEFAULT_CHARSET
 		lfOutPrecision:  0,
 		lfClipPrecision: 2, // CLIP_DEFAULT_PRECIS
 		lfQuality:       5, // CLEARTYPE_QUALITY

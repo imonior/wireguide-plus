@@ -522,6 +522,26 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		s.updateScheduler.Kick(true)
 	}
 
+	// Proxy (for update checks) changed through this whole-settings save:
+	// broadcast it on the Wails "settings_changed" event so a Settings UI
+	// open in another client — or the CLI — reflects the new mode/URL live,
+	// exactly like the per-toggle broadcasts do for health-check /
+	// pin-interface / etc. Guarded so an unchanged save stays silent
+	// (mirrors the live-apply handlers, which skip broadcasting when the
+	// value is identical — repeated identical broadcasts spammed
+	// settings_changed subscribers before). The GUI listens on the literal
+	// "settings_changed" (the IPC name is "event.settings_changed"; the
+	// bridge translates between them), so we emit the Wails name here.
+	if s.app != nil && prev != nil &&
+		(prev.ProxyMode != settings.ProxyMode || prev.ProxyURL != settings.ProxyURL) {
+		pm := settings.ProxyMode
+		pu := settings.ProxyURL
+		s.app.Event.Emit("settings_changed", ipc.SettingsChangedPayload{
+			ProxyMode: &pm,
+			ProxyURL:  &pu,
+		})
+	}
+
 	return nil
 }
 

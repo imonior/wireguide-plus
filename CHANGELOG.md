@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.7] - 2026-09-23
+
+### 🐛 Fixed
+
+- **Linux "Prevent system sleep" actually engages again**: a local edit had accidentally dropped the `systemd-inhibit` call, leaving only an idle shell that held no inhibitor lock — so the setting silently did nothing on Linux. Restored the `systemd-inhibit` wrapper around the self-watching shell so the override blocks suspend on Linux once more.
+- **Proxy change (for update checks) now broadcasts live**: `proxy_mode` / `proxy_url` were never part of the `settings_changed` payload, so the Settings UI's proxy reflection code was dead and a proxy change made from another client or the CLI wasn't reflected. Both fields are now in the payload and emitted on change.
+- **Settings save hardened against field resets**: the save path now reads the fresh settings object and overrides only the on-screen fields (spread), so a newly added setting can no longer be written back as its zero value by an older save path. This closes the mechanism behind the 2.3.6 "did not save" symptom.
+
+### 🔧 Changed
+
+- **gofmt formatting pass across the tree** (no behavior change).
+
 ## [2.3.6] - 2026-09-23
 
 ### 🐛 Fixed

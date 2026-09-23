@@ -189,6 +189,13 @@ type SettingsChangedPayload struct {
 	PreventSystemSleep   *bool   `json:"prevent_system_sleep,omitempty"`
 	PinInterface         *bool   `json:"pin_interface,omitempty"`
 	LogLevel             *string `json:"log_level,omitempty"`
+	// ProxyMode / ProxyURL mirror the persisted proxy (used for update
+	// checks) so a change applied through another client — the CLI — is
+	// reflected live in the Settings UI, the same role the fields above
+	// play for the live-apply toggles. They were never part of this
+	// payload before, which left the GUI's proxy reflection code dead.
+	ProxyMode *string `json:"proxy_mode,omitempty"`
+	ProxyURL  *string `json:"proxy_url,omitempty"`
 }
 
 // AutomationPreviewResponse is the read-only result of Automation.Preview:

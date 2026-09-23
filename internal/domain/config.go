@@ -52,35 +52,35 @@ type WireGuardConfig struct {
 
 // InterfaceConfig represents the [Interface] section of a .conf file.
 type InterfaceConfig struct {
-	PrivateKey string   `json:"private_key"`           // Required: Base64-encoded 32-byte key
-	Address    []string `json:"address"`               // Required: CIDR addresses (e.g., "10.0.0.2/24")
-	DNS        []string `json:"dns,omitempty"`         // Optional: DNS servers and/or search domains
-	MTU        int      `json:"mtu,omitempty"`         // Optional: 0 = auto-detect
-	ListenPort int      `json:"listen_port,omitempty"` // Optional: 0 = random
-	Table      string   `json:"table,omitempty"`       // Optional: routing table
-	FwMark     string   `json:"fw_mark,omitempty"`     // Optional: firewall mark
-	PreUp      string   `json:"pre_up,omitempty"`      // Optional: script before interface up
-	PostUp     string   `json:"post_up,omitempty"`     // Optional: script after interface up
-	PreDown    string   `json:"pre_down,omitempty"`    // Optional: script before interface down
-	PostDown   string   `json:"post_down,omitempty"`   // Optional: script after interface down
-	ExtraKeys  map[string]string `json:"extra_keys,omitempty"` // Unrecognized keys preserved for round-tripping
+	PrivateKey string            `json:"private_key"`           // Required: Base64-encoded 32-byte key
+	Address    []string          `json:"address"`               // Required: CIDR addresses (e.g., "10.0.0.2/24")
+	DNS        []string          `json:"dns,omitempty"`         // Optional: DNS servers and/or search domains
+	MTU        int               `json:"mtu,omitempty"`         // Optional: 0 = auto-detect
+	ListenPort int               `json:"listen_port,omitempty"` // Optional: 0 = random
+	Table      string            `json:"table,omitempty"`       // Optional: routing table
+	FwMark     string            `json:"fw_mark,omitempty"`     // Optional: firewall mark
+	PreUp      string            `json:"pre_up,omitempty"`      // Optional: script before interface up
+	PostUp     string            `json:"post_up,omitempty"`     // Optional: script after interface up
+	PreDown    string            `json:"pre_down,omitempty"`    // Optional: script before interface down
+	PostDown   string            `json:"post_down,omitempty"`   // Optional: script after interface down
+	ExtraKeys  map[string]string `json:"extra_keys,omitempty"`  // Unrecognized keys preserved for round-tripping
 
 	// AmneziaWG obfuscation parameters (device-level). These are sent to
 	// amneziawg-go via UAPI when Protocol == "amneziawg"; they are ignored
 	// (and rejected by the validator) for standard WireGuard configs.
 	// H1-H4 accept a single value or a "min-max" range string, matching
 	// amneziawg-go's UintRange format.
-	Jc   int    `json:"jc,omitempty"`    // Junk packet count (device-level)
-	Jmin int    `json:"jmin,omitempty"`  // Junk packet min length
-	Jmax int    `json:"jmax,omitempty"`  // Junk packet max length
-	S1   int    `json:"s1,omitempty"`    // Init packet padding
-	S2   int    `json:"s2,omitempty"`    // Response packet padding
-	S3   int    `json:"s3,omitempty"`    // Cookie packet padding
-	S4   int    `json:"s4,omitempty"`    // Transport packet padding
-	H1   string `json:"h1,omitempty"`    // Init header range
-	H2   string `json:"h2,omitempty"`    // Response header range
-	H3   string `json:"h3,omitempty"`    // Cookie header range
-	H4   string `json:"h4,omitempty"`    // Transport header range
+	Jc   int    `json:"jc,omitempty"`   // Junk packet count (device-level)
+	Jmin int    `json:"jmin,omitempty"` // Junk packet min length
+	Jmax int    `json:"jmax,omitempty"` // Junk packet max length
+	S1   int    `json:"s1,omitempty"`   // Init packet padding
+	S2   int    `json:"s2,omitempty"`   // Response packet padding
+	S3   int    `json:"s3,omitempty"`   // Cookie packet padding
+	S4   int    `json:"s4,omitempty"`   // Transport packet padding
+	H1   string `json:"h1,omitempty"`   // Init header range
+	H2   string `json:"h2,omitempty"`   // Response header range
+	H3   string `json:"h3,omitempty"`   // Cookie header range
+	H4   string `json:"h4,omitempty"`   // Transport header range
 }
 
 // IsAmneziaWG reports whether this config uses the AmneziaWG protocol.
@@ -92,12 +92,12 @@ func (c *InterfaceConfig) IsAmneziaWG() bool {
 
 // PeerConfig represents a [Peer] section of a .conf file.
 type PeerConfig struct {
-	PublicKey           string   `json:"public_key"`                     // Required: Base64-encoded 32-byte key
-	PresharedKey        string   `json:"preshared_key,omitempty"`        // Optional
-	Endpoint            string   `json:"endpoint,omitempty"`             // Optional: host:port
-	AllowedIPs          []string `json:"allowed_ips"`                    // Required: CIDR list
-	PersistentKeepalive int      `json:"persistent_keepalive,omitempty"` // Optional: seconds (0 = disabled)
-	ExtraKeys           map[string]string `json:"extra_keys,omitempty"` // Unrecognized keys preserved for round-tripping
+	PublicKey           string            `json:"public_key"`                     // Required: Base64-encoded 32-byte key
+	PresharedKey        string            `json:"preshared_key,omitempty"`        // Optional
+	Endpoint            string            `json:"endpoint,omitempty"`             // Optional: host:port
+	AllowedIPs          []string          `json:"allowed_ips"`                    // Required: CIDR list
+	PersistentKeepalive int               `json:"persistent_keepalive,omitempty"` // Optional: seconds (0 = disabled)
+	ExtraKeys           map[string]string `json:"extra_keys,omitempty"`           // Unrecognized keys preserved for round-tripping
 }
 
 // HasScripts returns true if any Pre/PostUp/Down scripts are defined.

@@ -15,6 +15,6 @@ func NewNetworkChangeDetector() NetworkChangeDetector {
 	return &noopNetworkChangeDetector{}
 }
 
-func (d *noopNetworkChangeDetector) Start()                         {}
-func (d *noopNetworkChangeDetector) Stop()                          {}
-func (d *noopNetworkChangeDetector) ChangeChan() <-chan struct{}    { return neverFires }
+func (d *noopNetworkChangeDetector) Start()                      {}
+func (d *noopNetworkChangeDetector) Stop()                       {}
+func (d *noopNetworkChangeDetector) ChangeChan() <-chan struct{} { return neverFires }

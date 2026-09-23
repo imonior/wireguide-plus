@@ -248,4 +248,3 @@ func (r *ValidationResult) EncodedMessages() []string {
 	}
 	return msgs
 }
-

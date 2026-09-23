@@ -472,10 +472,10 @@ type trayManager struct {
 	// their tunnel, as of the last status event. Surfaced in the status
 	// bubble: when the window is closed the bubble is the only place the
 	// user can be told, and the editor's colour marking is invisible then.
-	outOfRange []string
-	hasHandshake      map[string]bool // per-tunnel handshake status
-	rebuildTimer      *time.Timer     // debounce timer for rebuildMenu
-	notifyTimer       *time.Timer     // debounce timer for the status notification
+	outOfRange   []string
+	hasHandshake map[string]bool // per-tunnel handshake status
+	rebuildTimer *time.Timer     // debounce timer for rebuildMenu
+	notifyTimer  *time.Timer     // debounce timer for the status notification
 	// menu is the ONE Menu object backing the tray for the app's whole
 	// lifetime. rebuildMenu clears and refills it in place instead of
 	// creating a fresh Menu: Wails reuses the same NSMenu instance on

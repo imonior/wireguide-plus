@@ -8,11 +8,11 @@ func TestApplyOwners(t *testing.T) {
 		"utun4": "WireGuard",
 	}
 	entries := []RouteEntry{
-		{Interface: "utun3", InterfaceDetail: ""},         // filled
-		{Interface: "utun4", InterfaceDetail: ""},         // filled
-		{Interface: "utun5", InterfaceDetail: ""},         // no owner -> untouched
+		{Interface: "utun3", InterfaceDetail: ""},        // filled
+		{Interface: "utun4", InterfaceDetail: ""},        // filled
+		{Interface: "utun5", InterfaceDetail: ""},        // no owner -> untouched
 		{Interface: "en0", InterfaceDetail: "Wi-Fi"},     // existing detail preserved
-		{Interface: "lo0", InterfaceDetail: "Tailscale"},  // existing detail preserved even if owner known
+		{Interface: "lo0", InterfaceDetail: "Tailscale"}, // existing detail preserved even if owner known
 	}
 	got := applyOwners(entries, owners)
 	want := []struct {

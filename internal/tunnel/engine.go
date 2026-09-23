@@ -15,10 +15,10 @@ import (
 	awgconn "github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	awgdevice "github.com/amnezia-vpn/amneziawg-go/v3/device"
 	awgtun "github.com/amnezia-vpn/amneziawg-go/v3/tun"
+	"github.com/imonior/wireguide-plus/internal/config"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
-	"github.com/imonior/wireguide-plus/internal/config"
 )
 
 // Engine wraps a protocol device (wireguard-go or amneziawg-go) and its TUN.
@@ -29,8 +29,8 @@ type Engine struct {
 	ifaceName    string
 	// protocol is the backend in use: "" or config.ProtocolWireGuard, or
 	// config.ProtocolAmneziaWG. See Engine.IsAmneziaWG.
-	protocol string
-	closeOnce    sync.Once
+	protocol  string
+	closeOnce sync.Once
 
 	// bind is the protocol backend's conn.Bind we passed to device.NewDevice
 	// (either wireguard-go's or amneziawg-go's). Held as any so either

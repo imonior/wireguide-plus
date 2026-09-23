@@ -388,8 +388,8 @@ func detectOwnersWindows() map[string]string {
 	if res, err := runRouteCmd("powershell", "-NoProfile", "-Command",
 		"Get-NetAdapter | Select-Object Name,InterfaceDescription | ConvertTo-Json"); err == nil {
 		var adapters []struct {
-			Name                  string `json:"Name"`
-			InterfaceDescription  string `json:"InterfaceDescription"`
+			Name                 string `json:"Name"`
+			InterfaceDescription string `json:"InterfaceDescription"`
 		}
 		if json.Unmarshal(res, &adapters) == nil {
 			for _, a := range adapters {
@@ -403,8 +403,8 @@ func detectOwnersWindows() map[string]string {
 	if res, err := runRouteCmd("powershell", "-NoProfile", "-Command",
 		"Get-VpnConnection | Select-Object Name,ConnectionStatus | ConvertTo-Json"); err == nil {
 		var vpns []struct {
-			Name              string `json:"Name"`
-			ConnectionStatus  string `json:"ConnectionStatus"`
+			Name             string `json:"Name"`
+			ConnectionStatus string `json:"ConnectionStatus"`
 		}
 		if json.Unmarshal(res, &vpns) == nil {
 			for _, v := range vpns {

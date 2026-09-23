@@ -5,6 +5,7 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -24,12 +25,14 @@ var (
 // tunnels survive screensaver / screen-off / suspend.
 //
 // The bundled `systemd-inhibit` (every systemd-logind desktop) runs a command
-// under an inhibitor lock; when the command ends the lock is released. We hold
-// it open with `sleep infinity`. Setpgid makes the child its own process-group
-// leader so we can kill the WHOLE group — systemd-inhibit AND its `sleep`
-// grandchild — on disable, instead of leaving the `sleep infinity` process
-// orphaned and spinning forever. Pdeathsig guarantees the child is reaped if
-// the helper crashes, so the override never leaks. Hosts without
+// under an inhibitor lock; when the command ends the lock is released. Rather
+// than holding `sleep infinity` open — whose grandchild survives a helper
+// SIGKILL because Pdeathsig only reaps the direct child — we run a tiny
+// self-watching shell that polls the helper's own PID: it exits the instant
+// the helper disappears (SIGKILL, crash, OOM), releasing the inhibitor lock
+// with it. Setpgid keeps the whole group (systemd-inhibit + the shell + its
+// brief `sleep 5`) as one unit so a normal disable kills them all at once.
+// Pdeathsig is belt-and-braces for the direct child. Hosts without
 // systemd-inhibit (non-systemd init) degrade to a logged warning instead of
 // failing the toggle.
 func applySystemSleepPrevention(enabled bool) error {
@@ -40,8 +43,9 @@ func applySystemSleepPrevention(enabled bool) error {
 		if inhibitCmd != nil && inhibitCmd.Process != nil {
 			pid := inhibitCmd.Process.Pid
 			// Negative pid targets the whole process group (Setpgid made the
-			// child the leader), so the orphaned `sleep infinity` is killed
-			// too. The direct Kill is a best-effort fallback.
+			// child the leader), so systemd-inhibit, the watching shell and
+			// its `sleep 5` all die together. The direct Kill is a
+			// best-effort fallback.
 			_ = syscall.Kill(-pid, syscall.SIGKILL)
 			_ = inhibitCmd.Process.Kill()
 		}
@@ -63,14 +67,26 @@ func applySystemSleepPrevention(enabled bool) error {
 	// --what=idle  : block auto idle-suspend
 	// --what=sleep : block manual/auto suspend & hibernate
 	// --mode=block : prevent, not just delay
+	//
+	// systemd-inhibit holds an inhibitor lock while running its CHILD COMMAND;
+	// when that child exits, the lock is released. The child command is a
+	// shell that watches THIS helper's PID: it loops until the helper is
+	// gone, then exits, which releases the inhibitor lock. This is what
+	// guarantees no orphan when the helper is SIGKILLed — `sleep infinity`
+	// could never do this because its grandchild outlived a SIGKILL of the
+	// helper (Pdeathsig only reaps the direct child). The `sleep 5` inside is
+	// short-lived and self-exits within 5s once the shell exits. (The macOS
+	// `caffeinate -w` path uses the same "watch the PID, die with it" idea.)
 	cmd := exec.Command("systemd-inhibit",
 		"--what=idle:sleep",
 		"--why=WireGuide Plus background keep-alive",
 		"--mode=block",
-		"sleep", "infinity")
+		"sh", "-c",
+		fmt.Sprintf("while kill -0 %d 2>/dev/null; do sleep 5; done", os.Getpid()))
 	// Setpgid makes this child the leader of a fresh process group, and
-	// Pdeathsig reaps it if the helper dies unexpectedly — so the inhibitor
-	// lock is never left dangling.
+	// Pdeathsig reaps it if the helper dies unexpectedly — so a normal
+	// disable (kill -pid) takes the whole group down at once and the
+	// inhibitor lock is never left dangling.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid:   true,
 		Pdeathsig: syscall.SIGKILL,

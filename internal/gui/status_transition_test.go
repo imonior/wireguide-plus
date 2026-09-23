@@ -55,8 +55,8 @@ func TestComputeStatusTransitionsStableTunnelNotReAnnounced(t *testing.T) {
 	//    re-announce TS453Dmini as "connected".
 	tr, _ = computeStatusTransitions(
 		connSet("TS451D", tcsConnected, "TS453Dmini", tcsConnected),
-		keySet("TS453Dmini"),  // only TS453Dmini established now
-		keySet("TS453Dmini"),  // only TS453Dmini active now (TS451D gone)
+		keySet("TS453Dmini"), // only TS453Dmini established now
+		keySet("TS453Dmini"), // only TS453Dmini active now (TS451D gone)
 	)
 	assertTransition(t, tr, nil, []string{"TS451D"}, nil)
 
