@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.8] - 2026-09-24
+
+### ✨ 新增
+
+- 新增 `tools/checkrelease`：唯讀校驗，確認五份 i18n 語言 JSON 擁有完全一致的鍵集合，且五份 CHANGELOG 都包含本次發布的版本小節。`bump:version` 現在會先執行它，確保發佈不會帶著翻譯漂移或缺少某種語言的更新日誌出廠。
+
+### 🔧 變更
+
+- 新增統一的本地品質門禁（`task check`：`go vet` + 針對 `./internal/...` 的競態測試），並讓 CI 在直接推送到 `main` 時也會執行，堵住「推到 main 完全不測試」的窗口。
+- CI 現在會重新產生 Wails bindings，並與已提交的 `frontend/bindings` 比對，一旦發現漂移即失敗，防止前端/後端 IPC 呼叫靜默錯位。
+
 ## [2.3.7] - 2026-09-23
 
 ### 🐛 修復

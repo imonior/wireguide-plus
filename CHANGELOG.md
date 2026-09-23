@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.8] - 2026-09-24
+
+### ✨ Added
+
+- Add `tools/checkrelease`: a read-only guard that verifies the five i18n locale JSONs expose identical key sets and that all five CHANGELOGs carry the released version's section. `bump:version` now runs it first, so a release can never ship with drifted translations or a missing changelog language.
+
+### 🔧 Changed
+
+- Add a unified local quality gate (`task check`: `go vet` + race tests over `./internal/...`) and run CI on direct pushes to `main`, closing the gap where a push to main was never tested.
+- CI now regenerates the Wails bindings and fails on any drift from the committed `frontend/bindings`, preventing silent frontend/backend IPC mismatches.
+
 ## [2.3.7] - 2026-09-23
 
 ### 🐛 Fixed

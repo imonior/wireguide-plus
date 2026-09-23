@@ -4,6 +4,17 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.8] - 2026-09-24
+
+### ✨ 追加
+
+- `tools/checkrelease` を追加：5 つの i18n ロケール JSON が同一のキー集合を公開していること、および 5 つの CHANGELOG すべてに今回のバージョンのセクションが含まれていることを検証する読み取り専用のガード。`bump:version` は先にこれを実行するため、翻訳のズレや更新履歴の欠落を含んだリリースを防げます。
+
+### 🔧 変更
+
+- 統一されたローカル品質ゲート（`task check`：`go vet` + `./internal/...` 向け競合テスト）を追加し、CI を `main` への直接プッシュ時にも実行するよう変更。`main` へのプッシュが一切テストされない空白を閉じました。
+- CI が Wails bindings を再生成し、コミット済みの `frontend/bindings` との差分があれば失敗するようになり、フロントエンド/バックエンド間の IPC 呼び出しの静かな不一致を防ぎます。
+
 ## [2.3.7] - 2026-09-23
 
 ### 🐛 修正
