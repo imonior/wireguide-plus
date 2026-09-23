@@ -34,6 +34,18 @@ tasks:
     cmds:
       - task: "{{OS}}:build"
 
+  check:
+    summary: Local quality gate (go vet + race tests over ./internal/...)
+    desc: |
+      Deliberately scoped to ./internal/...: the root package embeds
+      frontend/dist, so `go vet ./...` / `go test ./...` fail locally until
+      the frontend has been built once. The CI matrix covers ./... after
+      building the frontend. -race needs a C toolchain on some platforms;
+      CI's Linux job is the authoritative -race pass.
+    cmds:
+      - go vet ./internal/...
+      - go test -race ./internal/...
+
   bump:version:
     summary: Synchronizes the VERSION file into all static build/package metadata files
     desc: |
@@ -43,7 +55,11 @@ tasks:
       / NSIS / MSIX files, the Linux nfpm metadata and the macOS Info.plist files in
       one pass. Go binaries pick the version up automatically at build time from
       VERSION (via -ldflags), so no Go code needs to change on a version bump.
+      Refuses to bump unless the five i18n locale files expose identical key sets
+      and all five CHANGELOGs already carry the target version's section
+      (tools/checkrelease, read-only).
     cmds:
+      - go run ./tools/checkrelease {{.NEW_VERSION}}
       - cmd: go run ./tools/bumpversion
         when: '{{eq .NEW_VERSION ""}}'
       - cmd: go run ./tools/bumpversion {{.NEW_VERSION}}

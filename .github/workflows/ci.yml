@@ -1,11 +1,13 @@
 name: CI
 
-# PR-only by design: pushing to a branch (including main via a merged PR)
-# must never rebuild or retest on its own — releases are cut exclusively
-# by v* tags (release.yml), and the repo owner was explicit that a bare
-# push should not light up CI. workflow_dispatch covers manual runs.
+# PRs plus direct pushes to main. Releases are still cut exclusively by v*
+# tags (release.yml); the push trigger only closes the window where a
+# direct-to-main commit (e.g. a release bump) would otherwise never be
+# tested. Pushes to feature branches stay silent by design.
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -53,6 +55,20 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Check generated bindings are up to date
+        # frontend/bindings is committed generated code, and the
+        # generate:bindings task skips whenever the directory exists. Without
+        # this gate, a Go API change with a forgotten regeneration leaves the
+        # frontend IPC calls silently mismatching the backend handlers.
+        run: |
+          set -euo pipefail
+          export PATH="${{ runner.temp }}/gobin:$PATH"
+          wails3 generate bindings -clean=true
+          git diff --stat --exit-code frontend/bindings || {
+            echo "::error::frontend/bindings is stale — run 'wails3 generate bindings -clean=true' and commit the result."
+            exit 1
+          }
 
       - name: Test and vet
         run: |
