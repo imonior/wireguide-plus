@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.9] - 2026-09-24
+
+### 🐛 修正
+
+- **macOS/Linux：クリーンインストール後にアプリが開かなくなる問題を修正。** 特権ヘルパーは root で動作するため、起動時にユーザーのログディレクトリが存在しなければ作成してしまいます（旧アプリとデータを削除してシステムサービスだけが残った状態で .dmg から 2.3.8 をインストールした環境などが該当）。この際ディレクトリは root 所有・権限 0700 で作られ、以降の GUI 起動は毎回「ログディレクトリは存在するが書き込み不可」とエラーで即終了していました。ヘルパーはログディレクトリを対象のデスクトップユーザーへ所有権を移すようになり、影響済みの環境もヘルパーの次回起動で自動修復されます。インストール済みの 2.3.8 が開かない場合は、`sudo chown -R "$USER" ~/Library/Logs/wireguideplus`（Linux では `sudo chown -R "$USER" ~/.local/share/wireguideplus`）で即時復旧できます。2.3.9 をインストールすれば初回起動で自動的に修復されます。
+
 ## [2.3.8] - 2026-09-24
 
 ### ✨ 追加

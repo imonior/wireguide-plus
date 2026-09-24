@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.9] - 2026-09-24
+
+### 🐛 Fixed
+
+- **macOS/Linux: app no longer refuses to open after a fresh install.** The privileged helper runs as root and creates the user's log directory when it is missing at startup — which happens on a fresh install (e.g. 2.3.8 via .dmg) when the old app and its data were deleted but the system service remained. The directory was left root-owned at mode 0700, and every later GUI launch then exited silently with "log directory exists but is not writable". The helper now hands the log directory over to the desktop user it serves, and an already-affected machine self-heals on the next helper start. If your installed 2.3.8 won't open, recover now with `sudo chown -R "$USER" ~/Library/Logs/wireguideplus` on macOS (or `sudo chown -R "$USER" ~/.local/share/wireguideplus` on Linux), or install 2.3.9 — the first launch repairs it.
+
 ## [2.3.8] - 2026-09-24
 
 ### ✨ Added

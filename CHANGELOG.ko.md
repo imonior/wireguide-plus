@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.3.9] - 2026-09-24
+
+### 🐛 수정
+
+- **macOS/Linux: 새로 설치 후 앱이 열리지 않는 문제 수정.**특권 helper는 root로 실행되므로 부팅 시 사용자 로그 디렉터리가 없으면 대신 생성합니다 — 이전 앱과 데이터를 삭제했지만 시스템 서비스는 남은 상태에서 .dmg로 2.3.8을 새로 설치한 환경이 정확히 이 경우에 해당합니다. 이전에는 이 디렉터리가 root 소유·0700 권한으로 남아, 이후 모든 GUI 실행이 "로그 디렉터리가 존재하지만 쓸 수 없음" 오류로 조용히 종료되었습니다. 이제 helper는 로그 디렉터리를 대상 데스크톱 사용자에게 소유권 반환하며, 이미 영향받은 환경도 helper 다음 시작 시 자동 복구됩니다. 설치한 2.3.8이 열리지 않는다면 `sudo chown -R "$USER" ~/Library/Logs/wireguideplus`(Linux은 `sudo chown -R "$USER" ~/.local/share/wireguideplus`)로 즉시 복구할 수 있고, 2.3.9를 설치하면 첫 실행에서 자동 수리됩니다.
+
 ## [2.3.8] - 2026-09-24
 
 ### ✨ 추가

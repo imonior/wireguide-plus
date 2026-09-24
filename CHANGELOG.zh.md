@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.9] - 2026-09-24
+
+### 🐛 修复
+
+- **macOS/Linux：全新安装后「无法打开」已修复。** 特权 helper 以 root 运行，启动时若用户的日志目录不存在就会代为创建——全新安装（如通过 .dmg 安装 2.3.8）删掉了旧应用及其数据、但系统服务仍残留时正是如此。该目录此前被留成 root 属主、0700 权限，导致之后每次 GUI 启动都因「日志目录已存在但不可写」静默退出。现在 helper 会把日志目录交还给它所服务的桌面用户，已受影响的机器在 helper 下次启动时自动修复。若已安装的 2.3.8 打不开，可立即执行 `sudo chown -R "$USER" ~/Library/Logs/wireguideplus`（Linux 为 `sudo chown -R "$USER" ~/.local/share/wireguideplus`）恢复，或直接安装 2.3.9——首次启动即自行修复。
+
 ## [2.3.8] - 2026-09-24
 
 ### ✨ 新增
