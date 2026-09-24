@@ -37,12 +37,14 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Start minimized** — a setting that starts the app minimized to the **taskbar** on
   Windows (the taskbar button stays visible, so the main window can always be reopened) or
   to the system tray on macOS/Linux.
-- **Tray connection notifications** — 10 seconds after startup (once the elevation prompt
-  is settled) the current connection state is shown; network changes (Wi-Fi switch,
-  cable unplug, network loss, ...) that alter tunnel state also show a 10-second-delayed
-  bubble with the stable, latest state. The bubble has an action menu (open main window /
-  disconnect), can be dismissed manually, or auto-closes after a configurable dwell time
-  (default 10 s, adjustable in Settings). macOS and Linux now show the same bubble (previously Windows-only).
+- **Tray connection notifications** — 15 seconds after startup (once the elevation prompt
+  is settled) an overview bubble lists every tunnel with its live state (green check /
+  red cross / yellow dot while connecting) and auto/manual mode; later network changes
+  (Wi-Fi switch, cable unplug, network loss, ...) that alter tunnel state also show a
+  10-second-delayed bubble with the stable, latest state. The bubble has an action menu
+  (open main window / disconnect), can be dismissed manually, or auto-closes after a
+  configurable dwell time (default 10 s, adjustable in Settings). macOS and Linux now
+  show the same bubble (previously Windows-only).
 - **Tunnel management** — import / export `.conf`, connection history, quick toggles.
 - **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
 - **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear). Editing works while the tunnel is connected too: saving disconnects it, applies the change, and reconnects automatically.
@@ -137,7 +139,7 @@ A manual override only lasts until the app restarts. For a tunnel that automatio
 **Automation** off in the tunnel's Automation editor. The tunnel keeps its rules and
 default state, but the engine will neither connect nor disconnect it.
 
-The same switch is also a one-click **Stop automation** toggle at the top of the tunnel detail view, so you can suppress automation right where you are looking at the tunnel. The global **Prevent system sleep** setting (off by default) keeps the machine awake **while a tunnel is connected** — on Windows, macOS and Linux alike — and releases the override the moment the last tunnel disconnects, so an idle or sleep power policy can't silently drop a tunnel. When another client has already taken a tunnel's address, WireGuide Plus now shows an interactive dialog naming the conflicting software and offering to stop that tunnel's automation — you decide, it never force-stops the other client.
+The same switch is also a one-click **Stop automation** toggle at the top of the tunnel detail view, so you can suppress automation right where you are looking at the tunnel. The global **Prevent system sleep** setting (off by default) keeps the machine awake **while a tunnel is connected** — on Windows, macOS and Linux alike — and releases the override the moment the last tunnel disconnects, so an idle or sleep power policy can't silently drop a tunnel. When another client has already taken a tunnel's address, WireGuide Plus shows a persistent dialog naming the conflicting software and the tunnel's automation status, with exactly two choices — stop that tunnel's automation, or keep trying — and holds that tunnel's auto-connect until you decide. Unresolved conflicts are re-presented at startup and after a helper restart; you decide, it never force-stops the other client.
 
 ### One tunnel, one client
 
@@ -146,8 +148,9 @@ is claimed by whichever adapter gets there first, and the second client's connec
 the assign-address step (Windows reports `The object already exists.` / 对象已存在). If you
 also run the official WireGuard client, stop its tunnel service before connecting the same
 tunnel here (e.g. `Stop-Service 'WireGuardTunnel$<tunnel-name>'`), or exclude the tunnel
-from automation (above). WireGuide Plus detects this at startup, names the conflicting
-adapter in the helper log, and retries failed automation connects with a back-off
+from automation (above). WireGuide Plus detects this, names the conflicting
+adapter — in the persistent conflict dialog (above) as well as the helper log —
+and retries failed automation connects with a back-off
 (30 s → 1 m → 2 m → 5 m) instead of hammering the adapter every poll.
 
 ### Condition types
