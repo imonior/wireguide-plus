@@ -118,6 +118,25 @@ export class SettingsChangedPayload {
              */
             this["log_level"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * ProxyMode / ProxyURL mirror the persisted proxy (used for update
+             * checks) so a change applied through another client — the CLI — is
+             * reflected live in the Settings UI, the same role the fields above
+             * play for the live-apply toggles. They were never part of this
+             * payload before, which left the GUI's proxy reflection code dead.
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["proxy_mode"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | null | undefined}
+             */
+            this["proxy_url"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
