@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/network"
 	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
@@ -292,6 +294,15 @@ func (h *Helper) reevaluateAutomation(reason string) {
 		// — the durable counterpart to the per-session manual latches.
 		if h.automationDisabled(name) {
 			slog.Debug("automation: tunnel exempted (automation disabled)",
+				"category", "network", "tunnel", name, "reason", reason)
+			continue
+		}
+		// An unresolved address conflict parks the tunnel until the user
+		// answers the dialog (stop automation / keep trying) — retrying into
+		// the same "another adapter holds my address" wall is exactly the
+		// loop the pause exists to break.
+		if h.isAutoConnectPaused(name) {
+			slog.Debug("automation: connect skipped (paused on address conflict, awaiting user decision)",
 				"category", "network", "tunnel", name, "reason", reason)
 			continue
 		}
@@ -593,6 +604,14 @@ func (h *Helper) automationConnect(name, reason, ssid string) {
 	h.connectMu.Unlock()
 	if err != nil {
 		slog.Warn("automation connect failed", "tunnel", name, "error", err)
+		var acErr *network.AddressConflictError
+		if errors.As(err, &acErr) {
+			// The address is held by a different adapter: further attempts
+			// die at the same step. Park the tunnel on a pause (and raise the
+			// dialog) instead of feeding the backoff loop.
+			h.pauseForAddressConflict(name, acErr.Address, acErr.Holder, "down")
+			return
+		}
 		h.recordAutoConnectFailure(name)
 		return
 	}

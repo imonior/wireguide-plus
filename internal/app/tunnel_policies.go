@@ -51,6 +51,7 @@ func (s *TunnelService) GetTunnelPolicies(name string) (*TunnelPolicies, error) 
 // the log rather than guessed at. Nothing here rewrites AllowedIPs
 // (principle 26).
 func (s *TunnelService) SetTunnelPolicies(name string, policies TunnelPolicies) error {
+	prevMeta, prevErr := s.tunnelStore.LoadMeta(name)
 	domains := make([]string, 0, len(policies.Domains))
 	for _, d := range policies.Domains {
 		d = storage.NormalizeDomainEntry(d)
@@ -67,6 +68,14 @@ func (s *TunnelService) SetTunnelPolicies(name string, policies TunnelPolicies) 
 		meta.AutomationDisabled = policies.AutomationDisabled
 	}); err != nil {
 		return err
+	}
+	// Turning automation back ON is a user decision about the tunnel's
+	// automation, so it also lifts any address-conflict pause held from
+	// before — otherwise the exemption the dialog paused them on would
+	// silently keep the engine away even after the user re-enabled it.
+	// Best-effort: helper-not-running just means nothing to lift.
+	if prevErr == nil && prevMeta != nil && prevMeta.AutomationDisabled && !policies.AutomationDisabled {
+		_ = s.ResumeAutoConnect(name)
 	}
 	s.logPolicyWarnings(name)
 	return nil

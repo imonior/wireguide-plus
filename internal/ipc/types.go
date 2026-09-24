@@ -111,6 +111,20 @@ const (
 	DNSPathResolveCancel  = "cancel"
 )
 
+// ResumeAutoConnectRequest lifts the address-conflict auto-connect pause on
+// one tunnel (Tunnel.ResumeAutoConnect) — the conflict dialog's "keep
+// trying" answer.
+type ResumeAutoConnectRequest struct {
+	Tunnel string `json:"tunnel"`
+}
+
+// AddressConflictsResponse is the pull counterpart of EventAddressConflict
+// (Tunnel.PendingAddressConflicts): the conflicts whose tunnels remain
+// paused on an unresolved conflict, awaiting the user's decision.
+type AddressConflictsResponse struct {
+	Conflicts []AddressConflictPayload `json:"conflicts"`
+}
+
 // ActiveTunnelsResponse lists all currently active tunnel names.
 type ActiveTunnelsResponse struct {
 	Names []string `json:"names"`
@@ -157,13 +171,16 @@ type AutoConnectPayload struct {
 }
 
 // AddressConflictPayload is broadcast (EventAddressConflict) when another
-// client already owns one of our tunnel addresses on a different adapter.
+// client already owns one of our tunnel addresses on a different adapter,
+// and is what Tunnel.PendingAddressConflicts returns per unresolved conflict.
 // Software is the inferred owner ("WireGuard (official client)" for a
 // WireGuardTunnel$* service adapter, "unknown" otherwise); Adapter is the
-// conflicting interface name; State is the tunnel's current connection state
-// ("active", "down" or "unknown") so the dialog can describe what is happening
-// right now. The helper never acts on this — it is purely informational and
-// the user's decision (stop automation, or leave it) drives any change.
+// conflicting interface name; State is the tunnel's connection state at the
+// moment of detection ("active", "down" or "unknown") so the dialog can
+// describe what is happening right now. Until the user answers the dialog
+// the tunnel's auto-connect stays paused — but the helper never forcibly
+// disconnects or permanently opts the tunnel out: the user's click drives
+// any change.
 type AddressConflictPayload struct {
 	Tunnel   string `json:"tunnel"`
 	Address  string `json:"address"`

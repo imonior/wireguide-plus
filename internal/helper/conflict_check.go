@@ -1,11 +1,8 @@
 package helper
 
 import (
-	"log/slog"
 	"net"
 	"strings"
-
-	"github.com/imonior/wireguide-plus/internal/ipc"
 )
 
 // checkAddressConflicts compares every stored tunnel's Address against the
@@ -14,14 +11,17 @@ import (
 // situation means another WireGuard client (the official one, typically) is
 // running the same tunnel: the two clients fight over the address, so our
 // tunnel connects, gets its address stolen, drops, reconnects — the exact
-// "TS453Dmini keeps connecting" loop. The check does NOT stop anything: it
-// logs a warning and broadcasts EventAddressConflict so the GUI can offer the
-// user a way to stop automation for that tunnel. The user decides; the helper
-// never forcibly disconnects.
+// "TS453Dmini keeps connecting" loop. The check pauses that tunnel's
+// automation (conflict_pause.go) and broadcasts EventAddressConflict so the
+// GUI can keep an interactive dialog up until the user decides — the helper
+// never forcibly disconnects or permanently opts the tunnel out on its own.
 //
-// The check is read-only, runs once per helper start in its own goroutine,
-// and a store error simply means "cannot check" — startup never blocks on
-// it and a missing store is not worth warning about.
+// The check itself is read-only, runs once per helper start in its own
+// goroutine, and a store error simply means "cannot check" — startup never
+// blocks on it and a missing store is not worth warning about. Conflicts
+// that appear only at runtime are caught by the connect path, which
+// classifies the assign-address failure and pauses through the same entry
+// point.
 func (h *Helper) checkAddressConflicts() {
 	if h.userTunnelStore == nil {
 		return
@@ -87,48 +87,13 @@ func (h *Helper) checkAddressConflicts() {
 					if active[name] {
 						state = "active"
 					}
-					software := inferConflictingSoftware(ia.name)
-					slog.Warn(
-						"tunnel address is already held by another adapter — connects will thrash until resolved",
-						"category", "network",
-						"tunnel", name,
-						"address", ip.String(),
-						"conflicting_adapter", ia.name,
-						"conflicting_software", software,
-						"state", state,
-						"note", "another WireGuard client appears to be running the same tunnel; the GUI will offer to stop automation for it")
-					h.broadcastAddressConflict(name, ip.String(), ia.name, software, state)
+					// One funnel: pauseForAddressConflict logs the detail,
+					// pauses this tunnel's automation, and broadcasts the
+					// dialog event (deduplicated by pause transition).
+					h.pauseForAddressConflict(name, addrCIDR, ia.name, state)
 				}
 			}
 		}
-	}
-}
-
-// broadcastAddressConflict surfaces a (tunnel, address, adapter) clash to the
-// GUI exactly once per helper lifetime. The same physical conflict produces
-// the same key on every re-check, so without this gate a recurring startup
-// check would re-open the dialog in a loop. A resolved conflict simply stops
-// matching and is never re-reported.
-func (h *Helper) broadcastAddressConflict(tunnel, address, adapter, software, state string) {
-	key := tunnel + "|" + address + "|" + adapter
-	h.addrConflictMu.Lock()
-	if h.reportedAddrConflicts == nil {
-		h.reportedAddrConflicts = make(map[string]bool)
-	}
-	if h.reportedAddrConflicts[key] {
-		h.addrConflictMu.Unlock()
-		return
-	}
-	h.reportedAddrConflicts[key] = true
-	h.addrConflictMu.Unlock()
-	if h.server != nil {
-		h.server.Broadcast(ipc.EventAddressConflict, ipc.AddressConflictPayload{
-			Tunnel:   tunnel,
-			Address:  address,
-			Adapter:  adapter,
-			Software: software,
-			State:    state,
-		})
 	}
 }
 

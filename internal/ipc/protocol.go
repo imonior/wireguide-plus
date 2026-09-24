@@ -144,6 +144,16 @@ const (
 	// waits for this call: action "disable" waives this tunnel's claim and
 	// lets the connect through, action "cancel" aborts it.
 	MethodResolveDNSPathConflict = "Tunnel.ResolveDNSPathConflict"
+	// MethodResumeAutoConnect is the conflict dialog's "keep trying" answer:
+	// it lifts the address-conflict auto-connect pause for one tunnel. The
+	// next evaluation retries; if the other adapter still holds the address
+	// the tunnel pauses again and the dialog is re-raised.
+	MethodResumeAutoConnect = "Tunnel.ResumeAutoConnect"
+	// MethodPendingAddressConflicts returns the conflicts still awaiting a
+	// user decision. The GUI pulls it on startup: a pause can predate the GUI
+	// (the helper outlives it), and "the dialog stays up until handled" is
+	// only true if a freshly-loaded GUI can discover the pending ones.
+	MethodPendingAddressConflicts = "Tunnel.PendingAddressConflicts"
 	// MethodClearDNSPathEnforcement tears down any LIVE DNS resolve path
 	// enforcement immediately. The GUI calls it when the master switch
 	// turns OFF: with the feature off the per-tunnel enforcement a still-
@@ -234,12 +244,16 @@ const (
 	// client already holds one of our tunnel addresses on a different
 	// adapter — the classic "two WireGuard clients running the same tunnel"
 	// conflict (e.g. the official Windows WireGuard service client driving
-	// the same .conf we manage). The GUI raises an INTERACTIVE dialog naming
-	// the conflicting software/adapter and offering to stop automation for
-	// that tunnel. The helper NEVER auto-stops anything: the user decides
+	// the same .conf we manage). The GUI keeps an INTERACTIVE dialog up
+	// naming the conflicting software/adapter and the tunnel's automation
+	// state, offering "stop automation for that tunnel" or "keep trying".
+	// Until the user answers, the tunnel's auto-connect is PAUSED (the
+	// evaluation loop and the reconnect monitor both leave it alone); the
+	// helper never forcibly disconnects or opts the tunnel out on its own
 	// (per the "don't forcibly stop, hand it to the user" rule). Detected at
-	// startup, de-duplicated per (tunnel, address, adapter) so the dialog
-	// appears once, not in a loop.
+	// startup and on any connect attempt that hits the conflict; broadcast
+	// once per pause — pending ones are pullable via
+	// Tunnel.PendingAddressConflicts so a later GUI start still shows them.
 	EventAddressConflict = "event.address_conflict"
 )
 

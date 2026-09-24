@@ -7,6 +7,75 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * AddressConflictPayload is broadcast (EventAddressConflict) when another
+ * client already owns one of our tunnel addresses on a different adapter,
+ * and is what Tunnel.PendingAddressConflicts returns per unresolved conflict.
+ * Software is the inferred owner ("WireGuard (official client)" for a
+ * WireGuardTunnel$* service adapter, "unknown" otherwise); Adapter is the
+ * conflicting interface name; State is the tunnel's connection state at the
+ * moment of detection ("active", "down" or "unknown") so the dialog can
+ * describe what is happening right now. Until the user answers the dialog
+ * the tunnel's auto-connect stays paused — but the helper never forcibly
+ * disconnects or permanently opts the tunnel out: the user's click drives
+ * any change.
+ */
+export class AddressConflictPayload {
+    /**
+     * Creates a new AddressConflictPayload instance.
+     * @param {Partial<AddressConflictPayload>} [$$source = {}] - The source object to create the AddressConflictPayload.
+     */
+    constructor($$source = {}) {
+        if (!("tunnel" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tunnel"] = "";
+        }
+        if (!("address" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["address"] = "";
+        }
+        if (!("adapter" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["adapter"] = "";
+        }
+        if (!("software" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["software"] = "";
+        }
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AddressConflictPayload instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {AddressConflictPayload}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AddressConflictPayload(/** @type {Partial<AddressConflictPayload>} */($$parsedSource));
+    }
+}
+
+/**
  * LogEntry is a single structured log record forwarded from the helper
  * to the GUI (and from the GUI to the frontend LogViewer). We keep it flat
  * — no nested attrs — because the viewer just renders a one-line per entry.

@@ -82,7 +82,7 @@ func (m *LinuxManager) AssignAddress(ifaceName string, addresses []string) error
 				continue
 			}
 			if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
-				return fmt.Errorf("assigning address %s: %w (address is already in use by interface %q — another WireGuard client appears to be running the same tunnel)", addr, err, holder)
+				return &AddressConflictError{Address: addr, Holder: holder, Kind: "interface", Err: err}
 			}
 			return fmt.Errorf("assigning address %s: %w", addr, err)
 		}

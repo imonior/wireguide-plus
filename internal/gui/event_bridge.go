@@ -231,6 +231,39 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 				"category", "policy", "tunnel", payload.Tunnel, "reason", payload.Reason)
 			b.app.Event.Emit("policy_blocked", payload)
 		}
+	case ipc.EventAddressConflict:
+		// Another adapter holds a tunnel's address; the helper has paused
+		// that tunnel's automation and the frontend must keep an interactive
+		// dialog up until the user answers it (stop automation / keep
+		// trying). The window is raised if hidden — "resident until
+		// handled" is meaningless if nobody can see the dialog.
+		var payload ipc.AddressConflictPayload
+		if err := json.Unmarshal(params, &payload); err != nil {
+			slog.Debug("event bridge: unmarshal address_conflict failed", "error", err)
+		} else {
+			go showDock()
+			b.app.Event.Emit("address_conflict", payload)
+		}
+	case ipc.EventDNSPathConflict:
+		// A manual connect parked on the machine-wide DNS resolve-path
+		// claim; the frontend offers the two answers (waive / cancel).
+		var payload ipc.DNSPathConflictPayload
+		if err := json.Unmarshal(params, &payload); err != nil {
+			slog.Debug("event bridge: unmarshal dns_path_conflict failed", "error", err)
+		} else {
+			b.app.Event.Emit("dns_path_conflict", payload)
+		}
+	case ipc.EventEgressInterfaceLost:
+		// A tunnel pinned to a physical NIC lost it; the frontend offers
+		// wait / auto / pick-another. Not auto-resolved server-side because
+		// leaking traffic out an unchosen interface is what the pin
+		// prevents.
+		var payload ipc.EgressInterfaceLostPayload
+		if err := json.Unmarshal(params, &payload); err != nil {
+			slog.Debug("event bridge: unmarshal egress_interface_lost failed", "error", err)
+		} else {
+			b.app.Event.Emit("egress_interface_lost", payload)
+		}
 	case ipc.EventQuit:
 		// `wireguideplus ctl stop` — the user asked for the whole app to go
 		// away. Run the same teardown the tray's Quit item does.

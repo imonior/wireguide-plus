@@ -5,7 +5,9 @@
     "not_connected": "Disconnected",
     "out_of_range": "Probe target outside tunnel routes",
     "open_window": "Open Window",
-    "disconnect": "Disconnect"
+    "disconnect": "Disconnect",
+    "overview_auto": "auto",
+    "overview_manual": "manual"
   },
   "app": {
     "disconnected": "Disconnected",
@@ -374,7 +376,7 @@
   "conflict": {
     "address_conflict": {
       "title": "Another VPN client is using this tunnel's address",
-      "message": "Another VPN client ({software}) already holds the address {address} of tunnel \"{tunnel}\" on adapter \"{adapter}\". The tunnel is currently {state}. This makes the connection thrash (connect → drop → reconnect). Nothing has been changed - you decide what to do.",
+      "message": "Another VPN client ({software}) already holds the address {address} of tunnel \"{tunnel}\" on adapter \"{adapter}\". The tunnel is currently {state}. This makes the connection thrash (connect → drop → reconnect). WireGuide Plus has paused this tunnel's auto-connect until you decide below.",
       "state_active": "connected",
       "state_down": "disconnected",
       "state_unknown": "unknown",
@@ -385,9 +387,13 @@
       "field_adapter": "Adapter",
       "field_software": "Client",
       "field_state": "State",
-      "note": "To fix it, stop the other client, or exclude this tunnel from automation so WireGuide Plus no longer fights over the address. We will not disconnect anything automatically.",
+      "note": "To fix it for good, stop the other client (or give the two tunnels different addresses). \"Keep trying\" resumes auto-connect immediately — if the address is still taken, you will be asked again; \"Stop auto-connect for this tunnel\" takes the tunnel out of automation.",
       "stop_automation": "Stop auto-connect for this tunnel",
-      "later": "Later"
+      "resume_retry": "Keep trying",
+      "field_automation": "Automation",
+      "automation_paused": "On — paused by this conflict",
+      "automation_unknown": "Unknown",
+      "info_only": "Automation is already stopped for this tunnel, so nothing will retry on its own — the details above are for reference. Resolve the conflict (stop the other client, or give the tunnels different addresses) before connecting."
     },
     "and_more": "… and {n} more",
     "cancel": "Cancel",

@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/imonior/wireguide-plus/internal/diag"
 	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
+	"github.com/imonior/wireguide-plus/internal/network"
 	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
@@ -41,6 +43,8 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodEstablishedTunnels, h.handleEstablishedTunnels)
 	h.server.Handle(ipc.MethodRename, h.handleRename)
 	h.server.Handle(ipc.MethodResolveDNSPathConflict, h.handleResolveDNSPathConflict)
+	h.server.Handle(ipc.MethodResumeAutoConnect, h.handleResumeAutoConnect)
+	h.server.Handle(ipc.MethodPendingAddressConflicts, h.handlePendingAddressConflicts)
 	h.server.Handle(ipc.MethodClearDNSPathEnforcement, h.handleClearDNSPathEnforcement)
 	h.server.Handle(ipc.MethodSetHealthCheck, h.handleSetHealthCheck)
 	h.server.Handle(ipc.MethodSetKeepConnectionOnIdle, h.handleSetKeepConnectionOnIdle)
@@ -396,8 +400,19 @@ func (h *Helper) handleConnect(params json.RawMessage) (interface{}, error) {
 
 	if err := h.doConnectHeld(req.Config); err != nil {
 		slog.Warn("tunnel connect failed", "category", "tunnel", "tunnel", req.Config.Name, "error", err)
+		var acErr *network.AddressConflictError
+		if errors.As(err, &acErr) {
+			// Even a manual attempt hit the other adapter holding the
+			// address: park automation on the conflict (and raise the dialog)
+			// so the engine does not resume hammering behind the user's
+			// back. The connect error still returns to the GUI unchanged.
+			h.pauseForAddressConflict(req.Config.Name, acErr.Address, acErr.Holder, "down")
+		}
 		return nil, err
 	}
+	// A manual connect that got through is the user's statement that the
+	// conflict is over — lift any stale pause on this tunnel.
+	h.resumeAutoConnect(req.Config.Name)
 
 	h.applyPostConnectFirewall(req.Config)
 	// A GUI restore / crash-recovery path can bring up a tunnel the

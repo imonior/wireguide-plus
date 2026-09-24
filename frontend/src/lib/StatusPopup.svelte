@@ -12,7 +12,7 @@
   let names = [];
   let state = 'disconnected';
   let outOfRange = [];
-  let durationMs = 10000;
+  let rows = []; // launch overview: [{ name, state, auto }]
   let closeTimer = null;
   let unsub = null;
 
@@ -21,11 +21,29 @@
     if (state === 'connecting') return $t('popup.connecting');
     return $t('popup.not_connected');
   }
+  function rowStatusText(s) {
+    if (s === 'connected') return $t('popup.connected');
+    if (s === 'connecting') return $t('popup.connecting');
+    return $t('popup.not_connected');
+  }
+  function stateGlyph(s) {
+    // U+2714 + VS15 keeps the check in text presentation so CSS colours it
+    // green — the emoji ✅ would be a fixed white-on-green block.
+    if (s === 'connected') return '✔︎';
+    if (s === 'connecting') return '🟡';
+    return '❌';
+  }
+  function stateClass(s) {
+    if (s === 'connected') return 'st-ok';
+    if (s === 'connecting') return 'st-try';
+    return 'st-down';
+  }
 
   function apply(d) {
     names = (d && d.names) || [];
     state = (d && d.state) || 'disconnected';
     outOfRange = (d && d.out_of_range) || [];
+    rows = (d && d.rows) || [];
     durationMs = (d && d.duration_ms) || 10000;
     if (closeTimer) clearTimeout(closeTimer);
     closeTimer = setTimeout(close, durationMs);
@@ -59,13 +77,23 @@
     <button class="popup-close" on:click={close} aria-label="Close">×</button>
   </div>
 
-  <div class="popup-status">
-    <span class="dot" class:connected={state === 'connected'} class:connecting={state === 'connecting'}></span>
-    <span class="status-text">{statusText()}</span>
-  </div>
+  {#if state === 'overview'}
+    {#each rows as r (r.name)}
+      <div class="popup-row">
+        <span class="glyph {stateClass(r.state)}">{stateGlyph(r.state)}</span>
+        <span class="row-name" title={r.name}>{r.name}</span>
+        <span class="row-meta"><span class={stateClass(r.state)}>{rowStatusText(r.state)}</span> · {r.auto ? $t('popup.overview_auto') : $t('popup.overview_manual')}</span>
+      </div>
+    {/each}
+  {:else}
+    <div class="popup-status">
+      <span class="glyph {stateClass(state)}">{stateGlyph(state)}</span>
+      <span class="status-text {stateClass(state)}">{statusText()}</span>
+    </div>
 
-  {#if names.length > 0}
-    <div class="popup-names">{names.join(', ')}</div>
+    {#if names.length > 0}
+      <div class="popup-names">{names.join(', ')}</div>
+    {/if}
   {/if}
 
   {#if outOfRange.length > 0}
@@ -73,7 +101,9 @@
   {/if}
 
   <div class="popup-actions">
-    <button class="btn" on:click={disconnect}>{$t('popup.disconnect')}</button>
+    {#if state !== 'overview'}
+      <button class="btn" on:click={disconnect}>{$t('popup.disconnect')}</button>
+    {/if}
     <button class="btn btn-primary" on:click={openWindow}>{$t('popup.open_window')}</button>
   </div>
 </div>
@@ -129,19 +159,40 @@
     align-items: center;
     gap: 8px;
   }
-  .dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--text-muted, #888);
-    flex-shrink: 0;
+  .popup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    min-height: 16px;
   }
-  .dot.connected {
-    background: var(--green, #34c759);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--green, #34c759) 50%, transparent);
+  .row-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #fff);
+  }
+  .row-meta {
+    flex-shrink: 0;
+    color: var(--text-secondary, #ccc);
+  }
+  .glyph {
+    font-size: 11px;
+    line-height: 1;
+    flex-shrink: 0;
   }
   .status-text {
     font-weight: 600;
+  }
+  .st-ok {
+    color: var(--green, #34c759);
+  }
+  .st-try {
+    color: #f5c518;
+  }
+  .st-down {
+    color: var(--red, #ff453a);
   }
   .popup-names {
     overflow: hidden;

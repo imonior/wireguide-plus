@@ -513,10 +513,13 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 
 	trayMgr := newTrayManager(app, win, tray, tunnelService, doShutdown)
 	trayMgr.initialBuild()
-	// Report the connection situation 10s after launch — enough time for
-	// the user to approve any permission prompts and for the automation
-	// rules to finish auto-connecting.
-	trayMgr.scheduleStatusNotification()
+	// Report the whole connection picture 15s after launch — enough time
+	// for the permission prompts and the automation rules' auto-connect
+	// pass to settle. This replaces the old startup status bubble: the
+	// per-transition bubbles (network loss → down, reconnect → up) keep
+	// firing from the status stream, but the launch moment gets its own
+	// overview of every tunnel's automation + connection state.
+	trayMgr.scheduleLaunchOverview()
 
 	if runtime.GOOS == "darwin" {
 		app.Event.OnApplicationEvent(events.Mac.ApplicationWillTerminate, func(_ *application.ApplicationEvent) {

@@ -23,6 +23,9 @@ import * as diag$0 from "../diag/models.js";
 import * as domain$0 from "../domain/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as ipc$0 from "../ipc/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as policy$0 from "../policy/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -680,6 +683,18 @@ export function OpenURL(url) {
 }
 
 /**
+ * PendingAddressConflicts returns the address conflicts whose tunnels are
+ * still paused awaiting the user's decision. The frontend pulls this on
+ * load so a GUI that (re)starts after the broadcast still shows the dialog.
+ * @returns {$CancellablePromise<ipc$0.AddressConflictPayload[]>}
+ */
+export function PendingAddressConflicts() {
+    return $Call.ByID(3872522765).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType40($result);
+    }));
+}
+
+/**
  * PolicyReport returns the conflicts involving one tunnel ("" = all
  * tunnels) across the routing, DNS and traffic-protection domains.
  * 
@@ -696,7 +711,7 @@ export function OpenURL(url) {
  */
 export function PolicyReport(name) {
     return $Call.ByID(1901060591, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType39($result);
+        return $$createType41($result);
     }));
 }
 
@@ -707,7 +722,7 @@ export function PolicyReport(name) {
  */
 export function PolicyReportAll() {
     return $Call.ByID(3331289786).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType39($result);
+        return $$createType41($result);
     }));
 }
 
@@ -785,7 +800,7 @@ export function ReconcileHistoryFromStatus(activeNames, handshakeMap, rxByTunnel
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType41($result);
+        return $$createType43($result);
     }));
 }
 
@@ -840,8 +855,20 @@ export function ResolveDNSPathConflict(tunnel, action) {
  */
 export function ResolveScriptRef(command) {
     return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType43($result);
+        return $$createType45($result);
     }));
+}
+
+/**
+ * ResumeAutoConnect is the address-conflict dialog's "keep trying" answer:
+ * it lifts the helper's auto-connect pause on that tunnel and asks the
+ * automation engine to re-evaluate now. If the other adapter still holds the
+ * address the attempt fails, re-pauses, and the dialog comes back.
+ * @param {string} tunnel
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResumeAutoConnect(tunnel) {
+    return $Call.ByID(1896266343, tunnel);
 }
 
 /**
@@ -858,7 +885,7 @@ export function ResolveScriptRef(command) {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType45($result);
+        return $$createType47($result);
     }));
 }
 
@@ -1162,7 +1189,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType46($result);
+        return $$createType48($result);
     }));
 }
 
@@ -1260,11 +1287,13 @@ const $$createType35 = $Create.Array($$createType34);
 const $$createType36 = $Create.Array($$createType28);
 const $$createType37 = storage$0.MigrateResult.createFrom;
 const $$createType38 = $Create.Nullable($$createType37);
-const $$createType39 = policy$0.Report.createFrom;
-const $$createType40 = $models.PublicDNSRefresh.createFrom;
-const $$createType41 = $Create.Nullable($$createType40);
-const $$createType42 = $models.ScriptRef.createFrom;
+const $$createType39 = ipc$0.AddressConflictPayload.createFrom;
+const $$createType40 = $Create.Array($$createType39);
+const $$createType41 = policy$0.Report.createFrom;
+const $$createType42 = $models.PublicDNSRefresh.createFrom;
 const $$createType43 = $Create.Nullable($$createType42);
-const $$createType44 = $models.DNSLeakResult.createFrom;
+const $$createType44 = $models.ScriptRef.createFrom;
 const $$createType45 = $Create.Nullable($$createType44);
-const $$createType46 = $models.TestProxyResult.createFrom;
+const $$createType46 = $models.DNSLeakResult.createFrom;
+const $$createType47 = $Create.Nullable($$createType46);
+const $$createType48 = $models.TestProxyResult.createFrom;

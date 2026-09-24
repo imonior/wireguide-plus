@@ -5,7 +5,9 @@
     "not_connected": "未连接",
     "out_of_range": "探测目标不在隧道范围内",
     "open_window": "打开主界面",
-    "disconnect": "断开连接"
+    "disconnect": "断开连接",
+    "overview_auto": "自动",
+    "overview_manual": "手动"
   },
   "app": {
     "disconnected": "已断开",
@@ -374,7 +376,7 @@
   "conflict": {
     "address_conflict": {
       "title": "另一个 VPN 客户端正在占用该隧道地址",
-      "message": "另一个 VPN 客户端（{software}）已经在适配器「{adapter}」上占用了隧道「{tunnel}」的地址 {address}。该隧道当前为{state}。这会导致连接反复横跳（连上→掉线→重连）。我们什么都没改——由你来决定如何处理。",
+      "message": "另一个 VPN 客户端（{software}）已经在适配器「{adapter}」上占用了隧道「{tunnel}」的地址 {address}。该隧道当前为{state}。这会导致连接反复横跳（连上→掉线→重连）。WireGuide Plus 已暂停本隧道的自动连接，等待你在下方做出决定。",
       "state_active": "已连接",
       "state_down": "已断开",
       "state_unknown": "未知",
@@ -385,9 +387,13 @@
       "field_adapter": "适配器",
       "field_software": "客户端",
       "field_state": "状态",
-      "note": "要彻底解决，请停止另一个客户端，或把本隧道排除出自动化，WireGuide Plus 就不再与该地址争夺。我们不会自动断开任何连接。",
+      "note": "要彻底解决，请停止另一个客户端（或让两条隧道使用不同地址）。「继续尝试」会立即恢复自动连接——若地址仍被占用会再次询问；「停止此隧道的自动连接」会把本隧道排除出自动化。",
       "stop_automation": "停止此隧道的自动连接",
-      "later": "稍后"
+      "resume_retry": "继续尝试",
+      "field_automation": "自动化",
+      "automation_paused": "开启——已因本冲突暂停",
+      "automation_unknown": "未知",
+      "info_only": "本隧道的自动化已停止，不会再有后台重试，上面的信息仅供留意。请先解决冲突（停止另一个客户端，或让两条隧道使用不同地址），再手动连接。"
     },
     "and_more": "…及另外 {n} 个",
     "cancel": "取消",

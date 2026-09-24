@@ -945,13 +945,89 @@ func (t *trayManager) showStatusNotification() {
 	})
 }
 
+// launchOverviewDelay is how long the GUI waits after startup before the
+// status-overview bubble appears. 15s sits past the permission-prompt window
+// and past the automation engine's usual auto-connect pass, so the overview
+// reports the settled picture rather than the churn of the first seconds.
+const launchOverviewDelay = 15 * time.Second
+
+// scheduleLaunchOverview arms the one-shot post-startup overview bubble.
+// Called from gui.Run after the tray's initial build.
+func (t *trayManager) scheduleLaunchOverview() {
+	time.AfterFunc(launchOverviewDelay, func() {
+		if t.quitting.Load() {
+			return
+		}
+		t.showLaunchOverview()
+	})
+}
+
+// showLaunchOverview renders the bubble listing EVERY tunnel with its
+// automation mode and connection state. It is the "what is this app about
+// to do to my machine" answer at launch: which tunnels are entrusted to
+// automation and which are the user's alone, and what is up right now.
+// Data is fully local — the tunnel list and policies come from the store
+// (no helper round-trip, unlike the status event stream), and the
+// connection state comes from the tray's own caches, which the status
+// events have been refreshing since launch.
+func (t *trayManager) showLaunchOverview() {
+	infos, err := t.svc.ListTunnelsLocal()
+	if err != nil {
+		slog.Warn("tray: launch overview: tunnel list failed", "err", err)
+		return
+	}
+	if len(infos) == 0 {
+		return // nothing to report
+	}
+
+	t.mu.Lock()
+	established := make(map[string]bool, len(t.establishedTunnels))
+	for n := range t.establishedTunnels {
+		established[n] = true
+	}
+	active := make(map[string]bool, len(t.activeTunnels))
+	for n := range t.activeTunnels {
+		active[n] = true
+	}
+	t.mu.Unlock()
+
+	rows := make([]overviewRow, 0, len(infos))
+	for _, info := range infos {
+		state := "disconnected"
+		switch {
+		case established[info.Name]:
+			state = "connected"
+		case active[info.Name]:
+			state = "connecting"
+		}
+		auto := true
+		if p, err := t.svc.GetTunnelPolicies(info.Name); err == nil && p != nil {
+			auto = !p.AutomationDisabled
+		}
+		rows = append(rows, overviewRow{Name: info.Name, State: state, Auto: auto})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+
+	lang := "en"
+	duration := 10 * time.Second
+	if s, err := t.svc.GetSettings(); err == nil && s != nil {
+		if s.Language != "" {
+			lang = s.Language
+		}
+		if s.NotifyDurationMs > 0 {
+			duration = time.Duration(s.NotifyDurationMs) * time.Millisecond
+		}
+	}
+	showOverviewPopup(rows, lang, duration, showDock)
+}
+
 // statusTransition is the per-tunnel change between two status snapshots,
 // as computed by computeStatusTransitions. Only the tunnels named here are
 // eligible for a bubble — a tunnel absent from all three slices stayed in
 // the same state and must not be re-announced.
 type statusTransition struct {
 	ups    []string // became connected (down/connecting → connected)
-	downs  []string // lost connection (connected → connecting/down)
+	downs  []string // lost a real connection (connected → connecting/gone)
 	trying []string // fresh connect attempt (down → connecting)
 }
 
@@ -999,12 +1075,23 @@ func computeStatusTransitions(prev map[string]tunnelConnState, established, acti
 			}
 			// connecting→connecting: nothing new to report
 		case tcsUnknown:
-			tr.downs = append(tr.downs, n) // was up/connecting → now gone
+			// Only a tunnel that was genuinely connected can be announced
+			// as lost. connecting→gone is a failed attempt that never
+			// reached a connection — saying "disconnected" about it is a
+			// lie, and in the address-conflict loop (connect attempt →
+			// DNS-timeout failure, repeatedly) it was exactly the pair of
+			// phantom "disconnected" bubbles users reported. The failure
+			// is already in the log; the bubble stays honest.
+			if ps == tcsConnected {
+				tr.downs = append(tr.downs, n)
+			}
 		}
 	}
-	// Tunnels that vanished entirely (were active, now not) count as a loss.
+	// Tunnels that vanished entirely (were active, now not) count as a
+	// loss — but again only from a genuinely connected state, for the same
+	// reason as above.
 	for n, ps := range prev {
-		if _, ok := cur[n]; !ok && ps != tcsUnknown {
+		if _, ok := cur[n]; !ok && ps == tcsConnected {
 			tr.downs = append(tr.downs, n)
 		}
 	}

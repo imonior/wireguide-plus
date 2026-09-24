@@ -1,8 +1,33 @@
 package network
 
 import (
+	"fmt"
 	"net"
 )
+
+// AddressConflictError is returned by AssignAddress when the address could
+// not be assigned because a DIFFERENT interface already holds it — the
+// "two WireGuard clients running the same tunnel" situation. Callers (the
+// automation engine) classify it with errors.As to pause auto-connect for
+// the tunnel until the user decides; the message keeps naming the holding
+// adapter so logs and dialogs stay actionable.
+type AddressConflictError struct {
+	Address string // the requested address, CIDR as configured
+	Holder  string // the other interface that already owns it
+	Kind    string // display noun: "adapter" on Windows, "interface" elsewhere
+	Err     error  // the underlying command failure
+}
+
+func (e *AddressConflictError) Error() string {
+	kind := e.Kind
+	if kind == "" {
+		kind = "interface"
+	}
+	return fmt.Sprintf("assigning address %s: %v (address is already in use by %s %q — another WireGuard client appears to be running the same tunnel)",
+		e.Address, e.Err, kind, e.Holder)
+}
+
+func (e *AddressConflictError) Unwrap() error { return e.Err }
 
 // addressOnInterface reports whether ip is already assigned to the named
 // interface. Used to make AssignAddress idempotent: a connect attempt that

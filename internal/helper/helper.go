@@ -22,6 +22,7 @@ package helper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -126,11 +127,13 @@ type Helper struct {
 	firewall firewall.FirewallManager
 	monitor  *reconnect.Monitor
 
-	// reportedAddrConflicts de-duplicates address-conflict dialogs so a
-	// (tunnel, address, adapter) clash is surfaced to the GUI once per
-	// helper lifetime, not on every re-check. Guarded by addrConflictMu.
-	addrConflictMu        sync.Mutex
-	reportedAddrConflicts map[string]bool
+	// addrConflictMu guards conflictPaused: tunnels whose automation is
+	// paused on an unresolved address conflict (another adapter holds their
+	// Address), keyed by tunnel name and holding the EventAddressConflict
+	// payload so a GUI that starts later can pull what still awaits a
+	// decision. See conflict_pause.go.
+	addrConflictMu sync.Mutex
+	conflictPaused map[string]ipc.AddressConflictPayload
 
 	// connectMu serializes Connect/Disconnect calls. Without this, two
 	// concurrent GUI connections could race on activeCfg, with the loser's
@@ -404,9 +407,10 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// Startup address-conflict self-check: a tunnel Address already held by
 	// some other adapter means another WireGuard client is running the same
 	// tunnel, and every connect attempt will die at the assign-address step
-	// with "The object already exists." Naming the competing adapter at
-	// startup turns that from a per-30s mystery failure into a one-line
-	// diagnosis. Read-only; never blocks startup.
+	// with "The object already exists." Each conflict pauses that tunnel's
+	// automation and raises the GUI dialog until the user decides — turning
+	// a per-30s mystery-failure loop into one actionable prompt. Read-only;
+	// never blocks startup.
 	h.goSafe("addr-conflict-check", h.checkAddressConflicts)
 
 	// Reconnect monitor — uses cached config
@@ -416,11 +420,12 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// unlock, but only for tunnels that haven't opted out of "keep
 	// connection on idle". Feed it the same resolver the connect path uses.
 	h.monitor.SetKeepAlivePredicate(h.keepConnectionOnIdle)
-	// Feed the reconnect monitor the same automation-exemption resolver the
+	// Feed the reconnect monitor the same "leave it alone" resolver the
 	// automation engine uses. This makes the dead-connection monitor honor a
 	// "stop automation" decision — manual stop must override every automated
-	// reconnect path (see #2/#103).
-	h.monitor.SetAutomationDisabledPredicate(h.automationDisabled)
+	// reconnect path (see #2/#103) — and a tunnel paused on an unresolved
+	// address conflict, which no engine path may touch until the user decides.
+	h.monitor.SetAutomationDisabledPredicate(h.automationBlockedForReconnect)
 	h.monitor.Start()
 
 	// Register RPC handlers
@@ -636,7 +641,17 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		h.connectMu.Lock()
 		err := h.manager.ConnectWithContext(ctx, cfg)
 		h.connectMu.Unlock()
-		return err
+		if err != nil {
+			var acErr *network.AddressConflictError
+			if errors.As(err, &acErr) {
+				// Same rule as the automation path: an address held by
+				// another adapter will keep being held; park the tunnel on a
+				// user decision instead of letting the monitor hammer it.
+				h.pauseForAddressConflict(name, acErr.Address, acErr.Holder, "down")
+			}
+			return err
+		}
+		return nil
 	}
 
 	// Legacy path: reconnect all tunnels.
@@ -653,6 +668,10 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		h.connectMu.Unlock()
 		if err != nil {
 			lastErr = err
+			var acErr *network.AddressConflictError
+			if errors.As(err, &acErr) {
+				h.pauseForAddressConflict(cfg.Name, acErr.Address, acErr.Holder, "down")
+			}
 		}
 	}
 	return lastErr

@@ -86,3 +86,26 @@ func TestComputeStatusTransitionsConnecting(t *testing.T) {
 	tr, _ = computeStatusTransitions(connSet("X", tcsConnected), keySet(), keySet("X"))
 	assertTransition(t, tr, nil, []string{"X"}, nil)
 }
+
+// TestComputeStatusTransitionsFailedAttemptNotAnnouncedDown covers the
+// address-conflict loop: automation dials a tunnel, the connect attempt dies
+// before ever handshaking (active → gone), and the next retry starts from
+// scratch. A tunnel that was only ever "connecting" must not be announced as
+// "disconnected" — it was never connected, and in the retry loop this fired a
+// phantom down-bubble on every attempt.
+func TestComputeStatusTransitionsFailedAttemptNotAnnouncedDown(t *testing.T) {
+	// connecting → vanished: a failed attempt, not a loss.
+	tr, _ := computeStatusTransitions(connSet("X", tcsConnecting), keySet(), keySet())
+	assertTransition(t, tr, nil, nil, nil)
+
+	// A full conflict-loop cycle: trying → (attempt dies) → trying again.
+	// The second attempt is not even a new transition (X left the sets
+	// entirely between polls), and neither leg may produce a down.
+	tr, _ = computeStatusTransitions(connSet("X", tcsConnecting), keySet(), keySet("X"))
+	assertTransition(t, tr, nil, nil, nil)
+
+	// connected → vanished still IS a loss: a genuinely live tunnel that
+	// disappeared must be reported.
+	tr, _ = computeStatusTransitions(connSet("X", tcsConnected), keySet(), keySet())
+	assertTransition(t, tr, nil, []string{"X"}, nil)
+}

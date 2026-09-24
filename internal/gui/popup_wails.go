@@ -35,18 +35,23 @@ const (
 	popupBaseHeight = 120
 	// popupWarnLine is the extra height the amber out-of-range warning needs.
 	popupWarnLine = 18
-	popupMargin   = 8
+	// popupRowLine is the extra height one launch-overview tunnel row
+	// needs beyond the first (the single-line status bubble is the base).
+	popupRowLine = 16
+	popupMargin  = 8
 )
 
 // popupPayload is the data the Svelte popup renders. State is one of
 // "connected" | "connecting" | "disconnected" (the popupState values, sent as
 // strings so the frontend can localise them via i18n rather than receiving
-// already-translated text).
+// already-translated text), or "overview" for the launch status report, in
+// which case Rows carries one entry per tunnel.
 type popupPayload struct {
-	Names      []string `json:"names"`
-	State      string   `json:"state"`
-	OutOfRange []string `json:"out_of_range"`
-	DurationMs int      `json:"duration_ms"`
+	Names      []string      `json:"names"`
+	State      string        `json:"state"`
+	OutOfRange []string      `json:"out_of_range"`
+	DurationMs int           `json:"duration_ms"`
+	Rows       []overviewRow `json:"rows,omitempty"`
 }
 
 var (
@@ -100,9 +105,6 @@ func registerPopupEvents(app *application.App) {
 // mac/Linux implementation behind notify_other.go's showStatusPopup; it is
 // never called on Windows (there notify_windows.go owns the popup).
 func showStatusPopupWails(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	if duration <= 0 {
-		duration = 10 * time.Second
-	}
 	s := "disconnected"
 	switch state {
 	case popupStateConnecting:
@@ -110,17 +112,32 @@ func showStatusPopupWails(names []string, state popupState, outOfRange []string,
 	case popupStateConnected:
 		s = "connected"
 	}
-	slog.Info("popup: showStatusPopupWails called", "names", names, "state", s,
-		"out_of_range", outOfRange, "lang", lang, "duration", duration)
+	showPopupWails(nil, names, s, outOfRange, lang, duration, onOpen, onDisconnect)
+}
+
+// showOverviewPopupWails is the mac/Linux launch status-overview bubble:
+// one row per tunnel (name, connection state, automation mode). Like its
+// Windows twin it is informational — Open Window is the only action.
+func showOverviewPopupWails(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
+	showPopupWails(rows, nil, "overview", nil, lang, duration, onOpen, nil)
+}
+
+func showPopupWails(rows []overviewRow, names []string, state string, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+	if duration <= 0 {
+		duration = 10 * time.Second
+	}
+	slog.Info("popup: showStatusPopupWails called", "names", names, "state", state,
+		"out_of_range", outOfRange, "lang", lang, "duration", duration, "rows", len(rows))
 
 	popupMu.Lock()
 	popupCb.onOpen = onOpen
 	popupCb.onDisconnect = onDisconnect
 	popupLatest = popupPayload{
 		Names:      names,
-		State:      s,
+		State:      state,
 		OutOfRange: outOfRange,
 		DurationMs: int(duration.Milliseconds()),
+		Rows:       rows,
 	}
 	popupMu.Unlock()
 
@@ -135,13 +152,17 @@ func showStatusPopupWails(names []string, state popupState, outOfRange []string,
 	if w == nil {
 		return
 	}
-	// Grow the window when the warning line is present so nothing overlaps.
-	if len(outOfRange) > 0 {
-		w.SetSize(popupWidth, popupBaseHeight+popupWarnLine)
-	} else {
-		w.SetSize(popupWidth, popupBaseHeight)
+	// Grow the window for every overview row beyond the first and for the
+	// warning line, so nothing overlaps.
+	height := popupBaseHeight
+	if len(rows) > 1 {
+		height += popupRowLine * (len(rows) - 1)
 	}
-	x, y := computePopupPos(popupWidth, popupBaseHeight+popupWarnLine)
+	if len(outOfRange) > 0 {
+		height += popupWarnLine
+	}
+	w.SetSize(popupWidth, height)
+	x, y := computePopupPos(popupWidth, height)
 	w.SetPosition(x, y)
 	w.Show()
 	// Emit after Show so the webview's subscription is in place; popup:ready

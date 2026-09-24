@@ -207,6 +207,10 @@ type popupTexts struct {
 	outOfRange string
 	openLabel  string
 	discLabel  string
+	// autoLabel/manualLabel tag each row of the launch overview bubble
+	// (see popupData.overview): automation may act on the tunnel or not.
+	autoLabel   string
+	manualLabel string
 }
 
 // popupState (and its three values) lives in popup_state.go — it is part of
@@ -215,13 +219,13 @@ type popupTexts struct {
 func popupTextsFor(lang string) popupTexts {
 	switch lang {
 	case "zh", "zh-CN", "zh-Hans", "zh-TW", "zh-Hant":
-		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接"}
+		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接", autoLabel: "自动", manualLabel: "手动"}
 	case "ko":
-		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기"}
+		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기", autoLabel: "자동", manualLabel: "수동"}
 	case "ja":
-		return popupTexts{connected: "接続済み", connecting: "接続中", notConnected: "未接続", outOfRange: "トンネル範囲外のプローブ先", openLabel: "ウィンドウを開く", discLabel: "切断"}
+		return popupTexts{connected: "接続済み", connecting: "接続中", notConnected: "未接続", outOfRange: "トンネル範囲外のプローブ先", openLabel: "ウィンドウを開く", discLabel: "切断", autoLabel: "自動", manualLabel: "手動"}
 	default:
-		return popupTexts{connected: "Connected", connecting: "Connecting", notConnected: "Disconnected", outOfRange: "Probe target outside tunnel routes", openLabel: "Open Window", discLabel: "Disconnect"}
+		return popupTexts{connected: "Connected", connecting: "Connecting", notConnected: "Disconnected", outOfRange: "Probe target outside tunnel routes", openLabel: "Open Window", discLabel: "Disconnect", autoLabel: "auto", manualLabel: "manual"}
 	}
 }
 
@@ -282,7 +286,12 @@ type popupData struct {
 	// warning line under the tunnel list — the companion to the editor's
 	// colour marking, for the case where the app window is closed and the
 	// only thing on screen is this bubble.
-	outOfRange   []string
+	outOfRange []string
+	// overview, when non-empty, switches the bubble to the launch status
+	// report: one row per tunnel (dot + name + state + automation tag)
+	// replacing the single status line, and no Disconnect button — the
+	// overview describes, it does not act.
+	overview     []overviewRow
 	lang         string
 	onOpen       func()
 	onDisconnect func()
@@ -326,6 +335,17 @@ var (
 // say "still trying" instead of "connected" for a tunnel whose connect
 // attempt has not finished — and may yet fail.
 func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+	spawnPopup(nil, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+}
+
+// showOverviewPopup displays the launch status-overview bubble: every
+// tunnel with its connection state and automation mode. Informational —
+// the only action is Open Window.
+func showOverviewPopup(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
+	spawnPopup(rows, nil, popupStateConnected, nil, lang, duration, onOpen, nil)
+}
+
+func spawnPopup(overview []overviewRow, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("popup: recovered from panic in showStatusPopup", "err", r, "stack", string(debug.Stack()))
@@ -335,10 +355,10 @@ func showStatusPopup(names []string, state popupState, outOfRange []string, lang
 		duration = 10 * time.Second
 	}
 	slog.Info("popup: showStatusPopup called", "names", names, "state", state,
-		"out_of_range", outOfRange, "duration", duration)
+		"out_of_range", outOfRange, "duration", duration, "overview_rows", len(overview))
 	ensurePopupClass()
 	closeConnectPopup() // replace any stale popup
-	go runPopupLoop(names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+	go runPopupLoop(overview, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
 func closeConnectPopup() {
@@ -375,7 +395,7 @@ func loadCursor(hinst uintptr, id int32) uintptr {
 	return c
 }
 
-func runPopupLoop(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func runPopupLoop(overview []overviewRow, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	// The window's message queue is bound to the OS thread that created it.
 	// A plain goroutine can migrate between OS threads between syscalls, which
 	// would make GetMessage/DispatchMessage run on a different thread than the
@@ -385,6 +405,7 @@ func runPopupLoop(names []string, state popupState, outOfRange []string, lang st
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	d := &popupData{
+		overview:     overview,
 		names:        names,
 		state:        state,
 		outOfRange:   outOfRange,
@@ -419,40 +440,69 @@ func runPopupLoop(names []string, state popupState, outOfRange []string, lang st
 	}
 
 	w := int32(348 * d.scale)
-	// The warning line is the only optional row. Growing the window (rather
-	// than squeezing the warning in) keeps the buttons at their fixed offsets
-	// from the bottom edge — they are positioned from h, so raising h moves
-	// them down with the extra row instead of overlapping the tunnel names.
+	// The warning line is the only optional row in a status bubble.
+	// Growing the window (rather than squeezing the warning in) keeps the
+	// buttons at their fixed offsets from the bottom edge — they are
+	// positioned from h, so raising h moves them down with the extra row
+	// instead of overlapping the tunnel names.
 	warnLine := int32(0)
 	if len(d.outOfRange) > 0 {
 		warnLine = int32(18 * d.scale)
 	}
 	h := int32(120*d.scale) + warnLine
+	rowH := int32(16 * d.scale)
+	if len(d.overview) > 0 {
+		// Overview mode: rows start at the status line's y and replace the
+		// single status caption + names line, so the window grows with the
+		// tunnel count. 92 = 42 (rows start) + 8 (gap) + 28 (buttons) +
+		// 14 (bottom pad), scaled; every row adds rowH.
+		rowsH := int32(92*d.scale) + rowH*int32(len(d.overview))
+		if base := int32(120 * d.scale); rowsH > base {
+			h = rowsH + warnLine
+		} else {
+			h = base + warnLine
+		}
+	}
 	pad := int32(14 * d.scale)
 	d.titleRect = windows.Rect{Left: pad, Top: int32(12 * d.scale), Right: w - pad, Bottom: int32(32 * d.scale)}
 	d.closeRect = windows.Rect{Left: w - pad - int32(22*d.scale), Top: int32(10 * d.scale), Right: w - pad, Bottom: int32(32 * d.scale)}
 	statusY := int32(42 * d.scale)
-	dotSize := int32(9 * d.scale)
-	d.dotRect = windows.Rect{Left: pad + int32(1*d.scale), Top: statusY + int32(4*d.scale),
-		Right: pad + dotSize + int32(1*d.scale), Bottom: statusY + dotSize + int32(4*d.scale)}
-	d.bodyRect = windows.Rect{Left: pad, Top: statusY + int32(20*d.scale), Right: w - pad, Bottom: statusY + int32(38*d.scale)}
+	dotSize := int32(11 * d.scale)
+	d.dotRect = windows.Rect{Left: pad + int32(1*d.scale), Top: statusY + int32(3*d.scale),
+		Right: pad + dotSize + int32(1*d.scale), Bottom: statusY + dotSize + int32(3*d.scale)}
+	if len(d.overview) > 0 {
+		d.bodyRect = windows.Rect{Left: pad, Top: statusY, Right: w - pad,
+			Bottom: statusY + rowH*int32(len(d.overview))}
+	} else {
+		d.bodyRect = windows.Rect{Left: pad, Top: statusY + int32(20*d.scale), Right: w - pad, Bottom: statusY + int32(38*d.scale)}
+	}
 	if warnLine > 0 {
 		d.warnRect = windows.Rect{Left: pad, Top: d.bodyRect.Bottom, Right: w - pad, Bottom: d.bodyRect.Bottom + warnLine}
 	}
 
-	// Buttons, right-aligned: [Disconnect] [Open Window]
+	// Buttons, right-aligned: [Disconnect] [Open Window]. The overview
+	// bubble only describes — Disconnect has no meaningful "all of the
+	// above" target there — so it keeps just Open Window, flush right.
 	texts := popupTextsFor(lang)
 	measDC, _, _ := procGetDC.Call(0)
 	btnH := int32(28 * d.scale)
 	btnY := h - pad - btnH
-	discW := measureText(measDC, d.bodyFont, texts.discLabel) + int32(24*d.scale)
+	discW := int32(0)
+	if len(d.overview) == 0 {
+		discW = measureText(measDC, d.bodyFont, texts.discLabel) + int32(24*d.scale)
+	}
 	openW := measureText(measDC, d.bodyFont, texts.openLabel) + int32(24*d.scale)
 	if measDC != 0 {
 		procReleaseDC.Call(0, measDC)
 	}
 	d.discRect = windows.Rect{Left: w - pad - discW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
-	d.openRect = windows.Rect{Left: w - pad - discW - int32(8*d.scale) - openW, Top: btnY,
-		Right: w - pad - discW - int32(8*d.scale), Bottom: btnY + btnH}
+	if len(d.overview) > 0 {
+		d.discRect = windows.Rect{} // zero rect: never hit
+		d.openRect = windows.Rect{Left: w - pad - openW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
+	} else {
+		d.openRect = windows.Rect{Left: w - pad - discW - int32(8*d.scale) - openW, Top: btnY,
+			Right: w - pad - discW - int32(8*d.scale), Bottom: btnY + btnH}
+	}
 
 	x, y := popupPosition(w, h, d.scale)
 	hinst, _, _ := procGetModuleHandleW.Call(0)
@@ -640,7 +690,7 @@ func drawPopup(d *popupData) {
 
 	var client windows.Rect
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client)))
-	bg, fg, border, _, dotGreen, warnColor := popupPalette(d.themeLight)
+	bg, fg, border, _, _, warnColor := popupPalette(d.themeLight)
 	texts := popupTextsFor(d.lang)
 
 	// Background
@@ -666,38 +716,39 @@ func drawPopup(d *popupData) {
 	// Close ✕
 	drawCloseGlyph(hdc, d, fg)
 
-	// Status dot: green only when something is genuinely up. A tunnel that
-	// is still connecting gets the neutral border colour and a "Connecting"
-	// caption — it has not connected yet and may still fail, so it must not
-	// borrow the green.
-	dotColor := dotGreen
-	statusText := texts.connected
-	switch d.state {
-	case popupStateConnecting:
-		dotColor = border
-		statusText = texts.connecting
-	case popupStateConnected:
-		// keep green + "Connected"
-	default:
-		dotColor = border
-		statusText = texts.notConnected
+	if len(d.overview) > 0 {
+		drawOverviewRows(hdc, d, texts, fg)
+	} else {
+		// Status mark + caption: ✅-style green check for connected, ❌-style
+		// red cross for disconnected, 🟡-style yellow disc while connecting.
+		// A tunnel that is still connecting gets neither the check nor the
+		// cross — it has not connected yet and may still fail.
+		statusText := texts.connected
+		state := "connected"
+		switch d.state {
+		case popupStateConnecting:
+			state = "connecting"
+			statusText = texts.connecting
+		case popupStateConnected:
+			// keep check + "Connected"
+		default:
+			state = "disconnected"
+			statusText = texts.notConnected
+		}
+		drawStatusMark(hdc, d.dotRect, state, d.scale, d.themeLight)
+
+		// Status line ("已连接" / "连接中" / "未连接") next to the mark,
+		// in the mark's colour: green for connected, red for lost, yellow
+		// while still trying.
+		selectFont(hdc, d.bodyFont)
+		_, ink := statusMarkInk(state, d.themeLight)
+		procSetTextColor.Call(hdc, uintptr(ink))
+		drawTextOut(hdc, statusText, d.dotRect.Right+int32(8*d.scale), statusLineTop(d))
+
+		// Tunnel names (single line with ellipsis)
+		bodyText := strings.Join(d.names, namesSeparator(d.lang))
+		drawTextClipped(hdc, d.bodyFont, fg, bodyText, d.bodyRect)
 	}
-	dotBrush := createSolidBrush(dotColor)
-	oldDotPen := selectObject(hdc, getStockObject(nullPen))
-	oldDotBrush := selectObject(hdc, dotBrush)
-	procEllipse.Call(hdc, uintptr(d.dotRect.Left), uintptr(d.dotRect.Top), uintptr(d.dotRect.Right), uintptr(d.dotRect.Bottom))
-	selectObject(hdc, oldDotPen)
-	selectObject(hdc, oldDotBrush)
-	procDeleteObject.Call(dotBrush)
-
-	// Status line ("已连接" / "连接中" / "未连接") next to the dot
-	selectFont(hdc, d.bodyFont)
-	procSetTextColor.Call(hdc, uintptr(fg))
-	drawTextOut(hdc, statusText, d.dotRect.Right+int32(8*d.scale), statusLineTop(d))
-
-	// Tunnel names (single line with ellipsis)
-	bodyText := strings.Join(d.names, namesSeparator(d.lang))
-	drawTextClipped(hdc, d.bodyFont, fg, bodyText, d.bodyRect)
 
 	// Warning line: probe targets that are not routed through this tunnel.
 	// Amber, not red — the tunnel itself is up and carrying traffic; it is
@@ -710,7 +761,126 @@ func drawPopup(d *popupData) {
 
 	// Buttons
 	drawPopupButton(hdc, d, d.openRect, texts.openLabel, d.hoverOpen)
-	drawPopupButton(hdc, d, d.discRect, texts.discLabel, d.hoverDisc)
+	if len(d.overview) == 0 {
+		drawPopupButton(hdc, d, d.discRect, texts.discLabel, d.hoverDisc)
+	}
+}
+
+// drawOverviewRows renders the launch overview: one row per tunnel —
+// status mark (✅/❌/🟡), name (ellipsized), and a right-aligned
+// "state · auto/manual" tag with the state word in the mark's colour.
+// The vocabulary is identical to the transition bubbles', so the overview
+// can never claim more than they are allowed to say.
+func drawOverviewRows(hdc uintptr, d *popupData, texts popupTexts, fg uint32) {
+	rowH := int32(16 * d.scale)
+	markSize := int32(11 * d.scale)
+	textTop := int32(3 * d.scale)
+	for i, r := range d.overview {
+		top := d.bodyRect.Top + int32(i)*rowH
+		word := texts.notConnected
+		switch r.State {
+		case "connected":
+			word = texts.connected
+		case "connecting":
+			word = texts.connecting
+		}
+		auto := texts.manualLabel
+		if r.Auto {
+			auto = texts.autoLabel
+		}
+		sep := " · "
+		rw := measureText(hdc, d.bodyFont, word+sep+auto)
+		markRect := windows.Rect{Left: d.bodyRect.Left, Top: top + textTop,
+			Right: d.bodyRect.Left + markSize, Bottom: top + textTop + markSize}
+		drawStatusMark(hdc, markRect, r.State, d.scale, d.themeLight)
+
+		nameRect := windows.Rect{
+			Left:   d.bodyRect.Left + markSize + int32(6*d.scale),
+			Top:    top,
+			Right:  d.bodyRect.Right - rw - int32(10*d.scale),
+			Bottom: top + rowH,
+		}
+		drawTextClipped(hdc, d.bodyFont, fg, r.Name, nameRect)
+
+		_, ink := statusMarkInk(r.State, d.themeLight)
+		wordW := measureText(hdc, d.bodyFont, word)
+		x := d.bodyRect.Right - rw
+		textY := top + textTop + int32(2*d.scale)
+		procSetTextColor.Call(hdc, uintptr(ink))
+		drawTextOut(hdc, word, x, textY)
+		procSetTextColor.Call(hdc, uintptr(fg))
+		drawTextOut(hdc, sep+auto, x+wordW, textY)
+	}
+}
+
+// statusMarkInk returns the (mark, text) colours for a connection state:
+// green for connected, red for lost, yellow while still trying. The text
+// yellow darkens on a light background where the pure disc colour is hard
+// to read.
+func statusMarkInk(state string, light bool) (mark, text uint32) {
+	switch state {
+	case "connected":
+		if light {
+			return rgb(0x2F, 0xBF, 0x71), rgb(0x1F, 0x8A, 0x4C)
+		}
+		return rgb(0x34, 0xC7, 0x59), rgb(0x34, 0xC7, 0x59)
+	case "connecting":
+		if light {
+			return rgb(0xF5, 0xC5, 0x18), rgb(0x9A, 0x6D, 0x00)
+		}
+		return rgb(0xFF, 0xD6, 0x0A), rgb(0xFF, 0xD6, 0x0A)
+	default:
+		if light {
+			return rgb(0xE0, 0x3A, 0x3A), rgb(0xC0, 0x10, 0x10)
+		}
+		return rgb(0xFF, 0x45, 0x3A), rgb(0xFF, 0x45, 0x3A)
+	}
+}
+
+// drawStatusMark renders the per-state glyph in the square r: a green
+// check for connected, a red cross for disconnected, a filled yellow disc
+// while connecting. GDI has no colour-emoji renderer, so these are the
+// vector equivalents of ✅ / ❌ / 🟡 — same shapes, same semantics.
+func drawStatusMark(hdc uintptr, r windows.Rect, state string, scale float32, light bool) {
+	mark, _ := statusMarkInk(state, light)
+	switch state {
+	case "connecting":
+		brush := createSolidBrush(mark)
+		oldPen := selectObject(hdc, getStockObject(nullPen))
+		oldBrush := selectObject(hdc, brush)
+		procEllipse.Call(hdc, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom))
+		selectObject(hdc, oldPen)
+		selectObject(hdc, oldBrush)
+		procDeleteObject.Call(brush)
+	case "connected":
+		w := int32(2 * scale)
+		if w < 1 {
+			w = 1
+		}
+		pen := createPen(0, w, mark)
+		oldPen := selectObject(hdc, pen)
+		x := float32(r.Left)
+		y := float32(r.Top)
+		s := float32(r.Right - r.Left)
+		procMoveToEx.Call(hdc, uintptr(int32(x+0.10*s)), uintptr(int32(y+0.52*s)), 0)
+		procLineTo.Call(hdc, uintptr(int32(x+0.40*s)), uintptr(int32(y+0.82*s)), 0)
+		procLineTo.Call(hdc, uintptr(int32(x+0.92*s)), uintptr(int32(y+0.18*s)), 0)
+		selectObject(hdc, oldPen)
+		procDeleteObject.Call(pen)
+	default:
+		w := int32(2 * scale)
+		if w < 1 {
+			w = 1
+		}
+		pen := createPen(0, w, mark)
+		oldPen := selectObject(hdc, pen)
+		procMoveToEx.Call(hdc, uintptr(r.Left), uintptr(r.Top), 0)
+		procLineTo.Call(hdc, uintptr(r.Right), uintptr(r.Bottom), 0)
+		procMoveToEx.Call(hdc, uintptr(r.Right), uintptr(r.Top), 0)
+		procLineTo.Call(hdc, uintptr(r.Left), uintptr(r.Bottom), 0)
+		selectObject(hdc, oldPen)
+		procDeleteObject.Call(pen)
+	}
 }
 
 func statusLineTop(d *popupData) int32 {

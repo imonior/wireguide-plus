@@ -860,6 +860,25 @@ func (s *TunnelService) ResolveDNSPathConflict(tunnel, action string) error {
 	}, nil)
 }
 
+// ResumeAutoConnect is the address-conflict dialog's "keep trying" answer:
+// it lifts the helper's auto-connect pause on that tunnel and asks the
+// automation engine to re-evaluate now. If the other adapter still holds the
+// address the attempt fails, re-pauses, and the dialog comes back.
+func (s *TunnelService) ResumeAutoConnect(tunnel string) error {
+	return s.call(ipc.MethodResumeAutoConnect, ipc.ResumeAutoConnectRequest{Tunnel: tunnel}, nil)
+}
+
+// PendingAddressConflicts returns the address conflicts whose tunnels are
+// still paused awaiting the user's decision. The frontend pulls this on
+// load so a GUI that (re)starts after the broadcast still shows the dialog.
+func (s *TunnelService) PendingAddressConflicts() ([]ipc.AddressConflictPayload, error) {
+	var resp ipc.AddressConflictsResponse
+	if err := s.call(ipc.MethodPendingAddressConflicts, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Conflicts, nil
+}
+
 // OpenURL opens a URL in the default browser. Only HTTPS URLs on
 // github.com are allowed to prevent misuse from a compromised frontend.
 func (s *TunnelService) OpenURL(url string) error {

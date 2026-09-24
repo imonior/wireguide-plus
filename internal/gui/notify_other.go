@@ -12,6 +12,12 @@ func showStatusPopup(names []string, state popupState, outOfRange []string, lang
 	showStatusPopupWails(names, state, outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
+// showOverviewPopup mirrors the Windows launch-overview bubble using the
+// same Wails secondary window (see popup_wails.go).
+func showOverviewPopup(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
+	showOverviewPopupWails(rows, lang, duration, onOpen)
+}
+
 // closeConnectPopup tears down any visible status bubble so a fresh one can
 // replace it (the trailing-edge dedup in scheduleStatusNotification, or a
 // manual dismiss, both funnel through here).

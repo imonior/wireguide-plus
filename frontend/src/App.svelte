@@ -52,7 +52,15 @@
   // owns the system's DNS resolve path. The helper holds the connect until
   // the user answers here (principle 33).
   let dnsPathConflict = null; // { tunnel, blockers }
-  let addressConflict = null; // { tunnel, address, adapter, software, state }
+  // Address conflicts pause the affected tunnel's auto-connect in the
+  // helper until the user answers the dialog, so every occurrence demands
+  // an answer — the dialog has no "later". More than one tunnel can be
+  // paused (two clients running several shared tunnels), and the user might
+  // dismiss the window before answering, so unresolved conflicts queue up:
+  // live events enqueue here, the dialog shows the head, answering pops the
+  // next, and a GUI launch re-pulls whatever the helper still holds.
+  let addressConflictQueue = []; // queued { tunnel, address, adapter, software, state }
+  let addressConflict = null; // the one currently on screen
   let pendingConnectName = '';
   let editName = '';
   let editorContent = '';
@@ -203,6 +211,12 @@
     // Settings dialog — which is the only other place that refreshes it.
     await refreshAppSettings(TunnelService);
     subscribeToEvents();
+    // Re-surface address conflicts the helper is still holding paused.
+    // A conflict pauses auto-connect until answered, and answering only
+    // happens in this window — if the user quit (or closed) the GUI with
+    // the dialog up, the pause survived in the helper and the question
+    // must be asked again, not silently dropped on restart.
+    await pullPendingAddressConflicts();
     // Scan for data left behind by pre-rename ("wireguide") installs; the
     // modal only appears while legacy data exists and hasn't been migrated
     // or dismissed by the user.
@@ -263,13 +277,13 @@
     addressConflictUnsub = Events.On('address_conflict', (event) => {
       const d = event?.data || {};
       if (!d?.tunnel) return;
-      addressConflict = {
+      enqueueAddressConflict({
         tunnel: d.tunnel,
         address: d.address || '',
         adapter: d.adapter || '',
         software: d.software || 'unknown',
         state: d.state || 'unknown',
-      };
+      });
     });
 
     // Wails v3 native file drop — HTML5 dragdrop doesn't work in WebKit.
@@ -325,6 +339,11 @@
       criticalErrors = [];
       await initialLoad(TunnelService);
       await refreshStatus(TunnelService);
+      // The conflict set above may reference the OLD helper; rebuild the
+      // queue from what the new helper actually holds.
+      addressConflict = null;
+      addressConflictQueue = [];
+      await pullPendingAddressConflicts();
     });
 
     // Wi-Fi SSID change events are still broadcast by the helper for
@@ -1126,11 +1145,54 @@
     }
   }
 
-  // Address-conflict dialog: "Stop auto-connect" sets the durable per-tunnel
-  // automation opt-out, so the helper stops fighting the other client for the
-  // address. The user action is the ONLY thing that changes.
+  // Address-conflict queue. enqueue shows the conflict immediately when
+  // nothing is on screen, otherwise parks it behind the current one. One
+  // entry per tunnel: the helper's pause is idempotent, and re-broadcasts
+  // for a tunnel the user hasn't answered yet would otherwise stack
+  // identical dialogs.
+  function enqueueAddressConflict(c) {
+    if (addressConflict?.tunnel === c.tunnel) return;
+    if (addressConflictQueue.some((q) => q.tunnel === c.tunnel)) return;
+    if (!addressConflict) {
+      addressConflict = c;
+      return;
+    }
+    addressConflictQueue = [...addressConflictQueue, c];
+  }
+
+  // Pull the helper's still-unanswered conflicts into the queue. Shared by
+  // launch and helper_reset: after a helper restart the conflict set is
+  // rebuilt by the startup check, and the events may have fired while this
+  // window had no subscription — the pull is the reliable channel.
+  async function pullPendingAddressConflicts() {
+    try {
+      const conflicts = await TunnelService.PendingAddressConflicts();
+      for (const c of conflicts || []) {
+        if (!c?.tunnel) continue;
+        enqueueAddressConflict({
+          tunnel: c.tunnel,
+          address: c.address || '',
+          adapter: c.adapter || '',
+          software: c.software || 'unknown',
+          state: c.state || 'unknown',
+        });
+      }
+    } catch (_) {
+      /* helper may be mid-restart; the next launch or event still surfaces it */
+    }
+  }
+
+  // Answered ("stop automation" or "keep trying"): the helper has been
+  // told either way, so drop the head and show the next unresolved one.
+  // A failed call still closes the dialog — the conflict stays paused in
+  // the helper and the next GUI launch re-pulls it, so nothing is lost.
   function onAddressConflictResolved() {
     addressConflict = null;
+    if (addressConflictQueue.length) {
+      const [next, ...rest] = addressConflictQueue;
+      addressConflictQueue = rest;
+      addressConflict = next;
+    }
   }
 
   // Legacy migration finished — reload tunnels/settings so the migrated data

@@ -17,3 +17,14 @@ const (
 	popupStateConnecting
 	popupStateConnected
 )
+
+// overviewRow is one line of the launch status-overview bubble: a tunnel,
+// its connection state ("connected" | "connecting" | "disconnected"), and
+// whether automation may act on it (Auto = automation not disabled). The
+// state travels as a string, like popupPayload.State, so each renderer
+// localises the caption itself instead of receiving pre-translated text.
+type overviewRow struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Auto  bool   `json:"auto"`
+}

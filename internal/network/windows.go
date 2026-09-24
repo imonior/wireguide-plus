@@ -122,7 +122,7 @@ func (m *WindowsManager) assignWithRetry(ifaceName, addr string, ip net.IP, args
 			return nil
 		}
 		if holder := interfaceHoldingIP(ip); holder != "" && holder != ifaceName {
-			return fmt.Errorf("assigning address %s: %w (address is already in use by adapter %q — another WireGuard client appears to be running the same tunnel)", addr, err2, holder)
+			return &AddressConflictError{Address: addr, Holder: holder, Kind: "adapter", Err: err2}
 		}
 		return fmt.Errorf("assigning address %s: %w", addr, err2)
 	}

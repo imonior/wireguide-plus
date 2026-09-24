@@ -1,18 +1,33 @@
 <script>
   // AddressConflictDialog — raised when the helper finds another client
   // already holding one of our tunnel addresses on a different adapter (the
-  // "two WireGuard clients running the same tunnel" conflict). This is an
-  // INTERACTIVE dialog: it names the conflicting software/adapter, shows the
-  // current connection state, and offers to stop automation for that tunnel.
-  // The helper never auto-stops anything — per the "don't forcibly stop, hand
-  // it to the user" rule — so the only action we take is the one the user
-  // clicks.
+  // "two WireGuard clients running the same tunnel" conflict). This dialog is
+  // PERSISTENT and blocking: the helper has paused this tunnel's
+  // auto-connect, and it stays paused until the user answers here with one
+  // of the two buttons. Escape and backdrop clicks are deliberately not
+  // handled — closing the app window is not an answer, and the next GUI
+  // launch re-pulls the unresolved conflicts, so the prompt returns.
   import { createEventDispatcher } from 'svelte';
   import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
   import { t } from '../i18n/index.js';
 
   export let conflict = null; // { tunnel, address, adapter, software, state }
   const dispatch = createEventDispatcher();
+
+  // The tunnel's durable automation opt-out (meta sidecar). null until
+  // loaded; when it already says "automation stopped" the conflict is
+  // informational only — the helper will never fight for the address again,
+  // so there is nothing to decide and no buttons to offer.
+  let automationDisabled = null;
+  TunnelService.GetTunnelPolicies(conflict?.tunnel || '')
+    .then((p) => { automationDisabled = !!(p && p.automation_disabled); })
+    .catch(() => { automationDisabled = null; });
+
+  function automationLabel() {
+    if (automationDisabled === true) return $t('tunnel.automation_off');
+    if (automationDisabled === false) return $t('conflict.address_conflict.automation_paused');
+    return $t('conflict.address_conflict.automation_unknown');
+  }
 
   function stateLabel(state) {
     if (state === 'active') return $t('conflict.address_conflict.state_active');
@@ -36,23 +51,27 @@
       dispatch('resolved', { action: 'stop', error: String(e) });
     }
   }
-  function later() {
-    dispatch('resolved', { action: 'later' });
-  }
-  function onKeyDown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      later();
+
+  // "Keep trying" answers the pause the other way: it lifts the conflict
+  // pause so automation resumes immediately (the helper re-evaluates right
+  // away) and closes the dialog. If the other client still holds the address
+  // the next failed connect pauses it again and the dialog returns — which
+  // is the point: the user chose to keep trying, once per attempt.
+  async function resumeTrying() {
+    if (!conflict?.tunnel) return;
+    try {
+      await TunnelService.ResumeAutoConnect(conflict.tunnel);
+      dispatch('resolved', { action: 'resume' });
+    } catch (e) {
+      console.warn('failed to resume auto-connect for tunnel:', e);
+      dispatch('resolved', { action: 'resume', error: String(e) });
     }
   }
 </script>
 
-<svelte:window on:keydown={onKeyDown} />
-
-<div class="modal-backdrop" on:click={later}>
+<div class="modal-backdrop">
   <div
     class="modal"
-    on:click|stopPropagation
     role="alertdialog"
     aria-modal="true"
     tabindex="-1"
@@ -75,14 +94,19 @@
       <div class="row"><span class="k">{$t('conflict.address_conflict.field_adapter')}</span><span class="v">{conflict?.adapter}</span></div>
       <div class="row"><span class="k">{$t('conflict.address_conflict.field_software')}</span><span class="v">{softwareLabel(conflict?.software)}</span></div>
       <div class="row"><span class="k">{$t('conflict.address_conflict.field_state')}</span><span class="v">{stateLabel(conflict?.state)}</span></div>
+      <div class="row"><span class="k">{$t('conflict.address_conflict.field_automation')}</span><span class="v">{automationLabel()}</span></div>
     </div>
 
     <p class="note">{$t('conflict.address_conflict.note')}</p>
 
-    <div class="actions">
-      <button class="btn btn-cancel" on:click={later}>{$t('conflict.address_conflict.later')}</button>
-      <button class="btn btn-warn" on:click={stopAutomation}>{$t('conflict.address_conflict.stop_automation')}</button>
-    </div>
+    {#if automationDisabled === true}
+      <p class="note">{$t('conflict.address_conflict.info_only')}</p>
+    {:else}
+      <div class="actions">
+        <button class="btn btn-cancel" on:click={resumeTrying}>{$t('conflict.address_conflict.resume_retry')}</button>
+        <button class="btn btn-warn" on:click={stopAutomation}>{$t('conflict.address_conflict.stop_automation')}</button>
+      </div>
+    {/if}
   </div>
 </div>
 
