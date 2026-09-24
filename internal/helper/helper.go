@@ -361,6 +361,15 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		h.userTunnelStore = storage.NewTunnelStore(filepath.Join(appSupport, "tunnels"))
 	}
 
+	// Create/repair the user-owned log dir BEFORE the daily handler first
+	// touches it, so a boot-time helper spawn cannot leave the GUI's log
+	// directory root-owned. Best-effort: failure only downgrades file
+	// logging, never helper startup.
+	var logsDirErr error
+	if logsDir != "" {
+		logsDirErr = prepareLogsDir(logsDir, ownerUID)
+	}
+
 	// Install the broadcast slog handler BEFORE the first log call so
 	// everything that follows (crash recovery notices, manager init,
 	// handler registration) gets piped to subscribed GUIs.
@@ -370,6 +379,9 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 		}
 		return h.server.Broadcast
 	})))
+	if logsDirErr != nil {
+		slog.Warn("helper log directory not ready", "dir", logsDir, "error", logsDirErr)
+	}
 
 	// Crash recovery (now logs via broadcast handler). Pass the helper's
 	// own firewall instance so cleanup reuses its in-memory state
