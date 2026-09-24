@@ -4,6 +4,21 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.10] - 2026-09-24
+
+### ✨ Added
+
+- **Address conflicts now pause that tunnel's automation until you decide.** When an automated connect hits an address another client already holds, a persistent dialog names the conflicting software, shows the tunnel's automation status, and offers exactly two choices — stop this tunnel's automation, or keep trying. There is no "handle it later" way out: the helper withholds the tunnel's auto-connect until you answer, and any unresolved conflict is re-presented at GUI startup and after a helper restart.
+- **Launch overview bubble.** 15 seconds after every GUI start, a popup now lists all tunnels with each one's live state and auto/manual mode, replacing the old 10-second startup status bubble.
+
+### 🐛 Fixed
+
+- **A failed connection attempt no longer produces a phantom "disconnected" bubble.** Only tunnels that were genuinely connected can now be announced as down; connecting-then-failing is no longer misread as a disconnect, while a real reconnect is still announced.
+
+### 🔧 Changed
+
+- **Status bubbles use one visual vocabulary on every platform:** green check + green text when connected, red cross + red text when disconnected, yellow dot while connecting — drawn as vectors in the native Windows bubble and mirrored in the macOS/Linux one, including the launch-overview rows.
+
 ## [2.3.9] - 2026-09-24
 
 ### 🐛 Fixed

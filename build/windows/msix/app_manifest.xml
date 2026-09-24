@@ -10,7 +10,7 @@
   <Identity
     Name="com.imonior.wireguide-plus"
     Publisher="CN=imonior"
-    Version="2.3.9.0"
+    Version="2.3.10.0"
     ProcessorArchitecture="x64" />
   
   <Properties>
