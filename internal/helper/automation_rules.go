@@ -123,6 +123,22 @@ const (
 	// re-evaluating the rules.
 	postConnectRuleCheckDelay = 3 * time.Second
 
+	// settleRecheckDelay is how long after an evaluation that acted (or
+	// skipped a tunnel as SSID-blind) a follow-up re-evaluation runs. The
+	// coalesced engine only re-runs on the next event, and a mid-flap
+	// context (SSID blanked while its network is otherwise back) may never
+	// be followed by one: macOS has no 30s poll, and an SSID that returned
+	// to its old value fires no transition. The recheck re-samples the
+	// context so the engine converges without depending on an event.
+	settleRecheckDelay = 8 * time.Second
+
+	// evalReasonSettle tags the follow-up recheck. A settle recheck that
+	// still finds things blind or acts again schedules no further recheck
+	// on purpose: the normal triggers remain the safety net and a
+	// self-perpetuating 8s timer would replace the quiet fail-closed skip
+	// with a steady evaluation loop.
+	evalReasonSettle = "settle-recheck"
+
 	// evalReasonStartup tags the one-shot evaluation the helper runs
 	// shortly after start (login / boot / LaunchDaemon restart). It is a
 	// log label only — startup evaluations obey exactly the same rules as
@@ -194,6 +210,20 @@ func reconcileAction(state wifi.DesiredState, active, manualOff, manualOn bool) 
 	return ""
 }
 
+// ssidBlind reports whether one tunnel's policy is UNDECIDABLE this
+// round: the rule set conditions on the SSID while the SSID is unknown
+// (a Wi-Fi uplink is present but no report backs it — see
+// NetworkContext.SSIDUndecidable). Evaluating anyway is what let a
+// same-SSID static→DHCP switch misconnect a tunnel: the ssid-conditioned
+// disconnect rules could not match an empty SSID, so the Default State
+// of "connect" won the round and brought the tunnel up. Fail closed:
+// take no action on such a tunnel until the SSID is known again — a
+// refused decision costs seconds, a wrong one costs an unwanted tunnel
+// that (on macOS, with no poll) can persist until the next event.
+func ssidBlind(rules []wifi.Rule, ctx wifi.NetworkContext) bool {
+	return ctx.SSIDUndecidable() && wifi.RulesReferenceSSID(rules)
+}
+
 // reevaluateAutomation drives every tunnel that has Automation rules
 // toward its desired state for the current network context (SSID +
 // physical-interface subnets). This runs entirely inside the helper, so
@@ -203,7 +233,10 @@ func reconcileAction(state wifi.DesiredState, active, manualOff, manualOn bool) 
 // regardless of how it was brought up. A tunnel with neither rules nor
 // an explicit Default State is never touched; a default-only policy
 // always converges on its Default State. On an UNIDENTIFIED network the
-// whole evaluation is skipped (see below) — no condition, no action.
+// whole evaluation is skipped (see below) — no condition, no action. A
+// tunnel whose rules depend on an SSID that is currently unknown is
+// skipped individually (see ssidBlind) — the Default State never
+// overrides conditions the context cannot judge.
 //
 // Concurrency: triggers must NOT call this directly — they post through
 // requestAutomationEval, and automationEvalLoop is the only caller. A
@@ -288,6 +321,13 @@ func (h *Helper) reevaluateAutomation(reason string) {
 		active[n] = true
 	}
 
+	// acted: this round carried out a connect/disconnect; blindSkipped:
+	// this round skipped at least one tunnel because its rules depend on
+	// an SSID that is currently unknown. Either means a decision is in
+	// flight or deferred on context data that may land without firing any
+	// event — re-sample it shortly (see settleRecheckDelay).
+	var acted, blindSkipped bool
+
 	for _, name := range auto.PolicyTunnelNames() {
 		// A tunnel the user exempted from automation is never touched: its
 		// rules stay stored and previewable, but the engine leaves it alone
@@ -313,6 +353,22 @@ func (h *Helper) reevaluateAutomation(reason string) {
 			h.clearAutoConnectBackoff(name)
 		}
 		rules := auto.PerTunnel[name]
+		// SSID-blind fail-closed gate (see ssidBlind): the rules depend on
+		// an SSID this context cannot supply, so neither a rule match nor
+		// the Default State fallback is trustworthy this round. Skip the
+		// tunnel entirely rather than let the fallback act on half a
+		// picture — this is precisely the round that used to misconnect
+		// tunnels during a same-SSID static→DHCP switch.
+		if ssidBlind(rules, ctx) {
+			blindSkipped = true
+			slog.Info("automation: skip (SSID unknown while rules depend on it — no default fallback on half a context)",
+				"category", "network",
+				"tunnel", name, "reason", reason,
+				"rules", len(rules),
+				"default", auto.Defaults[name],
+				"active", active[name])
+			continue
+		}
 		state := wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx)
 		switch reconcileAction(state, active[name], manualOff[name], manualOn[name]) {
 		case "connect":
@@ -326,8 +382,10 @@ func (h *Helper) reevaluateAutomation(reason string) {
 					"category", "network", "tunnel", name, "reason", reason)
 				continue
 			}
+			acted = true
 			h.automationConnect(name, reason, ctx.SSID)
 		case "disconnect":
+			acted = true
 			slog.Info("automation: rule disconnect",
 				"category", "network",
 				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
@@ -355,6 +413,22 @@ func (h *Helper) reevaluateAutomation(reason string) {
 				"ssid", ctx.SSID)
 		}
 	}
+
+	// One-shot settle recheck: after an action or a blind skip, re-sample
+	// the context shortly so the engine converges even when the healing
+	// state change fires no event (the macOS case: no poll, and an SSID
+	// returning to its old value transitions nothing). Deliberately not
+	// scheduled from a settle recheck itself — see evalReasonSettle.
+	if (acted || blindSkipped) && reason != evalReasonSettle {
+		go func() {
+			select {
+			case <-h.done:
+				return
+			case <-time.After(settleRecheckDelay):
+			}
+			h.requestAutomationEval(evalReasonSettle)
+		}()
+	}
 }
 
 // reconnectAllowed is the stale-connection monitor's policy gate, as a
@@ -372,18 +446,22 @@ func (h *Helper) reevaluateAutomation(reason string) {
 //     takes no action — and a reconnect IS an action. The route monitor /
 //     SSID report / poll re-post an evaluation once the network is known;
 //     that, not the monitor, is what brings the tunnel back then;
+//   - SSID-blind (ssidBlind): the policy depends on an SSID the context
+//     cannot supply, so its verdict is half a picture and the engine
+//     would skip this tunnel this round — the monitor must not act on the
+//     same half picture the engine refuses to act on;
 //   - policy says disconnect: the tunnel being DOWN is the desired state
 //     (a stale-handshake detection or a wake restore must not undo it);
 //   - otherwise (connect/unmanaged with a known network): allow —
 //     reconnecting converges on, or does not fight, the policy.
-func reconnectAllowed(state wifi.DesiredState, hasPolicy, networkKnown, manualOn, paused, exempted bool) bool {
+func reconnectAllowed(state wifi.DesiredState, hasPolicy, networkKnown, ssidBlind, manualOn, paused, exempted bool) bool {
 	if paused || exempted {
 		return false
 	}
 	if !hasPolicy || manualOn {
 		return true
 	}
-	if !networkKnown {
+	if !networkKnown || ssidBlind {
 		return false
 	}
 	return state != wifi.StateDisconnect
@@ -392,7 +470,8 @@ func reconnectAllowed(state wifi.DesiredState, hasPolicy, networkKnown, manualOn
 // reconnectPolicyBlocked answers the monitor's question for one tunnel:
 // may automation put it back up right now? It mirrors reevaluateAutomation
 // exactly — fresh settings read, both policy maps count, the same manual
-// latches, the same unidentified-network skip — because the two paths
+// latches, the same unidentified-network skip, the same SSID-blind
+// gate — because the two paths
 // acting on DIFFERENT verdicts is what lets a stale-handshake reconnect
 // connect a tunnel whose rule says disconnect (reconfiguring the IP
 // address flaps en0, the flap reads as a dead connection, and the blind
@@ -429,16 +508,18 @@ func (h *Helper) reconnectPolicyBlocked(name string) bool {
 	}
 	ctx := h.currentNetworkContext()
 	networkKnown := ctx.SSID != "" || len(ctx.PhysicalIPs) > 0
+	blind := hasPolicy && ssidBlind(rules, ctx)
 	state := wifi.StateUnmanaged
-	if hasPolicy {
+	if hasPolicy && !blind {
 		state = wifi.EvaluatePolicy(rules, def, ctx)
 	}
-	if !reconnectAllowed(state, hasPolicy, networkKnown, manualOn, paused, exempted) {
+	if !reconnectAllowed(state, hasPolicy, networkKnown, blind, manualOn, paused, exempted) {
 		slog.Info("automation: reconnect blocked by policy",
 			"category", "network",
 			"tunnel", name,
 			"decision", decisionLabel(state, false, manualOn),
 			"network_known", networkKnown,
+			"ssid_blind", blind,
 			"ssid", ctx.SSID,
 			"exempted", exempted,
 			"paused", paused)

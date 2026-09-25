@@ -120,6 +120,12 @@ pick the NIC manually.
   at the top of the Automation editor). A tunnel with neither rules nor a
   Default State is never touched by automation; setting only a Default State
   (zero rules) makes the tunnel always converge to it.
+- **SSID-blind, fail closed**: if the current network's SSID is momentarily
+  unknown — a Wi-Fi interface that flapped back up before its identity was
+  re-reported, the same-SSID reconfiguration case — rules conditioned on the
+  SSID are treated as **undecidable**, and that tunnel is skipped for the
+  round. The Default State never silently overrides conditions the engine
+  cannot yet judge; evaluation resumes the moment the SSID is known again.
 - Rule editing shows **live match indicators**: while the Automation editor is
   open, every condition shows whether it currently matches the live network, the
   first effective rule is highlighted as "in use", and a top bar shows the

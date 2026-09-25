@@ -782,3 +782,46 @@ func TestAutomationNormalize_TruncatesAfterFirstNoneMatch(t *testing.T) {
 		t.Errorf("x policy: got %v, want disconnect", got)
 	}
 }
+
+func TestSSIDUndecidable(t *testing.T) {
+	wifiUp := InterfaceInfo{Name: "en0", IsWiFi: true, Active: true}
+	wired := InterfaceInfo{Name: "Ethernet", IsWiFi: false, Active: true}
+	cases := []struct {
+		name string
+		ctx  NetworkContext
+		want bool
+	}{
+		{"ssid present is decidable", NetworkContext{SSID: "Home", Interfaces: []InterfaceInfo{wifiUp}}, false},
+		{"empty ssid with Wi-Fi uplink is missing data", NetworkContext{Interfaces: []InterfaceInfo{wifiUp}}, true},
+		{"empty ssid wired-only is a fact", NetworkContext{Interfaces: []InterfaceInfo{wired}}, false},
+		{"empty context is unidentified, not blind", NetworkContext{}, false},
+		{"dual-homed with a live Wi-Fi is still blind", NetworkContext{Interfaces: []InterfaceInfo{wired, wifiUp}}, true},
+		{"inactive Wi-Fi interface does not blind", NetworkContext{Interfaces: []InterfaceInfo{{Name: "en0", IsWiFi: true, Active: false}}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.ctx.SSIDUndecidable(); got != tc.want {
+				t.Errorf("SSIDUndecidable = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRulesReferenceSSID(t *testing.T) {
+	rules := []Rule{
+		{When: []Condition{{Type: CondSubnet, Subnet: "10.0.0.0/24"}}, Do: ActionDisconnect},
+	}
+	if RulesReferenceSSID(rules) {
+		t.Error("subnet-only rules must not reference the SSID")
+	}
+	rules = append(rules, Rule{When: []Condition{{Type: CondSSID, SSID: "Office"}}, Do: ActionDisconnect})
+	if !RulesReferenceSSID(rules) {
+		t.Error("a ssid condition anywhere in the list must count")
+	}
+	if !RulesReferenceSSID([]Rule{{When: []Condition{{Type: CondWiFi}}, Do: ActionConnect}}) {
+		t.Error("the wifi condition depends on the SSID too")
+	}
+	if RulesReferenceSSID(nil) {
+		t.Error("no rules reference nothing")
+	}
+}

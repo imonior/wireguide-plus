@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.1] - 2026-09-26
+
+### 🐛 Fixed
+
+- **Automation rules keep their grip through same-SSID network switches.** Reconfiguring a Wi-Fi network (e.g. static IP → DHCP) briefly drops the interface, and it can come back with a working address before the SSID is re-reported. In that window a disconnect rule conditioned on the SSID could not match the (temporarily blank) SSID, so the tunnel's Default State silently won and connected a tunnel its rules said to keep disconnected — and on macOS, with no periodic poll, the wrong connection could persist. Automation now fails closed on half a context: a tunnel whose rules depend on the SSID is skipped while its network's SSID is unknown, and the Default State never overrules a condition the engine cannot judge. Deciding resumes the moment the SSID is known again — a fresh SSID report now triggers it by itself, a one-shot settle recheck re-runs the evaluation seconds after any action or blind skip, and the reconnect monitor's policy gate refuses the same half context so a mid-flap restore can no longer act on a verdict the engine would not make.
+- **The macOS icon chain now ships the new rounded artwork everywhere.** The menu-bar tray icon, the app-bundle icon (Dock / Launchpad) and the DMG package icon were still built from the old square art; all of them — like the Windows rounded `.ico` — now derive from the single updated `build/appicon.png` source.
+
 ## [2.4.0] - 2026-09-26
 
 ### ✨ Added

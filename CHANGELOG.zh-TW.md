@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.1] - 2026-09-26
+
+### 🐛 修復
+
+- **同一 SSID 下的網路切換不再違背自動化規則。** 重新設定 Wi-Fi 網路（如靜態 IP 改 DHCP）會瞬間抖斷網路介面，介面可能先帶著可用位址恢復、SSID 回報卻尚未跟上。在這個窗口裡，以 SSID 為條件的「中斷」規則無法比對（暫時為空的）SSID，隧道的預設狀態便悄悄接管，把規則要求保持中斷的隧道連了起來——而 macOS 沒有定期輪詢兜底，錯誤連線可能一直維持。現在引擎對「半份脈絡」失敗關閉：規則依賴 SSID 的隧道，在其網路 SSID 未知期間整輪跳過，預設狀態絕不越權替引擎判定它無法評估的條件。SSID 恢復已知的瞬間決策隨即恢復——新的 SSID 回報本身就會觸發評估，任何執行或跳過後數秒還有一次性的沉降複查，重連監視器的策略門同樣拒絕這半份脈絡，抖動期間的盲恢復不再能做出引擎本不會做的決定。
+- **macOS 圖示鏈路補齊，新圓角圖示出現在所有出貨位置。** 選單列托盤圖示、App 套件圖示（Dock / 啟動台）與 DMG 安裝包圖示此前仍是舊的方角素材；現在包含 Windows 圓角 `.ico` 在內，全部由單一來源檔案 `build/appicon.png` 產生。
+
 ## [2.4.0] - 2026-09-26
 
 ### ✨ 新增

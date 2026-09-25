@@ -34,8 +34,10 @@ import (
 //     engine converges on the final network state without ever holding a
 //     backlog.
 //   - The one hazard this cannot cover is a context change that fires NO
-//     event after a transient mid-flap read. The 30s poll (non-darwin)
-//     and the next real event remain the safety net, as before.
+//     event after a transient mid-flap read. The settle recheck (one shot
+//     ~8s after an evaluation that acted or skipped a tunnel as
+//     SSID-blind), the SSID-report trigger, the 30s poll (non-darwin) and
+//     the next real event remain the safety net, as before.
 //
 // reevalMu is retained inside reevaluateAutomation as belt-and-braces
 // serialisation; with a single consumer goroutine it no longer does the

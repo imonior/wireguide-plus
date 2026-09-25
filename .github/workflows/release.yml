@@ -109,9 +109,17 @@ jobs:
         # hdiutil builds the drag-and-drop .dmg installer from the .app
         # bundle — the "installer" counterpart to the portable zip above,
         # mirroring Windows' installer + portable.zip split.
+        # A .VolumeIcon.icns at the staged root becomes the mounted
+        # volume's icon (hdiutil create has no -volicon flag); Finder
+        # previews .dmg files through that volume icon, so the installer
+        # no longer shows the generic disk-image glyph.
         run: |
-          cd bin
-          hdiutil create -volname "WireGuide Plus" -srcfolder wireguideplus.app -ov -format UDZO "WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.dmg"
+          rm -rf dmg-root
+          mkdir dmg-root
+          cp -R bin/wireguideplus.app dmg-root/
+          cp build/darwin/icons.icns dmg-root/.VolumeIcon.icns
+          hdiutil create -volname "WireGuide Plus" -srcfolder dmg-root -ov -format UDZO "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.dmg"
+          rm -rf dmg-root
 
       - uses: actions/upload-artifact@v7.0.1
         with:

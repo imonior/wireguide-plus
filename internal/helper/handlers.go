@@ -750,5 +750,14 @@ func (h *Helper) handleReportSSID(params json.RawMessage) (interface{}, error) {
 	h.ssidStampGW = gw
 	h.wifiMu.Unlock()
 	h.wifiMon.ReportExternalSSID(req.SSID)
+	// Always re-request an evaluation, even when the reported SSID equals
+	// the cached one and the monitor fires no transition: the fresh stamp
+	// just restored the SSID's credibility (an SSID-blind context becomes
+	// decidable again), and on macOS that transition-free healing moment
+	// would otherwise wait for an unrelated route event or the next poll —
+	// the window in which misconnections used to persist. The mailbox
+	// coalesces, so a periodic re-report costs nothing when a decision is
+	// already pending.
+	h.requestAutomationEval("ssid-report")
 	return ipc.Empty{}, nil
 }

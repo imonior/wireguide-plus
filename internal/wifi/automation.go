@@ -170,6 +170,45 @@ type NetworkContext struct {
 	Now time.Time
 }
 
+// SSIDUndecidable reports whether the current SSID is UNKNOWN rather
+// than merely absent: a Wi-Fi interface carries a routable address while
+// the context's SSID is empty. On macOS the SSID reaches the helper only
+// through GUI reports, and a same-SSID network switch (static → DHCP
+// reconfig) briefly blanks the report and the gateway stamp that
+// validates it while the interface and its address are already back —
+// so an empty SSID there means "data missing", not "not on Wi-Fi".
+// Without this distinction an ssid-conditioned disconnect rule cannot
+// match, the tunnel's Default State silently wins, and a tunnel the
+// rules say must stay disconnected connects during the flap. When no
+// Wi-Fi interface holds an address, an empty SSID IS a true fact and
+// ssid conditions legitimately fail to match.
+func (ctx NetworkContext) SSIDUndecidable() bool {
+	if ctx.SSID != "" {
+		return false
+	}
+	for _, inf := range ctx.Interfaces {
+		if inf.IsWiFi && inf.Active {
+			return true
+		}
+	}
+	return false
+}
+
+// RulesReferenceSSID reports whether any condition in the rule list
+// depends on the current SSID (the ssid and wifi conditions). Only such
+// rule sets are affected when the SSID is undecidable; subnet, gateway,
+// interface, ethernet and time rules keep judging from fresh data.
+func RulesReferenceSSID(rules []Rule) bool {
+	for _, r := range rules {
+		for _, c := range r.When {
+			if c.Type == CondSSID || c.Type == CondWiFi {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // DefaultAutomation returns an empty Automation with the maps initialised
 // so JSON marshals to {} rather than null.
 func DefaultAutomation() *Automation {
