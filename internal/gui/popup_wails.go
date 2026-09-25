@@ -53,6 +53,12 @@ type popupPayload struct {
 	OutOfRange []string      `json:"out_of_range"`
 	DurationMs int           `json:"duration_ms"`
 	Rows       []overviewRow `json:"rows,omitempty"`
+	// Lang is Settings.Language as chosen by the user ("auto" included).
+	// The bubble window is a separate webview: carrying the setting here
+	// makes its language authoritative even when the secondary window's
+	// startup settings read is unavailable or loses the race against the
+	// first payload replay.
+	Lang string `json:"lang,omitempty"`
 }
 
 var (
@@ -141,6 +147,7 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 		OutOfRange: outOfRange,
 		DurationMs: int(duration.Milliseconds()),
 		Rows:       rows,
+		Lang:       lang,
 	}
 	popupMu.Unlock()
 

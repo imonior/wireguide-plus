@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.2] - 2026-09-26
+
+### 🐛 Fixed
+
+- **Status bubbles now speak the language you chose.** The Windows GDI bubble only understood explicit language codes, so "auto" fell through to its English fallback while the main window had long been localising itself from the system — on Chinese, Japanese and Korean systems the notifications came out in English. Bubbles now resolve "auto" by the same rule as the rest of the app: Windows reads the OS UI language (telling Simplified from Traditional Chinese via the language id's sublanguage), and the macOS/Linux bubble receives the resolved language in every event and applies it. Traditional Chinese finally gets real traditional text (已連線 / 開啟主視窗) and its correct font, so every surface matches the language in Settings.
+
 ## [2.4.1] - 2026-09-26
 
 ### 🐛 Fixed

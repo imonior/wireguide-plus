@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.2] - 2026-09-26
+
+### 🐛 修正
+
+- **ステータスバブルが選択した言語で表示されます。** Windows の GDI バブルは明示的な言語コードしか理解できず、「自動」は英語のフォールバックに落ちていましたが、メインウィンドウはとっくにシステム言語にローカライズされていたため、中国語・日本語・韓国語の環境では通知だけ英文になっていました。バブルもアプリ全体と同じ規則で「自動」を解決します — Windows では OS の UI 言語を読み取り（サブランゲージ ID で簡体字／繁体字中国語も区別）、macOS/Linux のバブルは各イベントで解決済みの言語を受け取って適用します。繁体字中国語はついに本物の繁体字テキスト（已連線 / 開啟主視窗）と適切なフォントを用意しました。目にするすべての文字が設定の言語と一致します。
+
 ## [2.4.1] - 2026-09-26
 
 ### 🐛 修正

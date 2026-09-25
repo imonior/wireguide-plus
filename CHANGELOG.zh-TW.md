@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.2] - 2026-09-26
+
+### 🐛 修復
+
+- **狀態氣泡現在跟隨您所選的語言。** Windows 的 GDI 氣泡只認明確語言代碼，「自動」會落到英文兜底分支，而主介面早已依系統語言在地化——中文、日文、韓文系統上的通知因此一直是英文。現在氣泡與應用程式其餘部分用同一規則解析「自動」：Windows 讀取系統 UI 語言（並由語言識別碼的子語言區分簡體/繁體中文），macOS/Linux 氣泡在每次事件中收到解析後的語言並立即套用。繁體中文也第一次擁有真正的繁體文案（已連線 / 開啟主視窗）與合適字型——您看到的每一處文字都與設定裡的語言一致。
+
 ## [2.4.1] - 2026-09-26
 
 ### 🐛 修復

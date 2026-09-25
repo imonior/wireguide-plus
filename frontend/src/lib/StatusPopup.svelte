@@ -8,7 +8,7 @@
   // closes them); the launch overview carries a positive duration.
   import { onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
-  import { t } from '../i18n/index.js';
+  import { t, setLanguage } from '../i18n/index.js';
 
   let names = [];
   let state = 'disconnected';
@@ -43,6 +43,14 @@
   }
 
   function apply(d) {
+    // The user's explicit language pick travels with the payload. This
+    // window is a separate webview: the startup settings read can fail or
+    // land after the first replay, and then the bubble would sit there in
+    // the detected OS language while the app speaks another. "auto" (or no
+    // lang) deliberately resolves to the module-level detectLanguage() —
+    // the same rule the main window applies.
+    const lang = (d && d.lang) || '';
+    if (lang && lang !== 'auto') setLanguage(lang);
     names = (d && d.names) || [];
     state = (d && d.state) || 'disconnected';
     outOfRange = (d && d.out_of_range) || [];

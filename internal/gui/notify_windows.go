@@ -87,35 +87,36 @@ var (
 	shell32dll  = windows.NewLazySystemDLL("shell32.dll")
 	kernel32dll = windows.NewLazySystemDLL("kernel32.dll")
 
-	procCreateWindowExW       = user32dll.NewProc("CreateWindowExW")
-	procDefWindowProcW        = user32dll.NewProc("DefWindowProcW")
-	procDestroyWindow         = user32dll.NewProc("DestroyWindow")
-	procRegisterClassExW      = user32dll.NewProc("RegisterClassExW")
-	procSetTimer              = user32dll.NewProc("SetTimer")
-	procKillTimer             = user32dll.NewProc("KillTimer")
-	procPostQuitMessage       = user32dll.NewProc("PostQuitMessage")
-	procGetMessageW           = user32dll.NewProc("GetMessageW")
-	procTranslateMessage      = user32dll.NewProc("TranslateMessage")
-	procDispatchMessageW      = user32dll.NewProc("DispatchMessageW")
-	procSystemParametersInfoW = user32dll.NewProc("SystemParametersInfoW")
-	procShowWindow            = user32dll.NewProc("ShowWindow")
-	procGetDpiForSystem       = user32dll.NewProc("GetDpiForSystem")
-	procGetModuleHandleW      = kernel32dll.NewProc("GetModuleHandleW")
-	procLoadCursorW           = user32dll.NewProc("LoadCursorW")
-	procGetClientRect         = user32dll.NewProc("GetClientRect")
-	procGetDC                 = user32dll.NewProc("GetDC")
-	procReleaseDC             = user32dll.NewProc("ReleaseDC")
-	procInvalidateRect        = user32dll.NewProc("InvalidateRect")
-	procBeginPaint            = user32dll.NewProc("BeginPaint")
-	procEndPaint              = user32dll.NewProc("EndPaint")
-	procSetCapture            = user32dll.NewProc("SetCapture")
-	procReleaseCapture        = user32dll.NewProc("ReleaseCapture")
-	procTrackMouseEvent       = user32dll.NewProc("TrackMouseEvent")
-	procPostMessageW          = user32dll.NewProc("PostMessageW")
-	procSHAppBarMessage       = shell32dll.NewProc("SHAppBarMessage")
-	procSetWindowRgn          = user32dll.NewProc("SetWindowRgn")
-	procGetWindowRect         = user32dll.NewProc("GetWindowRect")
-	procGetCursorPos          = user32dll.NewProc("GetCursorPos")
+	procCreateWindowExW          = user32dll.NewProc("CreateWindowExW")
+	procDefWindowProcW           = user32dll.NewProc("DefWindowProcW")
+	procDestroyWindow            = user32dll.NewProc("DestroyWindow")
+	procRegisterClassExW         = user32dll.NewProc("RegisterClassExW")
+	procSetTimer                 = user32dll.NewProc("SetTimer")
+	procKillTimer                = user32dll.NewProc("KillTimer")
+	procPostQuitMessage          = user32dll.NewProc("PostQuitMessage")
+	procGetMessageW              = user32dll.NewProc("GetMessageW")
+	procTranslateMessage         = user32dll.NewProc("TranslateMessage")
+	procDispatchMessageW         = user32dll.NewProc("DispatchMessageW")
+	procSystemParametersInfoW    = user32dll.NewProc("SystemParametersInfoW")
+	procShowWindow               = user32dll.NewProc("ShowWindow")
+	procGetDpiForSystem          = user32dll.NewProc("GetDpiForSystem")
+	procGetModuleHandleW         = kernel32dll.NewProc("GetModuleHandleW")
+	procGetUserDefaultUILanguage = kernel32dll.NewProc("GetUserDefaultUILanguage")
+	procLoadCursorW              = user32dll.NewProc("LoadCursorW")
+	procGetClientRect            = user32dll.NewProc("GetClientRect")
+	procGetDC                    = user32dll.NewProc("GetDC")
+	procReleaseDC                = user32dll.NewProc("ReleaseDC")
+	procInvalidateRect           = user32dll.NewProc("InvalidateRect")
+	procBeginPaint               = user32dll.NewProc("BeginPaint")
+	procEndPaint                 = user32dll.NewProc("EndPaint")
+	procSetCapture               = user32dll.NewProc("SetCapture")
+	procReleaseCapture           = user32dll.NewProc("ReleaseCapture")
+	procTrackMouseEvent          = user32dll.NewProc("TrackMouseEvent")
+	procPostMessageW             = user32dll.NewProc("PostMessageW")
+	procSHAppBarMessage          = shell32dll.NewProc("SHAppBarMessage")
+	procSetWindowRgn             = user32dll.NewProc("SetWindowRgn")
+	procGetWindowRect            = user32dll.NewProc("GetWindowRect")
+	procGetCursorPos             = user32dll.NewProc("GetCursorPos")
 
 	procCreateSolidBrush      = gdi32dll.NewProc("CreateSolidBrush")
 	procCreateFontIndirectW   = gdi32dll.NewProc("CreateFontIndirectW")
@@ -230,7 +231,9 @@ type popupTexts struct {
 
 func popupTextsFor(lang string) popupTexts {
 	switch lang {
-	case "zh", "zh-CN", "zh-Hans", "zh-TW", "zh-Hant":
+	case "zh-TW", "zh-Hant":
+		return popupTexts{connected: "已連線", connecting: "連線中", notConnected: "未連線", outOfRange: "探測目標不在隧道範圍內", openLabel: "開啟主視窗", discLabel: "中斷連線", autoLabel: "自動", manualLabel: "手動"}
+	case "zh", "zh-CN", "zh-Hans":
 		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接", autoLabel: "自动", manualLabel: "手动"}
 	case "ko":
 		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기", autoLabel: "자동", manualLabel: "수동"}
@@ -243,7 +246,9 @@ func popupTextsFor(lang string) popupTexts {
 
 func popupFontFamily(lang string) string {
 	switch lang {
-	case "zh", "zh-CN", "zh-Hans", "zh-TW", "zh-Hant":
+	case "zh-TW", "zh-Hant":
+		return "Microsoft JhengHei UI"
+	case "zh", "zh-CN", "zh-Hans":
 		return "Microsoft YaHei UI"
 	case "ja":
 		return "Yu Gothic UI"
@@ -285,6 +290,14 @@ func systemLightTheme() bool {
 		return false
 	}
 	return v != 0
+}
+
+// osUILanguage returns the user's UI language LANGID. A failed call
+// yields 0, which langFromUILanguage maps to "en" — matching an
+// English-default Windows install.
+func osUILanguage() uint16 {
+	v, _, _ := procGetUserDefaultUILanguage.Call()
+	return uint16(v)
 }
 
 // ---- Per-window state ----
@@ -425,6 +438,12 @@ func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state p
 	// goroutine to one OS thread for the whole popup lifetime.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// "auto" must be resolved HERE: the GDI bubble draws its own translated
+	// strings and never sees the webview's language detection, so leaving
+	// "auto" unresolved fell through to English on machines whose UI the
+	// setting auto-localised (Chinese/Japanese/Korean Windows) — the bubble
+	// and the app disagreed about which language is in use.
+	lang = resolvePopupLang(lang, osUILanguage())
 	d := &popupData{
 		overview:     overview,
 		autoTags:     autoTags,
