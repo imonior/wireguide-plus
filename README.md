@@ -45,7 +45,8 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   ("🟢 Connected: name" in green, "🔴 Disconnected: name" in red, 🟡 amber while
   connecting) — that floats above your other apps without stealing focus and **stays
   until you act**: dismiss it, open the main window, disconnect, or let a newer event
-  replace it. All three platforms behave the same (macOS/Linux previously had none).
+  replace it. It parks in a corner of the screen's work area — never over your window's
+  content — and can be dragged anywhere. All three platforms behave the same (macOS/Linux previously had none).
 - **Unified tray behaviour** — a single click (left or right) opens the tray menu; a
   double left-click opens the main window, on every platform. Tray menu entries carry
   🟢 / 🔴 status glyphs on macOS & Linux (the Windows menu is GDI-drawn and can't render

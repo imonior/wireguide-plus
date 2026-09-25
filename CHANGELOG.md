@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.0] - 2026-09-26
+
+### ✨ Added
+
+- **Status bubbles can be dragged out of the way with the mouse.** If a standing bubble happens to cover something you need, grab it anywhere outside its buttons and move it — the gesture is focus-safe: dragging never activates the app or steals keyboard focus, on any platform. The Windows bubble drags via native caption handling (a click on its body still opens the main window); the macOS/Linux bubble uses the Wails window-drag.
+
+### 🔧 Changed
+
+- **The macOS/Linux status bubble now anchors to the bottom-right corner of the screen's work area** — the same pocket of screen the Windows bubble occupies by its tray — instead of hugging the main window's bottom-right corner. A notification no longer sits on top of the very window whose state it reports; the main-window anchor survives only as a fallback when no display info is available.
+
 ## [2.3.11] - 2026-09-26
 
 ### ✨ Added

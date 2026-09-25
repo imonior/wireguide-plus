@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.0] - 2026-09-26
+
+### ✨ 追加
+
+- **状態バブルをマウスドラッグで動かせます。** 常駐バブルがうっかり必要な内容を隠したら、ボタン以外を掴んで移動。ドラッグ中はアプリがアクティベートされずフォーカスも奪われません（3プラットフォーム共通）。Windows バブルはネイティブのキャプション移動で、本体クリックは従来どおりメインウィンドウを開きます。macOS/Linux バブルは Wails のウィンドウドラッグに対応します。
+
+### 🔧 変更
+
+- **macOS/Linux の状態バブルを画面のワークエリア右下隅に配置** —— Windows バブルがトレイ隅に停まるのと同じ位置です。従来のメインウィンドウ右下アンカー（通知が報告対象のウィンドウ内容に重なる）から変更しました。ディスプレイ情報が取得できない場合のみ従来動作に戻ります。
+
 ## [2.3.11] - 2026-09-26
 
 ### ✨ 追加

@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.0] - 2026-09-26
+
+### ✨ 新增
+
+- **状态气泡支持鼠标拖动。** 常驻气泡如果恰好挡住了你需要的内容，按住按钮以外的任意区域即可拖走；整个过程不抢焦点、不激活应用，三平台一致。Windows 气泡走原生标题栏拖动（在气泡正文上单击仍然是打开主窗口），macOS/Linux 气泡走 Wails 窗口拖拽。
+
+### 🔧 变更
+
+- **macOS/Linux 状态气泡改为锚定屏幕工作区右下角** —— 与 Windows 气泡停靠在托盘角落的位置一致，不再贴着主窗口右下角。通知不再压在它所报告的那个主窗口内容之上；仅当取不到显示器信息时才退回主窗口锚定。
+
 ## [2.3.11] - 2026-09-26
 
 ### ✨ 新增

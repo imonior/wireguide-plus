@@ -23,8 +23,10 @@ import (
 // unplug/replug, network loss, manual connect/disconnect), a small
 // self-drawn bubble pops up near the notification area reporting the
 // current connection situation. It carries a mini menu (Open Window /
-// Disconnect), can be dismissed with the ✕ button, and closes itself after
-// the configured duration (default 10s).
+// Disconnect), can be dismissed with the ✕ button, and — being a standing
+// notification — stays until the user acts; only the informational launch
+// overview closes itself after the configured duration. Any press-drag on
+// the bubble moves it (WM_NCHITTEST returns HTCAPTION outside the buttons).
 
 const (
 	connectPopupClass = "WireGuideConnectPopup"
@@ -38,15 +40,23 @@ const (
 	swShowNoActivate = 4
 
 	// Messages
-	wmEraseBkgnd  = 0x0014
-	wmPaint       = 0x000F
-	wmClose       = 0x0010
-	wmDestroy     = 0x0002
-	wmTimer       = 0x0113
-	wmMouseMove   = 0x0200
-	wmLButtonDown = 0x0201
-	wmLButtonUp   = 0x0202
-	wmMouseLeave  = 0x02A3
+	wmNCHitTest       = 0x0084
+	wmNCLButtonDown   = 0x00A1
+	wmNCLButtonUp     = 0x00A2
+	wmNCLButtonDblClk = 0x00A3
+	wmEraseBkgnd      = 0x0014
+	wmPaint           = 0x000F
+	wmClose           = 0x0010
+	wmDestroy         = 0x0002
+	wmTimer           = 0x0113
+	wmMouseMove       = 0x0200
+	wmLButtonDown     = 0x0201
+	wmLButtonUp       = 0x0202
+	wmMouseLeave      = 0x02A3
+
+	// WM_NCHITTEST returns
+	htClient  = 1
+	htCaption = 2
 
 	// GDI
 	transparentBkMode = 1
@@ -104,6 +114,8 @@ var (
 	procPostMessageW          = user32dll.NewProc("PostMessageW")
 	procSHAppBarMessage       = shell32dll.NewProc("SHAppBarMessage")
 	procSetWindowRgn          = user32dll.NewProc("SetWindowRgn")
+	procGetWindowRect         = user32dll.NewProc("GetWindowRect")
+	procGetCursorPos          = user32dll.NewProc("GetCursorPos")
 
 	procCreateSolidBrush      = gdi32dll.NewProc("CreateSolidBrush")
 	procCreateFontIndirectW   = gdi32dll.NewProc("CreateFontIndirectW")
@@ -319,6 +331,10 @@ type popupData struct {
 	hoverClose bool
 	hoverOpen  bool
 	hoverDisc  bool
+
+	// ncPress records where a non-client (caption) press began, in screen
+	// coords, so the matching release can tell a click from a drag.
+	ncPress popupPoint
 }
 
 var (
@@ -630,6 +646,54 @@ func popupWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		return 0
 	case wmEraseBkgnd:
 		return 1 // skip background erase to avoid flicker
+	case wmNCHitTest:
+		// The whole bubble is a caption (draggable) except its buttons.
+		// A standing notification must be parkable anywhere without the
+		// app doing anything: HTCAPTION hands the press to DefWindowProc's
+		// modal move loop, which drags the window and — crucially for a
+		// WS_EX_NOACTIVATE bubble — never activates or focus-steals.
+		sp := pointFromLPARAM(lParam) // screen coords
+		var wr windows.Rect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&wr)))
+		p := popupPoint{X: sp.X - wr.Left, Y: sp.Y - wr.Top}
+		if inRect(p, d.closeRect) || inRect(p, d.openRect) || inRect(p, d.discRect) {
+			return htClient
+		}
+		return htCaption
+	case wmNCLButtonDown:
+		d.ncPress = pointFromLPARAM(lParam) // screen coords
+		return defWindowProc(hwnd, msg, wParam, lParam)
+	case wmNCLButtonUp:
+		// DefWindowProc's drag loop ends by posting this message. A press
+		// released without leaving the caption's click tolerance is the
+		// old "click the bubble to open the window", so that gesture
+		// survives the drag; anything longer was a drag — keep the
+		// notification standing, just moved.
+		var cur popupPoint
+		procGetCursorPos.Call(uintptr(unsafe.Pointer(&cur)))
+		tol := int32(4 * d.scale)
+		dx, dy := cur.X-d.ncPress.X, cur.Y-d.ncPress.Y
+		if dx < 0 {
+			dx = -dx
+		}
+		if dy < 0 {
+			dy = -dy
+		}
+		if dx <= tol && dy <= tol {
+			var wr windows.Rect
+			procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&wr)))
+			p := popupPoint{X: cur.X - wr.Left, Y: cur.Y - wr.Top}
+			if inRect(p, d.bodyRect) || inRect(p, d.titleRect) ||
+				inRect(p, d.dotRect) || inRect(p, d.warnRect) {
+				procDestroyWindow.Call(hwnd)
+				if d.onOpen != nil {
+					go d.onOpen()
+				}
+			}
+		}
+		return 0
+	case wmNCLButtonDblClk:
+		return 0 // a borderless bubble must not maximise/restore on caption double-click
 	case wmPaint:
 		drawPopup(d)
 		return 0
@@ -656,11 +720,9 @@ func popupWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			if d.onOpen != nil {
 				go d.onOpen()
 			}
-		case inRect(p, d.bodyRect) || inRect(p, d.titleRect):
-			procDestroyWindow.Call(hwnd)
-			if d.onOpen != nil {
-				go d.onOpen()
-			}
+			// Body/title clicks are handled by WM_NCLBUTTONUP: since
+			// WM_NCHITTEST marks everything but the buttons as caption,
+			// presses there never arrive as client messages.
 		}
 		return 0
 	case wmMouseMove:

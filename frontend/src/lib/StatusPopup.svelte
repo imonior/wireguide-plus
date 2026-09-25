@@ -139,6 +139,16 @@
     font-family: var(--font-sans, system-ui);
     font-size: 13px;
     line-height: 1.4;
+    /* Wails frameless-window dragging: runtime drag.js starts a window
+       drag when the element under the pressed button computes
+       --wails-draggable: drag (inherited by every child unless a nearer
+       rule opts out, which is what the interactive bits below do). The
+       bubble is parkable anywhere; a standing notification that covers
+       content should be movable out of the way. */
+    --wails-draggable: drag;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -154,6 +164,8 @@
     letter-spacing: -0.01em;
   }
   .popup-close {
+    /* Interactive: must not hand the press to the window drag. */
+    --wails-draggable: no-drag;
     background: none;
     border: none;
     color: var(--text-secondary, #aaa);
@@ -232,6 +244,7 @@
     margin-top: 2px;
   }
   .btn {
+    --wails-draggable: no-drag;
     height: 28px;
     padding: 0 12px;
     background: var(--bg-card, #2a2a2a);

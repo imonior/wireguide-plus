@@ -242,11 +242,32 @@ func destroyPopupWindow() {
 	}
 }
 
-// computePopupPos anchors the bubble at the bottom-right corner of the main
-// window (the closest cross-platform stand-in for "near the tray" — Wails v3
-// alpha does not expose screen geometry publicly). Falls back to centred when
-// the main window is not yet known.
+// computePopupPos anchors the bubble at the bottom-right corner of the
+// primary display's WORK AREA (the screen minus menu bar / taskbar / Dock),
+// mirroring where the Windows bubble parks by its tray. The work area —
+// not the full bounds — is what keeps the bubble off the Dock, and the
+// corner — not a main-window anchor — is what keeps it off the user's
+// content: a bubble pinned to the window's corner used to sit on top of
+// whatever the window was showing, which is exactly what a notification
+// must not do. SetPosition and WorkArea are both in DIPs, so no scaling
+// correction is needed here.
 func computePopupPos(w, h int) (int, int) {
+	if popupApp != nil {
+		if sc := popupApp.Screen.GetPrimary(); sc != nil {
+			wa := sc.WorkArea
+			x := wa.X + wa.Width - w - popupMargin
+			y := wa.Y + wa.Height - h - popupMargin
+			if x < wa.X {
+				x = wa.X + popupMargin
+			}
+			if y < wa.Y {
+				y = wa.Y + popupMargin
+			}
+			return x, y
+		}
+	}
+	// No screen info (headless / early startup): fall back to anchoring on
+	// the main window, and if even that is unknown, let the WM place us.
 	if dockWindow != nil {
 		dx, dy := dockWindow.Position()
 		dw, dh := dockWindow.Size()
