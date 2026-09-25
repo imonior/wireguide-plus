@@ -287,11 +287,15 @@ type popupData struct {
 	// colour marking, for the case where the app window is closed and the
 	// only thing on screen is this bubble.
 	outOfRange []string
-	// overview, when non-empty, switches the bubble to the launch status
-	// report: one row per tunnel (dot + name + state + automation tag)
-	// replacing the single status line, and no Disconnect button — the
-	// overview describes, it does not act.
+	// overview, when non-empty, switches the bubble to per-tunnel rows
+	// instead of a single status caption + joined names line. autoTags says
+	// which flavour: true is the launch status report (name + right-aligned
+	// "state · auto/manual" tag, no Disconnect button — the overview
+	// describes, it does not act); false is a status transition, where each
+	// row reads "state: name" in the state's colour and Disconnect stays
+	// available.
 	overview     []overviewRow
+	autoTags     bool
 	lang         string
 	onOpen       func()
 	onDisconnect func()
@@ -328,37 +332,38 @@ var (
 // ---- Public API (called from tray.go) ----
 
 // showStatusPopup displays the connection-situation bubble near the tray
-// icon. duration controls how long it stays before auto-closing (the ✕
-// button or a click also closes it immediately).
+// icon. Status transitions pass popupPersistent: the bubble waits for the
+// user (✕, a button, or a newer transition replacing it) instead of
+// auto-closing — a warning that evaporates unread is a warning missed.
 // state must be derived from the *established* tunnel set (see
 // Manager.EstablishedTunnels): popupStateConnecting exists so the bubble can
 // say "still trying" instead of "connected" for a tunnel whose connect
 // attempt has not finished — and may yet fail.
 func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	spawnPopup(nil, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+	spawnPopup(transitionRows(names, state), false, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
 // showOverviewPopup displays the launch status-overview bubble: every
 // tunnel with its connection state and automation mode. Informational —
 // the only action is Open Window.
 func showOverviewPopup(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
-	spawnPopup(rows, nil, popupStateConnected, nil, lang, duration, onOpen, nil)
+	spawnPopup(rows, true, nil, popupStateConnected, nil, lang, duration, onOpen, nil)
 }
 
-func spawnPopup(overview []overviewRow, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func spawnPopup(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("popup: recovered from panic in showStatusPopup", "err", r, "stack", string(debug.Stack()))
 		}
 	}()
-	if duration <= 0 {
+	if duration == 0 {
 		duration = 10 * time.Second
 	}
 	slog.Info("popup: showStatusPopup called", "names", names, "state", state,
 		"out_of_range", outOfRange, "duration", duration, "overview_rows", len(overview))
 	ensurePopupClass()
 	closeConnectPopup() // replace any stale popup
-	go runPopupLoop(overview, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+	go runPopupLoop(overview, autoTags, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
 func closeConnectPopup() {
@@ -395,7 +400,7 @@ func loadCursor(hinst uintptr, id int32) uintptr {
 	return c
 }
 
-func runPopupLoop(overview []overviewRow, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
 	// The window's message queue is bound to the OS thread that created it.
 	// A plain goroutine can migrate between OS threads between syscalls, which
 	// would make GetMessage/DispatchMessage run on a different thread than the
@@ -406,6 +411,7 @@ func runPopupLoop(overview []overviewRow, names []string, state popupState, outO
 	defer runtime.UnlockOSThread()
 	d := &popupData{
 		overview:     overview,
+		autoTags:     autoTags,
 		names:        names,
 		state:        state,
 		outOfRange:   outOfRange,
@@ -483,12 +489,14 @@ func runPopupLoop(overview []overviewRow, names []string, state popupState, outO
 	// Buttons, right-aligned: [Disconnect] [Open Window]. The overview
 	// bubble only describes — Disconnect has no meaningful "all of the
 	// above" target there — so it keeps just Open Window, flush right.
+	// Transition bubbles keep both buttons even in row mode.
 	texts := popupTextsFor(lang)
 	measDC, _, _ := procGetDC.Call(0)
 	btnH := int32(28 * d.scale)
 	btnY := h - pad - btnH
+	summary := len(d.overview) > 0 && d.autoTags
 	discW := int32(0)
-	if len(d.overview) == 0 {
+	if !summary {
 		discW = measureText(measDC, d.bodyFont, texts.discLabel) + int32(24*d.scale)
 	}
 	openW := measureText(measDC, d.bodyFont, texts.openLabel) + int32(24*d.scale)
@@ -496,7 +504,7 @@ func runPopupLoop(overview []overviewRow, names []string, state popupState, outO
 		procReleaseDC.Call(0, measDC)
 	}
 	d.discRect = windows.Rect{Left: w - pad - discW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
-	if len(d.overview) > 0 {
+	if summary {
 		d.discRect = windows.Rect{} // zero rect: never hit
 		d.openRect = windows.Rect{Left: w - pad - openW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
 	} else {
@@ -530,7 +538,11 @@ func runPopupLoop(overview []overviewRow, names []string, state popupState, outO
 		procSetWindowRgn.Call(hwnd, hrgn, 1)
 	}
 
-	procSetTimer.Call(hwnd, 1, uintptr(duration.Milliseconds()), 0)
+	// A persistent bubble arms no close timer at all — it waits for the
+	// user. (A newer transition still replaces it via closeConnectPopup.)
+	if duration > 0 {
+		procSetTimer.Call(hwnd, 1, uintptr(duration.Milliseconds()), 0)
+	}
 	procShowWindow.Call(hwnd, swShowNoActivate)
 
 	var m popupMsg
@@ -717,7 +729,7 @@ func drawPopup(d *popupData) {
 	drawCloseGlyph(hdc, d, fg)
 
 	if len(d.overview) > 0 {
-		drawOverviewRows(hdc, d, texts, fg)
+		drawStatusRows(hdc, d, texts, fg)
 	} else {
 		// Status mark + caption: ✅-style green check for connected, ❌-style
 		// red cross for disconnected, 🟡-style yellow disc while connecting.
@@ -761,17 +773,20 @@ func drawPopup(d *popupData) {
 
 	// Buttons
 	drawPopupButton(hdc, d, d.openRect, texts.openLabel, d.hoverOpen)
-	if len(d.overview) == 0 {
+	if len(d.overview) == 0 || !d.autoTags {
 		drawPopupButton(hdc, d, d.discRect, texts.discLabel, d.hoverDisc)
 	}
 }
 
-// drawOverviewRows renders the launch overview: one row per tunnel —
-// status mark (✅/❌/🟡), name (ellipsized), and a right-aligned
-// "state · auto/manual" tag with the state word in the mark's colour.
-// The vocabulary is identical to the transition bubbles', so the overview
-// can never claim more than they are allowed to say.
-func drawOverviewRows(hdc uintptr, d *popupData, texts popupTexts, fg uint32) {
+// drawStatusRows renders one row per tunnel. Overview rows (d.autoTags)
+// show status mark (green check / red cross / yellow disc), name
+// (ellipsized), and a right-aligned "state · auto/manual" tag with the
+// state word in the mark's colour. Transition rows show mark plus a single
+// "State: name" string painted entirely in the state's colour, so a bubble
+// naming several tunnels gives each one its own line. The vocabulary is
+// shared between both modes, so the overview can never claim more than the
+// transition bubbles are allowed to say.
+func drawStatusRows(hdc uintptr, d *popupData, texts popupTexts, fg uint32) {
 	rowH := int32(16 * d.scale)
 	markSize := int32(11 * d.scale)
 	textTop := int32(3 * d.scale)
@@ -783,6 +798,23 @@ func drawOverviewRows(hdc uintptr, d *popupData, texts popupTexts, fg uint32) {
 			word = texts.connected
 		case "connecting":
 			word = texts.connecting
+		}
+		if !d.autoTags {
+			// A transition row states its own verdict: mark + a single
+			// "Disconnected: name" string, entirely in the state's ink —
+			// the same one-tunnel-one-line shape the request asked for.
+			markRect := windows.Rect{Left: d.bodyRect.Left, Top: top + textTop,
+				Right: d.bodyRect.Left + markSize, Bottom: top + textTop + markSize}
+			drawStatusMark(hdc, markRect, r.State, d.scale, d.themeLight)
+			_, ink := statusMarkInk(r.State, d.themeLight)
+			textRect := windows.Rect{
+				Left:   d.bodyRect.Left + markSize + int32(6*d.scale),
+				Top:    top,
+				Right:  d.bodyRect.Right,
+				Bottom: top + rowH,
+			}
+			drawTextClipped(hdc, d.bodyFont, ink, word+": "+r.Name, textRect)
+			continue
 		}
 		auto := texts.manualLabel
 		if r.Auto {

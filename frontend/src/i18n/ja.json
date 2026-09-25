@@ -278,6 +278,7 @@
     "disconnect_first": "先にトンネルを切断してください"
   },
   "log": {
+    "open_folder": "ログフォルダを開く",
     "clear": "クリア",
     "auto_scroll": "自動スクロール",
     "no_entries": "ログがありません",

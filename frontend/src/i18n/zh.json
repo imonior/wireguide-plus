@@ -278,6 +278,7 @@
     "disconnect_first": "请先断开隧道"
   },
   "log": {
+    "open_folder": "打开日志目录",
     "clear": "清空",
     "copy": "复制",
     "auto_scroll": "自动滚动",

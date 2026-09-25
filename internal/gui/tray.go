@@ -41,14 +41,17 @@ import (
 // a trayManager reference.
 var appQuitting atomic.Bool
 
-// Menu connection glyphs. Colored emoji render natively in the macOS menu
-// bar (AppKit), but the Windows tray popup is drawn with GDI, which cannot
-// render colored emoji — a 🟢 degrades to a grey outline circle there.
-// Windows therefore uses plain text glyphs (● filled / ○ hollow) so the two
-// states stay visually distinct in both light and dark themes.
+// Menu connection glyphs. Menu item text itself cannot be coloured on any
+// of the three platforms (AppKit/Win32/GTK menus draw labels with the theme
+// ink), so colour has to ride on the glyph — which means emoji there, since
+// plain text characters are monochrome. Colored emoji render natively in the
+// macOS menu (AppKit), but the Windows tray popup is drawn with GDI, which
+// cannot render colored emoji — a 🟢 degrades to a grey outline circle
+// there. Windows therefore uses plain vector glyphs (✔ / ✗) that stay
+// legible in both light and dark themes, and accepts their monochrome ink.
 var (
 	connectedGlyph    = "🟢"
-	disconnectedGlyph = "○"
+	disconnectedGlyph = "🔴"
 )
 
 func init() {
@@ -59,6 +62,74 @@ func init() {
 		connectedGlyph = "✔"
 		disconnectedGlyph = "✗"
 	}
+}
+
+// trayClickWindow is how close two left clicks must land for the second to
+// count as a double-click. A fixed value rather than the OS setting because
+// the router is deliberately cross-platform: Wails only hands us "a click
+// happened" (macOS fires one callback per mouse-down and offers no
+// double-click event at all; Windows fires one per button-UP, so a double
+// click delivers UP, UP with a DBLCLK in between that we ignore). 450ms
+// covers the default double-click interval on every platform while staying
+// snappy for the menu.
+const trayClickWindow = 450 * time.Millisecond
+
+// trayClickRouter turns raw tray clicks into the two user intents the app
+// recognises, identically on all platforms: a SINGLE left click opens the
+// context menu, a DOUBLE click shows the main window. The menu is delayed
+// by trayClickWindow so a second click can cancel it — the unavoidable
+// price of separating the two when only click events arrive. Right clicks
+// never reach the router: Wails' smart default (and, on Linux, the panel
+// itself) already shows the menu there.
+type trayClickRouter struct {
+	mu      sync.Mutex
+	last    time.Time
+	pending *time.Timer
+	open    func()
+	show    func()
+}
+
+func newTrayClickRouter(openMenu, showWindow func()) *trayClickRouter {
+	return &trayClickRouter{open: openMenu, show: showWindow}
+}
+
+// onClick is the tray OnClick callback. Both actions are safe from any
+// goroutine: openMenu round-trips the UI thread via InvokeSync, and
+// showDock (showWindow) is InvokeAsync-based precisely so tray callbacks
+// can call it from any thread.
+func (r *trayClickRouter) onClick() {
+	now := time.Now()
+	r.mu.Lock()
+	if !r.last.IsZero() && now.Sub(r.last) <= trayClickWindow {
+		// Second click of a double-click: stand the pending menu down.
+		// Clearing last stops a third rapid click from chaining into a
+		// second "double".
+		r.last = time.Time{}
+		if r.pending != nil {
+			r.pending.Stop()
+			r.pending = nil
+		}
+		r.mu.Unlock()
+		r.show()
+		return
+	}
+	r.last = now
+	if r.pending != nil {
+		r.pending.Stop()
+	}
+	r.pending = time.AfterFunc(trayClickWindow, func() {
+		r.mu.Lock()
+		r.pending = nil
+		if !r.last.IsZero() {
+			r.last = time.Time{}
+			open := r.open
+			r.mu.Unlock()
+			open()
+		} else {
+			r.mu.Unlock()
+		}
+	})
+	r.mu.Unlock()
 }
 
 var (
@@ -921,16 +992,13 @@ func (t *trayManager) showStatusNotification() {
 	sort.Strings(names)
 
 	lang := "en"
-	duration := 10 * time.Second
-	if s, err := t.svc.GetSettings(); err == nil && s != nil {
-		if s.Language != "" {
-			lang = s.Language
-		}
-		if s.NotifyDurationMs > 0 {
-			duration = time.Duration(s.NotifyDurationMs) * time.Millisecond
-		}
+	if s, err := t.svc.GetSettings(); err == nil && s != nil && s.Language != "" {
+		lang = s.Language
 	}
-	showStatusPopup(names, state, outOfRange, lang, duration, showDock, func() {
+	// Persistent on purpose: a status bubble that vanished on a timer could
+	// be missed entirely while the user works in another app — the notify
+	// duration setting now only governs the informational launch overview.
+	showStatusPopup(names, state, outOfRange, lang, popupPersistent, showDock, func() {
 		t.mu.Lock()
 		names := make([]string, 0, len(t.activeTunnels))
 		for n := range t.activeTunnels {
@@ -1181,14 +1249,13 @@ func (t *trayManager) rebuildMenu() {
 		// Each tunnel is a checkbox item: the native checkmark in front
 		// of the name is an independent ON/OFF switch — click it to
 		// toggle the tunnel. The glyph keeps the connection status
-		// visible next to the switch (green circle = connected, hollow
-		// grey = off).
+		// visible next to the switch (🟢 = connected, 🔴 = off on
+		// macOS/Linux; ✔/✗ monochrome on the GDI-drawn Windows menu).
 		// WireGuard "connected" means the first handshake has completed,
 		// so any tunnel in the active set is green; a separate yellow
 		// "connecting" glyph would leave the menu stuck on yellow right
 		// after a connect if the handshake timestamp had not been
-		// refreshed yet. Colored emoji render natively in the tray popup
-		// (Segoe UI Emoji on Windows, AppKit emoji on macOS). Wails flips
+		// refreshed yet. Wails flips
 		// the checkmark itself on click and hands the NEW state to the
 		// callback via ctx.IsChecked(), so the action follows the switch;
 		// a failed connect/disconnect is corrected on the next

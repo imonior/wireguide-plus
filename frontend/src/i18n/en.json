@@ -278,6 +278,7 @@
     "disconnect_first": "Disconnect the tunnel first"
   },
   "log": {
+    "open_folder": "Open log folder",
     "clear": "Clear",
     "copy": "Copy",
     "auto_scroll": "Auto-scroll",

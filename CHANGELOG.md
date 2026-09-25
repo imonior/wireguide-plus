@@ -4,6 +4,24 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.3.11] - 2026-09-26
+
+### ✨ Added
+
+- **Log folder access from the log viewer** — its toolbar gained an **Open log folder** button that reveals the on-disk log directory in Finder / Explorer / the system file manager (the same action behind the settings log row).
+- **Tray menu status glyphs** — connected tunnels carry 🟢 and disconnected ones 🔴 next to their names (macOS & Linux; the Windows tray menu is GDI-drawn and can't render colour emoji, so it uses monochrome ✔ / ✗).
+- **Unified tray-click behaviour on all platforms** — a single click (left *or* right) opens the tray menu; a double left-click opens the main window.
+
+### 🔧 Changed
+
+- **Status notifications are now one line per tunnel, on every platform:** "🟢 Connected: name" / "🔴 Disconnected: name" / 🟡 while connecting, the whole line painted in the state's colour — replacing the old joined-names caption.
+- **Status bubbles stand by until you act.** No auto-close timer any more: they are dismissed by your ✕, by opening the main window, by Disconnect, or by a newer event replacing them — previously a disconnect warning could evaporate ten seconds after you'd walked away from the app. The notify-duration setting now governs only the informational launch-overview bubble.
+- **The macOS bubble floats without stealing focus** — it raises itself above other apps (even over a full-screen one, via all-spaces window behaviour) instead of activating the app, so it surfaces *on top of* what you were doing rather than *instead of* it.
+
+### 🐛 Fixed
+
+- **A brief network flap can no longer connect a tunnel that automation said to keep down.** When an interface bounced for a second (e.g. reconfiguring a static IP briefly drops it), the dead-connection monitor restored every cached tunnel blind, outrunning the per-tunnel automation rules. Both restore paths now consult the same policy first: tunnels whose rules say disconnect, tunnels on an unidentified network, and paused/exempted tunnels are left alone.
+
 ## [2.3.10] - 2026-09-24
 
 ### ✨ Added

@@ -357,6 +357,96 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 }
 
+// reconnectAllowed is the stale-connection monitor's policy gate, as a
+// pure decision over already-collected inputs (see reconnectPolicyBlocked
+// for the probing half). The monitor's blind "it was up, put it back"
+// restore must not contradict the automation engine:
+//
+//   - paused/exempted (address-conflict pause, "stop automation"): the
+//     tunnel is the user's to decide, never the monitor's;
+//   - no policy at all: legacy behaviour — the monitor restores what it
+//     watched, there is no rule to contradict;
+//   - manual-on latch: the user's deliberate connect outranks the policy
+//     (mirror of reconcileAction's skip-manual-on);
+//   - UNIDENTIFIED network: no condition can be judged, so the engine
+//     takes no action — and a reconnect IS an action. The route monitor /
+//     SSID report / poll re-post an evaluation once the network is known;
+//     that, not the monitor, is what brings the tunnel back then;
+//   - policy says disconnect: the tunnel being DOWN is the desired state
+//     (a stale-handshake detection or a wake restore must not undo it);
+//   - otherwise (connect/unmanaged with a known network): allow —
+//     reconnecting converges on, or does not fight, the policy.
+func reconnectAllowed(state wifi.DesiredState, hasPolicy, networkKnown, manualOn, paused, exempted bool) bool {
+	if paused || exempted {
+		return false
+	}
+	if !hasPolicy || manualOn {
+		return true
+	}
+	if !networkKnown {
+		return false
+	}
+	return state != wifi.StateDisconnect
+}
+
+// reconnectPolicyBlocked answers the monitor's question for one tunnel:
+// may automation put it back up right now? It mirrors reevaluateAutomation
+// exactly — fresh settings read, both policy maps count, the same manual
+// latches, the same unidentified-network skip — because the two paths
+// acting on DIFFERENT verdicts is what lets a stale-handshake reconnect
+// connect a tunnel whose rule says disconnect (reconfiguring the IP
+// address flaps en0, the flap reads as a dead connection, and the blind
+// restore outran the rules). Any doubt it cannot resolve (settings
+// unreadable) fails OPEN to the monitor's legacy behaviour: the 30s
+// engine evaluation is seconds away and remains the authority.
+func (h *Helper) reconnectPolicyBlocked(name string) bool {
+	if name == "" {
+		return false
+	}
+	exempted := h.automationDisabled(name)
+	paused := h.isAutoConnectPaused(name)
+	settings, err := h.loadUserSettings()
+	if err != nil {
+		slog.Debug("automation: reconnect gate cannot load settings", "tunnel", name, "error", err)
+		return exempted || paused
+	}
+	settings.EnsureAutomation()
+	auto := settings.Automation
+	var rules []wifi.Rule
+	var def wifi.Action
+	hasPolicy := false
+	if auto != nil {
+		rules = auto.PerTunnel[name]
+		def = auto.Defaults[name]
+		hasPolicy = len(rules) > 0 || def != ""
+	}
+	manualOn := false
+	for _, n := range settings.ManualOnTunnels {
+		if n == name {
+			manualOn = true
+			break
+		}
+	}
+	ctx := h.currentNetworkContext()
+	networkKnown := ctx.SSID != "" || len(ctx.PhysicalIPs) > 0
+	state := wifi.StateUnmanaged
+	if hasPolicy {
+		state = wifi.EvaluatePolicy(rules, def, ctx)
+	}
+	if !reconnectAllowed(state, hasPolicy, networkKnown, manualOn, paused, exempted) {
+		slog.Info("automation: reconnect blocked by policy",
+			"category", "network",
+			"tunnel", name,
+			"decision", decisionLabel(state, false, manualOn),
+			"network_known", networkKnown,
+			"ssid", ctx.SSID,
+			"exempted", exempted,
+			"paused", paused)
+		return true
+	}
+	return false
+}
+
 // decisionLabel renders an evaluated desired state (plus the manual latches)
 // as the word the log viewer and the CLI preview both use, so the same
 // vocabulary appears everywhere.

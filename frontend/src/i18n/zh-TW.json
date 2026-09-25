@@ -278,6 +278,7 @@
     "disconnect_first": "請先中斷隧道連線"
   },
   "log": {
+    "open_folder": "打開日誌目錄",
     "clear": "清空",
     "copy": "複製",
     "auto_scroll": "自動捲動",

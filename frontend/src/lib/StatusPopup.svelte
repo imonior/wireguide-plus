@@ -3,8 +3,9 @@
   // URL carries ?popup=1 (the secondary Wails window opened from Go's
   // showStatusPopupWails). Mirrors the Windows Win32 bubble: title, status
   // dot + caption, the tunnel list, an amber "out of tunnel routes" warning,
-  // and Open Window / Disconnect buttons, auto-closing after the configured
-  // duration.
+  // and Open Window / Disconnect buttons. Status bubbles are persistent
+  // (duration_ms <= 0: only the user, or a newer event replacing this one,
+  // closes them); the launch overview carries a positive duration.
   import { onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
   import { t } from '../i18n/index.js';
@@ -12,7 +13,8 @@
   let names = [];
   let state = 'disconnected';
   let outOfRange = [];
-  let rows = []; // launch overview: [{ name, state, auto }]
+  let rows = []; // overview/transition rows: [{ name, state, auto }]
+  let durationMs = 10000;
   let closeTimer = null;
   let unsub = null;
 
@@ -27,11 +29,12 @@
     return $t('popup.not_connected');
   }
   function stateGlyph(s) {
-    // U+2714 + VS15 keeps the check in text presentation so CSS colours it
-    // green — the emoji ✅ would be a fixed white-on-green block.
-    if (s === 'connected') return '✔︎';
+    // Same circle vocabulary as the tray menu (🟢 connected / 🔴 down /
+    // 🟡 connecting). The emoji carry their own fixed colour, so no CSS
+    // ink is needed here — the row's stateClass colours the text.
+    if (s === 'connected') return '🟢';
     if (s === 'connecting') return '🟡';
-    return '❌';
+    return '🔴';
   }
   function stateClass(s) {
     if (s === 'connected') return 'st-ok';
@@ -44,9 +47,12 @@
     state = (d && d.state) || 'disconnected';
     outOfRange = (d && d.out_of_range) || [];
     rows = (d && d.rows) || [];
-    durationMs = (d && d.duration_ms) || 10000;
+    // duration_ms <= 0 means persistent (status bubbles wait for the user;
+    // only the launch overview carries a positive duration).
+    durationMs = (d && typeof d.duration_ms === 'number') ? d.duration_ms : 10000;
     if (closeTimer) clearTimeout(closeTimer);
-    closeTimer = setTimeout(close, durationMs);
+    closeTimer = null;
+    if (durationMs > 0) closeTimer = setTimeout(close, durationMs);
   }
 
   function close() {
@@ -83,6 +89,13 @@
         <span class="glyph {stateClass(r.state)}">{stateGlyph(r.state)}</span>
         <span class="row-name" title={r.name}>{r.name}</span>
         <span class="row-meta"><span class={stateClass(r.state)}>{rowStatusText(r.state)}</span> · {r.auto ? $t('popup.overview_auto') : $t('popup.overview_manual')}</span>
+      </div>
+    {/each}
+  {:else if rows.length > 0}
+    {#each rows as r (r.name)}
+      <div class="popup-row {stateClass(r.state)}">
+        <span class="glyph {stateClass(r.state)}">{stateGlyph(r.state)}</span>
+        <span class="row-text" title={r.name}>{rowStatusText(r.state)}: {r.name}</span>
       </div>
     {/each}
   {:else}
@@ -172,6 +185,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-primary, #fff);
+  }
+  /* Transition rows: same ellipsis box as .row-name but no colour of its
+     own, so the state class on the row (green/red/amber) paints it. */
+  .row-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .row-meta {
     flex-shrink: 0;

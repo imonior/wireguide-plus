@@ -38,13 +38,18 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
   Windows (the taskbar button stays visible, so the main window can always be reopened) or
   to the system tray on macOS/Linux.
 - **Tray connection notifications** — 15 seconds after startup (once the elevation prompt
-  is settled) an overview bubble lists every tunnel with its live state (green check /
-  red cross / yellow dot while connecting) and auto/manual mode; later network changes
-  (Wi-Fi switch, cable unplug, network loss, ...) that alter tunnel state also show a
-  10-second-delayed bubble with the stable, latest state. The bubble has an action menu
-  (open main window / disconnect), can be dismissed manually, or auto-closes after a
-  configurable dwell time (default 10 s, adjustable in Settings). macOS and Linux now
-  show the same bubble (previously Windows-only).
+  is settled) an overview bubble lists every tunnel with its live state and auto/manual
+  mode, then auto-closes after a configurable dwell time (default 10 s, adjustable in
+  Settings). Later, network changes (Wi-Fi switch, cable unplug, network loss, ...) that
+  alter tunnel state raise a per-tunnel status bubble — one line per tunnel
+  ("🟢 Connected: name" in green, "🔴 Disconnected: name" in red, 🟡 amber while
+  connecting) — that floats above your other apps without stealing focus and **stays
+  until you act**: dismiss it, open the main window, disconnect, or let a newer event
+  replace it. All three platforms behave the same (macOS/Linux previously had none).
+- **Unified tray behaviour** — a single click (left or right) opens the tray menu; a
+  double left-click opens the main window, on every platform. Tray menu entries carry
+  🟢 / 🔴 status glyphs on macOS & Linux (the Windows menu is GDI-drawn and can't render
+  colour emoji, so it uses ✔ / ✗).
 - **Tunnel management** — import / export `.conf`, connection history, quick toggles.
 - **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
 - **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear). Editing works while the tunnel is connected too: saving disconnects it, applies the change, and reconnects automatically.
@@ -76,8 +81,8 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
    updates, solving update failures caused by GitHub being unreachable / rate-limited.
 3. **Multi-language UI** — 简体中文 / English / 日本語 / 한국어 / 繁體中文.
 4. **System integration** — start on login, start minimized (taskbar on Windows / tray on
-   macOS & Linux), tray connection notifications (shown 10 s after startup / after network
-   changes alter connection state, default dwell 10 s, adjustable).
+   macOS & Linux), tray connection notifications (startup overview after 15 s with an
+   adjustable dwell time; status-change bubbles stay until handled).
 5. **Window title & interaction polish** and more.
 6. **AmneziaWG (AWG) protocol support** — a new protocol backend (amneziawg-go) for AmneziaWG tunnels, the obfuscated WireGuard fork that resists DPI. Configs are auto-detected, tunnels are badged in the UI, and an opt-out switch lives in Settings → Advanced.
 
@@ -330,6 +335,8 @@ the release automatically (see [docs/release.md](docs/release.md)).
 | Linux | Tunnel configs | `~/.config/wireguideplus/tunnels/*.conf` |
 | Linux | Tunnel scripts | `~/.config/wireguideplus/scripts/` |
 | Linux | Logs | `~/.local/share/wireguideplus/` (`$XDG_DATA_HOME/wireguideplus/`) |
+
+The log viewer toolbar and the settings log section both carry an **Open log folder** button that reveals this directory in the system file manager.
 
 ## Uninstall
 

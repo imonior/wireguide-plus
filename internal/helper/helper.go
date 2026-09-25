@@ -615,7 +615,10 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 
 // reconnectFn is the callback passed to reconnect.Monitor. When name is
 // non-empty, it reconnects only that specific tunnel. When name is empty
-// (legacy sleep/wake path), it reconnects all cached tunnels.
+// (legacy sleep/wake path), it reconnects the cached tunnels. Both paths
+// consult reconnectPolicyBlocked first: the monitor restores connections,
+// the automation engine decides them — a restore must never contradict a
+// policy.
 // The connectMu is held during Connect to prevent races with concurrent
 // GUI connect/disconnect calls.
 //
@@ -634,6 +637,14 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		cfg, ok := cfgs[name]
 		if !ok {
 			return fmt.Errorf("no cached config for tunnel %q", name)
+		}
+		// Policy gate: a stale-handshake detection on this tunnel must not
+		// connect it against its automation rules (the IP-reconfig flap
+		// case). Returning nil, not an error: a refusal is a decision, not
+		// a failure, and an error would arm the retry backoff to try the
+		// same refused connect again.
+		if h.reconnectPolicyBlocked(name) {
+			return nil
 		}
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("reconnect %q cancelled before Connect: %w", name, err)
@@ -654,12 +665,20 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		return nil
 	}
 
-	// Legacy path: reconnect all tunnels.
+	// Legacy path: reconnect all tunnels. "All" means all the monitor is
+	// allowed to touch: every tunnel still passes the same policy gate the
+	// named path gets. This path used to reconnect every cached tunnel
+	// blind, so a network flap (an IP reconfig briefly dropping en0 was the
+	// reported case) could connect a tunnel whose rules say disconnect —
+	// outrunning the engine, which had already decided to tear it down.
 	if len(cfgs) == 0 {
 		return fmt.Errorf("no cached config for reconnect")
 	}
 	var lastErr error
 	for _, cfg := range cfgs {
+		if h.reconnectPolicyBlocked(cfg.Name) {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("reconnect-all cancelled mid-loop: %w", err)
 		}

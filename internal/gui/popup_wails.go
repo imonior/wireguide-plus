@@ -9,8 +9,9 @@ package gui
 // view (frontend/src/lib/StatusPopup.svelte, mounted by App.svelte when the
 // URL carries ?popup=1). The view mirrors the Windows bubble: title, status
 // dot + caption, the tunnel list, an amber "out of tunnel routes" warning,
-// and Open Window / Disconnect buttons, auto-closing after the configured
-// duration.
+// and Open Window / Disconnect buttons. Status transitions arrive as
+// persistent bubbles (popupPersistent — dismissed by the user, never by a
+// timer); only the informational launch overview carries a duration.
 //
 // This file is intentionally build-tag-free so the Wails-window logic (which
 // is valid on every platform) is compiled and type-checked on Windows too —
@@ -82,6 +83,10 @@ func registerPopupEvents(app *application.App) {
 		popupMu.Lock()
 		cb := popupCb.onOpen
 		popupMu.Unlock()
+		// Log line anchoring the "clicked Open Window but the main window
+		// flashed" reports: if this appears but show-dock attempts do not,
+		// the callback wiring is the broken link, not showDock.
+		slog.Info("popup: open-window requested", "haveCallback", cb != nil)
 		if cb != nil {
 			go cb()
 		}
@@ -105,14 +110,12 @@ func registerPopupEvents(app *application.App) {
 // mac/Linux implementation behind notify_other.go's showStatusPopup; it is
 // never called on Windows (there notify_windows.go owns the popup).
 func showStatusPopupWails(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	s := "disconnected"
-	switch state {
-	case popupStateConnecting:
-		s = "connecting"
-	case popupStateConnected:
-		s = "connected"
-	}
-	showPopupWails(nil, names, s, outOfRange, lang, duration, onOpen, onDisconnect)
+	// The bubble is line-per-tunnel ("Connected: wg0", red/green whole line)
+	// on every platform: transitionRows builds the same rows the Windows GDI
+	// popup draws, and the Svelte view renders them one per line when state is
+	// not "overview". Names still travel for renderers that prefer the joined
+	// form and as a fallback if rows are ever dropped.
+	showPopupWails(transitionRows(names, state), names, state.String(), outOfRange, lang, duration, onOpen, onDisconnect)
 }
 
 // showOverviewPopupWails is the mac/Linux launch status-overview bubble:
@@ -123,7 +126,7 @@ func showOverviewPopupWails(rows []overviewRow, lang string, duration time.Durat
 }
 
 func showPopupWails(rows []overviewRow, names []string, state string, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	if duration <= 0 {
+	if duration == 0 {
 		duration = 10 * time.Second
 	}
 	slog.Info("popup: showStatusPopupWails called", "names", names, "state", state,
@@ -150,6 +153,9 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 	w := popupWin
 	popupMu.Unlock()
 	if w == nil {
+		// No window object: the popup silently never appears — say so in
+		// the log, because "why no notification?" otherwise has no trace.
+		slog.Warn("popup: no window available (app not wired?), skipping show")
 		return
 	}
 	// Grow the window for every overview row beyond the first and for the
@@ -165,6 +171,15 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 	x, y := computePopupPos(popupWidth, height)
 	w.SetPosition(x, y)
 	w.Show()
+	// A frameless always-on-top window is only frontmost *within* its own
+	// app: while another application owns the screen, the whole app (popup
+	// included) can stay behind it, so the "real-time" notification is
+	// invisible until the user happens to focus the main window. On macOS
+	// raise the popup's window level and order it front *without*
+	// activating the app — a notification must surface above whatever the
+	// user is doing, not yank focus to us. No-op on Linux (the WM decides)
+	// and unused on Windows (the bubble is the separate Win32 popup).
+	floatPopupWindow()
 	// Emit after Show so the webview's subscription is in place; popup:ready
 	// (fired by the view on mount) covers the brief race otherwise.
 	popupMu.Lock()

@@ -398,7 +398,9 @@ func (m *Monitor) triggerReconnectTunnel(tunnelName string) {
 	// out of automation must never be auto-reconnected by the dead-connection
 	// monitor (manual "stop automation" must override automation — #2/#103).
 	// The empty-string (all-tunnels) path is a deliberate global restore on
-	// wake/network change and is intentionally not gated here.
+	// wake/network change and is not gated HERE — the monitor cannot judge
+	// policy; the helper's reconnectFn applies the exemption/pause/policy
+	// gate per tunnel on both paths before it connects anything.
 	if tunnelName != "" && m.automationDisabled != nil && m.automationDisabled(tunnelName) {
 		slog.Info("automation disabled for tunnel, skipping reconnect", "tunnel", tunnelName)
 		return

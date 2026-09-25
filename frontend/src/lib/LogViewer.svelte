@@ -2,8 +2,26 @@
   import { afterUpdate, onMount } from 'svelte';
   import { logs, clearLogs, orderedLogs } from '../stores/logs.js';
   import { t } from '../i18n/index.js';
+  import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
 
   let filter = 'all';
+  let openingFolder = false;
+  let folderError = '';
+
+  // Reveal the on-disk log directory (the same RPC the settings page's
+  // "log folder" row uses — kept here so users deep in a log-reading
+  // session can grab the files without detouring through settings).
+  async function openFolder() {
+    if (openingFolder) return;
+    openingFolder = true;
+    folderError = '';
+    try {
+      await TunnelService.OpenFolder('logs');
+    } catch (e) {
+      folderError = e?.message || String(e);
+    }
+    openingFolder = false;
+  }
   // Category filter — mirrors logging.ValidCategories on the Go side.
   // Keep in sync when adding a category.
   const categories = ['app', 'update', 'settings', 'tunnel', 'network', 'system'];
@@ -145,6 +163,12 @@
       <label>
         <input type="checkbox" bind:checked={autoScroll} /> {$t('log.auto_scroll')}
       </label>
+      {#if folderError}
+        <span class="folder-error">{$t('settings.open_folder_failed')}: {folderError}</span>
+      {/if}
+      <button class="btn-action" on:click={openFolder} disabled={openingFolder}>
+        {$t('log.open_folder')}
+      </button>
       <button class="btn-action" on:click={copyAll}>
         {copyFeedback ? '✓' : $t('log.copy')}
       </button>
@@ -255,6 +279,11 @@
     cursor: pointer;
   }
   .btn-action:hover { background: var(--bg-hover); }
+  .btn-action:disabled { opacity: 0.6; cursor: default; }
+  .folder-error {
+    font: var(--text-footnote);
+    color: var(--danger, #e5534b);
+  }
 
   .log-entries {
     flex: 1;

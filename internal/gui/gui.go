@@ -423,16 +423,19 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		if (runtime.GOOS == "windows" || runtime.GOOS == "linux") && len(trayOffIconWindows) > 0 {
 			tray.SetIcon(trayOffIconWindows)
 		}
-		// Windows convention: left-click is the primary action and shows
-		// the main window; the context menu remains on right-click.
-		// Registered only here: on macOS any click opens the NSStatusItem
-		// menu natively, and an OnClick handler would fight it. On Linux,
-		// Wails' StatusNotifier fires the click handler for the dbusmenu
-		// "opened" event too, so registering it would raise the window on
-		// every right-click; Linux users get the "Show Window" menu item.
-		if runtime.GOOS == "windows" {
-			tray.OnClick(showDock)
-		}
+		// Unified tray-click semantics on ALL platforms: single left-click
+		// and right-click show the menu; double left-click shows the main
+		// window. The router detects the double itself from click spacing
+		// (macOS exposes no tray double-click event at all), so a single
+		// click opens the menu ~450ms after release — the cost of telling
+		// the two apart portably. Right-click needs no handler: Wails'
+		// smart default opens the menu natively (Windows/macOS) and the
+		// Linux panel hosts do it themselves. Linux caveat: Wails does not
+		// implement openMenu there, so a single left click stays a no-op
+		// (the menu remains via right-click), and a very fast double
+		// right-click can read as the router's double — a known, accepted
+		// corner of the otherwise-unified behaviour.
+		tray.OnClick(newTrayClickRouter(tray.OpenMenu, showDock).onClick)
 	}
 	tray.SetTooltip("WireGuide Plus")
 

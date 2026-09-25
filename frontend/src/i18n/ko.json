@@ -278,6 +278,7 @@
     "disconnect_first": "먼저 연결을 해제하세요"
   },
   "log": {
+    "open_folder": "로그 폴더 열기",
     "clear": "지우기",
     "auto_scroll": "자동 스크롤",
     "no_entries": "로그 항목 없음",
