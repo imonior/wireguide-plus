@@ -18,6 +18,14 @@
   let closeTimer = null;
   let unsub = null;
 
+  // On macOS the bubble is dragged natively: Go installs NSEvent monitors
+  // that hand AppKit the button-down once the pointer moves (see
+  // popupDragWatch in internal/gui/dock_darwin.go). Wails' JS drag path is
+  // unreliable for this window — it is shown without activating the app, so
+  // the first click is swallowed by activation and the drag never starts —
+  // and running both paths would race two drag sessions over one gesture.
+  const nativeDrag = /Macintosh|Mac OS X/.test(navigator.userAgent);
+
   function statusText() {
     if (state === 'connected') return $t('popup.connected');
     if (state === 'connecting') return $t('popup.connecting');
@@ -85,7 +93,7 @@
   });
 </script>
 
-<div class="popup-card">
+<div class="popup-card" class:native-drag={nativeDrag}>
   <div class="popup-header">
     <span class="popup-title">WireGuide Plus</span>
     <button class="popup-close" on:click={close} aria-label="Close">×</button>
@@ -161,6 +169,11 @@
     flex-direction: column;
     gap: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  .popup-card.native-drag {
+    /* macOS: NSEvent monitors own the drag (see script above) — opt the
+       card out of the Wails JS drag so the two paths can't race. */
+    --wails-draggable: no-drag;
   }
   .popup-header {
     display: flex;

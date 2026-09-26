@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.3] - 2026-09-26
+
+### 🐛 Fixed
+
+- **The macOS status bubble is now positioned by macOS itself.** Wails never reports a primary display on macOS, so the bubble silently fell back to the main-window anchor — computed in a mix of points and pixels — and landed near the middle of the screen; its rounded card also lived inside a square window, so the corners showed as a hard border. Size, position, rounded clipping, always-on-top level and Space/full-screen following are now done natively against `NSScreen.visibleFrame`.
+- **Dragging the macOS bubble works again.** The Wails JS window-drag never engaged on macOS, so grabbing the bubble did nothing. It is now moved by native mouse-event monitors: the gesture stays focus-safe (it never activates the app or steals keyboard focus), and a press below the movement threshold still passes straight through to the buttons.
+- **Launching a second copy no longer causes a disconnect/reconnect bubble storm.** Both GUI instances share one privileged helper, and the closing copy politely tore down the tunnel and shut the helper down that the surviving copy still depended on. The survivor's health monitor concluded the helper had crashed, reinstalled it behind an admin prompt, and automation reconnected the tunnel — so popups announced a "disconnect" while the main window still said connected. The GUI now holds an exclusive instance lock for its whole lifetime: a second launch asks the running instance to show its window and exits before it can touch any shared state.
+
+### 🔧 Changed
+
+- **The macOS/Linux status bubble now parks at the top-right of the work area**, just below the menu bar — the corner macOS itself uses for notifications — instead of the bottom-right introduced in 2.4.0, which covered the Dock. Windows keeps anchoring to its tray corner.
+
 ## [2.4.2] - 2026-09-26
 
 ### 🐛 Fixed

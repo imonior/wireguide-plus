@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.3] - 2026-09-26
+
+### 🐛 修复
+
+- **macOS 状态气泡改由 macOS 自身定位。** Wails 在 macOS 上从不报告主显示器，气泡因此静默退回「贴着主窗口」的兜底算法——而那份坐标混用了点与像素——最终落在屏幕中间；圆角卡片也被套在方形窗口里，四角露出一圈硬边框。现在尺寸、位置、圆角裁剪、置顶层级以及跟随空间/全屏，全部直接读取 `NSScreen.visibleFrame` 由原生代码完成。
+- **macOS 气泡重新可以拖动。** Wails 的 JS 窗口拖拽在 macOS 上从未生效，抓住气泡毫无反应。现在改由原生鼠标事件监视器驱动：手势依旧不抢焦点（既不会激活应用，也不会夺走键盘焦点），而未达到移动阈值的点击仍会原样传给按钮。
+- **再次启动一份程序不再引发「断开/重连」弹窗风暴。** 两个 GUI 实例共用同一个特权 helper，而退出的那一份会先拆除隧道并关闭 helper——存活的那一份仍在依赖它。它的健康监视器据此判定 helper 崩溃，弹出管理员授权窗口重装，自动化随即重连隧道：于是主界面明明显示已连接，弹窗却在提示「已断开」。GUI 现在在整个进程生命周期内持有单实例独占锁；第二份启动时只请求已运行的实例显示窗口，随即退出，且发生在它触碰任何共享状态之前。
+
+### 🔧 变更
+
+- **macOS/Linux 状态气泡现在停在工作区右上角**，紧贴菜单栏下方——即 macOS 自己放通知的角落——而不是 2.4.0 引入的右下角，那里正压着 Dock。Windows 仍按托盘所在角落停靠。
+
 ## [2.4.2] - 2026-09-26
 
 ### 🐛 修复

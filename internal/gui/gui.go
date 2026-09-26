@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -120,6 +121,16 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		return fmt.Errorf("create dirs: %w", err)
 	}
 	setGUILogFile(paths.LogsDir)
+
+	// 1b. Single-instance gate (see instance.go for the why). This MUST
+	// precede every shared-store write below — the history sweep in
+	// particular would otherwise close the running twin's live session
+	// records from a process that is about to exit.
+	if !ensureSingleInstance(paths.ConfigDir) {
+		slog.Info("gui: another instance is already running — asked it to show its window; exiting")
+		os.Exit(0)
+	}
+
 	tunnelStore := storage.NewTunnelStore(paths.TunnelsDir)
 	settingsStore := storage.NewSettingsStore(paths.ConfigDir)
 	historyStore := storage.NewHistoryStore(paths.ConfigDir)

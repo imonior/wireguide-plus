@@ -166,7 +166,11 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 		return
 	}
 	// Grow the window for every overview row beyond the first and for the
-	// warning line, so nothing overlaps.
+	// warning line, so nothing overlaps. On macOS the native float pass
+	// owns size, anchor and ordering (see popupFloatAsync in
+	// dock_darwin.go): Wails' screen service reports no primary display
+	// there, so anchoring through it lands the bubble in the middle of
+	// the screen — the native pass reads NSScreen.visibleFrame instead.
 	height := popupBaseHeight
 	if len(rows) > 1 {
 		height += popupRowLine * (len(rows) - 1)
@@ -174,9 +178,11 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 	if len(outOfRange) > 0 {
 		height += popupWarnLine
 	}
-	w.SetSize(popupWidth, height)
-	x, y := computePopupPos(popupWidth, height)
-	w.SetPosition(x, y)
+	if !popupAnchorsNatively() {
+		w.SetSize(popupWidth, height)
+		x, y := computePopupPos(popupWidth, height)
+		w.SetPosition(x, y)
+	}
 	w.Show()
 	// A frameless always-on-top window is only frontmost *within* its own
 	// app: while another application owns the screen, the whole app (popup
@@ -186,7 +192,7 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 	// activating the app — a notification must surface above whatever the
 	// user is doing, not yank focus to us. No-op on Linux (the WM decides)
 	// and unused on Windows (the bubble is the separate Win32 popup).
-	floatPopupWindow()
+	floatPopupWindow(popupWidth, height)
 	// Emit after Show so the webview's subscription is in place; popup:ready
 	// (fired by the view on mount) covers the brief race otherwise.
 	popupMu.Lock()
@@ -249,28 +255,22 @@ func destroyPopupWindow() {
 	}
 }
 
-// computePopupPos anchors the bubble at the bottom-right corner of the
-// primary display's WORK AREA (the screen minus menu bar / taskbar / Dock),
-// mirroring where the Windows bubble parks by its tray. The work area —
-// not the full bounds — is what keeps the bubble off the Dock, and the
-// corner — not a main-window anchor — is what keeps it off the user's
-// content: a bubble pinned to the window's corner used to sit on top of
-// whatever the window was showing, which is exactly what a notification
-// must not do. SetPosition and WorkArea are both in DIPs, so no scaling
-// correction is needed here.
+// computePopupPos anchors the bubble at the top-right corner of the primary
+// display's WORK AREA (the screen minus taskbar / panels) — the pocket
+// desktops reserve for notifications (Windows follows its tray edge instead,
+// in notify_windows.go; macOS anchors natively, see popupAnchorsNatively).
+// The work area — not the full bounds — is what keeps the bubble off the
+// system panels, and the corner — not a main-window anchor — is what keeps
+// it off the user's content: a bubble pinned to the window's corner used to
+// sit on top of whatever the window was showing, which is exactly what a
+// notification must not do.
+//
+// Off macOS the WorkArea already arrives in top-origin screen coordinates
+// (GTK) and SetPosition wants them unmodified, so the maths is direct here.
 func computePopupPos(w, h int) (int, int) {
 	if popupApp != nil {
 		if sc := popupApp.Screen.GetPrimary(); sc != nil {
-			wa := sc.WorkArea
-			x := wa.X + wa.Width - w - popupMargin
-			y := wa.Y + wa.Height - h - popupMargin
-			if x < wa.X {
-				x = wa.X + popupMargin
-			}
-			if y < wa.Y {
-				y = wa.Y + popupMargin
-			}
-			return x, y
+			return popupScreenAnchor(sc.WorkArea, w)
 		}
 	}
 	// No screen info (headless / early startup): fall back to anchoring on
@@ -289,4 +289,15 @@ func computePopupPos(w, h int) (int, int) {
 		return x, y
 	}
 	return 0, 0
+}
+
+// popupScreenAnchor converts a work area into the top-right position for a
+// w-wide bubble. Split out of computePopupPos so the arithmetic is
+// unit-testable without an app.
+func popupScreenAnchor(wa application.Rect, w int) (int, int) {
+	x := wa.X + wa.Width - w - popupMargin
+	if x < wa.X {
+		x = wa.X + popupMargin
+	}
+	return x, wa.Y + popupMargin
 }

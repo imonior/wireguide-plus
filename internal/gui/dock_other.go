@@ -88,9 +88,13 @@ func showDock() {
 // already hidden by the WindowClosing hook, so there is nothing to do here.
 func hideDock() {}
 
-// floatPopupWindow is a no-op off macOS. On Linux Wails exposes no way to
-// raise a window above another application's windows without stealing focus
-// (the WM decides), so AlwaysOnTop is the popup's fronting mechanism there;
-// on Windows the bubble is the separate Win32 popup, which sets
-// WS_EX_TOPMOST itself.
-func floatPopupWindow() {}
+// floatPopupWindow is a no-op off macOS (width/height are only used by the
+// macOS native pass). On Linux Wails exposes no way to raise a window above
+// another application's windows without stealing focus (the WM decides), so
+// AlwaysOnTop is the popup's fronting mechanism there; on Windows the bubble
+// is the separate Win32 popup, which sets WS_EX_TOPMOST itself.
+func floatPopupWindow(width, height int) {}
+
+// popupAnchorsNatively: off macOS the bubble is sized and positioned through
+// the generic Wails window calls in popup_wails.go.
+func popupAnchorsNatively() bool { return false }
