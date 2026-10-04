@@ -4,6 +4,82 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.0] - 2026-10-05
+
+### 🔧 变更
+
+- **自动化决策现在只在一处做出。** 实时引擎、重连监视器和只读预览过去各自重新实现同一批门禁 —— 网络是否可识别、自动化是否关闭、地址冲突暂停、SSID 不可知、策略拦截、DNS 路径拦截、失败退避、手动闩锁。同一决策的三份副本正是它们彼此偏离的原因：预览可能承诺一次引擎实际会拒绝的连接。三处现在都调用同一个纯函数，按同一顺序施加所有门禁；引擎依旧只负责执行，预览只负责呈现。重连行为没有变化 —— 其历史真值表被逐条保留。
+
+- **自动化预览不再可能与引擎不一致。** 它现在会呈现引擎真正施加的状态，每种状态各有文案：`blocked`（策略或 DNS 路径拦截阻止了这次连接）、`ssid-blind` 与 `network-unidentified`（引擎因尚无法判定网络而暂不动作）、`backoff`（连续连接失败已推迟重试）。这四种过去都显示为「没有规则匹配此网络」，所以一条隧道可能明明被引擎刻意放着不动，编辑器里却看起来毫无动作。
+
+### 🗑 移除
+
+- **2.0.0 之前的 Wi-Fi 规则迁移已退役。** 2.0.0 用自动化规则模型取代了旧的「仅 SSID」自动连接模型，并在首次读取时转换旧设置。这次性迁移 —— 以及它背后的 `wifi_rules` 字段 —— 现已移除。
+
+  **影响范围。** 只有由**早于 2.0.0** 的版本写入、且从未被 2.0.0–2.4.4 打开过的 `config.json` 会受影响：即带有 `wifi_rules` 键而没有 `automation` 键的文件。只要你运行过 2.0.0 或更高版本，你的规则早已被转换并存放在 `automation` 下，本次发布对你没有任何影响。残留的 `wifi_rules` 键今后在读取时会被忽略。
+
+  **新旧对照（两者位于同一个文件 `config.json` 中）：**
+
+  旧（已退役）：
+
+  ```json
+  "wifi_rules": {
+    "trusted_ssids": ["HomeWiFi"],
+    "per_tunnel": {
+      "office": { "auto_connect_ssids": ["CafeWiFi"] }
+    }
+  }
+  ```
+
+  新：
+
+  ```json
+  "automation": {
+    "default_state": { "office": "connect" },
+    "per_tunnel_rules": {
+      "office": [
+        { "when": [{ "type": "ssid", "ssid": "CafeWiFi" }], "match": "all", "do": "connect" }
+      ]
+    }
+  }
+  ```
+
+  | 旧 | 新 |
+  | `wifi_rules.trusted_ssids` —— 在这些网络上不连接该隧道 | `{ "when": [{"type":"ssid","ssid":"HomeWiFi"}], "do": "disconnect" }`，放在它要保护的每条隧道的连接规则**之前** |
+  | `wifi_rules.per_tunnel.<name>.auto_connect_ssids` | `automation.per_tunnel_rules.<name>` 下，每个 SSID 一条 `{ "when": [{"type":"ssid","ssid":"…"}], "do": "connect" }` 规则 |
+  | *（无对应项）* | `automation.default_state.<name>` —— 当**没有**规则匹配时该隧道收敛到的状态（`connect` / `disconnect`）。不设置则引擎不介入该隧道。 |
+
+  **文件位置：**
+
+  | 平台 | `config.json` | 隧道 / 脚本 |
+  | --- | --- | --- |
+  | macOS | `~/Library/Application Support/wireguideplus/config.json` | `…/wireguideplus/tunnels`、`…/wireguideplus/scripts` |
+  | Linux | `$XDG_CONFIG_HOME/wireguideplus/config.json`（或 `~/.config/wireguideplus/config.json`） | `…/wireguideplus/tunnels`、`…/wireguideplus/scripts` |
+  | Windows | `%APPDATA%\wireguideplus\config.json` | `…\wireguideplus\tunnels`、`…\wireguideplus\scripts` |
+
+  **手动迁移步骤：**
+
+  1. 退出 WireGuide Plus，并把 `config.json` 复制到安全的地方。
+  2. 打开 `config.json`，查看其中的 `wifi_rules` 段。
+  3. 对 `per_tunnel` 下的每条隧道建立 `automation.per_tunnel_rules.<name>`，并把 `auto_connect_ssids` 的每一项转成一条 `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"connect"}` 规则。
+  4. 对 `trusted_ssids` 的每一项，在受其保护的每条隧道的规则数组**最前面**加一条 `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"disconnect"}` 规则 —— 受信任 SSID 过去优先于自动连接，因此必须保持在最前。
+  5. 如需隧道在没有任何规则匹配时收敛到确定状态，可设置 `automation.default_state.<name>`。
+  6. 保存后重启，并在自动化编辑器（隧道 → **Automation**）或用 `wireguideplus ctl automation` 检查结果 —— 后者会打印当前网络上下文与每条隧道的决策。
+  7. 确认无误后，可删除已不再使用的 `wifi_rules` 键。
+
+  **注意事项：**
+
+  - 两种模型的 SSID 匹配都是**精确且区分大小写**的（`MyWifi` ≠ `mywifi`），请逐字节照抄名称。
+  - 旧模型会在你离开某个 Wi-Fi 时隐式断开自动接管的隧道。新引擎不会推断这一点 —— 它只按你的规则行事。如果你想要「不在公司 Wi-Fi 时就断开」，请把 `default_state` 设为 `disconnect` 并配一条公司网络的连接规则。照字面照搬旧行为会连有线网和手动连接后也一并断开，这正是旧迁移从不合成该规则的原因。
+  - 规则自上而下求值，**首个匹配者胜出**，之后才应用默认状态。顺序依然重要。
+  - 既无规则也无默认状态的隧道，在两种模型里引擎都不会介入 —— 无需迁移。
+  - 旧模型中若两条隧道声明了同一个 SSID，只有字典序靠前的那条生效；新模型里两条规则都会命中。若想保留「只有一个赢家」的旧行为，请给每条隧道各自的规则。
+  - 在编辑器显示的结果符合预期之前，请保留第 1 步的备份。
+
+### 🛠 内部
+
+- `internal/helper/decision.go` 现在独占决策逻辑：`EvaluateTunnelDecision` 负责收集输入，`evaluateTunnelDecision` 是有单元测试覆盖的纯函数，`DecisionConnectAllowed` 基于同一结果回答重连监视器的问题。引擎、预览与重连监视器不再各自持有一份门禁副本，原先为此存在的两个辅助函数（`reconnectAllowed`、`decisionLabel`）已删除。
+
 ## [2.4.4] - 2026-10-04
 
 ### 🐛 修复

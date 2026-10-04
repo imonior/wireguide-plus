@@ -4,6 +4,82 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.5.0] - 2026-10-05
+
+### 🔧 변경
+
+- **자동화 결정이 한 곳에서 이루어집니다.** 라이브 엔진, 재연결 감시 모니터, 읽기 전용 미리보기가 각각 동일한 게이트(네트워크 식별 여부, 자동화 사용 안 함, 주소 충돌으로 인한 일시 중지, SSID 미확인, 정상 차단, DNS 경로 차단, 실패 후 백오프, 수동 래치)를 따로 다시 구현하고 있었습니다. 같은 결정이 세 개로 나뉘어 있었기 때문에 서로 어긋나는 것이 가능했습니다. 미리보기가 엔진은 실제로 거부할 연결을 예고하는 상황이 었습니다. 이제 세 곳 모두 모든 게이트를 정해진 순서대로 적용하는 하나의 순수 함수를 호출합니다. 엔진은 여전히 실행만 하고 미리보기는 보고만 합니다. 재연결 동작은 변하지 않았습니다 — 기존의 진리표가 그대로 보존됩니다.
+
+- **자동화 미리보기가 엔진과 어긋나는 일은 더 이상 없습니다.** 엔진이 실제로 적용하는 상태를 각각의 라벨로 나타냅니다: `blocked`(정책 또는 DNS 경로 차단이 연결을 막음), `ssid-blind`와 `network-unidentified`(네트워크를 판단할 수 없어 엔진이 보류 중), `backoff`(연속 연결 실패로 재시도가 지연됨). 이 네 가지는 과거나 모두 “이 네트워크에 일치하는 규칙이 없음”으로 표시되어, 엔진이 의도적으로 건드리지 않는 턴널이 편집기에서는 아무 동작도 하지 않는 것처럼 보였습니다.
+
+### 🗑 제거
+
+- **2.0.0 이전 Wi-Fi 규칙 마그레이션은 폐지되었습니다.** 2.0.0은 오래된 SSID 전용 자동 연결 모델을 자동화 규칙 모델로 교체하면서 첫 읽기 때 이전 설정을 변환했습니다. 이 일회성 마그레이션과 그 기반이 된 `wifi_rules` 필드가 제거되었습니다.
+
+  **영향 범위.** **2.0.0보다 오래된** 릴리스가 쓰고 2.0.0–2.4.4에서 한 번도 열어보지 않은 `config.json`, 즉 `wifi_rules` 키는 있지만 `automation` 키가 없는 파일만 해당됩니다. 2.0.0 이상을 한 번이라도 실행한 적이 있다면 규칙은 이미 변환되어 `automation`에 저장되어 있으며 이번 릴리스로 달라지는 것은 없습니다. 남은 `wifi_rules` 키는 이제 로드 시 무시됩니다.
+
+  **신구 대조(둘 다 같은 `config.json` 파일 안):**
+
+  구버전(폐지):
+
+  ```json
+  "wifi_rules": {
+    "trusted_ssids": ["HomeWiFi"],
+    "per_tunnel": {
+      "office": { "auto_connect_ssids": ["CafeWiFi"] }
+    }
+  }
+  ```
+
+  신규버전:
+
+  ```json
+  "automation": {
+    "default_state": { "office": "connect" },
+    "per_tunnel_rules": {
+      "office": [
+        { "when": [{ "type": "ssid", "ssid": "CafeWiFi" }], "match": "all", "do": "connect" }
+      ]
+    }
+  }
+  ```
+
+  | 구버전 | 신규버전 |
+  | `wifi_rules.trusted_ssids` — 이 네트워크에서 연결하지 않음 | `{ "when": [{"type":"ssid","ssid":"HomeWiFi"}], "do": "disconnect" }`를 보호 대상 턴널의 연결 규칙 **앞**에 배치 |
+  | `wifi_rules.per_tunnel.<name>.auto_connect_ssids` | `automation.per_tunnel_rules.<name>` 아래에 SSID별로 하나씩 `{ "when": [{"type":"ssid","ssid":"…"}], "do": "connect" }` 규칙 |
+  | *(대응 없음)* | `automation.default_state.<name>` — 규칙이 **아무것도 일치하지 않을 때** 해당 턴널이 수렴하는 상태(`connect` / `disconnect`). 설정하지 않으면 엔진은 아무 동작도 하지 않습니다. |
+
+  **파일 위치:**
+
+  | 플랫폼 | `config.json` | 턴널 / 스크립트 |
+  | --- | --- | --- |
+  | macOS | `~/Library/Application Support/wireguideplus/config.json` | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Linux | `$XDG_CONFIG_HOME/wireguideplus/config.json` | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Windows | `%APPDATA%\wireguideplus\config.json` | `…\wireguideplus\tunnels`, `…\wireguideplus\scripts` |
+
+  **수동 마그레이션 방법:**
+
+  1. WireGuide Plus를 종료하고 `config.json`을 안전한 곳에 복사합니다.
+  2. `config.json`을 열어 `wifi_rules` 블록을 확인합니다.
+  3. `per_tunnel` 아래의 각 턴널에 대해 `automation.per_tunnel_rules.<name>`을 만들고, `auto_connect_ssids`의 각 항목을 `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"connect"}` 규칙 하나로 만듭니다.
+  4. `trusted_ssids`의 각 항목에 대해, 보호 대상 턴널 규칙 배열의 **맨 앞**에 `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"disconnect"}` 규칙을 추가합니다 — 신뢰되는 SSID는 과거나 자동 연결보다 우선했으므로 반드시 맨 앞에 있어야 합니다.
+  5. 규칙이 아무것도 일치하지 않을 때 특정 상태로 수렴하게 하려면 `automation.default_state.<name>`을 설정합니다.
+  6. 저장 후 재시작하고 자동화 편집기(턴널 → **Automation**)나 `wireguideplus ctl automation`으로 결과를 확인합니다. 뒤의 경우 현재 네트워크 컨텍스트와 각 턴널의 결정을 출력합니다.
+  7. 결과가 만족스러우면 더 이상 사용하지 않는 `wifi_rules` 키를 삭제해도 됩니다.
+
+  **주의사항:**
+
+  - SSID 매칭은 두 모델 모두 **정확하고 대소문자를 구분**합니다(`MyWifi` ≠ `mywifi`). 이름을 바이트 단위로 그대로 복사하세요.
+  - 구모델은 자동 관리되는 턴널을 Wi-Fi 구역을 벗어날 때 모니게 종료했습니다. 새 엔진은 그러한 수익을 유추하지 않고 규칙에 쓰인 대로만 동작합니다. “회사 Wi-Fi가 아니면 종료”를 원한다면 `default_state`를 `disconnect`로 설정하고 회사 네트워크용 연결 규칙을 함께 사용하세요. 과거의 동작을 그대로 옮c기면 유선 네트워크에서나 수동 연결 직후에도 종료되는데, 이것이 구 마그레이션이 그 규칙을 생성하지 않은 이유입니다.
+  - 규칙은 위에서 아래로 평가되며 **먼저 일치한 규칙이 채택**됩니다. 그 후에야 기본 상태가 적용됩니다. 순서는 여전히 중요합니다.
+  - 규칙도 기본 상태도 없는 턴널은 두 모델 모두 엔진이 건드리지 않습니다 — 마그레이션할 것이 없습니다.
+  - 구모델에서 두 턴널이 같은 SSID를 선언했다면 사전순상 먼저 한 턴널만 적용되었습니다. 새 모델에서는 둘 다 일치하므로 과거와 같이 하나만 적용되게 하려면 턴널별로 별도의 규칙을 지정하세요.
+  - 편집기에 원하는 결과가 나올 때까지 1단계의 백업을 보관하세요.
+
+### 🛠 내부
+
+- `internal/helper/decision.go`가 결정을 단일 관리합니다: `EvaluateTunnelDecision`이 입력을 수집하고, `evaluateTunnelDecision`은 유닛 테스트로 보호되는 순수 함수이며, `DecisionConnectAllowed`는 같은 결과로 재연결 감시의 질문에 답합니다. 엔진, 미리보기, 재연결 감시 모니터가 각자 게이트 복사본을 들고 다니는 만큼 사라집니다. 이를 위해 있던 둘 개의 보조 함수(`reconnectAllowed`, `decisionLabel`)는 삭제되었습니다.
+
 ## [2.4.4] - 2026-10-04
 
 ### 🐛 수정

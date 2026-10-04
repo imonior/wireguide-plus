@@ -10,10 +10,11 @@ through each one.
 Rule evaluation lives in `internal/helper/automation_rules.go`
 (`reevaluateAutomation`); the rule model + engine live in
 `internal/wifi/automation.go` (`Evaluate`); rule data lives in
-`Settings.Automation` (`internal/storage/settings.go`). Legacy
-`Settings.WifiRules` is migrated once on first read. The helper evaluates
-rules itself, so these tests verify behavior **both with the GUI running
-and after Cmd+Q'ing the GUI**.
+`Settings.Automation` (`internal/storage/settings.go`). The legacy
+`Settings.WifiRules` model is retired — there is no auto-migration any
+more, so a `wifi_rules` key in an old `config.json` is ignored. The helper
+evaluates rules itself, so these tests verify behavior **both with the
+GUI running and after Cmd+Q'ing the GUI**.
 
 Rules can be authored in the GUI (tunnel detail → **Automation**) or from
 the CLI (`wireguideplus ctl automation add/rm/rules`). The read-only preview

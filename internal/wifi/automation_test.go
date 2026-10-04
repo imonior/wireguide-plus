@@ -444,67 +444,6 @@ func TestEvaluateDetail_AndPartialMatch(t *testing.T) {
 	}
 }
 
-func TestMigrateFromLegacy(t *testing.T) {
-	legacy := &Rules{
-		TrustedSSIDs: []string{"corp-wifi"},
-		PerTunnel: map[string]TunnelSSIDs{
-			"company":  {AutoConnectSSIDs: []string{"home", "cafe"}},
-			"nolegacy": {},
-		},
-	}
-	auto := MigrateFromLegacy(legacy)
-
-	got := auto.PerTunnel["company"]
-	// trusted disconnect + connect home + connect cafe (no synthesized
-	// none_match — migration translates only explicit legacy settings).
-	if len(got) != 3 {
-		t.Fatalf("company rules: got %d, want 3 (%+v)", len(got), got)
-	}
-	// Trusted disconnect must come first (precedence).
-	if got[0].Do != ActionDisconnect || got[0].When[0].SSID != "corp-wifi" {
-		t.Errorf("first rule should be trusted disconnect, got %+v", got[0])
-	}
-	if got[1].Do != ActionConnect || got[1].When[0].SSID != "home" {
-		t.Errorf("second rule should be connect home, got %+v", got[1])
-	}
-	// Migration must NOT synthesize a none_match rule.
-	for _, r := range got {
-		if r.When[0].Type == CondNoneMatch {
-			t.Errorf("migration should not add a none_match rule, got %+v", r)
-		}
-	}
-	// A tunnel with no legacy rules gets no rules.
-	if _, ok := auto.PerTunnel["nolegacy"]; ok {
-		t.Errorf("nolegacy should have no migrated rules")
-	}
-
-	// Behavioural check: on corp-wifi the migrated company tunnel
-	// disconnects; on home it connects.
-	if s := Evaluate(got, NetworkContext{SSID: "corp-wifi"}); s != StateDisconnect {
-		t.Errorf("migrated: corp-wifi got %v, want disconnect", s)
-	}
-	if s := Evaluate(got, NetworkContext{SSID: "home"}); s != StateConnect {
-		t.Errorf("migrated: home got %v, want connect", s)
-	}
-	// A network matching none of the tunnel's rules leaves it untouched —
-	// migration no longer forces a disconnect on unlisted networks
-	// (including Ethernet / no-SSID). This is the fix for the observed
-	// "manually connected on Ethernet, got auto-killed" behaviour.
-	if s := Evaluate(got, NetworkContext{SSID: "random-cafe"}); s != StateUnmanaged {
-		t.Errorf("migrated: away network got %v, want unmanaged", s)
-	}
-	if s := Evaluate(got, NetworkContext{PhysicalIPs: ips("192.168.0.5")}); s != StateUnmanaged {
-		t.Errorf("migrated: ethernet (no ssid) got %v, want unmanaged", s)
-	}
-}
-
-func TestMigrateFromLegacy_Nil(t *testing.T) {
-	auto := MigrateFromLegacy(nil)
-	if auto == nil || auto.PerTunnel == nil {
-		t.Fatal("nil legacy should yield an initialised empty Automation")
-	}
-}
-
 // New — gateway_ip matches the current default gateway's IPv4 exactly
 // (medium-agnostic like gateway MAC, but stable across router swaps).
 func TestEvaluate_GatewayIP(t *testing.T) {

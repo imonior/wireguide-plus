@@ -148,8 +148,9 @@ type RequestQuitResponse struct {
 }
 
 // WifiSSIDPayload is broadcast by the helper whenever the system's
-// active Wi-Fi SSID changes. The GUI evaluates Settings.WifiRules and
-// triggers Connect / Disconnect accordingly.
+// active Wi-Fi SSID changes. The automation engine re-evaluates each
+// tunnel's Automation policy against the new context and triggers
+// Connect / Disconnect accordingly.
 type WifiSSIDPayload struct {
 	OldSSID string `json:"old_ssid"`
 	NewSSID string `json:"new_ssid"`

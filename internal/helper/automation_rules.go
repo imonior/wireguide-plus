@@ -352,36 +352,13 @@ func (h *Helper) reevaluateAutomation(reason string) {
 		if active[name] || manualOff[name] || manualOn[name] || reason == "ssid-change" {
 			h.clearAutoConnectBackoff(name)
 		}
-		rules := auto.PerTunnel[name]
-		// SSID-blind fail-closed gate (see ssidBlind): the rules depend on
-		// an SSID this context cannot supply, so neither a rule match nor
-		// the Default State fallback is trustworthy this round. Skip the
-		// tunnel entirely rather than let the fallback act on half a
-		// picture — this is precisely the round that used to misconnect
-		// tunnels during a same-SSID static→DHCP switch.
-		if ssidBlind(rules, ctx) {
-			blindSkipped = true
-			slog.Info("automation: skip (SSID unknown while rules depend on it — no default fallback on half a context)",
-				"category", "network",
-				"tunnel", name, "reason", reason,
-				"rules", len(rules),
-				"default", auto.Defaults[name],
-				"active", active[name])
-			continue
-		}
-		state := wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx)
-		switch reconcileAction(state, active[name], manualOff[name], manualOn[name]) {
+		// Single authoritative decision: the engine no longer re-implements
+		// the gates (network-known, automation-disabled, address-conflict
+		// pause, ssid-blind, policy/DNS block, back-off) — EvaluateTunnel
+		// Decision applies them all, so preview and reconnect cannot drift.
+		d := h.EvaluateTunnelDecision(name, settings, ctx)
+		switch d.Action {
 		case "connect":
-			// A tunnel stuck in a retry loop (its address held elsewhere,
-			// an unreachable endpoint) must not be re-hammered every poll;
-			// skip until its back-off window elapses. Logged at Debug so the
-			// steady-state poll stays quiet — the failure itself was already
-			// reported at Warn when it happened.
-			if h.autoConnectBackingOff(name) {
-				slog.Debug("automation: connect deferred (back-off after repeated failures)",
-					"category", "network", "tunnel", name, "reason", reason)
-				continue
-			}
 			acted = true
 			h.automationConnect(name, reason, ctx.SSID)
 		case "disconnect":
@@ -390,6 +367,22 @@ func (h *Helper) reevaluateAutomation(reason string) {
 				"category", "network",
 				"tunnel", name, "reason", reason, "ssid", ctx.SSID)
 			h.disconnectAutoManaged(name)
+		case "unresolved":
+			if d.SSIDBlind {
+				blindSkipped = true
+			}
+			slog.Info("automation: skip",
+				"category", "network",
+				"tunnel", name, "reason", reason,
+				"ssid", ctx.SSID, "why", d.Reason)
+		case "blocked":
+			slog.Info("automation: connect blocked by decision",
+				"category", "network",
+				"tunnel", name, "reason", reason,
+				"ssid", ctx.SSID, "block_reason", d.BlockReason)
+		case "deferred":
+			slog.Debug("automation: connect deferred (back-off after repeated failures)",
+				"category", "network", "tunnel", name, "reason", reason)
 		case "skip-manual-off":
 			slog.Info("automation: skip connect (manually switched off)",
 				"category", "network",
@@ -406,9 +399,8 @@ func (h *Helper) reevaluateAutomation(reason string) {
 				"category", "network",
 				"tunnel", name,
 				"reason", reason,
-				"decision", decisionLabel(state, manualOff[name], manualOn[name]),
-				"rules", len(rules),
-				"default", auto.Defaults[name],
+				"decision", d.Action,
+				"desired", d.Desired,
 				"active", active[name],
 				"ssid", ctx.SSID)
 		}
@@ -431,42 +423,6 @@ func (h *Helper) reevaluateAutomation(reason string) {
 	}
 }
 
-// reconnectAllowed is the stale-connection monitor's policy gate, as a
-// pure decision over already-collected inputs (see reconnectPolicyBlocked
-// for the probing half). The monitor's blind "it was up, put it back"
-// restore must not contradict the automation engine:
-//
-//   - paused/exempted (address-conflict pause, "stop automation"): the
-//     tunnel is the user's to decide, never the monitor's;
-//   - no policy at all: legacy behaviour — the monitor restores what it
-//     watched, there is no rule to contradict;
-//   - manual-on latch: the user's deliberate connect outranks the policy
-//     (mirror of reconcileAction's skip-manual-on);
-//   - UNIDENTIFIED network: no condition can be judged, so the engine
-//     takes no action — and a reconnect IS an action. The route monitor /
-//     SSID report / poll re-post an evaluation once the network is known;
-//     that, not the monitor, is what brings the tunnel back then;
-//   - SSID-blind (ssidBlind): the policy depends on an SSID the context
-//     cannot supply, so its verdict is half a picture and the engine
-//     would skip this tunnel this round — the monitor must not act on the
-//     same half picture the engine refuses to act on;
-//   - policy says disconnect: the tunnel being DOWN is the desired state
-//     (a stale-handshake detection or a wake restore must not undo it);
-//   - otherwise (connect/unmanaged with a known network): allow —
-//     reconnecting converges on, or does not fight, the policy.
-func reconnectAllowed(state wifi.DesiredState, hasPolicy, networkKnown, ssidBlind, manualOn, paused, exempted bool) bool {
-	if paused || exempted {
-		return false
-	}
-	if !hasPolicy || manualOn {
-		return true
-	}
-	if !networkKnown || ssidBlind {
-		return false
-	}
-	return state != wifi.StateDisconnect
-}
-
 // reconnectPolicyBlocked answers the monitor's question for one tunnel:
 // may automation put it back up right now? It mirrors reevaluateAutomation
 // exactly — fresh settings read, both policy maps count, the same manual
@@ -482,69 +438,29 @@ func (h *Helper) reconnectPolicyBlocked(name string) bool {
 	if name == "" {
 		return false
 	}
-	exempted := h.automationDisabled(name)
-	paused := h.isAutoConnectPaused(name)
 	settings, err := h.loadUserSettings()
 	if err != nil {
 		slog.Debug("automation: reconnect gate cannot load settings", "tunnel", name, "error", err)
-		return exempted || paused
+		// Fail open to legacy behaviour: the 30s engine evaluation is
+		// seconds away and remains the authority.
+		return h.automationDisabled(name) || h.isAutoConnectPaused(name)
 	}
 	settings.EnsureAutomation()
-	auto := settings.Automation
-	var rules []wifi.Rule
-	var def wifi.Action
-	hasPolicy := false
-	if auto != nil {
-		rules = auto.PerTunnel[name]
-		def = auto.Defaults[name]
-		hasPolicy = len(rules) > 0 || def != ""
-	}
-	manualOn := false
-	for _, n := range settings.ManualOnTunnels {
-		if n == name {
-			manualOn = true
-			break
-		}
-	}
 	ctx := h.currentNetworkContext()
-	networkKnown := ctx.SSID != "" || len(ctx.PhysicalIPs) > 0
-	blind := hasPolicy && ssidBlind(rules, ctx)
-	state := wifi.StateUnmanaged
-	if hasPolicy && !blind {
-		state = wifi.EvaluatePolicy(rules, def, ctx)
-	}
-	if !reconnectAllowed(state, hasPolicy, networkKnown, blind, manualOn, paused, exempted) {
+	d := h.EvaluateTunnelDecision(name, settings, ctx)
+	if !DecisionConnectAllowed(d) {
 		slog.Info("automation: reconnect blocked by policy",
 			"category", "network",
 			"tunnel", name,
-			"decision", decisionLabel(state, false, manualOn),
-			"network_known", networkKnown,
-			"ssid_blind", blind,
+			"decision", d.Action,
+			"network_known", d.NetworkKnown,
+			"ssid_blind", d.SSIDBlind,
 			"ssid", ctx.SSID,
-			"exempted", exempted,
-			"paused", paused)
+			"exempted", d.Exempted,
+			"paused", d.Paused)
 		return true
 	}
 	return false
-}
-
-// decisionLabel renders an evaluated desired state (plus the manual latches)
-// as the word the log viewer and the CLI preview both use, so the same
-// vocabulary appears everywhere.
-func decisionLabel(state wifi.DesiredState, manualOff, manualOn bool) string {
-	switch state {
-	case wifi.StateConnect:
-		if manualOff {
-			return "manual-off"
-		}
-		return "connect"
-	case wifi.StateDisconnect:
-		if manualOn {
-			return "manual-on"
-		}
-		return "disconnect"
-	}
-	return "unmanaged"
 }
 
 // automationDisabled reports whether the tunnel is exempted from automation
@@ -654,15 +570,6 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 		active[n] = true
 	}
 
-	manualOff := make(map[string]bool, len(settings.ManualOffTunnels))
-	for _, n := range settings.ManualOffTunnels {
-		manualOff[n] = true
-	}
-	manualOn := make(map[string]bool, len(settings.ManualOnTunnels))
-	for _, n := range settings.ManualOnTunnels {
-		manualOn[n] = true
-	}
-
 	resp := ipc.AutomationPreviewResponse{
 		SSID:        ctx.SSID,
 		PhysicalIPs: ipStrs,
@@ -672,43 +579,52 @@ func (h *Helper) handleAutomationPreview(_ json.RawMessage) (interface{}, error)
 	}
 	if auto != nil {
 		for _, name := range auto.PolicyTunnelNames() {
-			rules := auto.PerTunnel[name]
-			// The engine skips an exempted tunnel outright, so the preview
-			// must say the same thing rather than show a decision that will
-			// never be acted on.
-			if h.automationDisabled(name) {
-				resp.Tunnels = append(resp.Tunnels, ipc.AutomationTunnelDecision{
-					Name:      name,
-					RuleCount: len(rules),
-					Decision:  "disabled",
-					Active:    active[name],
-					ManualOff: manualOff[name],
-					ManualOn:  manualOn[name],
-				})
-				continue
-			}
+			// Preview draws from the SAME authoritative decision the engine
+			// and reconnect monitor use, so it can no longer disagree with
+			// what the engine would actually do — including the fail-closed
+			// gates (unidentified network, ssid-blind) and the policy/DNS
+			// block that the engine enforces before connecting.
+			d := h.EvaluateTunnelDecision(name, settings, ctx)
 			decision := "unmanaged"
-			switch wifi.EvaluatePolicy(rules, auto.Defaults[name], ctx) {
-			case wifi.StateConnect:
-				if manualOff[name] {
-					decision = "manual-off" // suppressed by the manual-off latch
+			switch {
+			case d.Exempted:
+				decision = "disabled"
+			case d.Action == "blocked":
+				decision = "blocked"
+			case d.Action == "unresolved" && d.SSIDBlind:
+				// ssid-blind: the engine refuses to act on a half context,
+				// so preview must not claim connect either.
+				decision = "ssid-blind"
+			case d.Action == "unresolved":
+				// network-unidentified (no SSID and no physical IPs): the
+				// engine takes no action this round.
+				decision = "network-unidentified"
+			case d.Action == "connect":
+				if d.ManualOff {
+					decision = "manual-off"
 				} else {
 					decision = "connect"
 				}
-			case wifi.StateDisconnect:
-				if manualOn[name] {
-					decision = "manual-on" // suppressed by the manual-on latch
+			case d.Action == "disconnect":
+				if d.ManualOn {
+					decision = "manual-on"
 				} else {
 					decision = "disconnect"
 				}
+			case d.Action == "skip-manual-off":
+				decision = "manual-off"
+			case d.Action == "skip-manual-on":
+				decision = "manual-on"
+			case d.Action == "deferred":
+				decision = "backoff"
 			}
 			resp.Tunnels = append(resp.Tunnels, ipc.AutomationTunnelDecision{
 				Name:      name,
-				RuleCount: len(rules),
+				RuleCount: len(auto.PerTunnel[name]),
 				Decision:  decision,
 				Active:    active[name],
-				ManualOff: manualOff[name],
-				ManualOn:  manualOn[name],
+				ManualOff: d.ManualOff,
+				ManualOn:  d.ManualOn,
 			})
 		}
 	}

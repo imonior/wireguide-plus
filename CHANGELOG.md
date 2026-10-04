@@ -4,6 +4,82 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.0] - 2026-10-05
+
+### 🔧 Changed
+
+- **The automation decision is made in one place now.** The live engine, the reconnect monitor and the read-only preview each used to re-implement the same gates — network known, automation disabled, address-conflict pause, SSID-blind, policy block, DNS-path block, back-off and the manual latch. Three copies of one decision is exactly how they drifted apart: the preview could promise a connect the engine would refuse. All three now call a single pure function that applies every gate in one order; the engine still only acts and the preview only reports. Reconnect behaviour is unchanged — its historical truth table is preserved exactly.
+
+- **The automation preview can no longer disagree with the engine.** It now reports the states the engine really enforces, each with its own label: `blocked` (a policy or DNS-path block is stopping the connect), `ssid-blind` and `network-unidentified` (the engine is holding because it cannot judge the network yet), and `backoff` (repeated connect failures have delayed the retry). All four used to display as “no rule matches this network”, which is why a tunnel could look idle in the editor while the engine was deliberately leaving it alone.
+
+### 🗑 Removed
+
+- **The pre-2.0.0 Wi-Fi rules migration is retired.** 2.0.0 replaced the old SSID-only auto-connect model with the Automation rule model and converted the old settings on first read. That one-shot migration — and the `wifi_rules` field behind it — is gone.
+
+  **Who is affected.** Only a `config.json` written by a release **older than 2.0.0** and never opened by 2.0.0–2.4.4: a file that has a `wifi_rules` key and no `automation` key. If you have ever run 2.0.0 or later, your rules were already converted and stored under `automation`, and this release changes nothing for you. A leftover `wifi_rules` key is ignored on load from now on.
+
+  **Old versus new (both live in the same file, `config.json`):**
+
+  Old (retired):
+
+  ```json
+  "wifi_rules": {
+    "trusted_ssids": ["HomeWiFi"],
+    "per_tunnel": {
+      "office": { "auto_connect_ssids": ["CafeWiFi"] }
+    }
+  }
+  ```
+
+  New:
+
+  ```json
+  "automation": {
+    "default_state": { "office": "connect" },
+    "per_tunnel_rules": {
+      "office": [
+        { "when": [{ "type": "ssid", "ssid": "CafeWiFi" }], "match": "all", "do": "connect" }
+      ]
+    }
+  }
+  ```
+
+  | Old | New |
+  | `wifi_rules.trusted_ssids` — suppress the tunnel on these networks | `{ "when": [{"type":"ssid","ssid":"HomeWiFi"}], "do": "disconnect" }`, placed **before** the connect rules of every tunnel it should protect |
+  | `wifi_rules.per_tunnel.<name>.auto_connect_ssids` | one `{ "when": [{"type":"ssid","ssid":"…"}], "do": "connect" }` rule per SSID under `automation.per_tunnel_rules.<name>` |
+  | *(no equivalent)* | `automation.default_state.<name>` — the state the tunnel converges to when **no** rule matches (`connect` / `disconnect`). Without it the engine leaves the tunnel alone. |
+
+  **Where the file is:**
+
+  | Platform | `config.json` | Tunnels / scripts |
+  | --- | --- |
+  | macOS | `~/Library/Application Support/wireguideplus/config.json` | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Linux | `$XDG_CONFIG_HOME/wireguideplus/config.json` (or `~/.config/wireguideplus/config.json`) | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Windows | `%APPDATA%\wireguideplus\config.json` | `…\wireguideplus\tunnels`, `…\wireguideplus\scripts` |
+
+  **Migrating by hand:**
+
+  1. Quit WireGuide Plus and copy `config.json` somewhere safe.
+  2. Open `config.json` and read its `wifi_rules` block.
+  3. For each tunnel under `per_tunnel`, create `automation.per_tunnel_rules.<name>` and turn every entry of `auto_connect_ssids` into one `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"connect"}` rule.
+  4. For each entry of `trusted_ssids`, add a `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"disconnect"}` rule at the **top** of the arrays of every tunnel the trusted list should protect — trusted SSIDs used to outrank auto-connect, so they must stay first.
+  5. Optionally set `automation.default_state.<name>` if the tunnel should converge to a known state when nothing matches.
+  6. Save, restart, and check the result in the Automation editor (tunnel → **Automation**) or with `wireguideplus ctl automation`, which prints the current network context and every tunnel’s decision.
+  7. Once you are satisfied, you may delete the now-unused `wifi_rules` key.
+
+  **Notes and caveats:**
+
+  - SSID matching stays **exact and case-sensitive** in both models (`MyWifi` ≠ `mywifi`). Copy the names byte for byte.
+  - The old model implicitly disconnected an auto-managed tunnel when you left its Wi-Fi zone. The new engine does not infer that — it only does what your rules say. If you want “down whenever I am not on the office Wi-Fi”, set `default_state` to `disconnect` together with a connect rule for the office. A literal port would also fire on Ethernet and right after a manual connect, which is why the old migration never synthesised it.
+  - Rules are evaluated top to bottom and the **first match wins**; only then does the Default State apply. Order still matters.
+  - A tunnel with neither rules nor a Default State is left alone by the engine in both models — there is nothing to migrate.
+  - If two tunnels in the old model claimed the same SSID, the lexicographically first one won. In the new model both rules fire, so give each tunnel its own rules if you want to keep the old single-winner behaviour.
+  - Keep the backup from step 1 until the editor shows what you expect.
+
+### 🛠 Internal
+
+- `internal/helper/decision.go` now owns the decision: `EvaluateTunnelDecision` gathers the inputs, `evaluateTunnelDecision` is a pure function covered by unit tests, and `DecisionConnectAllowed` answers the reconnect monitor’s question from that same result. The engine, the preview and the reconnect monitor no longer carry their own copies of the gates, and the two helpers they used for it (`reconnectAllowed`, `decisionLabel`) are gone.
+
 ## [2.4.4] - 2026-10-04
 
 ### 🐛 Fixed

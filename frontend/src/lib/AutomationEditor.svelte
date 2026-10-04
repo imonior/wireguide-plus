@@ -694,6 +694,10 @@
     disconnect: 'automation.decision_disconnect',
     'manual-off': 'automation.decision_manual_off',
     'manual-on': 'automation.decision_manual_on',
+    blocked: 'automation.decision_blocked',
+    'ssid-blind': 'automation.decision_ssid_blind',
+    'network-unidentified': 'automation.decision_network_unidentified',
+    backoff: 'automation.decision_backoff',
   })[decisionKey()] || 'automation.decision_unmanaged';
   // Build one marker snapshot from the same ordered draft/details pair used
   // by the backend. Keying condition markers by the editor row id avoids
@@ -855,7 +859,12 @@
   }
   function decisionKey() {
     if (!preview || !preview.decision) return 'unmanaged';
-    return preview.decision; // 'connect' | 'disconnect' | 'unmanaged' | 'manual-off'
+    // 'connect' | 'disconnect' | 'unmanaged' | 'manual-off' | 'manual-on'
+    // | 'disabled' | 'blocked' | 'ssid-blind' | 'network-unidentified'
+    // | 'backoff' — the last four are fail-closed / policy states the
+    // engine enforces; they must be surfaced here so preview cannot claim a
+    // connect the engine would refuse.
+    return preview.decision;
   }
   function conditionMatchCount(type) {
     let count = 0;

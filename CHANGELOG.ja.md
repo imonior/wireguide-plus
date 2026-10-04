@@ -4,6 +4,82 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.0] - 2026-10-05
+
+### 🔧 変更
+
+- **自動化の判定は一か所で行われるようになりました。** ライブエンジン、再接続監視モニター、参照専用のプレビューは、それぞれ同じゲート（ネットワーク識別済み、自動化無効、アドレス競合による一時停止、SSID 不明、ポリシーブロック、DNS パスブロック、失敗時のバックオフ、手動ラッチ）を個別に実装していました。同一判定のコピーが 3 つあったことこそ、プレビューがエンジンが実際には拒否する接続を約束してしまうような食い違いが生まれていました。三者とも、すべてのゲートを一定の順序で适用する単一の純粹関数を呼ぶようになりました。エンジンは引き続き実行するだけ、プレビューは報告するだけです。再接続の動作は変わりません — 従来の真偽表はそのまま保持されています。
+
+- **自動化プレビューがエンジンと食い違うことはなくなりました。** エンジンが実際に強制している状態を、それぞれ専用のラベルで示すようになりました：`blocked`（ポリシーまたは DNS パスブロックが接続を止めている）、`ssid-blind` と `network-unidentified`（ネットワークを判定できないためエンジンが保留している）、`backoff`（連続失敗が続い、再試行が遅延されている）。これら 4 つは従来「このネットワークに一致するルールはありませんと表示されていたため、エンジンが意図的に触らないトンネルがエディタ上は何もしていないように見えました。
+
+### 🗑 削除
+
+- **2.0.0 より前の Wi-Fi ルール移行は廃止されました。** 2.0.0 は古い SSID 専用の自動接続モデルを自動化ルールモデルに置き換え、初回読み込み時に古い設定を変換していました。この一度限りの移行と、その背景にある `wifi_rules` フィールドは削除されました。
+
+  **影響範囲。** **2.0.0 より古い**リリースが書き込み、2.0.0–2.4.4 で一度も開かれていない `config.json`、つまり `wifi_rules` キーがあり `automation` キーがないファイルのみが対象です。2.0.0 以降を一度でも実行していれば、ルールはすでに変換されて `automation` に保存されており、今回のリリースで変わることはありません。残った `wifi_rules` キーは今後読み込み時に無視されます。
+
+  **新旧対照（どちらも同じ `config.json` ファイル内）：**
+
+  旧（廃止）：
+
+  ```json
+  "wifi_rules": {
+    "trusted_ssids": ["HomeWiFi"],
+    "per_tunnel": {
+      "office": { "auto_connect_ssids": ["CafeWiFi"] }
+    }
+  }
+  ```
+
+  新：
+
+  ```json
+  "automation": {
+    "default_state": { "office": "connect" },
+    "per_tunnel_rules": {
+      "office": [
+        { "when": [{ "type": "ssid", "ssid": "CafeWiFi" }], "match": "all", "do": "connect" }
+      ]
+    }
+  }
+  ```
+
+  | 旧 | 新 |
+  | `wifi_rules.trusted_ssids` — これらのネットワークでは接続しない | `{ "when": [{"type":"ssid","ssid":"HomeWiFi"}], "do": "disconnect" }`。保護対象の各トンネルの接続ルールの**前**に配置 |
+  | `wifi_rules.per_tunnel.<name>.auto_connect_ssids` | `automation.per_tunnel_rules.<name>` 配下に、SSID ごとに 1 つの `{ "when": [{"type":"ssid","ssid":"…"}], "do": "connect" }` ルール |
+  | *(対応なし)* | `automation.default_state.<name>` — **どのルールも一致しない**ときに収束する状態（`connect` / `disconnect`）。未設定ならエンジンは何もしません。 |
+
+  **ファイルの場所：**
+
+  | プラットフォーム | `config.json` | トンネル / スクリプト |
+  | --- | --- | --- |
+  | macOS | `~/Library/Application Support/wireguideplus/config.json` | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Linux | `$XDG_CONFIG_HOME/wireguideplus/config.json` | `…/wireguideplus/tunnels`, `…/wireguideplus/scripts` |
+  | Windows | `%APPDATA%\wireguideplus\config.json` | `…\wireguideplus\tunnels`, `…\wireguideplus\scripts` |
+
+  **手動移行の手順：**
+
+  1. WireGuide Plus を終了し、`config.json` を安全な場所にコピーします。
+  2. `config.json` を開き、`wifi_rules` ブロックを確認します。
+  3. `per_tunnel` 配下の各トンネルに `automation.per_tunnel_rules.<name>` を作成し、`auto_connect_ssids` の各項目を 1 つの `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"connect"}` ルールにします。
+  4. `trusted_ssids` の各項目について、保護対象の各トンネルのルール配列の**先頭**に `{"when":[{"type":"ssid","ssid":"<name>"}],"match":"all","do":"disconnect"}` ルールを追加します — 信頼済 SSID は従来自動接続より優先されていたため、引き続き先頭に置く必要があります。
+  5. ルールが一致しないときに収束先を確定したい場合は、`automation.default_state.<name>` を設定します。
+  6. 保存して再起動し、自動化エディタ（トンネル → **Automation**）または `wireguideplus ctl automation` で結果を確認します。後者は現在のネットワークコンテキストと各トンネルの判定を出力します。
+  7. 結果に問題がなければ、使わなくなった `wifi_rules` キーを削除してかまいません。
+
+  **注意事項：**
+
+  - SSID の一致判定は両モデルとも**完全一致で大小文字を区別**します（`MyWifi` ≠ `mywifi`）。名前はバイト単位でそのままコピーしてください。
+  - 古いモデルでは、自動管理のトンネルは Wi-Fi ゾーンを離れると暗黙に切断されました。新エンジンはそれを推定せず、ルールに書かれていることだけをします。「会社の Wi-Fi 以外なら切断」が必要なら、`default_state` を `disconnect` にし、会社網を対象とする接続ルールを併用してください。古い動作をちょうど移行すると有線網や手動接続直後でも切断してしまうため、従来の移行ではこのルールを生成していませんでした。
+  - ルールは上から下へ評価され、**最初に一致したものが采用**されます。その後にデフォルト状態が適用されます。順序は依然重要です。
+  - ルールもデフォルト状態も持たないトンネルは、両モデルともエンジンは何もしません — 移行は不要です。
+  - 古いモデルで複数のトンネルが同じ SSID を宣言していた場合、辞書順で最初のものが采用されました。新モデルでは両方のルールがヒットするため、古い動作（采用者は 1 つ）を保ちたければ、トンネルごとに個別のルールを指定してください。
+  - エディタの表示が期待どおりになるまで、手順 1 のバックアップを残しておいてください。
+
+### 🛠 内部
+
+- `internal/helper/decision.go` が判定を一元管理します：`EvaluateTunnelDecision` が入力を収集し、`evaluateTunnelDecision` はユニットテスト対応の純粹関数、`DecisionConnectAllowed` はその結果から再接続監視の問題に答えます。エンジン・プレビュー・再接続モニターはゲートのコピーを持たず、これまでの補助関数（`reconnectAllowed`、`decisionLabel`）は削除されました。
+
 ## [2.4.4] - 2026-10-04
 
 ### 🐛 修正

@@ -644,23 +644,16 @@ export class Settings {
              */
             this["auto_update_check"] = undefined;
         }
-        if (!("wifi_rules" in $$source)) {
-            /**
-             * WifiRules holds the LEGACY SSID-based auto-connect / auto-disconnect
-             * policy. Retained for migration; superseded by Automation. Once
-             * Automation is populated it is the source of truth and WifiRules is
-             * no longer consulted by the rule engine.
-             * @member
-             * @type {wifi$0.Rules}
-             */
-            this["wifi_rules"] = (new wifi$0.Rules());
-        }
         if (/** @type {any} */(false)) {
             /**
              * Automation is the per-tunnel condition→action rule model (issue
-             * #12). A nil pointer means "not yet migrated from WifiRules";
-             * EnsureAutomation() populates it once from the legacy rules. A
-             * non-nil (possibly empty) value means the user is on the new model.
+             * #12) — the sole automation model. A nil pointer simply means "no
+             * policy yet"; EnsureAutomation() initialises it to an empty model,
+             * so every caller (engine, preview, editor) can rely on a non-nil
+             * value. The legacy SSID-only WifiRules model it replaced was
+             * retired: any `wifi_rules` key in an existing settings file is now
+             * ignored on load, and upgrading from a pre-2.0.0 release is a
+             * manual, documented step (see CHANGELOG).
              * @member
              * @type {wifi$0.Automation | null | undefined}
              */
@@ -761,30 +754,26 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField22_0 = $$createType3;
-        const $$createField23_0 = $$createType5;
+        const $$createField22_0 = $$createType4;
+        const $$createField23_0 = $$createType2;
         const $$createField24_0 = $$createType2;
-        const $$createField25_0 = $$createType2;
+        const $$createField27_0 = $$createType2;
         const $$createField28_0 = $$createType2;
-        const $$createField29_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("wifi_rules" in $$parsedSource) {
-            $$parsedSource["wifi_rules"] = $$createField22_0($$parsedSource["wifi_rules"]);
-        }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField23_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField22_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField24_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField23_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField25_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField24_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField28_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField27_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField29_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField28_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
@@ -794,6 +783,5 @@ export class Settings {
 const $$createType0 = LegacyDataItem.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = wifi$0.Rules.createFrom;
-const $$createType4 = wifi$0.Automation.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
+const $$createType3 = wifi$0.Automation.createFrom;
+const $$createType4 = $Create.Nullable($$createType3);

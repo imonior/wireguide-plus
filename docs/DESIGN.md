@@ -272,9 +272,14 @@ The action is `connect` or `disconnect`. A rule disconnects a tunnel
 or tray is **exempt from connect rules**: it lands on
 `Settings.ManualOffTunnels` (persisted in `config.json`), and the engine
 skips its connect decisions until the user connects it again (which
-clears the flag) or WireGuide Plus restarts (which clears all flags). Legacy
-`Settings.WifiRules` (SSID-only auto-connect + global trusted list) is
-migrated once into this model by `Settings.EnsureAutomation`.
+clears the flag) or WireGuide Plus restarts (which clears all flags).
+
+`Settings.Automation` is the sole automation model. The older SSID-only
+`WifiRules` (auto-connect list + global trusted list) was **retired**:
+the field and its one-shot migration are gone, so a `wifi_rules` key
+left in an existing `config.json` is ignored on load and upgrading from
+a pre-2.0.0 release means recreating the policy in the Automation model
+(manual, documented in the CHANGELOG).
 
 ### Evaluation triggers (helper-side)
 

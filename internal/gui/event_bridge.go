@@ -200,8 +200,9 @@ func (b *eventBridge) handleEvent(method string, params json.RawMessage) {
 			b.app.Event.Emit("log", entry)
 		}
 	case ipc.EventWifiSSID:
-		// SSID change from the helper's wifi monitor. Frontend evaluates
-		// Settings.WifiRules and decides whether to (dis)connect a tunnel.
+		// SSID change from the helper's wifi monitor. The frontend
+		// re-evaluates the automation policy and decides whether to
+		// (dis)connect a tunnel.
 		var payload ipc.WifiSSIDPayload
 		if err := json.Unmarshal(params, &payload); err != nil {
 			slog.Debug("event bridge: unmarshal wifi_ssid failed", "error", err)

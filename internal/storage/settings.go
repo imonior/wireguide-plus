@@ -117,16 +117,14 @@ type Settings struct {
 	// silence the failed-check log noise.
 	AutoUpdateCheck *bool `json:"auto_update_check,omitempty"`
 
-	// WifiRules holds the LEGACY SSID-based auto-connect / auto-disconnect
-	// policy. Retained for migration; superseded by Automation. Once
-	// Automation is populated it is the source of truth and WifiRules is
-	// no longer consulted by the rule engine.
-	WifiRules wifi.Rules `json:"wifi_rules"`
-
 	// Automation is the per-tunnel condition→action rule model (issue
-	// #12). A nil pointer means "not yet migrated from WifiRules";
-	// EnsureAutomation() populates it once from the legacy rules. A
-	// non-nil (possibly empty) value means the user is on the new model.
+	// #12) — the sole automation model. A nil pointer simply means "no
+	// policy yet"; EnsureAutomation() initialises it to an empty model,
+	// so every caller (engine, preview, editor) can rely on a non-nil
+	// value. The legacy SSID-only WifiRules model it replaced was
+	// retired: any `wifi_rules` key in an existing settings file is now
+	// ignored on load, and upgrading from a pre-2.0.0 release is a
+	// manual, documented step (see CHANGELOG).
 	Automation *wifi.Automation `json:"automation,omitempty"`
 
 	// ManualOffTunnels lists tunnels the user has manually switched off
@@ -261,31 +259,27 @@ func (s *Settings) ClearAllManualOverrides() {
 	s.ManualOnTunnels = nil
 }
 
-// EnsureAutomation lazily migrates the legacy WifiRules into the
-// Automation model the first time it's needed, so existing users keep
-// their auto-connect/disconnect behaviour after the model change. It's a
-// no-op once Automation is non-nil (the user is already on the new
-// model), so it never overwrites edited rules. Callers that want the
-// migration persisted must Save afterwards; the rule engine can call it
-// on each load without persisting (it's deterministic and cheap).
+// EnsureAutomation guarantees a usable Automation model on the settings,
+// so every consumer (rule engine, preview, editor) can read and write it
+// without nil checks. It initialises an empty model when none is stored
+// and then folds pre-Default-State rule shapes (none_match "Otherwise",
+// missing defaults) into the current policy model; Normalize is
+// idempotent and never overwrites an explicit Defaults entry, so this
+// never clobbers rules the user edited. Callers that want the result
+// persisted must Save afterwards; the rule engine can call it on each
+// load without persisting (it's deterministic and cheap).
 func (s *Settings) EnsureAutomation() {
-	if s.Automation != nil {
-		// Already on the Automation model — just fold any pre-Default-State
-		// rule shapes (none_match "Otherwise", missing defaults) into the
-		// current policy model. Normalize is idempotent and never overwrites
-		// an explicit Defaults entry.
-		s.Automation.Normalize()
-		return
+	if s.Automation == nil {
+		s.Automation = wifi.DefaultAutomation()
 	}
-	s.Automation = wifi.MigrateFromLegacy(&s.WifiRules)
 	s.Automation.Normalize()
 }
 
-// RenameTunnelRules moves a tunnel's Automation (and legacy WifiRules)
-// entries from oldName to newName. Automation rules are keyed by tunnel
-// name, so a rename that doesn't carry them over silently orphans the
-// rules — and, worse, they'd re-attach if a new tunnel later reused the
-// old name (issue #12). Call inside a SettingsStore.Update.
+// RenameTunnelRules moves a tunnel's Automation entries from oldName to
+// newName. Automation rules are keyed by tunnel name, so a rename that
+// doesn't carry them over silently orphans the rules — and, worse, they'd
+// re-attach if a new tunnel later reused the old name (issue #12). Call
+// inside a SettingsStore.Update.
 func (s *Settings) RenameTunnelRules(oldName, newName string) {
 	if oldName == newName {
 		return
@@ -296,10 +290,10 @@ func (s *Settings) RenameTunnelRules(oldName, newName string) {
 			delete(s.Automation.PerTunnel, oldName)
 		}
 	}
-	if s.WifiRules.PerTunnel != nil {
-		if r, ok := s.WifiRules.PerTunnel[oldName]; ok {
-			s.WifiRules.PerTunnel[newName] = r
-			delete(s.WifiRules.PerTunnel, oldName)
+	if s.Automation != nil && s.Automation.Defaults != nil {
+		if d, ok := s.Automation.Defaults[oldName]; ok {
+			s.Automation.Defaults[newName] = d
+			delete(s.Automation.Defaults, oldName)
 		}
 	}
 	if s.IsManualOff(oldName) {
@@ -312,18 +306,16 @@ func (s *Settings) RenameTunnelRules(oldName, newName string) {
 	}
 }
 
-// DeleteTunnelRules drops a tunnel's Automation (and legacy WifiRules)
-// entries so a deleted tunnel leaves no stale rules behind that could
-// unexpectedly attach to a same-named tunnel created later (issue #12).
+// DeleteTunnelRules drops a tunnel's Automation entries (both its rules
+// and its Default State) so a deleted tunnel leaves no stale policy
+// behind that could unexpectedly attach to a same-named tunnel created
+// later (issue #12).
 func (s *Settings) DeleteTunnelRules(name string) {
 	if s.Automation != nil {
 		delete(s.Automation.PerTunnel, name)
 		if s.Automation.Defaults != nil {
 			delete(s.Automation.Defaults, name)
 		}
-	}
-	if s.WifiRules.PerTunnel != nil {
-		delete(s.WifiRules.PerTunnel, name)
 	}
 	s.ClearManualOff(name)
 	s.ClearManualOn(name)
@@ -350,11 +342,6 @@ func DefaultSettings() *Settings {
 		ListSort:             "name_asc",
 		ListActiveOnTop:      true,
 		ListPaneWidth:        240,
-		WifiRules: wifi.Rules{
-			// Initialize the map so JSON serialization round-trips
-			// produce {} rather than null for an empty mapping.
-			PerTunnel: make(map[string]wifi.TunnelSSIDs),
-		},
 	}
 }
 

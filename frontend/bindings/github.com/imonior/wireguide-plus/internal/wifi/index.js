@@ -10,7 +10,5 @@ export {
     InterfaceInfo,
     Rule,
     RuleDetail,
-    Rules,
-    SSIDPermissionStatus,
-    TunnelSSIDs
+    SSIDPermissionStatus
 } from "./models.js";

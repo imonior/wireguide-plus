@@ -382,10 +382,10 @@ func (s *TunnelService) GetSettings() (*storage.Settings, error) {
 		return nil, err
 	}
 	// Always hand the frontend a populated Automation model so the rule
-	// editor can read/edit it directly — EnsureAutomation lazily migrates
-	// the legacy WifiRules the first time (in memory; persisted only when
-	// the user saves). Without this the UI would see a null automation for
-	// legacy users and couldn't show their migrated rules.
+	// editor can read/edit it directly — EnsureAutomation initialises an
+	// empty model when none is stored (in memory; persisted only when the
+	// user saves). Without this the UI would see a null automation and
+	// couldn't show or create the policy.
 	if settings != nil {
 		settings.EnsureAutomation()
 	}
@@ -404,7 +404,7 @@ func (s *TunnelService) GetSettings() (*storage.Settings, error) {
 // `wireguideplus ctl …` write, or a latch set while the Settings dialog was
 // open, used to be rolled back by the whole-object save.
 //
-// Automation and WifiRules deliberately stay payload-owned: a policy can
+// Automation deliberately stays payload-owned: a policy can legitimately
 // legitimately arrive through a whole-settings save rather than through
 // SaveAutomationRules (SaveSettings keys an immediate automation
 // re-evaluation off that field).

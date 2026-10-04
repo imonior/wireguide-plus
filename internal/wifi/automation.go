@@ -11,15 +11,14 @@ import (
 	"time"
 )
 
-// Automation is the per-tunnel condition→action rule model that
-// generalises the older TrustedSSIDs + AutoConnectSSIDs pair (issue #12).
+// Automation is the per-tunnel condition→action rule model (issue #12).
 // Each tunnel owns an ordered list of rules; evaluation decides, from the
 // current network context, whether that tunnel should be connected or
 // disconnected — independently of how it was brought up.
 //
-// This type is additive: the legacy Rules (TrustedSSIDs / PerTunnel
-// AutoConnectSSIDs) still exist for migration. MigrateFromLegacy builds
-// an equivalent Automation from a legacy Rules value.
+// This is the sole automation model: the older SSID-only WifiRules model
+// (TrustedSSIDs / AutoConnectSSIDs) was retired, so the rule engine and the
+// editor only ever deal with Automation.
 type Automation struct {
 	// Defaults maps a tunnel name to the state its policy converges to
 	// when NO rule matches ("connect" / "disconnect"). Written by the
@@ -564,6 +563,15 @@ func ValidateRule(r Rule) error {
 	return r.Validate()
 }
 
+// ssidEqual compares two SSIDs EXACTLY (full name, case-sensitive).
+// An SSID is a byte string per 802.11: case, middle spaces and special
+// characters are all significant. The editor's live preview shows the
+// mismatch immediately when the typed name differs from the broadcast
+// one, so strict comparison is safe.
+func ssidEqual(a, b string) bool {
+	return a == b
+}
+
 // conditionMatches reports whether a concrete (ssid/wifi/subnet/network)
 // condition matches the context. none_match is handled by ruleMatchesCond.
 func conditionMatches(c Condition, ctx NetworkContext) bool {
@@ -765,74 +773,4 @@ func (a *Automation) TunnelNames() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// MigrateFromLegacy builds an Automation equivalent to a legacy Rules
-// value, so existing users keep working after the model change:
-//
-//   - each tunnel's AutoConnectSSIDs → {when: [ssid=X], do: connect}
-//   - global TrustedSSIDs → for every tunnel that has any rule, a
-//     {when: [ssid=Y], do: disconnect} placed BEFORE its connect rules so
-//     "trusted" wins over "auto-connect" on an overlapping network
-//     (matching the legacy precedence where trusted was checked first).
-//
-// Trusted SSIDs are only meaningful relative to a tunnel that could
-// otherwise be connected, so they're attached to tunnels that have
-// auto-connect rules; a tunnel with no legacy rules gets none.
-func MigrateFromLegacy(legacy *Rules) *Automation {
-	out := DefaultAutomation()
-	if legacy == nil {
-		return out
-	}
-	names := make([]string, 0, len(legacy.PerTunnel))
-	for n := range legacy.PerTunnel {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		var connectRules []Rule
-		for _, ssid := range legacy.PerTunnel[name].AutoConnectSSIDs {
-			if ssid == "" {
-				continue
-			}
-			connectRules = append(connectRules, Rule{
-				When: []Condition{{Type: CondSSID, SSID: ssid}},
-				Do:   ActionConnect,
-			})
-		}
-		// Trusted SSIDs only ever affected auto-managed tunnels in the
-		// legacy model, i.e. tunnels with an auto-connect list. Don't
-		// attach trusted-disconnect rules to a tunnel that had no
-		// connect rules — that would newly disconnect it on a trusted
-		// network, which legacy never did.
-		if len(connectRules) == 0 {
-			continue
-		}
-		var rules []Rule
-		// Trusted (disconnect) rules first, so they take precedence over
-		// the connect rules on an overlapping network.
-		for _, ssid := range legacy.TrustedSSIDs {
-			if ssid == "" {
-				continue
-			}
-			rules = append(rules, Rule{
-				When: []Condition{{Type: CondSSID, SSID: ssid}},
-				Do:   ActionDisconnect,
-			})
-		}
-		rules = append(rules, connectRules...)
-		// NOTE: we deliberately do NOT synthesize a none_match→disconnect
-		// rule here. Legacy auto-connect implicitly disconnected the
-		// tunnel when you left its Wi-Fi zone, but that behaviour was
-		// coarse (Wi-Fi-transition only, auto-managed only) and, ported
-		// literally into the new any-network-change engine, would
-		// aggressively tear down tunnels on Ethernet or after a manual
-		// connect. Migration therefore translates only what the user
-		// EXPLICITLY configured (connect on SSID, disconnect on trusted
-		// SSID); a user who wants "off when I leave" adds that rule
-		// explicitly in the Automation editor, alongside separate
-		// connect/disconnect conditions.
-		out.PerTunnel[name] = rules
-	}
-	return out
 }

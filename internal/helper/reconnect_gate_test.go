@@ -6,45 +6,35 @@ import (
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
 
-// reconnectAllowed is the policy gate both reconnect paths consult before
-// connecting; the table pins the decision invariants — most importantly the
-// issue-3 case: a network flap (IP reconfig briefly dropping en0) must not
-// let the blind "it was up, put it back" restore connect a tunnel whose
-// policy says disconnect.
+// DecisionConnectAllowed is the convergent policy gate the reconnect monitor
+// consults (formerly reconnectAllowed). This table pins the same decision
+// invariants — most importantly the issue-3 case: a network flap (IP
+// reconfig briefly dropping en0) must not let the blind "it was up, put it
+// back" restore connect a tunnel whose policy says disconnect.
 func TestReconnectAllowed(t *testing.T) {
 	cases := []struct {
-		name         string
-		state        wifi.DesiredState
-		hasPolicy    bool
-		networkKnown bool
-		ssidBlind    bool
-		manualOn     bool
-		paused       bool
-		exempted     bool
-		want         bool
+		name     string
+		decision TunnelDecision
+		want     bool
 	}{
-		{"no policy keeps legacy restore", wifi.StateUnmanaged, false, true, false, false, false, false, true},
-		{"policy disconnect blocks", wifi.StateDisconnect, true, true, false, false, false, false, false},
-		{"policy connect allows", wifi.StateConnect, true, true, false, false, false, false, true},
-		{"unmanaged with policy allows", wifi.StateUnmanaged, true, true, false, false, false, false, true},
-		{"manual-on latch outranks disconnect policy", wifi.StateDisconnect, true, true, false, true, false, false, true},
-		{"unidentified network blocks policy tunnels", wifi.StateConnect, true, false, false, false, false, false, false},
-		{"unidentified network, no policy, still restores", wifi.StateUnmanaged, false, false, false, false, false, false, true},
-		{"paused blocks even with connect policy", wifi.StateConnect, true, true, false, false, true, false, false},
-		{"exempted blocks even with no policy", wifi.StateUnmanaged, false, true, false, false, false, true, false},
-		{"manual-on cannot override pause", wifi.StateConnect, true, true, false, true, true, false, false},
-		// The SSID-blind cases: the engine refuses to decide a tunnel whose
-		// rules depend on an unknown SSID, so the monitor must not act on
-		// the half picture either (the same-SSID static→DHCP misconnect).
-		{"ssid-blind blocks policy tunnels", wifi.StateConnect, true, true, true, false, false, false, false},
-		{"ssid-blind, no policy, still restores", wifi.StateUnmanaged, false, true, true, false, false, false, true},
-		{"ssid-blind cannot override manual-on", wifi.StateConnect, true, true, true, true, false, false, true},
+		{"no policy keeps legacy restore", TunnelDecision{HasPolicy: false, NetworkKnown: true}, true},
+		{"policy disconnect blocks", TunnelDecision{HasPolicy: true, Desired: wifi.StateDisconnect, NetworkKnown: true}, false},
+		{"policy connect allows", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, NetworkKnown: true}, true},
+		{"unmanaged with policy allows", TunnelDecision{HasPolicy: true, Desired: wifi.StateUnmanaged, NetworkKnown: true}, true},
+		{"manual-on latch outranks disconnect policy", TunnelDecision{HasPolicy: true, Desired: wifi.StateDisconnect, ManualOn: true, NetworkKnown: true}, true},
+		{"unidentified network blocks policy tunnels", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, NetworkKnown: false}, false},
+		{"unidentified network, no policy, still restores", TunnelDecision{HasPolicy: false, NetworkKnown: false}, true},
+		{"paused blocks even with connect policy", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, Paused: true, NetworkKnown: true}, false},
+		{"exempted blocks even with no policy", TunnelDecision{HasPolicy: false, Exempted: true, NetworkKnown: true}, false},
+		{"manual-on cannot override pause", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, ManualOn: true, Paused: true, NetworkKnown: true}, false},
+		{"ssid-blind blocks policy tunnels", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, SSIDBlind: true, NetworkKnown: true}, false},
+		{"ssid-blind, no policy, still restores", TunnelDecision{HasPolicy: false, SSIDBlind: true, NetworkKnown: true}, true},
+		{"ssid-blind cannot override manual-on", TunnelDecision{HasPolicy: true, Desired: wifi.StateConnect, SSIDBlind: true, ManualOn: true, NetworkKnown: true}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := reconnectAllowed(tc.state, tc.hasPolicy, tc.networkKnown, tc.ssidBlind, tc.manualOn, tc.paused, tc.exempted); got != tc.want {
-				t.Errorf("reconnectAllowed(%v, hasPolicy=%v, known=%v, blind=%v, manualOn=%v, paused=%v, exempted=%v) = %v, want %v",
-					tc.state, tc.hasPolicy, tc.networkKnown, tc.ssidBlind, tc.manualOn, tc.paused, tc.exempted, got, tc.want)
+			if got := DecisionConnectAllowed(tc.decision); got != tc.want {
+				t.Errorf("DecisionConnectAllowed(%+v) = %v, want %v", tc.decision, got, tc.want)
 			}
 		})
 	}

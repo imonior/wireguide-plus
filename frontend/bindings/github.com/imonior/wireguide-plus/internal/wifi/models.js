@@ -22,15 +22,14 @@ export const Action = {
 };
 
 /**
- * Automation is the per-tunnel condition→action rule model that
- * generalises the older TrustedSSIDs + AutoConnectSSIDs pair (issue #12).
+ * Automation is the per-tunnel condition→action rule model (issue #12).
  * Each tunnel owns an ordered list of rules; evaluation decides, from the
  * current network context, whether that tunnel should be connected or
  * disconnected — independently of how it was brought up.
  * 
- * This type is additive: the legacy Rules (TrustedSSIDs / PerTunnel
- * AutoConnectSSIDs) still exist for migration. MigrateFromLegacy builds
- * an equivalent Automation from a legacy Rules value.
+ * This is the sole automation model: the older SSID-only WifiRules model
+ * (TrustedSSIDs / AutoConnectSSIDs) was retired, so the rule engine and the
+ * editor only ever deal with Automation.
  */
 export class Automation {
     /**
@@ -416,57 +415,6 @@ export class RuleDetail {
 }
 
 /**
- * Rules defines WiFi auto-connect behavior. The model is per-tunnel:
- * each tunnel owns the list of SSIDs that should auto-activate it.
- * The "trusted" list is a global override that disconnects auto-managed
- * tunnels when joining those networks.
- */
-export class Rules {
-    /**
-     * Creates a new Rules instance.
-     * @param {Partial<Rules>} [$$source = {}] - The source object to create the Rules.
-     */
-    constructor($$source = {}) {
-        if (!("trusted_ssids" in $$source)) {
-            /**
-             * override: VPN off on these networks
-             * @member
-             * @type {string[]}
-             */
-            this["trusted_ssids"] = [];
-        }
-        if (!("per_tunnel" in $$source)) {
-            /**
-             * keyed by tunnel name
-             * @member
-             * @type {{ [_ in string]?: TunnelSSIDs }}
-             */
-            this["per_tunnel"] = {};
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Rules instance from a string or object.
-     * @param {any} [$$source = {}]
-     * @returns {Rules}
-     */
-    static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType9;
-        const $$createField1_0 = $$createType11;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("trusted_ssids" in $$parsedSource) {
-            $$parsedSource["trusted_ssids"] = $$createField0_0($$parsedSource["trusted_ssids"]);
-        }
-        if ("per_tunnel" in $$parsedSource) {
-            $$parsedSource["per_tunnel"] = $$createField1_0($$parsedSource["per_tunnel"]);
-        }
-        return new Rules(/** @type {Partial<Rules>} */($$parsedSource));
-    }
-}
-
-/**
  * SSIDPermissionStatus describes whether the process can read the current SSID.
  */
 export class SSIDPermissionStatus {
@@ -506,43 +454,6 @@ export class SSIDPermissionStatus {
     }
 }
 
-/**
- * TunnelSSIDs holds the per-tunnel auto-connect list. Wrapped in a
- * struct (rather than just []string) so future per-tunnel fields can
- * be added without changing the JSON shape.
- */
-export class TunnelSSIDs {
-    /**
-     * Creates a new TunnelSSIDs instance.
-     * @param {Partial<TunnelSSIDs>} [$$source = {}] - The source object to create the TunnelSSIDs.
-     */
-    constructor($$source = {}) {
-        if (!("auto_connect_ssids" in $$source)) {
-            /**
-             * @member
-             * @type {string[]}
-             */
-            this["auto_connect_ssids"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new TunnelSSIDs instance from a string or object.
-     * @param {any} [$$source = {}]
-     * @returns {TunnelSSIDs}
-     */
-    static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType9;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("auto_connect_ssids" in $$parsedSource) {
-            $$parsedSource["auto_connect_ssids"] = $$createField0_0($$parsedSource["auto_connect_ssids"]);
-        }
-        return new TunnelSSIDs(/** @type {Partial<TunnelSSIDs>} */($$parsedSource));
-    }
-}
-
 // Private type creation functions
 const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = Rule.createFrom;
@@ -553,6 +464,3 @@ const $$createType5 = Condition.createFrom;
 const $$createType6 = $Create.Array($$createType5);
 const $$createType7 = ConditionDetail.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = $Create.Array($Create.Any);
-const $$createType10 = TunnelSSIDs.createFrom;
-const $$createType11 = $Create.Map($Create.Any, $$createType10);
