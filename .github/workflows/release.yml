@@ -577,8 +577,13 @@ jobs:
           # nfpm.yaml publishes WireGuidePlus-<new>.deb whose package metadata
           # (and therefore apt's upgrade decision) still says the old version.
           deb_ver="$(dpkg-deb -f bin/wireguideplus.deb Version)"
-          if [ "$deb_ver" != "${{ steps.ver.outputs.ver }}" ]; then
-            echo "::error::bin/wireguideplus.deb declares Version=$deb_ver but the tag is ${{ steps.ver.outputs.ver }} (build/linux/nfpm/nfpm.yaml is stale)"
+          # nfpm always emits "upstream-revision" (e.g. 2.4.4-1, combining
+          # nfpm.yaml's version + release); compare only the upstream part so a
+          # correctly-versioned package is not rejected, while a stale
+          # nfpm.yaml (e.g. 2.4.3-1 -> upstream 2.4.3) is still caught.
+          deb_upstream="${deb_ver%-*}"
+          if [ "$deb_upstream" != "${{ steps.ver.outputs.ver }}" ]; then
+            echo "::error::bin/wireguideplus.deb declares Version=$deb_ver (upstream $deb_upstream) but the tag is ${{ steps.ver.outputs.ver }} (build/linux/nfpm/nfpm.yaml is stale)"
             exit 1
           fi
           echo "deb Version matches tag: $deb_ver"
