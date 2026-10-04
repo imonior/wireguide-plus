@@ -2155,7 +2155,8 @@
     border-color: color-mix(in srgb, var(--red) 40%, var(--border));
     color: var(--red);
   }
-  /* conf 文本 / 字段编辑 顶部切换条（同时是弹窗拖拽把手） */
+/* Top tab strip switching between raw conf text and field editing; it
+     doubles as the dialog drag handle. */
   .editor-tabs {
     display: flex;
     gap: 4px;

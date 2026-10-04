@@ -528,7 +528,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 					// would run its cleanup(), which disconnects every tunnel
 					// — exactly the session we were asked to preserve.
 					slog.Info("quit with tunnels up: helper and its tunnels are left running",
-						"category", "lifecycle")
+						"category", "system")
 				}
 			}
 			// Close in a goroutine with a short delay so the helper has

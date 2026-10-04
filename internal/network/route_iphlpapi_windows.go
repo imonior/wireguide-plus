@@ -353,9 +353,10 @@ func DefaultRouteV6LuidAndIndex(excludedAliases []string) (uint64, uint32, net.I
 	return r.InterfaceLuid, r.InterfaceIndex, r.NextHop, r.Metric
 }
 
-// HasDefaultRouteOnInterface 判断指定 ifIndex 的网卡上是否存在默认路由(0.0.0.0/0 或 ::/0)
-// family: afInet(2) / afInet6(23)
-// 返回：has是否存在默认路由，metric该路由的Metric；不存在返回 false,0
+// HasDefaultRouteOnInterface reports whether the adapter with the given
+// ifIndex carries a default route (0.0.0.0/0 or ::/0).
+// family: afInet (2) or afInet6 (23). Returns whether such a route exists
+// plus its metric, or false, 0 when there is none.
 func HasDefaultRouteOnInterface(family uint16, ifIndex uint32) (has bool, metric uint32) {
 	var tablePtr unsafe.Pointer
 	ret, _, _ := procGetIpForwardTable2.Call(uintptr(family), uintptr(unsafe.Pointer(&tablePtr)))

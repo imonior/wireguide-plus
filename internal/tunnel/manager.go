@@ -355,7 +355,8 @@ func (m *Manager) ConnectWithContext(ctx context.Context, cfg *domain.WireGuardC
 		// VPN-over-VPN etc.).
 		sbCtx, sbCancel := context.WithCancel(context.Background())
 		entry.socketBindCancel = sbCancel
-		// ⚠️ connect_phases.go 167已经注释，engine.SocketPinV4/V6不再被手动赋值
+		// connect_phases.go no longer assigns engine.SocketPinV4/V6 by hand
+		// (its pin call is commented out), so both start at zero here.
 		entry.socketBindInitialV4 = 0
 		entry.socketBindInitialV6 = 0
 

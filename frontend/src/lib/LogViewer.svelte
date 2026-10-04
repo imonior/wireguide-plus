@@ -24,7 +24,7 @@
   }
   // Category filter — mirrors logging.ValidCategories on the Go side.
   // Keep in sync when adding a category.
-  const categories = ['app', 'update', 'settings', 'tunnel', 'network', 'system'];
+  const categories = ['app', 'update', 'settings', 'tunnel', 'network', 'policy', 'system'];
   let categoryFilter = 'all';
   let autoScroll = true;
   let logContainer;

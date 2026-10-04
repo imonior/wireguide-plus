@@ -140,7 +140,7 @@ func (s *TunnelService) call(method string, params interface{}, result interface
 // "the button did nothing" can always be reconstructed afterwards. It is
 // deliberately fire-and-forget on the JS side and must never fail loudly.
 func (s *TunnelService) LogFrontend(message string) {
-	slog.Info("frontend", "category", "gui", "detail", message)
+	slog.Info("frontend", "category", "app", "detail", message)
 }
 
 // callLong performs an RPC with a generous timeout for operations that may

@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.1] - 2026-10-05
+
+### 🐛 Fixed
+
+- **Windows: the underlay interface picker no longer skips past third-party VPN adapters.** It tested for IANA interface type 31 where a tunnel adapter is actually type **131** (`IF_TYPE_TUNNEL` in `ipifcons.h`), so the test never matched: a VPN adapter holding a default route could win the contest, and the tunnel's UDP socket was then bound to another VPN's adapter — which is exactly what the filter exists to prevent. The egress dropdown carried the same wrong constant and could offer a VPN adapter as an egress candidate. Both now use 131. A neighbouring constant named `ifTypeL2TP` was in fact the software-loopback type 24 (IANA defines no L2TP type) and is renamed to say what it is; its behaviour is unchanged.
+
+- **"Automation is switched off for this tunnel" was shown as "no rule matches this network".** Turning a tunnel's automation off made the live decision strip fall back to the unmanaged label, which reads as advice to go and fix your rules. The disabled state now has its own label — the text existed in all five languages, only the mapping was missing.
+
+- **Log records tagged `policy`, `lifecycle` or `gui` could not be filtered.** The log viewer only offers the categories the backend declares, and those three were never declared: every automation and DNS-path decision record (20+ per run) was unfilterable, while the `system` button stayed empty even though lifecycle records existed. `policy` is now a real category alongside `app`, `update`, `settings`, `tunnel`, `network` and `system`; the two one-off tags moved to `system` and `app`.
+
+### 🛠 Internal
+
+- **36 unused translation keys removed** (596 remain, all five languages in lockstep): leftovers of the pre-2.0.0 automation editor (`section_connect`, `label_active`, `tunnel_inactive`, `rule_or`, …), two DNS-list messages superseded by `dns_public_fetch_unavailable`, and field labels the editor never rendered. A test now fails the build when a `"category", "…"` literal in the Go sources is missing from the declared category list, so this kind of drift cannot creep back unnoticed.
+- **The translation files are LF now.** They had drifted into a mix of `\r\r\n`, `\r\n` and bare `\n` — the reason a one-value edit used to show up as a whole-file diff. They match the repository's `.gitattributes` normalisation now.
+- Comments in the Windows tunnel, Wi-Fi profile and interface code are in English again. One of them carried a note from an earlier coding session whose suggestion had been rejected but applied backwards — that note is why the tunnel interface type above was wrong.
+
 ## [2.5.0] - 2026-10-05
 
 ### 🔧 Changed

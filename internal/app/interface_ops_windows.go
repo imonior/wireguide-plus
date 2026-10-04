@@ -12,10 +12,10 @@ import (
 // IfType values from ipifcons.h that mark non-physical interfaces we never
 // offer as egress candidates.
 const (
-	ifTypePPP         = 23
-	ifTypeL2TP        = 24
-	ifTypeTunnel      = 31
-	ifTypePropVirtual = 53 // proprietary virtual (Hyper-V vEthernet etc.)
+	ifTypePPP              = 23
+	ifTypeSoftwareLoopback = 24
+	ifTypeTunnel           = 131
+	ifTypePropVirtual      = 53 // proprietary virtual (Hyper-V vEthernet etc.)
 )
 
 // listPhysicalInterfaces enumerates interfaces for the egress dropdown on
@@ -43,7 +43,7 @@ func listPhysicalInterfaces() ([]PhysicalInterface, error) {
 			row, rowErr := luid.Interface()
 			if rowErr == nil && row != nil {
 				switch row.Type {
-				case ifTypePPP, ifTypeL2TP, ifTypeTunnel, ifTypePropVirtual:
+				case ifTypePPP, ifTypeSoftwareLoopback, ifTypeTunnel, ifTypePropVirtual:
 					continue
 				}
 				// Alias is the GENERIC name Windows shows in ncpa.cpl

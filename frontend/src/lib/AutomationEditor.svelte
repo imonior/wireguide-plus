@@ -690,6 +690,12 @@
   // Human label for the live decision strip ("this network will connect /
   // disconnect / ..."), taken from the draft's evaluated decision.
   $: decisionLabelKey = ({
+    // Order mirrors the backend switch in helper/automation_rules.go, where
+    // "disabled" (automation switched off for this tunnel) outranks every
+    // rule-derived token: without this entry the strip fell through to
+    // decision_unmanaged ("no rule matches this network"), which reads as
+    // "go fix your rules" when the real answer is "you turned automation off".
+    disabled: 'automation.decision_disabled',
     connect: 'automation.decision_connect',
     disconnect: 'automation.decision_disconnect',
     'manual-off': 'automation.decision_manual_off',
@@ -725,10 +731,12 @@
         const conditionMatched = !!rd?.conditions?.[idx]?.matched;
         // Two markers only, and both are about the CONDITION/rule itself —
         // never about whether the tunnel is physically up:
-        //   - match   —— 本条件与当前网络是否匹配（纯匹配判定）
-        //   - active  —— 「使用中」：本条件所属规则是首个匹配的规则，且引擎
-        //                实际执行了它的动作（connect/disconnect）。这是"引用/
-        //                采用"状态，与隧道是否已连接无关（隧道状态另有状态芯片）。
+//   - match   — does this condition fit the current network (a pure
+        //               match test, nothing more);
+        //   - in-use  — "in use": this condition's rule is the first match AND
+        //               the engine actually ran its action (connect/disconnect).
+        //               It is an "adopted" marker and says nothing about whether
+        //               the tunnel is up (that has its own state chip).
         const inUse = conditionMatched && winning && actionExecuted();
         result.conditions[c._id] = {
           match: conditionMatched,
@@ -1405,8 +1413,8 @@
   }
   .am-badge.am-yes { color: #fff; background: var(--green, #34c759); }
   .am-badge.am-no { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
-  /* "使用中" uses the accent colour so it reads differently from the green
-     "匹配" badge when both are lit: match = the condition fits the network
+/* The "in use" badge uses the accent colour so it reads differently from
+     the green "match" badge when both are lit: match = the condition fits
      now; in-use = this condition's rule is the one the engine is applying.
      Neither depends on the tunnel being physically up. */
   .am-badge-use.am-yes { color: #fff; background: var(--accent); }

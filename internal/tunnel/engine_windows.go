@@ -2,7 +2,7 @@
 
 package tunnel
 
-// TunnelLUID 返回wintun适配器LUID，返回uint64。
+// TunnelLUID returns the wintun adapter's LUID as a uint64.
 //
 // Both protocol backends expose a *NativeTun with a LUID() uint64 method
 // (wireguard-go and amneziawg-go return uint64), so a small interface

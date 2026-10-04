@@ -70,11 +70,12 @@ const (
 	afInet                = 2
 	afInet6               = 23
 
-	// IfType from ipifcons.h
-	ifTypePPP        = 23
-	ifTypeL2TP       = 24 // ❌错误！L2TP标准IfType=24，你写成31
-	ifTypeTunnel     = 31 // ❌错误！TUNNEL标准IfType=31，你写成131
-	ifTypeSoftSwitch = 133
+	// IfType values from ipifcons.h (IANA ifType). Mirrored in
+	// app/interface_ops_windows.go — keep both copies in sync.
+	ifTypePPP              = 23
+	ifTypeSoftwareLoopback = 24
+	ifTypeTunnel           = 131
+	ifTypeSoftSwitch       = 133
 )
 
 type candidateIf struct {
@@ -131,7 +132,7 @@ func findFallbackInterface(tunnelInterfaceName string, ipv6 bool) uint32 {
 		if !hasValidIP {
 			continue
 		}
-		// 查询**该网卡自身**是否存在默认路由以及对应metric
+		// Ask whether THIS adapter itself holds a default route, and its metric.
 		hasDefRoute, nicMetric := network.HasDefaultRouteOnInterface(familyCode, uint32(iface.Index))
 		if !hasDefRoute {
 			slog.Debug("findFallbackInterface: skip candidate, no default route on this interface",
@@ -185,10 +186,15 @@ func findFallbackInterface(tunnelInterfaceName string, ipv6 bool) uint32 {
 	return 0
 }
 
-// findDefaultUnderlayByLUID 复刻wireguard‑windows mtumonitor findDefaultLUID
-// 使用GetIPForwardTable2读取完整路由表，规避GetBestInterfaceEx的256(ERROR_NO_SUCH_DEVICE)时序bug
-// 增强：过滤第三方VPN隧道类型接口；跳过自身wintun LUID；按route.Metric+interface.Metric选最优
-// 失败返回ifIndex=0，上层调用方继续使用findFallbackInterface做兜底扫描
+// findDefaultUnderlayByLUID mirrors wireguard-windows' mtumonitor
+// findDefaultLUID: it reads the whole routing table with GetIPForwardTable2
+// rather than GetBestInterfaceEx, which can fail with 256
+// (ERROR_NO_SUCH_DEVICE) while an adapter is still settling.
+//
+// Beyond that upstream logic it also skips third-party VPN/tunnel adapters,
+// skips our own wintun LUID, and picks the best candidate by
+// route.Metric + interface.Metric. On failure it returns ifIndex 0 and the
+// caller falls back to findFallbackInterface.
 func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LUID, uint32, error) {
 	var family winipcfg.AddressFamily
 	if ipv6 {
@@ -207,11 +213,11 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 	var bestIfIndex uint32
 
 	for _, row := range routes {
-		// 只取默认路由 0.0.0.0/0 或 ::/0
+		// Only default routes: 0.0.0.0/0 or ::/0.
 		if row.DestinationPrefix.PrefixLength != 0 {
 			continue
 		}
-		// 跳过本程序wintun隧道
+		// Skip our own wintun tunnel.
 		if row.InterfaceLUID == tunnelLUID {
 			continue
 		}
@@ -224,10 +230,12 @@ func findDefaultUnderlayByLUID(tunnelLUID winipcfg.LUID, ipv6 bool) (winipcfg.LU
 			continue
 		}
 
-		// 过滤第三方VPN隧道类虚拟网卡，避免UDP socket绑定到其他VPN
+		// Skip third-party VPN/tunnel adapters so the UDP socket never
+		// binds to another VPN's interface by mistake.
 		switch ifRow.Type {
-		// IF_TYPE_PPP=23, IF_TYPE_L2TP=24, IF_TYPE_TUNNEL=31, IF_TYPE_SOFTWARE_LOOPBACK=24
-		case winipcfg.IfType(ifTypePPP), winipcfg.IfType(ifTypeL2TP), winipcfg.IfType(ifTypeTunnel):
+		// IF_TYPE_PPP = 23, IF_TYPE_SOFTWARE_LOOPBACK = 24,
+		// IF_TYPE_TUNNEL = 131.
+		case winipcfg.IfType(ifTypePPP), winipcfg.IfType(ifTypeSoftwareLoopback), winipcfg.IfType(ifTypeTunnel):
 			slog.Info("skip third‑party vpn/tunnel interface", "ifType", ifRow.Type, "idx", ifRow.InterfaceIndex)
 			continue
 		}
@@ -312,7 +320,8 @@ func resolveEgressIfIndex(tunnelInterfaceName string, tunnelLUID winipcfg.LUID, 
 		ifIndex = findFallbackInterface(tunnelInterfaceName, ipv6)
 	}
 
-	// 如果拿到的默认路由网卡就是隧道自身，直接走fallback
+	// If the adapter carrying the default route turns out to be the tunnel
+	// itself, fall straight through to the fallback scan.
 	if ifIndex > 0 {
 		iface, errIface := net.InterfaceByIndex(int(ifIndex))
 		if errIface == nil && iface.Name == tunnelInterfaceName {

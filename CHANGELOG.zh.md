@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.1] - 2026-10-05
+
+### 🐛 修复
+
+- **Windows：选择底层网卡时不再漏掉第三方 VPN 网卡。** 代码按 IANA 接口类型 31 过滤，而隧道网卡实际是 **131**（`ipifcons.h` 的 `IF_TYPE_TUNNEL`），等于这个判断从来没命中过：一个持有默认路由的 VPN 网卡就能胜出，隧道的 UDP socket 于是绑到了另一个 VPN 的网卡上——而这段过滤存在的目的恰恰是防止这件事。出口网卡下拉框用的是同一个错误常量，同样可能把 VPN 网卡列为出口候选。两处都已改为 131。旁边一个名为 `ifTypeL2TP` 的常量其实是软件回环类型 24（IANA 没有定义 L2TP 类型），已改名为它真实代表的含义；它的行为没有变化。
+
+- **「该隧道已关闭自动化」曾显示为「无规则匹配当前网络」。** 关闭某隧道的自动化后，实时决策条会回退到"未托管"标签，读起来像是建议你去改规则。现在关闭状态有了自己的标签——五种语言的文案一直都在，只是映射漏了这一项。
+
+- **标记为 `policy`、`lifecycle`、`gui` 的日志无法被筛选。** 日志面板只提供后端声明过的分类，而这三个从未声明：每一次自动化与 DNS 路径决策记录（每轮 20 条以上）都筛不出来，同时 `system` 按钮恒为空——尽管生命周期记录确实存在。现在 `policy` 与 `app`、`update`、`settings`、`tunnel`、`network`、`system` 并列成为正式分类；那两个一次性标签分别归入 `system` 与 `app`。
+
+### 🛠 内部
+
+- **删除 36 个未使用的翻译键**（保留 596 个，五种语言严格同步）：2.0.0 之前自动化编辑器遗留（`section_connect`、`label_active`、`tunnel_inactive`、`rule_or` 等）、两条已被 `dns_public_fetch_unavailable` 取代的 DNS 列表提示，以及编辑器从未渲染的字段标签。另加了一个测试：Go 源码里任何 `"category", "…"` 字面量若不在已声明的分类列表中，构建即失败，这类漂移不会再悄悄回来。
+- **翻译文件统一为 LF。** 此前它们混用了 `\r\r\n`、`\r\n` 与裸 `\n`，这正是"改一个值却显示整个文件 diff"的原因。现已与仓库 `.gitattributes` 的规范化规则一致。
+- Windows 隧道、Wi-Fi 配置与网卡相关代码的注释改回英文；其中一处还留着某次撰码过程里被否决建议的批注，而且被反向应用了——上面那个隧道接口类型错误正是由此而来。
+
 ## [2.5.0] - 2026-10-05
 
 ### 🔧 变更

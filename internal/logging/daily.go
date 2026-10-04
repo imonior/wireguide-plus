@@ -33,6 +33,7 @@ var ValidCategories = []string{
 	"settings", // settings saves and applied changes
 	"tunnel",   // connect/disconnect, scripts, health
 	"network",  // firewall, DNS protection, interfaces
+	"policy",   // automation decisions, rule gating, DNS resolve path
 	"system",   // lifecycle, crash recovery, spawn
 }
 

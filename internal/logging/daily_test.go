@@ -2,9 +2,11 @@ package logging
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -123,5 +125,84 @@ func TestCategoryFromRecord(t *testing.T) {
 	attrs := []slog.Attr{slog.String("category", "settings")}
 	if got := CategoryFromRecord(slog.NewRecord(time.Now(), slog.LevelInfo, "hello", 0), attrs); got != "settings" {
 		t.Fatalf("category = %q, want settings", got)
+	}
+}
+
+// TestNoRogueCategories guards the drift this package has already suffered
+// once: call sites invented "policy", "lifecycle" and "gui" while
+// ValidCategories still listed only six names, so those records could never
+// be selected in the LogViewer and "system" ended up with zero entries.
+//
+// The frontend mirrors this list (LogViewer's `categories` array) and the
+// log.category_* i18n keys are generated from it, so a new category is a
+// three-place change, not one.
+func TestNoRogueCategories(t *testing.T) {
+	valid := make(map[string]bool, len(ValidCategories))
+	for _, c := range ValidCategories {
+		valid[c] = true
+	}
+
+	root := repoRoot(t)
+	re := regexp.MustCompile(`"category",\s*"([a-z-]+)"`)
+	seen := map[string]string{} // category -> first file that used it
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			// Skip vendored/irrelevant trees.
+			switch d.Name() {
+			case "node_modules", ".git", "dist", "bindings", "releases":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+			if _, ok := seen[m[1]]; !ok {
+				seen[m[1]] = path
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk source: %v", err)
+	}
+
+	if len(seen) == 0 {
+		t.Fatal("no category literals found — the scan is broken, not the code")
+	}
+	for cat, where := range seen {
+		if !valid[cat] {
+			t.Errorf("category %q used in %s is not in ValidCategories %v — "+
+				"add it there, to LogViewer's categories array and to the log.category_* i18n keys",
+				cat, where, ValidCategories)
+		}
+	}
+}
+
+// repoRoot walks up from this test file to the module root.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("go.mod not found above the test directory")
+		}
+		dir = parent
 	}
 }
