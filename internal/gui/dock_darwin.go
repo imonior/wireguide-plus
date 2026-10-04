@@ -134,12 +134,21 @@ static void dragArm(NSWindow *w, NSEvent *down) {
 		[gDragDown release];
 		gDragDown = down;
 	}
-	gDragWin = w;
+	// Own a reference for the whole gesture, exactly like the button-down
+	// event: the user can close the bubble (tray click, dismiss) between the
+	// first Dragged event and the one that clears this slot, and a raw
+	// pointer would then hand performWindowDragWithEvent: a freed window.
+	if (gDragWin != w) {
+		[w retain];
+		[gDragWin release];
+		gDragWin = w;
+	}
 }
 
 static void dragDisarm(void) {
 	[gDragDown release];
 	gDragDown = nil;
+	[gDragWin release];
 	gDragWin = nil;
 }
 

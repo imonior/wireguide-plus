@@ -4,6 +4,28 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.4] - 2026-10-04
+
+### 🐛 修复
+
+- **设置导出/导入现在会带上每条隧道的策略。** 归档此前只有 `*.conf`，换机后流量保护、DNS 路由选择、单隧道自动化开关、空闲保连、受保护域名、备注与延迟探测目标全部丢失。现在 `.meta.json` sidecar 随隧道一起打包，并挂到导入实际落地的名字上（包括去重后的 `name-1`）；读不到或找不到对应隧道的 sidecar 会记一条日志后跳过，不再让整次导入失败。`config.json` 经由设置存储的加锁原子写入应用，解析不了的字节会被拒绝并保留原文件。
+- **保存设置不再回滚别处的改动。** 设置对话框此前把打开时读到的整个对象写回去，中间落盘的改动——`wireguideplus ctl …`、手动连接/断开闩、DNS 泄漏测试的解析器列表——会被无声覆盖。现在保存是文件锁下的读-改-写，后端自有字段得以保留。
+- **Windows：helper 拒绝启用无法限定到单个用户的控制管道。** 解析不出当前登录用户的 SID 时，管道原先退化为授权给*交互式用户*，任何已登录账户都能操作隧道与防火墙规则。现在一律 fail closed：helper 不启动，GUI 通过既有的重试对话框提示。
+- **日志目录被 root 占有不再让你失去文件日志（macOS/Linux）。** 特权 helper 先建了日志目录时，无权限的 GUI 既写不了也 chown 不了。现在 GUI 照常启动，请 helper（以 root 运行）把目录**及其中每个按日切分的日志文件**所有权交还，然后重开自己的日志；若此刻还没有 helper，健康监控会在它出现后重试这次修复。
+- **helper 不再在隧道仍连接时因关闭而 panic。** 宽限计时器、`Helper.Shutdown` 与 `ctl stop` 可能在任何一方真正关闭通道前都通过“是否已关闭”的检查，第二次 close 会让 helper 带着存活隧道一起倒下。关闭现在是恰好一次。
+- **GUI 并发写日志不再与日志文件重绑竞态。** handler 读取自身 file 字段时未持有重绑所用的锁，而重绑又会丢弃被替换的 handler——重绑期间写入的记录可能落到已关闭的 handler，或泄漏它仍打开的文件。
+- **状态气泡的窗口不再可能在拖动过程中被释放（macOS）。** 拖拽槽位原先只存窗口的裸指针，若在首个 dragged 事件与清空槽位的那个事件之间关闭气泡，AppKit 拿到的就是已释放的窗口。现在槽位在拖动手势期间持有一个引用；窗口创建也与存在性检查放在同一把锁下，因此同时触发的两次展示（启动 15 秒总览与防抖后的状态变化）不会各建一个窗口、让第一个再也关不掉，拆除流程也不会误杀刚替换上来的气泡。
+- **失效或被 root 占用的实例锁不再让应用启动即退。** 属于其他用户的 `gui-instance.lock` 返回权限错误，过去被读成“已有第二份在运行”，于是每次启动都退出并指向一个并不存在的实例；现在改为告警并在没有单实例闸门的情况下继续运行。唤醒监听启动前也会先把锁文件截断，残留字节不再能永久拒绝唤起请求。
+- **helper 自动恢复不再无限弹提示。** 连续失败次数封顶三次，之后监控只做静默探测——避免在用户持续取消授权或安装本身损坏时，把 5 秒一次的轮询变成无止境的管理员/UAC 对话框。
+- **七条 toast 打印的是消息 id 而不是文字。** 它们查询的 id 在任何一种语言的目录里都不存在（`helper.disconnected`、`helper.reconnected`、`wifi.switched`、`egress.clear_failed`、`export.done`、`export.failed`、`connect.failed`），因此永远找不到译文。现在每条都指向真实键，并且 `checkrelease` 会拒绝英语目录里不存在的 `$t('ns.key')` 字面量。
+- **macOS helper 安装改为用私有临时文件暂存 LaunchDaemon plist**（`0600`，名字不可预测），不再写到 `/tmp` 下固定的全局可读路径。
+- **两行描述了从未发生行为的日志。** 无权限 GUI 预料之中的“cannot create/chmod DataDir”警告降为 debug 级——它们每次启动都刷，把日志里真正该看的警告训练成了噪音；带 Pre/PostUp 脚本的隧道现在记录这些脚本究竟会不会执行，而不是宣称 GUI 忽略它们。
+
+### 🔧 变更
+
+- **发布门禁不会再和它产出的制品说法不一。** `ci.yml` 每次 push 都跑 `checkrelease`（五语目录键集一致、每个 `$t()` id 存在、CHANGELOG 覆盖 `VERSION`）；发布流程先校验 tag、`VERSION` 与打包元数据三者同号，再断言每个制品**自身**声明的版本——macOS bundle 用 `plutil`、Windows 安装器的版本资源、`.deb` 的 `Version` 字段；`bump:version` 遇到无事可做时以非零退出而不是静默跳过；`fix-release-notes` 会填充过去原样留在发布正文里的版本占位符。
+- **文档与 task 文件重新与代码树一致。** Windows 下载章节改为描述发布真正附带的 portable zip（里面就是 exe 与匹配的驱动 DLL），不再让你手工配对裸 exe 和 DLL；`releases/` 说明其中四个被跟踪的二进制是用 `git add -f` 有意保留的回滚备份；删掉了已死的 `build:server` / `run:server` / `build:docker` 目标与一条指向不存在文件的 `.gitignore` 记录；`systemDataDir()` 改从 `storage.GetPaths` 取路径，不再保留第二份无人同步的硬编码副本。
+
 ## [2.4.3] - 2026-09-26
 
 ### 🐛 修复

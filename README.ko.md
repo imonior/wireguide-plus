@@ -47,7 +47,7 @@ WireGuide Plus는 오픈소스 프로젝트 [`korjwl1/wireguide`](https://github
 - **AmneziaWG(AWG) 터널** — AmneziaWG(난독화 WireGuard) 설정 가져오기 및 연결 지원. AWG는 설정의 Jc/Jmin/Jmax/S1-S4/H1-H4 난독화 매개변수로 자동 감지되며, 해당 터널에는 「AmneziaWG」 배지가 표시됩니다. 설정 → 고급에서 지원을 끌 수 있습니다.
 - **터널 편집기: 필드 뷰와 스크립트 훅** — conf 텍스트 외에 키별 폼(interface / peer 그룹)으로 구성을 편집하고, PreUp / PostUp / PreDown / PostDown 스크립트 훅을 관리(파일 선택, 빈 스크립트 생성, 코드 편집, 지우기)할 수 있습니다. 연결 중에도 편집할 수 있으며, 저장하면 끊고 변경을 적용한 뒤 자동으로 다시 연결합니다.
 - **터널별 물리적 출구 바인딩** — 「인터페이스 고정」 활성화 시 터널마다 암호화 트래픽을 특정 물리 NIC에 고정(Windows / Linux / macOS)할 수 있으며, 바인딩된 NIC가 사라지면 대화상자에서 대기 / 자동 전환 / 수동 지정을 선택합니다.
-- **설정 내보내기/가져오기** — tunnels, scripts, `config.json`(로그 제외)을 하나의 아카이브로 묶어 다른 머신으로 쉽게 이전할 수 있습니다.
+- **설정 내보내기/가져오기** — tunnels(터널별 정책 sidecar 포함), scripts, `config.json`(로그 제외)을 하나의 아카이브로 묶어 다른 머신으로 쉽게 이전할 수 있습니다.
 - **도구 탭** — 내장 **DNS 누수 테스트**로 트래픽이 실제로 설정한 DNS 서버를 통해 나가는지 확인하고, **경로 시각화**는 현재 라우팅 테이블을 보여주며 각 경로에 VPN / Direct 배지를 달고 LAN 온링크 필터와 셀룰러 인터페이스 표기를 지원합니다.
 - **터널 정책** — 터널별 DNS 확인 경로, 특정 도메인의 터널 강제 통과, 트래픽 보호, 기본 DNS, 그리고 결정적 충돌 해결.
 - **지연 프로브** — 터널별 지연 프로브가 다중 대상 병렬을 지원합니다. 각 후보(공용 리졸버 8.8.8.8 / 223.5.5.5, 터널 엔드포인트, 임의의 사용자 지정 주소 또는 도메인)를 동시에 프로브하고 해석 IP·종류·왕복 시간을 표시합니다. 분할 터널에서는 사용자 지정 대상이 저장 전 터널의 AllowedIPs 커버리지로 검증됩니다. 대상은 저장 후 즉시 다시 프로브되며, 도메인 엔드포인트는 상세 페이지 상단에 현재 해석된 주소를 표시합니다.
@@ -164,28 +164,26 @@ arch는 `x86` / `amd64` / `arm64`). 설치된 프로그램 파일 이름에도 �
 
 **포터블 버전(설치 불필요)**
 
-- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`** (32비트 exe는 **`wintun-x86.dll`**,
-  ARM64 exe는 **`wintun-arm64.dll`**) — **같은 아키텍처**의 두 파일을 함께 다운로드해
-  같은 폴더에 넣은 뒤 exe를 실행하세요.
+- `wireguideplus-<version>-amd64-portable.zip` (`-x86-` / `-arm64-` 도 있음) —
+  아키텍처별 1개의 zip에 **exe와 일치하는 드라이버 DLL이 이미 함께** 들어 있습니다.
+  zip 하나를 내려받아 한 폴더에 풀고 exe를 실행하세요.
 
 포터블 버전은 **단독으로 실행되지 않습니다**. WireGuard 터널을 만드는 데 필요한
-드라이버 DLL을 exe와 같은 폴더에 두어야 합니다. 프로그램은 아키텍처에 맞는 파일을
-자동으로 로드합니다(`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) —
+드라이버 DLL을 exe와 같은 폴더에 두어야 하며, 두 파일을 묶은 zip을 제공하는 이유가
+그것입니다. 프로그램은 아키텍처에 맞는 파일을 자동으로 로드합니다
+(`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) —
 **이름을 바꿀 필요 없이** 아래 표대로 두면 됩니다:
 
-| exe | 일치하는 드라이버 DLL |
+| zip 안의 exe | 일치하는 드라이버 DLL |
 | --- | --- |
 | `wireguideplus-amd64.exe`(64비트) | `wintun-amd64.dll` |
 | `wireguideplus-x86.exe`(32비트) | `wintun-x86.dll` |
 | `wireguideplus-arm64.exe`(ARM64) | `wintun-arm64.dll` |
 
 드라이버 DLL은 `wintun-0.14.1.zip`에 들어 있습니다(
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) 참조). 릴리스에는
-`wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-x86-portable.zip` /
-`wireguideplus-<version>-arm64-portable.zip` 포터블 zip도 제공됩니다. 각 zip에는 exe와 일치하는
-드라이버 DLL이 **함께** 들어 있어 압축을 풀기만 하면 실행할 수 있습니다. 릴리스에서
-더 이상 개별 DLL을 첨부하지 않습니다(포터블 zip 또는 설치 프로그램을 사용하세요).
-일치하는 드라이버 DLL이 exe 옆에 없으면 터널을 만들 수 없습니다.
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll) 참조). 릴리스에는 exe 단품이나
+개별 DLL을 첨부하지 않습니다. 위의 포터블 zip(또는 설치 프로그램)이 두 파일을 함께
+얻는 방법입니다. 일치하는 드라이버 DLL이 exe 옆에 없으면 터널을 만들 수 없습니다.
 
 
 

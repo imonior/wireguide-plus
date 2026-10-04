@@ -48,6 +48,10 @@
   let showZipResult = false;
   let zipResults = [];
   let conflictList = [];
+  // The policy report the conflict dialog renders when the user is asked
+  // to override it: handleConnect parks the connect here, ConflictWarning
+  // reads it, and answering clears it.
+  let policyConflictReport = null;
   // A connect parked by the helper because another connected tunnel already
   // owns the system's DNS resolve path. The helper holds the connect until
   // the user answers here (principle 33).
@@ -309,9 +313,9 @@
     helperUnsub = Events.On('helper', (event) => {
       const { alive, message } = event.data || {};
       if (!alive) {
-        showToast($t('helper.disconnected') + (message ? ' — ' + message : ''));
+        showToast($t('app.helper_disconnected') + (message ? ' — ' + message : ''));
       } else {
-        showToast($t('helper.reconnected'));
+        showToast($t('app.helper_reconnected'));
       }
     });
 
@@ -356,7 +360,7 @@
     wifiSsidUnsub = Events.On('wifi_ssid', (event) => {
       const { new_ssid } = event.data || {};
       if (new_ssid) {
-        showToast($t('wifi.switched', { ssid: new_ssid }));
+        showToast($t('app.wifi_switched', { ssid: new_ssid }));
       }
     });
 
@@ -425,7 +429,7 @@
       await TunnelService.SetTunnelBinding(name, 0, '');
       showToast($t('egress_lost.switched', { tunnel: name }));
     } catch (e) {
-      showToast($t('egress.clear_failed', { err: errText(e) }));
+      showToast($t('egress_lost.clear_failed', { err: errText(e) }));
     }
   }
 
@@ -1026,10 +1030,10 @@
     try {
       const path = await TunnelService.ExportTunnel(name);
       if (path) {
-        showToast($t('export.done', { path }));
+        showToast($t('app.export_done', { path }));
       }
     } catch (err) {
-      showToast($t('export.failed', { err: errText(err) }));
+      showToast($t('app.export_failed', { err: errText(err) }));
     }
   }
 
@@ -1040,7 +1044,7 @@
       await refreshTunnels(TunnelService);
       await refreshStatus(TunnelService);
     } catch (e) {
-      showToast($t('connect.failed', { err: errText(e) }));
+      showToast($t('app.connect_failed', { err: errText(e) }));
     }
   }
 

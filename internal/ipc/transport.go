@@ -1,12 +1,70 @@
 package ipc
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 )
+
+// ownerSIDPattern matches a numeric SID string (S-1-5-21-…-1001), the only
+// shape that may be interpolated into the pipe's security descriptor. SDDL
+// aliases such as IU (Interactive Users) or BA are rejected: the descriptor
+// exists to name ONE user, and an alias names everybody.
+var ownerSIDPattern = regexp.MustCompile(`^S-1-\d+(-\d+)+$`)
+
+// broadPrincipals are the well-known SIDs whose numeric form the pattern above
+// happily accepts — Everyone, Interactive Users, Authenticated Users, the
+// built-in groups and the service accounts. None of them is ever a real user's
+// token SID (that is S-1-5-21-… on every machine and domain account), and all
+// of them stand for "more than one person", which is the issue #20 hole in a
+// different spelling: the grant would reach other logged-on accounts instead
+// of the GUI's own user.
+var broadPrincipals = map[string]struct{}{
+	"S-1-1-0":      {}, // Everyone
+	"S-1-1-1":      {}, // Local
+	"S-1-1-2":      {}, // Console Logon
+	"S-1-5-4":      {}, // Interactive Users (IU)
+	"S-1-5-6":      {}, // Network logon
+	"S-1-5-7":      {}, // Authenticated Users
+	"S-1-5-9":      {}, // Enterprise Domain Controllers
+	"S-1-5-15":     {}, // External
+	"S-1-5-18":     {}, // LOCAL SYSTEM
+	"S-1-5-19":     {}, // LOCAL SERVICE
+	"S-1-5-20":     {}, // NETWORK SERVICE
+	"S-1-5-32-544": {}, // Built-in Administrators (BA)
+	"S-1-5-32-545": {}, // Built-in Users
+	"S-1-5-32-546": {}, // Built-in Guests
+	"S-1-5-32-562": {}, // Remote Management Users
+	"S-1-5-1000":   {}, // Other Organization
+}
+
+// ownerGrant returns the SDDL access block that lets the unprivileged GUI read
+// and write the helper's pipe. It fails closed when there is no single owner
+// to grant it to — the alternative was historically a grant to every
+// logged-on account (issue #20).
+//
+// This lives in the portable file, not transport_windows.go, so the rule
+// itself is testable on every platform's test runner; the Windows wire-up
+// additionally parses the SID with windows.StringToSid before building the
+// descriptor.
+func ownerGrant(ownerSID string) (string, error) {
+	if ownerSID == "" {
+		return "", fmt.Errorf("no owner SID for the helper pipe: refusing to grant it to every interactive user")
+	}
+	if !ownerSIDPattern.MatchString(ownerSID) {
+		return "", fmt.Errorf("invalid owner SID %q for the helper pipe", ownerSID)
+	}
+	// ownerSIDPattern is case-sensitive and requires the uppercase S-1-
+	// prefix, so an SID that reached here is already in canonical form.
+	if _, bad := broadPrincipals[ownerSID]; bad {
+		return "", fmt.Errorf("owner SID %q is a shared principal, not a single user", ownerSID)
+	}
+	return "(A;;GRGW;;;" + ownerSID + ")", nil
+}
 
 // DefaultSocketPath returns the default socket/pipe address for this OS+user.
 func DefaultSocketPath() string {

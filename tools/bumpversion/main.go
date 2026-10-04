@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -108,28 +109,47 @@ func main() {
 		byPath[t.path] = append(byPath[t.path], t)
 	}
 
-	changed := 0
+	// Pre-flight: every pattern must match its file, and this runs before a
+	// single byte is written. The old behaviour printed "SKIP <file>" and
+	// exited 0, so a bump could rewrite six of ten files and the release then
+	// shipped artefacts that disagree about their version — which is what the
+	// Release workflow's preflight job now has to catch after the fact. An
+	// unmatched pattern is a bug in this tool or a restructured file, and
+	// either way the tree must stay untouched until it is fixed.
+	contents := make(map[string][]byte, len(byPath))
+	var unmatched []string
 	for path, tlist := range byPath {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "bumpversion: read", path, ":", err)
 			os.Exit(1)
 		}
-		out := string(data)
-		matched, contentChanged := false, false
+		contents[path] = data
 		for _, t := range tlist {
-			if t.re.MatchString(out) {
-				matched = true
+			if !t.re.MatchString(string(data)) {
+				unmatched = append(unmatched, fmt.Sprintf("%s  pattern %s", path, t.re))
 			}
+		}
+	}
+	if len(unmatched) > 0 {
+		sort.Strings(unmatched)
+		fmt.Fprintln(os.Stderr, "bumpversion: no version pattern matched — nothing was written:")
+		for _, u := range unmatched {
+			fmt.Fprintln(os.Stderr, "  ", u)
+		}
+		os.Exit(1)
+	}
+
+	changed := 0
+	for path, tlist := range byPath {
+		out := string(contents[path])
+		contentChanged := false
+		for _, t := range tlist {
 			next := t.re.ReplaceAllString(out, t.repl)
 			if next != out {
 				contentChanged = true
 			}
 			out = next
-		}
-		if !matched {
-			fmt.Printf("SKIP  %s (no version pattern matched)\n", path)
-			continue
 		}
 		if !contentChanged {
 			fmt.Printf("OK    %s (already %s)\n", path, newVer)

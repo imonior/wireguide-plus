@@ -192,7 +192,8 @@ func ensureHelper(ctx context.Context, dataDir string) (*ipc.Client, error) {
 // startHelperHealthMonitor runs a background goroutine that pings the helper
 // every 5 seconds. On failure it:
 //  1. Emits a "helper" event to notify the frontend
-//  2. Attempts to re-spawn the helper and establish a new connection
+//  2. Attempts to re-spawn the helper and establish a new connection — up to
+//     maxAutoRecoverAttempts times, after which it only probes silently
 //  3. Swaps the new connection into the ClientHolder
 //  4. Asks the event bridge to re-subscribe
 //  5. Emits "helper" (alive) once the connection is back
@@ -200,13 +201,22 @@ func ensureHelper(ctx context.Context, dataDir string) (*ipc.Client, error) {
 // This fixes the previous design where a helper crash left the app
 // permanently unable to receive events (the bridge was still attached to a
 // dead socket).
-func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, dataDir string, bridge *eventBridge, done <-chan struct{}, gate *shutdownGate, wg *sync.WaitGroup) {
+func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, dataDir, logsDir string, bridge *eventBridge, done <-chan struct{}, gate *shutdownGate, wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		wasAlive := true
+		// Consecutive failed auto-recovery attempts. recoverHelper is the
+		// path that spawns, and spawning is what asks the OS for elevation,
+		// so an unfixable helper — the user keeps cancelling the prompt, or
+		// the daemon install is broken — turned the 5 s tick into an admin
+		// dialog that never stops. The no-client branch above already refuses
+		// to auto-spawn for exactly this reason; this is the same rule applied
+		// once the retries start stacking up.
+		const maxAutoRecoverAttempts = 3
+		recoverFailures := 0
 		for {
 			select {
 			case <-done:
@@ -237,6 +247,11 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 				if probeHelper(clients, bridge, dataDir) {
 					slog.Info("helper connected via background probe")
 					app.Event.Emit("helper", HelperEvent{Alive: true})
+					// A helper that only shows up now is also the first
+					// opportunity to repair a root-owned log directory, so
+					// the user isn't left with a GUI whose file logging
+					// silently fails for the rest of the session.
+					repairLogsDirOwnership(clients.Get(), logsDir)
 				}
 				continue
 			}
@@ -273,15 +288,42 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 				if recoverHelper(clients, bridge, dataDir, done, gate) {
 					slog.Info("helper recovered")
 					app.Event.Emit("helper", HelperEvent{Alive: true})
+					repairLogsDirOwnership(clients.Get(), logsDir)
 					wasAlive = true
+					recoverFailures = 0
+				} else {
+					recoverFailures++
 				}
 
 			case !alive && !wasAlive:
-				// Retry recovery on subsequent ticks until it comes back.
+				if recoverFailures >= maxAutoRecoverAttempts {
+					// Auto-recovery has paused. Fall back to the silent probe
+					// the no-client branch uses: a helper the user starts by
+					// hand, or one that finally comes back, is still adopted —
+					// only the unprompted spawn loop stops.
+					if probeHelper(clients, bridge, dataDir) {
+						slog.Info("helper connected via background probe after auto-recovery paused")
+						app.Event.Emit("helper", HelperEvent{Alive: true})
+						repairLogsDirOwnership(clients.Get(), logsDir)
+						wasAlive = true
+						recoverFailures = 0
+					}
+					break
+				}
+				// Retry recovery on subsequent ticks, up to the cap.
 				if recoverHelper(clients, bridge, dataDir, done, gate) {
 					slog.Info("helper recovered")
 					app.Event.Emit("helper", HelperEvent{Alive: true})
+					repairLogsDirOwnership(clients.Get(), logsDir)
 					wasAlive = true
+					recoverFailures = 0
+				} else {
+					recoverFailures++
+					if recoverFailures == maxAutoRecoverAttempts {
+						slog.Warn("helper auto-recovery paused after repeated failures",
+							"attempts", recoverFailures,
+							"hint", "a helper started manually is still picked up on the next tick")
+					}
 				}
 
 			case alive && !wasAlive:
@@ -294,7 +336,9 @@ func startHelperHealthMonitor(app *application.App, clients *ipc.ClientHolder, d
 				slog.Info("helper reachable again")
 				bridge.Resubscribe()
 				app.Event.Emit("helper", HelperEvent{Alive: true})
+				repairLogsDirOwnership(c, logsDir)
 				wasAlive = true
+				recoverFailures = 0
 			}
 		}
 	}()

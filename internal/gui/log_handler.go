@@ -123,10 +123,21 @@ func (h *guiLogHandler) Enabled(_ context.Context, l slog.Level) bool {
 	return l >= h.levelVar.Level()
 }
 
+// currentFile snapshots the file handler under mu. setGUILogFile writes that
+// field while holding the same lock, so a record path that read it directly
+// would race every other goroutine that is logging — and a re-bind that also
+// closes the handler it replaced would leave the reader writing into a closed
+// DailyHandler.
+func (h *guiLogHandler) currentFile() *logging.DailyHandler {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.file
+}
+
 func (h *guiLogHandler) Handle(ctx context.Context, r slog.Record) error {
 	_ = h.stderr.Handle(ctx, r)
-	if h.file != nil {
-		_ = h.file.Handle(ctx, r)
+	if file := h.currentFile(); file != nil {
+		_ = file.Handle(ctx, r)
 	}
 
 	// The "category" attr is carried separately (entry.Category) and
@@ -184,11 +195,12 @@ func (h *guiLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	combined = append(combined, h.attrs...)
 	combined = append(combined, attrs...)
 	app := h.app
+	file := h.file
 	h.mu.Unlock()
 	return &guiLogHandler{
 		levelVar: h.levelVar,
 		stderr:   h.stderr.WithAttrs(attrs),
-		file:     h.file,
+		file:     file,
 		app:      app,
 		attrs:    combined,
 	}
@@ -197,11 +209,12 @@ func (h *guiLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 func (h *guiLogHandler) WithGroup(name string) slog.Handler {
 	h.mu.Lock()
 	app := h.app
+	file := h.file
 	h.mu.Unlock()
 	return &guiLogHandler{
 		levelVar: h.levelVar,
 		stderr:   h.stderr.WithGroup(name),
-		file:     h.file,
+		file:     file,
 		app:      app,
 		attrs:    h.attrs,
 	}
@@ -211,14 +224,28 @@ func (h *guiLogHandler) WithGroup(name string) slog.Handler {
 // wireguideplus-YYYY-MM-DD.log in logsDir. Called after storage.EnsureDirs
 // so the directory is guaranteed to exist; records emitted before this
 // point are only in stderr/pending and are not retroactively written.
+//
+// Safe to call more than once: the GUI calls it again after the privileged
+// helper repairs ownership of a root-owned log directory, and a re-bind that
+// dropped the previous handler without closing it would leak the *os.File the
+// old DailyHandler had open (DailyHandler only closes on day rollover or an
+// explicit Close).
 func setGUILogFile(logsDir string) {
 	path := filepath.Join(logsDir, "wireguideplus.log")
 	fileHandler := logging.NewDailyHandler(logsDir, "wireguideplus", guiLogLevel)
 	guiLogRefMu.Lock()
 	if guiLogRef != nil {
 		guiLogRef.mu.Lock()
+		old := guiLogRef.file
 		guiLogRef.file = fileHandler
 		guiLogRef.mu.Unlock()
+		if old != nil {
+			// Best-effort: a failure to flush the previous day's file must
+			// not stop us from binding the new handler.
+			if err := old.Close(); err != nil {
+				slog.Warn("closing previous GUI log file failed", "error", err)
+			}
+		}
 	}
 	guiLogRefMu.Unlock()
 	slog.Info("file log enabled (daily)", "path", path)

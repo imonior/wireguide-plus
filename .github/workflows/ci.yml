@@ -75,6 +75,17 @@ jobs:
           go test -race ./...
           go vet ./...
 
+      - name: Check release consistency
+        # checkrelease covers what no compiler can see: the five catalogues
+        # exposing the same key set, every $t('ns.key') literal existing at all
+        # (translate() echoes the raw key back, so a wrong namespace ships as a
+        # bare-key toast), and CHANGELOG.md plus its four translations carrying
+        # the VERSION section. Running it on every push means a release tag can
+        # never be cut from a main that fails the same check.
+        run: |
+          set -euo pipefail
+          go run ./tools/checkrelease
+
       - name: Build native Linux binary
         run: |
           set -euo pipefail

@@ -51,14 +51,26 @@ jobs:
         run: |
           set -euo pipefail
           cur="${{ inputs.tag }}"
+          # The download section of build/release-tail.md.tmpl addresses every
+          # asset as .../download/<tag>/wireguideplus-<ver>-…, so the tail needs
+          # the version as well as the two tags. Without this the body shipped
+          # with the placeholder spelled literally 25 times.
+          ver="${cur#v}"
           prev="$(git tag --sort=-v:refname | awk -v c="$cur" 'f{print; exit} $0==c{f=1}')"
           prev="${prev:-$cur}"
-          echo "current tag: $cur   previous tag: $prev"
+          echo "current tag: $cur   previous tag: $prev   version: $ver"
           # Latest changelog section, with the "## [x.y.z] - date" header line
           # dropped so the body reads like a changelog (matches the old layout).
           awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 > RELEASE_NOTES.md
           # Append the asset/download/footer tail with version placeholders filled.
-          sed -e "s#__CUR__#$cur#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
+          sed -e "s#__CUR__#$cur#g" -e "s#__VER__#$ver#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
+          # Fail on ANY leftover placeholder, not just the ones handled here: a
+          # new __NAME__ in the template must not reach a published body.
+          if grep -q '__[A-Z][A-Z_]*__' RELEASE_NOTES.md; then
+            echo "::error::RELEASE_NOTES.md still contains unsubstituted placeholders:"
+            grep -o '__[A-Z][A-Z_]*__' RELEASE_NOTES.md | sort -u
+            exit 1
+          fi
           echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
           cat RELEASE_NOTES.md
       - name: Overwrite release body

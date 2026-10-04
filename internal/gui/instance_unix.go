@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
@@ -21,4 +22,13 @@ func acquireInstanceLock(path string) (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+// isInstanceLockConflict reports whether a failed acquire means "a twin
+// instance holds the lock" rather than "the lock could not be taken".
+// flock(LOCK_NB) reports EWOULDBLOCK for the former; everything else
+// (EACCES on a root-owned lock file, a read-only config directory) is an
+// environment failure that must not be mistaken for a running twin.
+func isInstanceLockConflict(err error) bool {
+	return errors.Is(err, syscall.EWOULDBLOCK)
 }

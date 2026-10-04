@@ -21,9 +21,17 @@ func TestValidateArgsSocketSID(t *testing.T) {
 		t.Errorf("valid SID rejected: %v", err)
 	}
 
-	empty := base // empty SID is fine (Unix / fallback)
-	if err := ValidateArgs(empty); err != nil {
-		t.Errorf("empty SID rejected: %v", err)
+	// An empty SID is the normal case on Unix, where the socket's inode
+	// ownership is the access gate. On Windows it means nobody told the
+	// helper whose pipe to open, and the historical answer was to grant
+	// Interactive Users — so it has to be a spawn failure there instead.
+	err := ValidateArgs(base)
+	if runtime.GOOS == "windows" {
+		if err == nil {
+			t.Error("empty SocketSID accepted on Windows: the helper pipe would have no owner")
+		}
+	} else if err != nil {
+		t.Errorf("empty SID rejected on %s: %v", runtime.GOOS, err)
 	}
 
 	for _, bad := range []string{

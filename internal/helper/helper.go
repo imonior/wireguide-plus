@@ -254,6 +254,12 @@ type Helper struct {
 	userTunnelStore *storage.TunnelStore
 	userAppSupport  string
 
+	// logsDir and ownerUID are captured at startup so the
+	// RepairLogOwnership RPC handler can re-apply ownership to the user-side
+	// log directory on demand, without re-parsing launch arguments.
+	logsDir  string
+	ownerUID int
+
 	// autoFailMu guards autoConnectBackoff. A tunnel whose automation
 	// connect keeps failing (e.g. its address is held by another WireGuard
 	// client) must not be re-attempted on every 30s poll: each attempt
@@ -368,6 +374,8 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// touches it, so a boot-time helper spawn cannot leave the GUI's log
 	// directory root-owned. Best-effort: failure only downgrades file
 	// logging, never helper startup.
+	h.logsDir = logsDir
+	h.ownerUID = ownerUID
 	var logsDirErr error
 	if logsDir != "" {
 		logsDirErr = prepareLogsDir(logsDir, ownerUID)

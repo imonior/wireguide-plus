@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -153,6 +152,29 @@ func PlistNeedsReinstall(args Args) bool {
 	return string(existing) != expected
 }
 
+// createPlistTemp writes the staged plist content to a private temp file and
+// returns its path. os.CreateTemp supplies both properties the fixed path
+// lacked: an unpredictable name (so nothing can be pre-planted at the spot we
+// are about to truncate) and 0600 (root reads it for the install copy; nobody
+// else needs to). The caller removes the file when the install is done.
+func createPlistTemp(content string) (string, error) {
+	f, err := os.CreateTemp(os.TempDir(), daemonLabel+"-*.plist")
+	if err != nil {
+		return "", err
+	}
+	path := f.Name()
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		os.Remove(path)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
 // installAndLoadDaemon writes the plist to a temp file (no escaping issues),
 // then runs a shell script as root via osascript that copies everything into
 // place and bootstraps the daemon. The user sees one password prompt.
@@ -168,12 +190,19 @@ func installAndLoadDaemon(ctx context.Context, args Args) error {
 	}
 
 	// Write plist to a temp file — avoids heredoc/escaping issues inside
-	// the AppleScript string. Go writes it as the current user to /tmp,
-	// then the root shell script copies it to /Library/LaunchDaemons/.
+	// the AppleScript string. Go writes it as the current user, then the
+	// root shell script copies it to /Library/LaunchDaemons/.
+	//
+	// The temp file gets an unpredictable name and 0600 (createPlistTemp).
+	// Writing to a fixed `<TempDir>/com.wireguideplus.helper.plist` at 0644
+	// was both readable by every account on the machine — it lists the
+	// socket path, data dir and log dir, so it names the user — and open to
+	// a pre-creation/symlink race in a shared /tmp, where whoever got there
+	// first decided which file this write truncated.
 	plist := generatePlistContent(exe, args)
 
-	tmpPlist := filepath.Join(os.TempDir(), daemonLabel+".plist")
-	if err := os.WriteFile(tmpPlist, []byte(plist), 0644); err != nil {
+	tmpPlist, err := createPlistTemp(plist)
+	if err != nil {
 		return fmt.Errorf("write temp plist: %w", err)
 	}
 	defer os.Remove(tmpPlist)

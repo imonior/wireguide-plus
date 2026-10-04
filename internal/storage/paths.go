@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,12 @@ import (
 )
 
 const appName = "wireguideplus"
+
+// ErrDirNotOwnedByUser is returned by EnsureDirs when the log directory exists
+// but is owned by another user (the root helper created it) and the current
+// process cannot chmod or write it. The GUI catches this to ask the privileged
+// helper to chown the directory back, rather than aborting startup.
+var ErrDirNotOwnedByUser = errors.New("directory not owned by current user")
 
 // canWriteDir tests whether the current process can create files in dir by
 // writing and immediately removing a temp file. Used by EnsureDirs to
@@ -192,8 +199,26 @@ func copyFile(src, dst string) error {
 // /Library/Application Support/wireguideplus on macOS). If creation fails due
 // to insufficient privileges, the error is logged as a warning instead of
 // failing the entire startup — the helper process will create it when running
-// as root.
+// as root. It is handled *before* the user-directory loop because that loop can
+// return early (see ErrDirNotOwnedByUser), and nothing on the helper side
+// creates DataDir, so a skipped block would leave the directory missing.
 func (p *Paths) EnsureDirs() error {
+	// DataDir is the system-level directory (macOS /Library/Application
+	// Support, Linux /var/lib, Windows ProgramData) owned by root/admin and
+	// used by the privileged helper, so an unprivileged GUI can neither create
+	// nor chmod it. Both failures are therefore EXPECTED on every startup, not
+	// a problem to report: logging them at Warn trained users to ignore the
+	// log's actual warnings, so they are Debug-level diagnostics. The helper
+	// (running as root) creates the directory for real.
+	if p.DataDir != "" {
+		if err := os.MkdirAll(p.DataDir, 0700); err != nil {
+			slog.Debug("cannot create DataDir as current user (expected; the helper creates it as root)",
+				"dir", p.DataDir, "error", err)
+		} else if err := os.Chmod(p.DataDir, 0700); err != nil {
+			slog.Debug("cannot chmod DataDir as current user (expected; it is root-owned)",
+				"dir", p.DataDir, "error", err)
+		}
+	}
 	userDirs := []string{p.ConfigDir, p.TunnelsDir, p.ScriptsDir, p.LogsDir}
 	for _, dir := range userDirs {
 		if dir == "" {
@@ -213,17 +238,16 @@ func (p *Paths) EnsureDirs() error {
 			if canWriteDir(dir) {
 				slog.Warn("cannot tighten dir permissions (owned by another user)",
 					"dir", dir, "error", err)
+			} else if dir == p.LogsDir {
+				// The log directory is owned by another user AND we cannot
+				// write to it. The unprivileged GUI cannot chown it, so
+				// return a sentinel the GUI catches to ask the privileged
+				// helper to repair ownership and retry — instead of aborting
+				// startup.
+				return fmt.Errorf("log directory %s not owned by current user: %w", dir, ErrDirNotOwnedByUser)
 			} else {
 				return fmt.Errorf("directory %s exists but is not writable: %w", dir, err)
 			}
-		}
-	}
-	// DataDir may require elevated privileges; warn instead of failing.
-	if p.DataDir != "" {
-		if err := os.MkdirAll(p.DataDir, 0700); err != nil {
-			slog.Warn("cannot create DataDir (may need root)", "dir", p.DataDir, "error", err)
-		} else if err := os.Chmod(p.DataDir, 0700); err != nil {
-			slog.Warn("cannot set DataDir permissions", "dir", p.DataDir, "error", err)
 		}
 	}
 	return nil

@@ -142,3 +142,75 @@ func TestInstallScriptReplacesBinaryAtomically(t *testing.T) {
 		t.Error("install script swaps the helper binary before booting out the old daemon")
 	}
 }
+
+// TestCreatePlistTempIsPrivate pins the two properties the staged plist needs:
+// an unpredictable name, so nothing can be pre-planted (including as a
+// symlink) at the path we are about to write, and 0600, because the plist
+// names the user's socket, data and log directories and only root needs to
+// read it for the install copy.
+func TestCreatePlistTempIsPrivate(t *testing.T) {
+	const body = "<?xml version=\"1.0\"?>\n<plist><true/></plist>\n"
+
+	seen := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		path, err := createPlistTemp(body)
+		if err != nil {
+			t.Fatalf("createPlistTemp: %v", err)
+		}
+		t.Cleanup(func() { os.Remove(path) })
+
+		if path == filepath.Join(os.TempDir(), daemonLabel+".plist") {
+			t.Errorf("staged plist is at the predictable path %q", path)
+		}
+		if !strings.HasPrefix(filepath.Base(path), daemonLabel) {
+			t.Errorf("staged plist %q is not namespaced to the daemon label", filepath.Base(path))
+		}
+		// plutil -lint keys off the extension, and the install copies this
+		// file into /Library/LaunchDaemons under the .plist name.
+		if filepath.Ext(path) != ".plist" {
+			t.Errorf("staged plist %q lost its .plist extension", path)
+		}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if perm := info.Mode().Perm(); perm != 0600 {
+			t.Errorf("staged plist mode = %O, want 0600", perm)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if string(data) != body {
+			t.Errorf("staged content = %q, want %q", data, body)
+		}
+		seen[path] = true
+	}
+	if len(seen) != 2 {
+		t.Error("two calls staged the plist at the same path")
+	}
+}
+
+// TestInstallStagesPlistThroughCreatePlistTemp is the same rule at the call
+// site: installAndLoadDaemon must not write a world-readable plist to a fixed
+// path in the shared temp directory.
+func TestInstallStagesPlistThroughCreatePlistTemp(t *testing.T) {
+	src, err := os.ReadFile("spawn_darwin.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	s := string(src)
+
+	if strings.Contains(s, "os.WriteFile(tmpPlist") {
+		t.Error("install stage writes the plist with os.WriteFile; " +
+			"the fixed path it targeted can be pre-created by another account")
+	}
+	if !strings.Contains(s, "createPlistTemp(plist)") {
+		t.Error("install stage no longer routes the plist through createPlistTemp")
+	}
+	if !strings.Contains(s, "defer os.Remove(tmpPlist)") {
+		t.Error("the staged plist is never removed; it holds the user's paths " +
+			"for as long as the temp directory lives")
+	}
+}

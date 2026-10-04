@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
@@ -33,4 +34,17 @@ func acquireInstanceLock(path string) (*os.File, error) {
 		return nil, syscall.Errno(32)
 	}
 	return os.NewFile(uintptr(h), path), nil
+}
+
+// errorSharingViolation is the CreateFile failure a second read+write open
+// produces while the running instance still holds the handle.
+const errorSharingViolation = syscall.Errno(32)
+
+// isInstanceLockConflict reports whether a failed acquire means "a twin
+// instance holds the lock" rather than "the lock could not be taken".
+// Only ERROR_SHARING_VIOLATION is a twin; ERROR_ACCESS_DENIED and friends
+// mean the file or its directory is unusable for us (root/admin-owned lock
+// from an earlier install) and must not be mistaken for a running instance.
+func isInstanceLockConflict(err error) bool {
+	return errors.Is(err, errorSharingViolation)
 }

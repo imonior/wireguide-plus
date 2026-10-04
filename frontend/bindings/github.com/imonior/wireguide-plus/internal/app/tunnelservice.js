@@ -275,9 +275,9 @@ export function ExportConfig(name) {
 }
 
 /**
- * ExportSettings writes tunnels + scripts + config.json (never logs) into
- * a zip chosen via a native save dialog. Returns the path, or "" when the
- * user cancels.
+ * ExportSettings writes tunnels (with their .meta.json policy sidecars),
+ * scripts and config.json (never logs) into a zip chosen via a native save
+ * dialog. Returns the path, or "" when the user cancels.
  * @returns {$CancellablePromise<string>}
  */
 export function ExportSettings() {
@@ -521,9 +521,10 @@ export function ImportQRFromPath(path, name) {
 
 /**
  * ImportSettings asks for a settings zip (exported by ExportSettings),
- * restores scripts into the scripts folder, imports tunnels, applies
- * config.json, and re-points each imported tunnel's script references at
- * the local scripts folder so packages stay portable across machines.
+ * restores scripts into the scripts folder, imports tunnels together with
+ * their per-tunnel policy sidecars, applies config.json, and re-points each
+ * imported tunnel's script references at the local scripts folder so packages
+ * stay portable across machines.
  * Returns nil when the user cancels the file dialog.
  * @returns {$CancellablePromise<$models.SettingsImportResult | null>}
  */

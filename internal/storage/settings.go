@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -517,6 +518,36 @@ func (s *SettingsStore) Save(settings *Settings) error {
 	return s.saveLocked(settings)
 }
 
+// ReplaceRaw installs a whole settings document supplied as ready-made bytes
+// (a settings package restored from an export), holding the same mutex + file
+// lock as Save so it can't interleave with a concurrent CLI Update. The bytes
+// are parsed before anything touches the disk: a document that doesn't decode
+// is refused instead of written, because a config.json the app can't parse
+// gets quarantined to .corrupt on the next load and the user silently loses
+// every setting they had. Writing through here rather than with os.WriteFile
+// at the call site is the point — that would replace the file non-atomically
+// and without the lock, so a crash mid-write leaves no settings at all and a
+// concurrent reader can see a torn file.
+func (s *SettingsStore) ReplaceRaw(data []byte) error {
+	var probe Settings
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("settings document is not valid: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+		return err
+	}
+	if lf, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0600); err == nil {
+		defer lf.Close()
+		if flockExclusive(int(lf.Fd())) == nil {
+			defer flockUnlock(int(lf.Fd())) //nolint:errcheck
+		}
+	}
+	return writeBytesAtomic(data, s.path)
+}
+
 // saveLocked is Save's body without the mutex/flock, for callers (Update)
 // that already hold both.
 func (s *SettingsStore) saveLocked(settings *Settings) error {
@@ -524,38 +555,5 @@ func (s *SettingsStore) saveLocked(settings *Settings) error {
 	if err != nil {
 		return err
 	}
-	// Ensure the config directory exists before writing (matches history's
-	// saveLocked). Without this, os.CreateTemp fails when EnsureDirs hasn't
-	// run or the directory was removed out from under us.
-	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
-		return err
-	}
-	tmpFile, err := os.CreateTemp(filepath.Dir(s.path), ".wireguide-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Chmod(tmpPath, 0600); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := atomicRenameDurable(tmpPath, s.path); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	return writeBytesAtomic(data, s.path)
 }

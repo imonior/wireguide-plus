@@ -32,6 +32,81 @@ func TestInstanceLockMutualExclusion(t *testing.T) {
 	third.Close()
 }
 
+// TestEnsureSingleInstanceDistinguishesLockFailure: only a lock HELD BY
+// ANOTHER PROCESS may send this instance down the wake-and-exit path. A
+// root-owned gui-instance.lock from an older install fails with EACCES /
+// ERROR_ACCESS_DENIED instead, and reading that as "a twin is running"
+// bricked launch in silence — the app exited 0 every time while the log
+// blamed an instance that did not exist.
+func TestEnsureSingleInstanceDistinguishesLockFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: an unreadable file is still openable, so EACCES cannot be produced")
+	}
+	// A real twin: first instance holds the lock, second must decline.
+	held := t.TempDir()
+	lock, err := acquireInstanceLock(filepath.Join(held, instanceLockName))
+	if err != nil {
+		t.Fatalf("acquire in the twin case: %v", err)
+	}
+	defer lock.Close()
+	if ensureSingleInstance(held) {
+		t.Fatal("second instance was allowed in while another held the lock")
+	}
+
+	// Lock file present but not openable: an environment failure, and the
+	// instance keeps running (unsynchronised, but visible in the log).
+	blocked := t.TempDir()
+	path := filepath.Join(blocked, instanceLockName)
+	if err := os.WriteFile(path, []byte("1 2 3\n"), 0o000); err != nil {
+		t.Fatalf("create unreadable lock file: %v", err)
+	}
+	if !ensureSingleInstance(blocked) {
+		t.Fatal("EACCES on the lock file was read as a running twin")
+	}
+}
+
+// TestStartWakeListenerClearsStaleRecord: the record is published into the
+// same file the crashed predecessor left behind, and serveWake compares the
+// whole line. Without truncating first, a longer old record leaves its tail
+// glued to ours, wakeExistingInstance then reads four fields instead of
+// three, rejects the record as malformed and never pings — so relaunching
+// the app becomes a silent no-op forever.
+func TestStartWakeListenerClearsStaleRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), instanceLockName)
+	stale := strings.Repeat("9", 128) + "\n"
+	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
+		t.Fatalf("seed stale record: %v", err)
+	}
+	lock, err := acquireInstanceLock(path)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer lock.Close()
+	if err := startWakeListener(lock, path); err != nil {
+		t.Fatalf("startWakeListener: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read record: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); strings.Contains(got, "9999") {
+		t.Fatalf("stale tail survived the re-bind: %q", got)
+	}
+
+	fired := make(chan struct{}, 1)
+	orig := onInstanceWake
+	onInstanceWake = func() { fired <- struct{}{} }
+	defer func() { onInstanceWake = orig }()
+
+	wakeExistingInstance(path)
+	select {
+	case <-fired:
+	case <-time.After(3 * time.Second):
+		t.Fatal("wake was not delivered after a stale record was overwritten")
+	}
+}
+
 // TestInstanceWakeRoundTrip covers both sides of the wake channel: the
 // listener publishes its record into the lock file, the second-launcher
 // path reads that record and lands a verified onInstanceWake callback —

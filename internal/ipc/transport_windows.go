@@ -16,8 +16,12 @@ import (
 // ownerSID (the spawning user's SID) scopes the pipe ACL to that user.
 func Listen(addr string, ownerUID int, ownerSID string) (net.Listener, error) {
 	_ = ownerUID
+	sddl, err := buildPipeSDDL(ownerSID)
+	if err != nil {
+		return nil, err
+	}
 	config := &winio.PipeConfig{
-		SecurityDescriptor: buildPipeSDDL(ownerSID),
+		SecurityDescriptor: sddl,
 		MessageMode:        false,
 		InputBufferSize:    65536,
 		OutputBufferSize:   65536,
@@ -31,25 +35,34 @@ func Listen(addr string, ownerUID int, ownerSID string) (net.Listener, error) {
 }
 
 // buildPipeSDDL returns the pipe's security descriptor. SYSTEM and
-// Administrators get full control (GA). The read+write (GRGW) grant that
-// lets the unprivileged GUI connect is scoped to the spawning user's SID
-// — the previous grant to Interactive Users (IU / S-1-5-4) let EVERY
-// logged-on account on a multi-user machine drive a SYSTEM helper:
+// Administrators get full control (GA), and the read+write (GRGW) grant that
+// lets the unprivileged GUI connect is scoped to the spawning user's SID by
+// ownerGrant — the previous grant to Interactive Users (IU / S-1-5-4) let
+// EVERY logged-on account on a multi-user machine drive a SYSTEM helper:
 // disconnect tunnels, drop per-tunnel System DNS enforcement, forge SSIDs into the
 // automation engine, force shutdown (issue #20).
 //
-// An empty or malformed SID falls back to the historical IU grant so a
-// helper started by an older GUI (no --owner-sid) keeps working; the
-// fallback is logged as a warning at the call site of Run. Validation
-// uses windows.StringToSid — never interpolate an unvalidated string
-// into a security descriptor.
-func buildPipeSDDL(ownerSID string) string {
-	if ownerSID != "" {
-		if _, err := windows.StringToSid(ownerSID); err == nil {
-			return fmt.Sprintf("D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;%s)", ownerSID)
-		}
+// A missing or malformed SID is a hard failure. It used to fall back to that
+// IU grant so a helper started without --owner-sid (an older GUI, or a manual
+// start) still worked — which meant the one build that most needed scoping
+// was the one that quietly reopened the hole, and the app would run fine
+// while every other logged-in user kept control of it. Failing closed makes
+// the un-scoped configuration visible as a startup error instead.
+//
+// GUI and helper are always the same binary (the helper is spawned from
+// os.Executable()), so an older GUI that never passes --owner-sid cannot meet
+// a newer helper in the field; only a hand-started `--helper` can, and that
+// operator gets an actionable message. windows.StringToSid is the last word
+// before the value is interpolated into the descriptor.
+func buildPipeSDDL(ownerSID string) (string, error) {
+	grant, err := ownerGrant(ownerSID)
+	if err != nil {
+		return "", err
 	}
-	return "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)"
+	if _, err := windows.StringToSid(ownerSID); err != nil {
+		return "", fmt.Errorf("invalid owner SID %q for the helper pipe: %w", ownerSID, err)
+	}
+	return "D:(A;;GA;;;SY)(A;;GA;;;BA)" + grant, nil
 }
 
 // Dial connects to a named pipe and verifies the server is owned by a trusted

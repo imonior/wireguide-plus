@@ -39,6 +39,7 @@ type Server struct {
 	mu           sync.Mutex
 	eventSubs    map[*subscriber]struct{} // active event subscribers
 	shutdownCh   chan struct{}
+	shutdownOnce sync.Once
 	onConnect    func() // called when a control conn attaches (any)
 	onDisconnect func() // called when the last control conn closes
 	controlConns map[net.Conn]struct{}
@@ -175,12 +176,14 @@ func (s *Server) safeHandleConn(conn net.Conn) {
 // Helper fields. The bound prevents a stuck handler from holding the whole
 // helper exit hostage — at that point we log and return anyway, letting
 // the process exit and launchd respawn handle the wedged state.
+//
+// Callers are independent (the grace timer, handleShutdown, handleRequestQuit)
+// and run outside connWg's recover wrapper, so closing the channel has to be
+// exactly-once: a select-then-close would let two of them pass the check
+// before either closed it, and "close of closed channel" would take the helper
+// down with the tunnel still up.
 func (s *Server) Shutdown() {
-	select {
-	case <-s.shutdownCh:
-	default:
-		close(s.shutdownCh)
-	}
+	s.shutdownOnce.Do(func() { close(s.shutdownCh) })
 	s.listener.Close()
 
 	s.mu.Lock()

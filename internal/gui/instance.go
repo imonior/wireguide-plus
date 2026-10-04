@@ -44,6 +44,17 @@ func ensureSingleInstance(configDir string) bool {
 	path := filepath.Join(configDir, instanceLockName)
 	lock, err := acquireInstanceLock(path)
 	if err != nil {
+		if !isInstanceLockConflict(err) {
+			// The lock could not be taken, which is not the same as it being
+			// taken by someone else: a root-owned gui-instance.lock left by an
+			// older install gives EACCES/ERROR_ACCESS_DENIED here. Treating
+			// that as a twin would exit(0) on every launch — a silently bricked
+			// app with a log line pointing at an instance that does not exist.
+			// Degrade instead: warn, and run without the gate.
+			slog.Warn("instance: could not take the instance lock; continuing without the single-instance gate",
+				"path", path, "error", err)
+			return true
+		}
 		slog.Info("instance: another GUI instance holds the lock", "path", path, "error", err)
 		wakeExistingInstance(path)
 		return false
@@ -64,7 +75,7 @@ func ensureSingleInstance(configDir string) bool {
 // record doubles as the credential, and only a reader of the lock file can
 // forge a valid ping. That keeps "pop the window" gated to same-user
 // processes, which is exactly the set that can contain another instance.
-func startWakeListener(lock io.WriteCloser, path string) error {
+func startWakeListener(lock *os.File, path string) error {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
@@ -76,6 +87,17 @@ func startWakeListener(lock io.WriteCloser, path string) error {
 	}
 	record := fmt.Sprintf("%d %d %s", os.Getpid(),
 		ln.Addr().(*net.TCPAddr).Port, hex.EncodeToString(token))
+	// Clear the file before publishing our record. A crashed predecessor's
+	// longer record would otherwise leave trailing bytes glued to ours, and
+	// serveWake's exact comparison would reject every wake forever — the app
+	// would look dead to a relaunch. This is the safe place to truncate: we
+	// hold the exclusive lock. Doing it at open time (O_TRUNC) would let the
+	// *losing* instance wipe the running one's record before its flock call
+	// even fails.
+	if err := lock.Truncate(0); err != nil {
+		ln.Close()
+		return err
+	}
 	if _, err := lock.Write([]byte(record + "\n")); err != nil {
 		ln.Close()
 		return err

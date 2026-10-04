@@ -16,17 +16,26 @@ is **not** updated automatically on every release.
 
 ## Rules
 
-- Binary files are **never committed** to git (repo bloat). They are ignored
-  by the `releases/*` rule in `.gitignore`.
-- The `README.md` / `README.zh.md` files ARE tracked, so the directory's
-  purpose survives clones and the directory is never treated as throwaway.
-- Routine cleanup commands will NOT touch this directory:
-  - `git clean -fd`: safe (ignored files are kept)
-  - `task build` / `wails3` builds: only write to `bin/`
-  - CI (GitHub Actions): runs on isolated runners, never touches local files
-- ⚠️ The ONLY command that removes these files is `git clean -fdx`
-  (`-x` deletes ignored files too) — **never run it casually**. If you truly
-  need to wipe the archive, preview first with `git clean -ndx releases/`.
+- Anything newly dropped in here is ignored by the `releases/*` rule in
+  `.gitignore`, so the directory cannot accumulate binaries by accident.
+- The four v1.1.0 files listed in the manifest below are the deliberate
+  exception: they match that ignore rule and are tracked anyway, which means
+  they were added with `git add -f` on purpose. They are the rollback backup of
+  the last build that was tested locally end to end — do not delete them, and
+  do not "clean up" the repository because of their size. (The same release is
+  also on GitHub, but its assets still carry the pre-rename `WireGuide-*`
+  names, so the archive and the release page are not interchangeable 1:1.)
+- `README.md` / `README.zh.md` are tracked too, so the directory's purpose
+  survives clones and the directory is never treated as throwaway.
+- What can and cannot destroy the tracked backups:
+  - `git clean -fd` and `git clean -fdx` cannot touch them — clean only removes
+    untracked files. `-x` additionally wipes any *new* ignored drop-in here, so
+    still preview with `git clean -ndx releases/` before running it.
+  - `git rm`, `git checkout` of a tree without them, and history rewrites do
+    destroy them; the bytes then survive only in the commit that added them, and
+    in nothing at all for a shallow clone or an archive export.
+  - `task build` / `wails3` builds only write to `bin/`.
+  - CI (GitHub Actions) runs on isolated runners and never touches local files.
 
 ## Manifest
 

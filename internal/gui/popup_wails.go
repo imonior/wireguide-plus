@@ -65,7 +65,12 @@ var (
 	popupApp *application.App
 	popupWin *application.WebviewWindow
 	popupMu  sync.Mutex
-	popupCb  struct {
+	// Serialises window creation. It is separate from popupMu because window
+	// calls round-trip the main thread while popupMu is taken by main-thread
+	// callbacks (destroyPopupWindow on dismiss, the popup:ready replay above)
+	// — holding popupMu across a creation risks deadlocking the UI thread.
+	popupCreateMu sync.Mutex
+	popupCb       struct {
 		onOpen       func()
 		onDisconnect func()
 	}
@@ -204,7 +209,19 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 // ensurePopupWindow creates the secondary popup window once. It is a no-op if
 // the window already exists (callers may keep reusing it across notifications,
 // or destroy it via destroyPopupWindow between shows).
+//
+// The existence check and the creation happen under one lock: releasing
+// popupMu before NewWithOptions let two concurrent shows (the 15 s launch
+// overview and a debounced status transition can fire together) each pass the
+// check, each create a window, and the second assignment overwrite the first.
+// destroyPopupWindow only knows about the field, so the loser became an
+// always-on-top bubble no dismiss path could reach. Holding createMu across
+// the creation and re-checking after acquiring it makes exactly one caller
+// build, and the other reuses its window.
 func ensurePopupWindow() {
+	popupCreateMu.Lock()
+	defer popupCreateMu.Unlock()
+
 	popupMu.Lock()
 	if popupWin != nil || popupApp == nil {
 		popupMu.Unlock()

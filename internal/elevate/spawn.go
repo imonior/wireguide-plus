@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -18,8 +19,10 @@ type Args struct {
 	SocketUID int
 	// SocketSID is the spawning user's Windows SID (S-1-5-21-…). The
 	// helper scopes the pipe ACL and per-connection peer checks to it,
-	// replacing the every-interactive-user IU grant (issue #20). Empty
-	// on Unix and on Windows builds that fail to read the token.
+	// replacing the every-interactive-user IU grant (issue #20). Empty on
+	// Unix, where the socket's ownership is the gate. On Windows it is
+	// required: ValidateArgs refuses to elevate without it rather than
+	// letting the helper open an un-scoped pipe.
 	SocketSID string
 	// DataDir for crash recovery state
 	DataDir string
@@ -62,6 +65,15 @@ func ValidateArgs(a Args) error {
 		// interpolated into a pipe security descriptor — refuse anything
 		// that isn't a plain S-1-… SID string.
 		return fmt.Errorf("SocketSID is not a valid SID string: %q", a.SocketSID)
+	}
+	// Windows has to know WHO owns the control channel before it can be
+	// opened: the pipe's access grant is scoped to this SID, and there is no
+	// safe fallback — the historical one (grant to Interactive Users) handed
+	// every logged-on account on the machine a SYSTEM helper (issue #20). So
+	// an unreadable token is a spawn failure, not a reason to loosen the ACL.
+	// Unix gates the socket by UID/inode ownership and passes no SID.
+	if runtime.GOOS == "windows" && a.SocketSID == "" {
+		return fmt.Errorf("SocketSID is empty: refusing to elevate a helper whose control pipe has no owner")
 	}
 	return nil
 }

@@ -460,9 +460,18 @@ func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state p
 		if r := recover(); r != nil {
 			slog.Error("popup: recovered from panic in runPopupLoop", "err", r, "stack", string(debug.Stack()))
 		}
-		closeConnectPopup()
+		// Tear down only the bubble this loop still owns. A newer transition
+		// replaces us: spawnPopup posts WM_CLOSE to our window and its own
+		// loop stores its hwnd in the global, sometimes before we get here.
+		// Closing and zeroing unconditionally then killed the fresh bubble the
+		// instant it appeared, or left the global at 0 so nothing could ever
+		// dismiss it. The message-loop exit below already compares; this is
+		// the same rule for the panic and early-return paths.
+		if hwnd := d.hwnd; hwnd != 0 && activePopupHWND.Load() == hwnd {
+			activePopupHWND.Store(0)
+			procPostMessageW.Call(hwnd, wmClose, 0, 0)
+		}
 		d.hwnd = 0
-		activePopupHWND.Store(0)
 	}()
 	if dpi, _, _ := procGetDpiForSystem.Call(); dpi != 0 {
 		d.dpi = uint32(dpi)

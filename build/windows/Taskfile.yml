@@ -227,7 +227,7 @@ tasks:
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else if eq .ARCH "arm64"}}ARM64{{else}}X86{{end}}'
 
   create:msix:package:
-    summary: Creates an MSIX package
+    summary: Creates an MSIX package (needs a root wails.json; not used by release.yml)
     deps:
       - task: build
     cmds:
@@ -241,6 +241,14 @@ tasks:
           {{if .CERT_PATH}}--cert "{{.CERT_PATH}}"{{end}} \
           {{if .PUBLISHER}}--publisher "{{.PUBLISHER}}"{{end}} \
           {{if .USE_MSIX_TOOL}}--use-msix-tool{{else}}--use-makeappx{{end}}
+    preconditions:
+      # `wails3 tool msix --config` reads a JSON file with an `info` object
+      # (internal/flags/msix.go defaults it to ./wails.json). This project keeps
+      # its config in build/config.yml (YAML), which that flag cannot parse, and
+      # no wails.json is committed - so Store packaging needs one added first.
+      # Releases ship NSIS installers, so release.yml never reaches this task.
+      - sh: 'test -f "{{.ROOT_DIR}}/wails.json"'
+        msg: "No wails.json at the repository root: MSIX packaging is not wired up for this project (config lives in build/config.yml). Add a JSON wails.json with an `info` block to use this task."
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
       SUFFIX: '{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}'

@@ -21,11 +21,13 @@ func getPeerCredential(conn net.Conn) (uid uint32, pid int32, err error) {
 // is the per-connection second gate, protecting against ACL regressions
 // and any path that loosens the descriptor.
 //
-// expectedSID == "" means the helper was spawned without --owner-sid
-// (older GUI or manual start): fall back to the historical behaviour —
-// SDDL-only gating when no UID restriction was requested, fail closed if
-// a caller expected UID enforcement (expectedUID >= 0), because Windows
-// has no UID to enforce.
+// expectedSID == "" is not a state a production helper can reach: Listen
+// refuses to open the pipe without an owner SID, so a helper that is listening
+// always knows whose SID to check. The branch survives for callers that build
+// a Server without going through Listen (this package's tests), where the
+// per-connection check has nothing to compare against and the pipe ACL is the
+// only gate. A caller that asks for UID enforcement is refused rather than
+// waved through, because Windows has no UID to enforce.
 func verifyPeer(conn net.Conn, expectedUID int, expectedSID string) error {
 	if expectedSID == "" {
 		if expectedUID < 0 {

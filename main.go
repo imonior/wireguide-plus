@@ -15,12 +15,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 
 	"github.com/imonior/wireguide-plus/internal/cli"
 	"github.com/imonior/wireguide-plus/internal/gui"
 	"github.com/imonior/wireguide-plus/internal/helper"
+	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -116,18 +116,22 @@ func main() {
 }
 
 // systemDataDir returns the system-level data directory for helper state.
-// Duplicated in cmd/gui / cmd/helper as needed if we ever split binaries.
+//
+// The value comes from storage.GetPaths — the single source of truth shared
+// with the GUI's own EnsureDirs. This used to be a second, hardcoded switch
+// over runtime.GOOS in main.go; the two copies happened to agree, but nothing
+// kept them in sync, so a future platform-path change in storage would have
+// silently pointed the helper's crash-recovery state at a different directory
+// than the GUI expected. It also disagreed on the unsupported-platform case:
+// this used to fall back to /tmp/wireguideplus while storage returns an error.
+//
+// Note the GUI passes this in as a command-line argument, so the helper and the
+// GUI always agree even when they run as different users (the helper cannot
+// call GetPaths meaningfully: as root, os.UserHomeDir() resolves to /var/root).
 func systemDataDir() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "/Library/Application Support/wireguideplus"
-	case "linux":
-		return "/var/lib/wireguideplus"
-	case "windows":
-		if pd := os.Getenv("PROGRAMDATA"); pd != "" {
-			return pd + `\wireguideplus`
-		}
-		return `C:\ProgramData\wireguideplus`
+	paths, err := storage.GetPaths()
+	if err != nil {
+		log.Fatal("cannot resolve system data directory:", err)
 	}
-	return "/tmp/wireguideplus"
+	return paths.DataDir
 }

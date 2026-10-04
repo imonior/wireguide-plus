@@ -185,6 +185,13 @@ const (
 	// shutdown path then stops the helper. With no GUI attached the
 	// helper simply shuts itself down.
 	MethodRequestQuit = "Helper.RequestQuit"
+	// MethodRepairLogOwnership asks the privileged helper to chown its
+	// user-side log directory (and every log file in it) back to the
+	// desktop user. The GUI runs unprivileged and cannot chown a directory
+	// the root helper created, so when the GUI discovers at startup that its
+	// log directory is not writable it asks the helper (running as root) to
+	// repair ownership and retries, instead of aborting.
+	MethodRepairLogOwnership = "Helper.RepairLogOwnership"
 )
 
 // Event names (server → client notifications)

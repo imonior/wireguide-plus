@@ -54,6 +54,7 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodAutomationPreview, h.handleAutomationPreview)
 	h.server.Handle(ipc.MethodAutomationReevaluate, h.handleAutomationReevaluate)
 	h.server.Handle(ipc.MethodProbeNow, h.handleProbeNow)
+	h.server.Handle(ipc.MethodRepairLogOwnership, h.handleRepairLogOwnership)
 }
 
 // handleProbeNow runs one latency probe cycle right now instead of waiting
@@ -110,6 +111,22 @@ func (h *Helper) handleSetLogLevel(params json.RawMessage) (interface{}, error) 
 
 func (h *Helper) handlePing(params json.RawMessage) (interface{}, error) {
 	return ipc.PingResponse{Version: ipc.ProtocolVersion, AppVersion: update.CurrentVersion(), PID: os.Getpid()}, nil
+}
+
+// handleRepairLogOwnership re-applies ownership of the helper's user-side log
+// directory (and every log file in it) to the desktop user. The GUI runs
+// unprivileged and cannot chown a directory the root helper created, so when the
+// GUI finds its log directory not writable at startup it asks the helper — which
+// runs as root — to repair it via this method. Best-effort: an empty logsDir or
+// a negative uid is a no-op.
+func (h *Helper) handleRepairLogOwnership(_ json.RawMessage) (interface{}, error) {
+	if h.logsDir == "" || h.ownerUID < 0 {
+		return ipc.Empty{}, nil
+	}
+	if err := prepareLogsDir(h.logsDir, h.ownerUID); err != nil {
+		return nil, err
+	}
+	return ipc.Empty{}, nil
 }
 
 func (h *Helper) handleShutdown(params json.RawMessage) (interface{}, error) {
@@ -366,10 +383,16 @@ func (h *Helper) handleConnect(params json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("invalid config: %s", strings.Join(result.ErrorMessages(), "; "))
 	}
 
-	// Log if the config contains scripts — they are parsed but ignored.
+	// The hooks are not ignored here: connect_phases runs each one whenever
+	// the payload carries EnableScripts, which the GUI injects from
+	// Settings → advanced → enable WireGuard scripts. Log which way this
+	// connect went — the previous "ignoring (not supported in GUI client)"
+	// wording described behaviour that never happens and sent debugging down
+	// the wrong path.
 	if req.Config.HasScripts() {
-		slog.Info("config contains Pre/PostUp/Down scripts; ignoring (not supported in GUI client)",
-			"tunnel", req.Config.Name)
+		slog.Info("config contains Pre/PostUp/Down scripts",
+			"tunnel", req.Config.Name,
+			"will_run", req.Config.EnableScripts)
 	}
 
 	// Check for routing conflicts with existing interfaces (Tailscale etc).

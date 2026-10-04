@@ -45,8 +45,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Verify tag, VERSION and packaging metadata agree
+    runs-on: ubuntu-latest
+    # Each build job names its artefacts after the TAG but stamps them with
+    # VERSION (Go -ldflags) and the static packaging metadata (nfpm.yaml's
+    # version, Info.plist's CFBundleShortVersionString, the NSIS/MSIX
+    # versions). A tag that doesn't match VERSION therefore silently ships
+    # artefacts called X.Y.Z that report an older version — and the in-app
+    # updater compares against that older number, so clients can sit on a
+    # release forever. Windows caught this by accident (its asset path is
+    # derived from the tag and asserted); Linux and macOS did not. Fail here,
+    # before three platform builds burn their minutes.
+    steps:
+      - uses: actions/checkout@v5.1.0
+
+      - name: VERSION must equal the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::tag is v${tag} but VERSION is ${ver}; artefacts would be named for the tag and report the VERSION inside"
+            exit 1
+          fi
+          echo "tag/VERSION agree at ${ver}"
+
+      - name: packaging metadata must carry the same version
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="$(tr -d '[:space:]' < VERSION)"
+          # These files are static and rewritten by tools/bumpversion; a stale
+          # one is exactly the drift bumpversion now refuses to produce, so
+          # this is the belt-and-braces check for hand edits and bad merges.
+          files=(
+            build/config.yml
+            build/windows/info.json
+            build/windows/versioninfo.json
+            build/windows/wails.exe.manifest
+            build/windows/nsis/wails_tools.nsh
+            build/windows/msix/template.xml
+            build/windows/msix/app_manifest.xml
+            build/linux/nfpm/nfpm.yaml
+            build/darwin/Info.plist
+            build/darwin/Info.dev.plist
+          )
+          bad=0
+          # Match the version as a whole token, not as a substring, and with the
+          # dots escaped: a bare grep -q 2.4.3 is satisfied by 12.4.35 (leading
+          # digits) and by 2x4y3 (unescaped dots are wildcards), so an x.y.3 ->
+          # x.y.30 release could leave stale metadata unnoticed. The trailing
+          # \. alternative is not slack — the four Windows files store the
+          # derived 4-part form (2.4.3.0), and 2.4.30 is still rejected because
+          # a digit follows.
+          esc="${ver//./\\.}"
+          pattern='(^|[^0-9.])'"${esc}"'(\.|$|[^0-9])'
+          for f in "${files[@]}"; do
+            if ! grep -qE "$pattern" "$f"; then
+              echo "::error::$f does not mention $ver as its own version token (stale packaging metadata)"
+              bad=1
+            fi
+          done
+          exit $bad
+
   build-macos:
     name: macOS arm64
+    needs: preflight
     # arm64 only. Intel macs are a vanishing share of the target
     # audience and shipping a CGO/.m cross-compile from arm64 (or
     # standing up a parallel macos-13 runner) costs more in CI
@@ -97,6 +163,24 @@ jobs:
           command -v wails3
           wails3 task darwin:package ARCH=arm64 SIGN_PUBKEY=${{ env.UPDATE_SIGNING_PUBKEY }}
 
+      - name: Check bundle version matches tag
+        # The .app's version strings come from build/darwin/Info.plist while the
+        # artefact names come from the tag. If those diverge, the download page
+        # offers WireGuidePlus-<new> while the running app reports the old
+        # version, and the in-app updater (which compares that reported version)
+        # keeps re-offering a release the user already installed.
+        run: |
+          set -euo pipefail
+          ver="${{ steps.ver.outputs.ver }}"
+          plist="bin/wireguideplus.app/Contents/Info.plist"
+          short="$(plutil -extract CFBundleShortVersionString raw -o - "$plist")"
+          bundle="$(plutil -extract CFBundleVersion raw -o - "$plist")"
+          if [ "$short" != "$ver" ] || [ "$bundle" != "$ver" ]; then
+            echo "::error::$plist reports CFBundleShortVersionString=$short CFBundleVersion=$bundle but the tag is $ver"
+            exit 1
+          fi
+          echo "bundle version matches tag: $ver"
+
       - name: Archive .app (portable)
         # ditto preserves macOS metadata (extended attributes, symlinks,
         # the codesign signature) better than plain `zip -ry`. The
@@ -132,6 +216,7 @@ jobs:
 
   build-windows:
     name: Windows ${{ matrix.asset }}
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -290,6 +375,24 @@ jobs:
             exit 1
           fi
 
+      - name: Check installer version resource matches tag
+        shell: pwsh
+        # The embedded version resource comes from build/windows/versioninfo.json
+        # while the file name comes from the tag; a stale resource is what the
+        # Windows properties dialog and any MSI-style inventory report.
+        # versioninfo.json records the derived 4-part form (X.Y.Z.0), so the
+        # resource must START with the tag version rather than equal it.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = '${{ steps.ver.outputs.ver }}'
+          $src = "bin\wireguideplus-$ver-${{ matrix.asset }}-installer.exe"
+          $vi = (Get-Item $src).VersionInfo
+          if ($vi.ProductVersion -notlike "$ver*" -or $vi.FileVersion -notlike "$ver*") {
+            "::error::$src carries ProductVersion=$($vi.ProductVersion) FileVersion=$($vi.FileVersion) but the tag is $ver"
+            exit 1
+          }
+          "installer version resource matches tag: $($vi.ProductVersion)"
+
       - name: Package portable build (exe + wintun-<arch>.dll)
         shell: pwsh
         # Portable builds are NOT standalone: the exe loads the
@@ -397,6 +500,7 @@ jobs:
 
   build-linux:
     name: Linux ${{ matrix.arch }}
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -468,6 +572,16 @@ jobs:
           command -v wails3
           wails3 tool package -name wireguideplus -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           dpkg-deb --info bin/wireguideplus.deb
+          # The artefact is renamed from the tag while its own Version field
+          # comes from nfpm.yaml — assert the two agree, otherwise a stale
+          # nfpm.yaml publishes WireGuidePlus-<new>.deb whose package metadata
+          # (and therefore apt's upgrade decision) still says the old version.
+          deb_ver="$(dpkg-deb -f bin/wireguideplus.deb Version)"
+          if [ "$deb_ver" != "${{ steps.ver.outputs.ver }}" ]; then
+            echo "::error::bin/wireguideplus.deb declares Version=$deb_ver but the tag is ${{ steps.ver.outputs.ver }} (build/linux/nfpm/nfpm.yaml is stale)"
+            exit 1
+          fi
+          echo "deb Version matches tag: $deb_ver"
           mv bin/wireguideplus.deb "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}.deb"
 
       - name: Package portable tarball
@@ -614,6 +728,14 @@ jobs:
           awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 > RELEASE_NOTES.md
           # Append the asset/download/footer tail with version placeholders filled.
           sed -e "s#__CUR__#$cur#g" -e "s#__VER__#$ver#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
+          # Same rule as the refresh workflow: any placeholder the three
+          # substitutions above don't cover must stop the publish rather than
+          # appear literally in a release body.
+          if grep -q '__[A-Z][A-Z_]*__' RELEASE_NOTES.md; then
+            echo "::error::RELEASE_NOTES.md still contains unsubstituted placeholders:"
+            grep -o '__[A-Z][A-Z_]*__' RELEASE_NOTES.md | sort -u
+            exit 1
+          fi
           echo "--- release body ($(wc -l < RELEASE_NOTES.md) lines) ---"
           cat RELEASE_NOTES.md
       - name: Publish release

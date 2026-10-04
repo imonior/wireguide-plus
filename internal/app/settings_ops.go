@@ -392,6 +392,41 @@ func (s *TunnelService) GetSettings() (*storage.Settings, error) {
 	return settings, nil
 }
 
+// applySettingsPayload writes a whole-settings payload onto the freshest
+// on-disk state, keeping the fields only backend code owns. Called from inside
+// SettingsStore.Update, so cur is the file's current content under the lock.
+//
+// Backend-owned here means "no screen sends a new value for it": the manual
+// on/off latches are written by connect and disconnect (tunnel_ops) and the
+// DNS leak-test resolver lists by the diagnostics panel (diag_ops), each
+// through Update. A payload therefore only ever echoes them, and the echo is
+// stale by whatever landed after the frontend's GetSettings - a
+// `wireguideplus ctl …` write, or a latch set while the Settings dialog was
+// open, used to be rolled back by the whole-object save.
+//
+// Automation and WifiRules deliberately stay payload-owned: a policy can
+// legitimately arrive through a whole-settings save rather than through
+// SaveAutomationRules (SaveSettings keys an immediate automation
+// re-evaluation off that field).
+//
+// The kept values are re-copied rather than left in place, so the stored
+// object never aliases the caller's slices.
+func applySettingsPayload(cur, payload *storage.Settings) {
+	manualOff := append([]string(nil), cur.ManualOffTunnels...)
+	manualOn := append([]string(nil), cur.ManualOnTunnels...)
+	dnsServers := append([]string(nil), cur.DNSTestPublicServers...)
+	dnsFetched := append([]string(nil), cur.DNSTestPublicFetched...)
+	dnsFetchedAt := cur.DNSTestPublicFetchedAt
+
+	*cur = *payload
+
+	cur.ManualOffTunnels = manualOff
+	cur.ManualOnTunnels = manualOn
+	cur.DNSTestPublicServers = dnsServers
+	cur.DNSTestPublicFetched = dnsFetched
+	cur.DNSTestPublicFetchedAt = dnsFetchedAt
+}
+
 // SaveSettings persists the settings file AND applies any side effects:
 // currently, pushing the new log level to both the GUI's slog handler and
 // the helper's slog handler. Without those side effects a user lowering the
@@ -417,20 +452,14 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		settings.LogRetentionDays = 90
 	}
 
-	// Preserve the manual latches: the frontend's settings object never
-	// edits those lists, and saving a stale in-memory copy must not silently
-	// drop tunnels the user switched off/on by hand (a manual override wins
-	// over automation until they act again or the app restarts).
-	if prev != nil {
-		if len(prev.ManualOffTunnels) > 0 {
-			settings.ManualOffTunnels = append([]string(nil), prev.ManualOffTunnels...)
-		}
-		if len(prev.ManualOnTunnels) > 0 {
-			settings.ManualOnTunnels = append([]string(nil), prev.ManualOnTunnels...)
-		}
-	}
-
-	if err := s.settingsStore.Save(settings); err != nil {
+	// Update, not Save: the payload arrived from a snapshot the frontend took
+	// before this call, so the write has to merge onto the file's current
+	// content rather than replace it. applySettingsPayload lists which fields
+	// win.
+	if err := s.settingsStore.Update(func(cur *storage.Settings) error {
+		applySettingsPayload(cur, settings)
+		return nil
+	}); err != nil {
 		return err
 	}
 

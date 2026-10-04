@@ -14,9 +14,11 @@ the Homebrew cask.
 
 The workflows fire on **events**, not on any analysis of what changed:
 
-- `.github/workflows/ci.yml` — runs **only** on `pull_request` and manual
-  `workflow_dispatch`. Pushes to `main` (merged PRs, doc-only edits,
-  everything) never light it up by design, so routine commits are cheap.
+- `.github/workflows/ci.yml` — runs on `pull_request`, on pushes to `main`,
+  and on manual `workflow_dispatch`. Pushes to feature branches stay silent by
+  design, so routine WIP commits are cheap; the `main` trigger closes the
+  window where a direct-to-main commit (a release bump, a doc-only edit) would
+  otherwise never be tested.
 - `.github/workflows/release.yml` — runs **only** when a tag matching `v*`
   is pushed (`on.push.tags`). There is no `paths` filter and no content
   sniffing: any `v*` tag triggers the full cross-platform build, regardless
@@ -61,7 +63,9 @@ go run ./tools/updatesign pub          # must print the same public hex
 # 2. bump the version — the VERSION file is the single source of truth:
 echo 1.1.2 > VERSION
 task bump:version                      # rewrites every static build/package metadata file
-#    (or, one step: task bump:version 1.1.2)
+#    (or, one step: task bump:version NEW_VERSION=1.1.2 — the version must be
+#     passed as a variable; a bare positional argument is read as a second task
+#     name and go-task aborts with `Task "1.1.2" does not exist`)
 #    Go binaries need no edits: build/*/Taskfile.yml inject VERSION at build time.
 
 # 3. make sure CHANGELOG.md (and its zh / zh-TW / ja / ko siblings) already
@@ -79,7 +83,7 @@ Release assets produced per tag:
 | `wireguideplus-<version>-x86-installer.exe` (32-bit installer) | build-windows (x86) |
 | `wireguideplus-<version>-amd64-installer.exe` (64-bit installer) | build-windows (amd64) |
 | `wireguideplus-<version>-arm64-installer.exe` (ARM64 installer) | build-windows (arm64) |
-| `wireguideplus-<version>-x86-portable.zip` / `wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-arm64-portable.zip`（每个 zip 内含 `wireguideplus-<arch>.exe` + 对应 `wintun-<arch>.dll`；bare exe 与 bare `wintun-<arch>.dll` 均不单独发布） | build-windows |
+| `wireguideplus-<version>-x86-portable.zip` / `wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-arm64-portable.zip` (each zip contains `wireguideplus-<arch>.exe` plus the matching `wintun-<arch>.dll`; neither a bare exe nor a bare `wintun-<arch>.dll` is attached to the Release) | build-windows |
 | `WireGuidePlus-<version>-darwin-arm64.zip` (portable, contains `wireguideplus.app`) | build-macos |
 | `WireGuidePlus-<version>-darwin-arm64.dmg` (drag-and-drop installer) | build-macos |
 | `WireGuidePlus-<version>-linux-amd64.deb` / `WireGuidePlus-<version>-linux-arm64.deb` (installers) | build-linux |

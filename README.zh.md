@@ -36,7 +36,7 @@ WireGuide Plus 是对开源项目 [`korjwl1/wireguide`](https://github.com/korjw
 - **AmneziaWG（AWG）隧道** — 支持导入并连接 AmneziaWG（混淆版 WireGuard）配置。AWG 由配置中的 Jc/Jmin/Jmax/S1-S4/H1-H4 混淆参数自动识别，对应隧道会显示「AmneziaWG」徽标；可在「设置 → 高级」中关闭支持。
 - **隧道编辑器：字段视图与脚本钩子** — 除 conf 文本外，提供逐字段表单（interface / peer 分组）编辑配置，并支持管理 PreUp / PostUp / PreDown / PostDown 脚本钩子（选择文件、新建空白、编辑代码、清除）。隧道连接中也可编辑：保存时会断开、应用改动并自动重连。
 - **每隧道物理出口绑定** — 开启「固定接口」后，可将单个隧道的加密流量固定到指定物理网卡（Windows / Linux / macOS）；绑定网卡失效时弹窗提供等待、自动切换或手动指定。
-- **设置导出与导入** — 将 tunnels、scripts 与 `config.json`（不含日志）打包为单个压缩包，便于迁移到其他机器。
+- **设置导出与导入** — 将 tunnels（含每条隧道的策略 sidecar）、scripts 与 `config.json`（不含日志）打包为单个压缩包，便于迁移到其他机器。
 - **工具箱标签页** — 内置 **DNS 泄漏测试** 检查流量是否真的从配置的 DNS 服务器出去，以及 **路由可视化** 展示当前路由表，并为每条路由标注 VPN / Direct 徽标，支持局域网直连过滤与蜂窝接口标记。
 - **隧道策略** — 每隧道的 DNS 解析路径、强制指定域名走隧道、流量保护、默认 DNS，以及确定性的冲突裁决。
 - **延迟探测** — 每隧道延迟探测支持多目标并行；每个候选（公共解析器 8.8.8.8 / 223.5.5.5、隧道端点，以及任意手填地址或域名）同时探测，并展示其解析 IP、类型与往返时延。分流隧道下手填目标会在保存前按隧道 AllowedIPs 覆盖校验。目标保存后会立即重新探测；域名端点会在详情页顶部显示当前解析到的地址。
@@ -149,26 +149,24 @@ Android / iOS 上，系统内核与权限机制使 WireGuard 实现**无法同�
 
 **绿色版（免安装）**
 
-- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`**（32 位 exe 配 **`wintun-x86.dll`**，
-  ARM64 exe 配 **`wintun-arm64.dll`**）— 需同时下载**同一架构**的两个文件放在同一
+- `wireguideplus-<version>-amd64-portable.zip`（或 `-x86-` / `-arm64-`）— 每种架构
+  一个 zip，里面**已经**装着 exe 和同架构的驱动 DLL。下载一个 zip，解压到同一个
   文件夹，再运行 exe。
 
 绿色版**并非独立程序**：运行需要同目录下放置与程序架构匹配的驱动 DLL（用于创建
-WireGuard 隧道）。程序按架构自动加载对应文件（`wintun-amd64.dll` / `wintun-x86.dll` /
-`wintun-arm64.dll`），**无需改名**，按下表选择即可：
+WireGuard 隧道），zip 正是为此把两个文件打包在一起。程序按架构自动加载对应文件
+（`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`），**无需改名**，按下表选择即可：
 
-| exe | 匹配的驱动 DLL |
+| zip 内的 exe | 匹配的驱动 DLL |
 | --- | --- |
 | `wireguideplus-amd64.exe`（64 位） | `wintun-amd64.dll` |
 | `wireguideplus-x86.exe`（32 位） | `wintun-x86.dll` |
 | `wireguideplus-arm64.exe`（ARM64） | `wintun-arm64.dll` |
 
 驱动 DLL 来自 `wintun-0.14.1.zip`（见
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)）。Release 提供打包好的便携
-zip（`wireguideplus-<version>-amd64-portable.zip` / `wireguideplus-<version>-x86-portable.zip` /
-`wireguideplus-<version>-arm64-portable.zip`），内含 exe **和**对应架构的驱动 DLL——下载后解压
-即可运行。Release 不再单独附驱动 DLL（请使用便携 zip 或安装包）。缺少匹配的驱动 DLL
-时无法创建隧道。
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)）。Release 既不单独附 exe，
+也不单独附驱动 DLL——上面那个便携 zip（或安装包）就是同时拿到两个文件的途径。缺少
+匹配的驱动 DLL 时无法创建隧道。
 
 
 

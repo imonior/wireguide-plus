@@ -9,6 +9,7 @@ package gui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -117,8 +118,18 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("paths: %w", err)
 	}
+	// If the log directory is owned by the root helper and not writable, keep
+	// booting — we ask the helper to repair ownership once the IPC connection
+	// is up (see the block after ensureHelper below), and the helper health
+	// monitor retries it later if no helper is available yet. Any other storage
+	// error is still fatal.
 	if err := paths.EnsureDirs(); err != nil {
-		return fmt.Errorf("create dirs: %w", err)
+		if errors.Is(err, storage.ErrDirNotOwnedByUser) {
+			slog.Warn("log directory not owned by current user; will request repair from helper", "error", err)
+			markLogsDirNeedsRepair()
+		} else {
+			return fmt.Errorf("create dirs: %w", err)
+		}
 	}
 	setGUILogFile(paths.LogsDir)
 
@@ -202,6 +213,12 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		}
 		slog.Error("helper connection failed after 3 attempts; continuing with limited functionality")
 	}
+	// Self-heal a root-owned log directory: now that we have a helper
+	// connection, ask it (running as root) to chown the user-side log
+	// directory back to this user, then re-point file logging at it. If no
+	// helper is available the repair stays pending and the health monitor
+	// retries it once one shows up.
+	repairLogsDirOwnership(initialClient, paths.LogsDir)
 	clients := ipc.NewClientHolder(initialClient)
 
 	// 3. Wails service
@@ -563,7 +580,7 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	healthDone := make(chan struct{})
 	var healthWg sync.WaitGroup
 	healthWg.Add(1)
-	startHelperHealthMonitor(app, clients, dataDir, bridge, healthDone, recoveryGate, &healthWg)
+	startHelperHealthMonitor(app, clients, dataDir, paths.LogsDir, bridge, healthDone, recoveryGate, &healthWg)
 	// SSID reporter shares the same shutdown channel + WaitGroup so app
 	// quit waits for it to exit before returning, instead of leaking the
 	// goroutine until process death.

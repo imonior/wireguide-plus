@@ -32,7 +32,7 @@ contract, not a suggestion. Local dev may run newer, CI will not.
 
 ```bash
 # Install frontend dependencies
-cd frontend && npm ci && cd ..
+cd frontend && npm install && cd ..
 
 # Development mode (hot reload)
 task dev
@@ -82,7 +82,7 @@ where the local hooks were never enabled.
 - `internal/gui/` — Wails app, tray, event bridge
 - `internal/app/` — GUI-side services bound to the frontend
 - `internal/network/` — Platform-specific network config
-- `internal/firewall/` — 防火墙后端（macOS `pf` / Linux `nftables` / Windows WFP）：当前只服务于**按隧道**的 System DNS 强制（`EnableDNSProtection`）；全局 kill switch 开关已从产品中移除，仅保留平台原语
+- `internal/firewall/` — firewall backends (macOS `pf` / Linux `nftables` / Windows WFP): today it only serves **per-tunnel** System DNS enforcement (`EnableDNSProtection`); the machine-wide kill switch was removed from the product, the platform primitives remain
 - `internal/wifi/` — Automation rule model, network fingerprinting
 - `internal/ipc/` — JSON-RPC 2.0 transport (Unix socket / named pipe)
 - `internal/cli/` — `wireguideplus ctl` command-line interface

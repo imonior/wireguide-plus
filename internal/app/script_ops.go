@@ -2,8 +2,10 @@ package app
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -327,7 +329,7 @@ func (s *TunnelService) SetHookInText(content, hook, command string) (string, er
 }
 
 // ---------------------------------------------------------------------------
-// Settings backup — export / import (tunnels + scripts + config.json, no logs)
+// Settings backup — export / import (tunnels + sidecars + scripts + config)
 // ---------------------------------------------------------------------------
 
 // SettingsImportResult reports what one import pass produced.
@@ -337,9 +339,9 @@ type SettingsImportResult struct {
 	SettingsApplied bool              `json:"settings_applied"`
 }
 
-// ExportSettings writes tunnels + scripts + config.json (never logs) into
-// a zip chosen via a native save dialog. Returns the path, or "" when the
-// user cancels.
+// ExportSettings writes tunnels (with their .meta.json policy sidecars),
+// scripts and config.json (never logs) into a zip chosen via a native save
+// dialog. Returns the path, or "" when the user cancels.
 func (s *TunnelService) ExportSettings() (string, error) {
 	if s.app == nil {
 		return "", fmt.Errorf("app not initialized")
@@ -390,6 +392,10 @@ func (s *TunnelService) writeSettingsZip(dest string) error {
 	}
 
 	// Tunnels — read the .conf files from disk so exports are byte-exact.
+	// Each tunnel also carries a .meta.json sidecar holding the per-tunnel
+	// policy (traffic protection, DNS-resolve path, automation on/off,
+	// idle-keepalive override, monitored domains). Exporting only the
+	// .conf restored the connection but silently dropped all of it.
 	tunnelCount := 0
 	if names, err := s.tunnelStore.List(); err == nil {
 		for _, name := range names {
@@ -402,6 +408,15 @@ func (s *TunnelService) writeSettingsZip(dest string) error {
 				return err
 			}
 			tunnelCount++
+			// Sidecars are additive: no .meta.json is normal for a tunnel
+			// that never had a policy set, so a missing file is skipped
+			// without a word.
+			if meta, err := os.ReadFile(filepath.Join(paths.TunnelsDir, name+".meta.json")); err == nil {
+				if err := addEntry("tunnels/"+name+".meta.json", meta); err != nil {
+					zw.Close()
+					return err
+				}
+			}
 		}
 	}
 
@@ -442,9 +457,10 @@ func (s *TunnelService) writeSettingsZip(dest string) error {
 }
 
 // ImportSettings asks for a settings zip (exported by ExportSettings),
-// restores scripts into the scripts folder, imports tunnels, applies
-// config.json, and re-points each imported tunnel's script references at
-// the local scripts folder so packages stay portable across machines.
+// restores scripts into the scripts folder, imports tunnels together with
+// their per-tunnel policy sidecars, applies config.json, and re-points each
+// imported tunnel's script references at the local scripts folder so packages
+// stay portable across machines.
 // Returns nil when the user cancels the file dialog.
 func (s *TunnelService) ImportSettings() (*SettingsImportResult, error) {
 	if s.app == nil {
@@ -469,10 +485,6 @@ func (s *TunnelService) ImportSettings() (*SettingsImportResult, error) {
 }
 
 func (s *TunnelService) importSettingsReader(r *zip.Reader) (*SettingsImportResult, error) {
-	paths, err := storage.GetPaths()
-	if err != nil {
-		return nil, fmt.Errorf("resolve app paths: %w", err)
-	}
 	scriptsDir, err := storage.ScriptsDirPath()
 	if err != nil {
 		return nil, err
@@ -496,8 +508,11 @@ func (s *TunnelService) importSettingsReader(r *zip.Reader) (*SettingsImportResu
 		}
 	}
 
-	// Pass 2 — tunnels.
+	// Pass 2 — tunnels. importedTo records each archive base name → the name
+	// it actually landed under, so the sidecar pass can follow a tunnel that
+	// had to be de-duplicated (foo.conf already existed → foo-1).
 	importedNames := []string{}
+	importedTo := map[string]string{}
 	for _, f := range r.File {
 		rel := strings.TrimPrefix(filepath.ToSlash(f.Name), "tunnels/")
 		if rel == f.Name || rel == "" || strings.Contains(rel, "/") ||
@@ -515,27 +530,76 @@ func (s *TunnelService) importSettingsReader(r *zip.Reader) (*SettingsImportResu
 			result.Tunnels = append(result.Tunnels, ZipImportResult{Name: base, Error: err.Error()})
 		} else {
 			importedNames = append(importedNames, name)
+			importedTo[base] = name
 			result.Tunnels = append(result.Tunnels, ZipImportResult{Name: name})
 		}
 	}
 
-	// Pass 3 — app settings.
+	// Pass 3 — per-tunnel policy sidecars. Best-effort by design: a package
+	// exported before sidecars were exported, or one whose .conf imported
+	// under a different name than the sidecar expects, must not fail the
+	// whole restore — the tunnels themselves are already in place. So every
+	// miss here is a warning, never an error.
+	for _, f := range r.File {
+		rel := strings.TrimPrefix(filepath.ToSlash(f.Name), "tunnels/")
+		if rel == f.Name || rel == "" || strings.Contains(rel, "/") ||
+			!strings.HasSuffix(strings.ToLower(rel), ".meta.json") {
+			continue
+		}
+		data, err := readZipEntry(f)
+		if err != nil {
+			slog.Warn("settings: skipped tunnel policy sidecar (unreadable)",
+				"category", "settings", "entry", rel, "error", err)
+			continue
+		}
+		base := strings.TrimSuffix(filepath.Base(rel), ".meta.json")
+		name, ok := importedTo[base]
+		if !ok {
+			slog.Warn("settings: skipped tunnel policy sidecar (no matching imported tunnel)",
+				"category", "settings", "entry", rel, "tunnel", base)
+			continue
+		}
+		var meta storage.TunnelMeta
+		if err := json.Unmarshal(data, &meta); err != nil {
+			slog.Warn("settings: skipped tunnel policy sidecar (unparsable)",
+				"category", "settings", "entry", rel, "tunnel", name, "error", err)
+			continue
+		}
+		if err := s.tunnelStore.SaveMeta(name, &meta); err != nil {
+			slog.Warn("settings: skipped tunnel policy sidecar (write failed)",
+				"category", "settings", "entry", rel, "tunnel", name, "error", err)
+		}
+	}
+
+	// Pass 4 — app settings.
 	for _, f := range r.File {
 		if filepath.ToSlash(f.Name) != "config.json" {
 			continue
 		}
 		data, err := readZipEntry(f)
 		if err != nil {
+			slog.Warn("settings: imported config.json unreadable", "category", "settings", "error", err)
 			break
 		}
-		cfgPath := filepath.Join(paths.ConfigDir, "config.json")
-		if err := os.WriteFile(cfgPath, data, 0600); err == nil {
+		if s.settingsStore == nil {
+			slog.Warn("settings: imported config.json skipped (settings store unavailable)",
+				"category", "settings")
+			break
+		}
+		// Through the store, not os.WriteFile: config.json is also being
+		// read and written by CLI `ctl` calls and by the GUI's own save
+		// path, and a bare write skips both the file lock and the atomic
+		// rename. ReplaceRaw rejects bytes that don't decode as settings
+		// instead of writing a file the app would quarantine on next load.
+		if err := s.settingsStore.ReplaceRaw(data); err != nil {
+			slog.Warn("settings: imported config.json rejected", "category", "settings", "error", err)
+		} else {
 			result.SettingsApplied = true
 		}
 		break
 	}
 
-	// Pass 4 — re-point script references at the local scripts folder so
+	// Pass 5 — re-point script references at the local scripts folder so
 	// a package exported on machine A resolves on machine B.
 	if len(result.Scripts) > 0 {
 		local := map[string]bool{}

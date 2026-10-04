@@ -32,7 +32,7 @@ func shortSocketPath(t *testing.T) string {
 func startTransientTestServer(t *testing.T) (addr string, connects, disconnects *atomic.Int32, srv *Server) {
 	t.Helper()
 	addr = shortSocketPath(t)
-	listener, err := Listen(addr, -1, "")
+	listener, err := Listen(addr, -1, testOwnerSID(t))
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}

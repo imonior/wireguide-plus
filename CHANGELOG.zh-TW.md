@@ -4,6 +4,28 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.4.4] - 2026-10-04
+
+### 🐛 修復
+
+- **設定匯出/匯入現在會帶著每條通道自己的策略。** 封存檔此前只有 `*.conf`，換機器後流量保護、DNS 路由選擇、單通道自動化開關、閒置保持連線、受保護網域、備註與延遲探測目標全數遺失。現在 `.meta.json` sidecar 會隨通道一起打包，並掛到匯入實際落地的名稱上（包含去重後的 `name-1`）；讀不到或找不到對應通道的 sidecar 會記錄一行日誌後跳過，不再讓整次匯入失敗。`config.json` 經由設定儲存體的加鎖原子寫入套用，無法解析的位元組會被拒絕並保留原檔案。
+- **儲存設定不再回滾別處的修改。** 設定對話方塊此前會把開啟時讀到的整個物件寫回，其間落盤的修改——`wireguideplus ctl …`、手動連線/中斷閂、DNS 洩漏測試的解析器清單——會被無聲覆蓋。現在儲存是檔案鎖下的讀-改-寫，後端自有欄位得以保留。
+- **Windows：helper 拒絕啟動無法限定到單一使用者的控制管道。** 解析不出目前登入使用者的 SID 時，管道原本退化為授權給互動式使用者，任何已登入帳戶都能操作通道與防火牆規則。現在一律 fail closed：helper 不啟動，GUI 透過既有的重試對話方塊提示。
+- **日誌目錄被 root 佔有不再讓你失去檔案日誌（macOS/Linux）。** 特權 helper 先建立日誌目錄時，無權限的 GUI 既無法寫入也無法 chown。現在 GUI 照常啟動，並請 helper（以 root 執行）把目錄以及其中每個依日切分的日誌檔案的所有權交還，然後重開自己的日誌；若此刻還沒有 helper，健康監控會在它出現後重試這次修復。
+- **helper 不再在通道仍連線時因關閉而 panic。** 寬限計時器、`Helper.Shutdown` 與 `ctl stop` 可能在任何一方真正關閉通道前都通過「是否已關閉」的檢查，第二次 close 會讓 helper 帶著存活的通道一起倒下。關閉現在恰好一次。
+- **GUI 平行寫日誌不再與日誌檔案重新綁定產生競態。** handler 讀取自身 file 欄位時未持有重新綁定所用的鎖，而重新綁定又會丟棄被替換的 handler——重新綁定期間寫入的記錄可能落到已關閉的 handler，或洩漏它仍開啟的檔案。
+- **狀態氣泡的視窗不再可能在拖曳過程中被釋放（macOS）。** 拖曳槽位原先只存放視窗的裸指標，若在第一個 dragged 事件與清空槽位的那個事件之間關閉氣泡，AppKit 拿到的就是已釋放的視窗。現在槽位在整個拖曳手勢期間持有一個參照；視窗建立也與存在性檢查放在同一把鎖下，因此同時觸發的兩次顯示（啟動 15 秒總覽與防抖後的狀態變化）不會各建一個視窗、讓第一個再也關不掉，拆除流程也不會誤殺剛替換上來的氣泡。
+- **失效或被 root 佔用的實例鎖不再讓應用程式一啟動就退出。** 屬於其他使用者的 `gui-instance.lock` 回報許可權錯誤，過去被解讀成「已有第二份在執行」，於是每次啟動都退出並指向一個並不存在的實例；現在改為發出警告，並在沒有單實例閘門的情況下繼續執行。喚醒監聽啟動前也會先把鎖檔案截斷，殘留位元組不再能永久拒絕喚醒要求。
+- **helper 自動復原不再不停跳出提示。** 連續失敗次數上限三次，之後監控只做靜默探測——避免在使用者持續取消授權或安裝本身損壞時，把 5 秒一次的輪詢變成無止境的管理員/UAC 對話方塊。
+- **七條 toast 印出的是訊息 id 而不是文字。** 它們查詢的 id 在任何語系的目錄裡都不存在（`helper.disconnected`、`helper.reconnected`、`wifi.switched`、`egress.clear_failed`、`export.done`、`export.failed`、`connect.failed`），因此永遠找不到譯文。現在每條都指向真實鍵，而且 `checkrelease` 會拒絕英文目錄裡不存在的 `$t('ns.key')` 字面量。
+- **macOS helper 安裝改用私有暫存檔暫放 LaunchDaemon plist**（`0600`、名稱不可預測），不再寫到 `/tmp` 下固定的全域可讀路徑。
+- **兩行描述從未發生行為的日誌。** 無權限 GUI 預期中的「cannot create/chmod DataDir」警告降為 debug 級——它們每次啟動都會刷，把日誌裡真正該看的警告訓練成了雜訊；帶有 Pre/PostUp 腳本的通道現在會記錄這些腳本究竟會不會執行，而不是宣稱 GUI 忽略它們。
+
+### 🔧 變更
+
+- **發布閘門不會再和它產出的成品說法不一。** `ci.yml` 每次 push 都跑 `checkrelease`（五語目錄鍵集合一致、每個 `$t()` id 都存在、CHANGELOG 涵蓋 `VERSION`）；發布流程先校驗 tag、`VERSION` 與打包元資料三者同號，再斷言每個成品**自身**宣告的版本——macOS bundle 用 `plutil`、Windows 安裝程式的版本資源、`.deb` 的 `Version` 欄位；`bump:version` 遇到無事可做時以非零碼退出而不是靜默跳過；`fix-release-notes` 會填充過去原樣留在發布正文裡的版本佔位符。
+- **文件與 task 檔案重新與程式碼樹一致。** Windows 下載章節改為描述發布真正附帶的 portable zip（裡面就是 exe 與對應的驅動 DLL），不再要你去手工配對裸 exe 和 DLL；`releases/` 說明其中四個被追蹤的二進位檔是用 `git add -f` 有意保留的回滾備份；刪掉了已死的 `build:server` / `run:server` / `build:docker` 目標，以及一條指向不存在檔案的 `.gitignore` 紀錄；`systemDataDir()` 改從 `storage.GetPaths` 取路徑，不再保留第二份沒有人同步的硬編碼副本。
+
 ## [2.4.3] - 2026-09-26
 
 ### 🐛 修復

@@ -55,7 +55,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **AmneziaWG (AWG) tunnels** — import and connect AmneziaWG (obfuscated WireGuard) configs. AWG is auto-detected from the Jc/Jmin/Jmax/S1-S4/H1-H4 obfuscation parameters in the config and each such tunnel shows an "AmneziaWG" badge; support can be switched off under Settings → Advanced.
 - **Tunnel editor: field view & script hooks** — alongside the raw conf text, a per-field form (interface / peer groups) edits the config, and the PreUp / PostUp / PreDown / PostDown script hooks can be managed (pick a file, create a blank, edit code, clear). Editing works while the tunnel is connected too: saving disconnects it, applies the change, and reconnects automatically.
 - **Per-tunnel physical egress binding** — with Pin Interface enabled, each tunnel's encrypted traffic can be pinned to a specific physical NIC (Windows / Linux / macOS); if the bound NIC disappears, a dialog offers wait / auto-switch / manual pick.
-- **Settings export & import** — bundles tunnels, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
+- **Settings export & import** — bundles tunnels together with each tunnel's policy sidecar, scripts and `config.json` (logs excluded) into a single archive for migrating to another machine.
 - **Tools tab** — a built-in **DNS Leak Test** checks whether your traffic actually exits through the configured DNS servers, and **Route Visualization** shows the active routing table with per-route VPN / Direct badges, a LAN on-link filter, and Cellular interface labelling.
 - **Tunnel policies** — per-tunnel DNS resolution paths, force specific domains through the tunnel, traffic protection, default DNS, and deterministic conflict resolution.
 - **Latency probe** — per-tunnel latency probing with multiple targets in parallel; each candidate (public resolvers 8.8.8.8 / 223.5.5.5, the tunnel endpoint, and any custom address or domain) is probed simultaneously and shown with its resolved IP, kind and round-trip time. On split tunnels, custom targets are validated against the tunnel's AllowedIPs coverage before they are saved. Targets are re-probed immediately after saving, and a domain endpoint shows the address it currently resolves to in the tunnel header.
@@ -225,28 +225,26 @@ no extra files to download.
 
 **Portable build (no installation)**
 
-- `wireguideplus-amd64.exe` **+ `wintun-amd64.dll`** (or **+ `wintun-x86.dll`** for the
-  32-bit exe, **+ `wintun-arm64.dll`** for the ARM64 exe) — download **both** files for
-  the same architecture and place them in the same folder, then run the exe.
+- `wireguideplus-<version>-amd64-portable.zip` (or `-x86-` / `-arm64-`) — one zip per
+  architecture, each already containing the exe **and** the matching driver DLL.
+  Download one zip, extract it into a single folder, then run the exe.
 
 The portable binary is **not standalone**: it needs the matching-architecture driver
-DLL next to it (used to create WireGuard tunnels). The exe loads the DLL by its
-arch-qualified name (`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) — no
-rename is ever needed:
+DLL next to it (used to create WireGuard tunnels), which is why the zip ships the two
+files together. The exe loads the DLL by its arch-qualified name
+(`wintun-amd64.dll` / `wintun-x86.dll` / `wintun-arm64.dll`) — no rename is ever needed:
 
-| exe | matching driver DLL |
+| exe inside the zip | matching driver DLL |
 | --- | --- |
 | `wireguideplus-amd64.exe` (64-bit) | `wintun-amd64.dll` |
 | `wireguideplus-x86.exe` (32-bit) | `wintun-x86.dll` |
 | `wireguideplus-arm64.exe` (ARM64) | `wintun-arm64.dll` |
 
 The driver DLLs come from `wintun-0.14.1.zip` (see
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)). Releases provide ready-made
-portable zips (`wireguideplus-<version>-amd64-portable.zip` /
-`wireguideplus-<version>-x86-portable.zip` / `wireguideplus-<version>-arm64-portable.zip`), each already
-containing the exe **and** the matching driver DLL — download one zip, extract, and run.
-Releases no longer attach bare DLLs (use the portable zip or the installer above). Without
-the matching driver DLL, tunnels cannot be created.
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#42-wintun-driver-dll)). A release attaches neither a
+bare exe nor a bare DLL, so there is no pairing to do by hand — the portable zip above,
+or the installer, is how you get both files. Without the matching driver DLL, tunnels
+cannot be created.
 
 
 
