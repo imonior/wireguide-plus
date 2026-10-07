@@ -58,7 +58,7 @@ jobs:
     # derived from the tag and asserted); Linux and macOS did not. Fail here,
     # before three platform builds burn their minutes.
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - name: VERSION must equal the tag
         shell: bash
@@ -120,7 +120,7 @@ jobs:
     # build from source.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Compute release version (tag without the leading v)
         id: ver
@@ -240,7 +240,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Compute release version (tag without the leading v)
         id: ver
@@ -519,7 +519,7 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Compute release version (tag without the leading v)
         id: ver
@@ -620,7 +620,7 @@ jobs:
     outputs:
       macos_sha: ${{ steps.gen.outputs.macos_sha }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
         with:
           # git-cliff needs the full history + all tags to compute the
           # commit range since the previous release. Shallow clone (the
@@ -783,7 +783,7 @@ jobs:
 
       - name: Checkout homebrew-tap
         if: steps.check_token.outputs.skip == 'false'
-        uses: actions/checkout@v5.1.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: imonior/homebrew-tap
           token: ${{ secrets.TAP_PUSH_TOKEN }}
