@@ -353,6 +353,21 @@ The log viewer toolbar and the settings log section both carry an **Open log fol
 - **Linux** — `sudo apt remove wireguideplus` (`.deb`), or delete the portable binary and
   `~/.config/wireguideplus`.
 
+## License
+
+WireGuide Plus is distributed under the **MIT License**. It is a fork of
+[`korjwl1/wireguide`](https://github.com/korjwl1/wireguide); that project's original
+MIT License declaration is retained in this repository's [`LICENSE`](LICENSE) file, so
+the only condition of the MIT License (keep the copyright notice) is satisfied. The
+full license text, including both copyright lines, lives in that file at the
+repository root — and is also shipped alongside every binary release.
+
+The bundled **Wintun** driver (`wintun-*.dll`) is a prebuilt, signed binary provided
+by the Wintun project under its separate **Prebuilt Binaries License**, not under the
+MIT License. That license text ships in every binary release as `wintun-LICENSE.txt`
+and is also available at
+[`third_party/wintun/LICENSE-prebuilt-dll.txt`](third_party/wintun/LICENSE-prebuilt-dll.txt).
+
 ## Acknowledgements
 
 - [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — upstream open-source project

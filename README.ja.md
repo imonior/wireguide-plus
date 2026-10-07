@@ -274,6 +274,12 @@ sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-
 - **macOS** — **WireGuide Plus** を「アプリケーション」からゴミ箱へドラッグします。必要に応じて `~/Library/Application Support/wireguideplus` と `~/Library/Preferences/com.imonior.wireguide-plus.plist` も削除してください。
 - **Linux** — `sudo apt remove wireguideplus`（`.deb`）、またはポータブルバイナリと `~/.config/wireguideplus` を削除します。
 
+## ライセンス（License）
+
+WireGuide Plus は **MIT ライセンス** の下で配布されています。本プロジェクトは [`korjwl1/wireguide`](https://github.com/korjwl1/wireguide) のフォークであり、オリジナルの MIT ライセンス声明は本リポジトリの [`LICENSE`](LICENSE) ファイルに維持されています（MIT の唯一の条件である「著作権表示の保持」は満たされています）。完全なライセンス条文（両方の著作権行を含む）はリポジトリのルートにある同ファイルにあり、すべてのバイナリ配布物にも同梱されます。
+
+同梱されている **Wintun** ドライバー（`wintun-*.dll`）は、Wintun プロジェクトが提供する事前ビルド済み署名バイナリであり、MIT ライセンスではなく別の **Prebuilt Binaries License** の下で提供されています。そのライセンス条文は各バイナリ配布物に `wintun-LICENSE.txt` として同梱され、[`third_party/wintun/LICENSE-prebuilt-dll.txt`](third_party/wintun/LICENSE-prebuilt-dll.txt) からも参照できます。
+
 ## 謝辞
 
 - [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — アップストリームのオープンソースプロジェクト

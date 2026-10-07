@@ -10,6 +10,8 @@ import (
 
 // GetSavedWifiProfiles returns the SSIDs of the Wi-Fi profiles saved on
 // this machine.
+//
+// GetSavedWifiProfiles 获取本机已保存的 Wi-Fi 配置文件的 SSID 列表。
 func GetSavedWifiProfiles() ([]string, error) {
 	cmd := exec.Command("netsh", "wlan", "show", "profiles")
 	var out bytes.Buffer
@@ -24,6 +26,7 @@ func GetSavedWifiProfiles() ([]string, error) {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		// netsh sample line: "All User Profile     : ASUS_QS_JYH"
+		// netsh 输出示例："所有用户配置文件     : ASUS_QS_JYH"
 		if _, after, ok := strings.Cut(line, ":"); ok {
 			ssid := strings.TrimSpace(after)
 			if ssid != "" {
@@ -31,7 +34,7 @@ func GetSavedWifiProfiles() ([]string, error) {
 			}
 		}
 	}
-	// De-duplicate.
+	// De-duplicate. / 去重
 	m := make(map[string]bool)
 	var res []string
 	for _, s := range list {

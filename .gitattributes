@@ -28,3 +28,8 @@ frontend/bindings/** text eol=lf
 *.syso binary
 *.exe binary
 *.dll binary
+
+# The wintun Prebuilt Binaries License is stored byte-for-byte as published
+# (CRLF included): it forbids modification, so git must not rewrite its line
+# endings the way text=auto would.
+third_party/wintun/LICENSE-prebuilt-dll.txt -text

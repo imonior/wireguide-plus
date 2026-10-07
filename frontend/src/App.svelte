@@ -2155,8 +2155,9 @@
     border-color: color-mix(in srgb, var(--red) 40%, var(--border));
     color: var(--red);
   }
-/* Top tab strip switching between raw conf text and field editing; it
-     doubles as the dialog drag handle. */
+  /* Top tab strip switching between raw conf text and field editing; it
+     doubles as the dialog drag handle.
+     顶部标签条：在原始 conf 文本与字段编辑之间切换，同时兼作对话框的拖拽手柄。 */
   .editor-tabs {
     display: flex;
     gap: 4px;

@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.2] - 2026-10-07
+
+### 🔧 变更
+
+- **MIT 许可证现在随每个二进制产物一同分发。** 应用自身的 `LICENSE` 此前只存在于源码树中；现在 Windows 安装器会把它装到程序目录，macOS 会把它复制进 `.app` 包的 `Contents/Resources`，Linux deb 会把它放在 `/usr/share/doc/wireguideplus/copyright`（Debian 策略要求），Windows 与 Linux 的便携归档也会一并打包。Wintun 驱动的 Prebuilt Binaries License 同样在每个渠道随 `wintun-*.dll` 一并分发。
+- **GitHub 赞助链接曾指向原作者。** `.github/FUNDING.yml` 仍把赞助导向 `korjwl1`——这是 fork 的遗留；现已指向 `imonior`。
+- **每份 README 都新增了 License 小节。** 五种语言现在都说明了 MIT 许可证、保留的上游声明，以及独立许可的 Wintun 驱动。
+
+### 🛠 内部
+
+- **代码注释重新改为双语**（英文 + 中文），覆盖 Windows 隧道、Wi-Fi 配置与网卡相关代码以及两个 Svelte 组件，符合项目约定。
+
 ## [2.5.1] - 2026-10-05
 
 ### 🐛 修复

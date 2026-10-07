@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the official wintun.dll, verifies SHA256, and copies the arch-
-# appropriate DLL into the given output directory.
+# appropriate DLL plus the Prebuilt Binaries License that governs it into the
+# given output directory.
 #
 # Usage: vendor-wintun.sh <version> <sha256> <arch> <out_dir>
 set -euo pipefail
@@ -44,7 +45,17 @@ if [ ! -f "$SRC" ]; then
     exit 1
 fi
 
+# The DLL is licensed, not sold, under the Prebuilt Binaries License shipped
+# inside the same zip; it must travel with every redistribution, so it is
+# vendored next to the DLL instead of being dropped with the extraction dir.
+LICENSE_SRC="$TMP/extract/wintun/LICENSE.txt"
+if [ ! -f "$LICENSE_SRC" ]; then
+    echo "wintun/LICENSE.txt not found at $LICENSE_SRC (the license must ship with the DLL)" >&2
+    exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 OUT_NAME="wintun-$DLL_ARCH.dll"
 cp "$SRC" "$OUT_DIR/$OUT_NAME"
-echo "Bundled $DLL_ARCH driver as $OUT_NAME to $OUT_DIR"
+cp "$LICENSE_SRC" "$OUT_DIR/wintun-LICENSE.txt"
+echo "Bundled $DLL_ARCH driver as $OUT_NAME and its license as wintun-LICENSE.txt to $OUT_DIR"

@@ -47,8 +47,17 @@ if (-not (Test-Path $src)) {
     throw "wintun.dll not found at $src (unknown arch: $dllArch)"
 }
 
+# The DLL is licensed, not sold, under the Prebuilt Binaries License shipped
+# inside the same zip; it must travel with every redistribution, so it is
+# vendored next to the DLL instead of being dropped with the extraction dir.
+$licenseSrc = Join-Path $tmpDir "wintun\LICENSE.txt"
+if (-not (Test-Path $licenseSrc)) {
+    throw "wintun\LICENSE.txt not found at $licenseSrc (the license must ship with the DLL)"
+}
+
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $outName = "wintun-$dllArch.dll"
 Copy-Item $src (Join-Path $OutDir $outName) -Force
+Copy-Item $licenseSrc (Join-Path $OutDir "wintun-LICENSE.txt") -Force
 Remove-Item -Recurse -Force $tmpDir
-Write-Host "Bundled $dllArch driver as $outName to $OutDir"
+Write-Host "Bundled $dllArch driver as $outName and its license as wintun-LICENSE.txt to $OutDir"

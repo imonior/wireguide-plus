@@ -393,7 +393,7 @@ jobs:
           }
           "installer version resource matches tag: $($vi.ProductVersion)"
 
-      - name: Package portable build (exe + wintun-<arch>.dll)
+      - name: Package portable build (exe + wintun-<arch>.dll + licenses)
         shell: pwsh
         # Portable builds are NOT standalone: the exe loads the
         # architecture-specific driver DLL from its own folder
@@ -402,11 +402,17 @@ jobs:
         # architecture that already contains the matching DLL. vendor:wintun
         # put the arch-correct one in bin/ already; the built exe is named
         # wireguideplus-<arch>.exe, so the zip and its contents both carry
-        # the platform. The exe inside the zip is the unsigned build output
-        # (SignPath only covers the installer).
+        # the platform. The zip also carries the DLL's own Prebuilt Binaries
+        # License (bin\wintun-LICENSE.txt), which governs its redistribution,
+        # and the application's own MIT License (bin\LICENSE.txt) so the
+        # portable build ships its terms without a package manager.
+        # The exe inside the zip is the unsigned build output (SignPath only
+        # covers the installer).
         run: |
-          Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll" -DestinationPath "bin\wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-portable.zip" -Force
-          Get-ChildItem bin | Where-Object { $_.Name -like 'wireguideplus-*' -or $_.Name -like 'wintun-*' } | Select-Object Name, Length
+          # Stage the application's MIT license next to the binary for the zip.
+          Copy-Item -Force LICENSE bin\LICENSE.txt
+          Compress-Archive -Path "bin\wireguideplus-${{ matrix.asset }}.exe", "bin\wintun-${{ matrix.asset }}.dll", "bin\wintun-LICENSE.txt", "bin\LICENSE.txt" -DestinationPath "bin\wireguideplus-${{ steps.ver.outputs.ver }}-${{ matrix.asset }}-portable.zip" -Force
+          Get-ChildItem bin | Where-Object { $_.Name -like 'wireguideplus-*' -or $_.Name -like 'wintun-*' -or $_.Name -like 'LICENSE*' } | Select-Object Name, Length
 
       # --- SignPath Foundation code signing ---------------------------
       # Gated by SIGNPATH_API_TOKEN presence. While SignPath onboarding
@@ -592,9 +598,11 @@ jobs:
       - name: Package portable tarball
         # Portable build = the bare binary in a tarball (no package manager
         # needed); pairs with the .deb installer, mirroring Windows'
-        # installer + portable.zip split.
+        # installer + portable.zip split. The tarball also carries the
+        # application's MIT License so the terms travel with the binary.
         run: |
-          tar -czf "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus
+          cp -f LICENSE bin/LICENSE.txt
+          tar -czf "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus LICENSE.txt
 
       - uses: actions/upload-artifact@v7.0.1
         with:

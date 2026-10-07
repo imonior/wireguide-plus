@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.2] - 2026-10-07
+
+### 🔧 変更
+
+- **MIT ライセンスがすべてのバイナリ成果物に同梱されるようになりました。** アプリ自身の `LICENSE` はこれまでソースツリーにしか存在しませんでした。今後は Windows インストーラーがプログラムディレクトリに配置し、macOS は `.app` バンドルの `Contents/Resources` にコピーし、Linux deb は `/usr/share/doc/wireguideplus/copyright`（Debian ポリシーの要件）に配置し、Windows と Linux のポータブルアーカイブにも同梱します。Wintun ドライバーの Prebuilt Binaries License も同様に、各チャネルで `wintun-*.dll` と共に配布されます。
+- **GitHub Sponsors リンクが上流の作者を指していました。** `.github/FUNDING.yml` は依然として `korjwl1` に寄付を誘導していました——これはフォークの名残です。現在は `imonior` を指すようになりました。
+- **すべての README に License セクションが追加されました。** 5 言語すべてで MIT ライセンス、保持されている上流の声明、および別ライセンスの Wintun ドライバーについて説明するようになりました。
+
+### 🛠 内部
+
+- **コードコメントが再びバイリンガル**（英語 + 中国語）になりました。Windows のトンネル・Wi-Fi プロファイル・インターフェース関連コードと 2 つの Svelte コンポーネントにわたり、プロジェクトの慣例に従っています。
+
 ## [2.5.1] - 2026-10-05
 
 ### 🐛 修正

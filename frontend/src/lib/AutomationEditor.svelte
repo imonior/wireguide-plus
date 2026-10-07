@@ -731,12 +731,18 @@
         const conditionMatched = !!rd?.conditions?.[idx]?.matched;
         // Two markers only, and both are about the CONDITION/rule itself —
         // never about whether the tunnel is physically up:
-//   - match   — does this condition fit the current network (a pure
+        //   - match   — does this condition fit the current network (a pure
         //               match test, nothing more);
         //   - in-use  — "in use": this condition's rule is the first match AND
         //               the engine actually ran its action (connect/disconnect).
         //               It is an "adopted" marker and says nothing about whether
         //               the tunnel is up (that has its own state chip).
+        //
+        // 只有两个标记，且描述的都是「条件/规则本身」，与隧道是否真正连通无关：
+        //   - match   —— 该条件是否匹配当前网络（纯粹的匹配判断）；
+        //   - in-use  —— 「使用中」：该条件所属规则是首个匹配，且引擎真的执行了
+        //                其动作（connect/disconnect）。这是「被采纳」标记，
+        //                不表示隧道已连通（连通状态有独立的状态徽章）。
         const inUse = conditionMatched && winning && actionExecuted();
         result.conditions[c._id] = {
           match: conditionMatched,
@@ -1413,10 +1419,13 @@
   }
   .am-badge.am-yes { color: #fff; background: var(--green, #34c759); }
   .am-badge.am-no { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
-/* The "in use" badge uses the accent colour so it reads differently from
+  /* The "in use" badge uses the accent colour so it reads differently from
      the green "match" badge when both are lit: match = the condition fits
      now; in-use = this condition's rule is the one the engine is applying.
-     Neither depends on the tunnel being physically up. */
+     Neither depends on the tunnel being physically up.
+     「使用中」徽章使用强调色，以便与绿色「匹配」徽章同时点亮时区分开来：
+     match = 当前条件匹配；in-use = 该条件所属规则正是引擎正在应用的那条。
+     两者都与隧道是否真正连通无关。 */
   .am-badge-use.am-yes { color: #fff; background: var(--accent); }
   .am-badge-match.am-no { color: #fff; background: color-mix(in srgb, var(--red, #ff3b30) 72%, transparent); }
   .am-remove { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; flex-shrink: 0; }

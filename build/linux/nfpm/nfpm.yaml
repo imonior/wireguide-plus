@@ -6,7 +6,7 @@
 name: "wireguideplus"
 arch: ${GOARCH}
 platform: "linux"
-version: "2.5.1"
+version: "2.5.2"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
@@ -23,6 +23,12 @@ contents:
     dst: "/usr/share/icons/hicolor/128x128/apps/wireguideplus.png"
   - src: "./build/linux/wireguideplus.desktop"
     dst: "/usr/share/applications/wireguideplus.desktop"
+  # Debian policy places the copyright/license file at this exact path; nfpm
+  # does not generate it from the `license:` field, so ship our MIT LICENSE here.
+  - src: "./LICENSE"
+    dst: "/usr/share/doc/wireguideplus/copyright"
+    file_info:
+      mode: 0644
 
 # Wails v3 alpha.74 uses GTK3 and the WebKitGTK 4.1 API on Linux.
 depends:

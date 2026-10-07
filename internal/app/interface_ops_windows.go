@@ -11,16 +11,21 @@ import (
 
 // IfType values from ipifcons.h that mark non-physical interfaces we never
 // offer as egress candidates.
+// 取自 ipifcons.h 的 IfType 值，标记那些非物理网卡、不会作为出口候选出现的接口。
 const (
 	ifTypePPP              = 23
 	ifTypeSoftwareLoopback = 24
 	ifTypeTunnel           = 131
-	ifTypePropVirtual      = 53 // proprietary virtual (Hyper-V vEthernet etc.)
+	ifTypePropVirtual      = 53 // proprietary virtual (Hyper-V vEthernet etc.) / 厂商私有虚拟网卡（如 Hyper-V vEthernet）
 )
 
 // listPhysicalInterfaces enumerates interfaces for the egress dropdown on
 // Windows. Uses the IP helper API (same source as the socket-bind monitor)
 // so the description matches what the user sees in ncpa.cpl.
+//
+// listPhysicalInterfaces 枚举 Windows 出口下拉框的网卡列表。
+// 使用 IP Helper API（与 socket-bind 监视器同源），
+// 使描述与用户在 ncpa.cpl 中看到的一致。
 func listPhysicalInterfaces() ([]PhysicalInterface, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {

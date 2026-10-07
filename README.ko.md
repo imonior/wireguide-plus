@@ -268,6 +268,12 @@ NSIS 설치 프로그램 설명, 버전 리소스 및 릴리스 워크플로는 
 - **macOS** — **WireGuide Plus**를「응용 프로그램」에서 휴지통으로 드래그합니다. 필요하면 `~/Library/Application Support/wireguideplus`와 `~/Library/Preferences/com.imonior.wireguide-plus.plist`도 삭제하세요.
 - **Linux** — `sudo apt remove wireguideplus`(`.deb`), 또는 포터블 바이너리와 `~/.config/wireguideplus`를 삭제하세요.
 
+## 라이선스（License）
+
+WireGuide Plus는 **MIT 라이선스** 하에 배포됩니다. 이 프로젝트는 [`korjwl1/wireguide`](https://github.com/korjwl1/wireguide)의 포크이며, 원본 MIT 라이선스 선언은 이 저장소의 [`LICENSE`](LICENSE) 파일에 그대로 유지됩니다(MIT의 유일한 조건인 "저작권 고지 유지"는 충족됩니다). 전체 라이선스 문구(두 줄의 저작권 행 포함)는 저장소 루트의 해당 파일에 있으며, 모든 바이너리 릴리스에도 함께 포함됩니다.
+
+동봉된 **Wintun** 드라이버(`wintun-*.dll`)는 Wintun 프로젝트가 제공하는 사전 빌드 서명 바이너리로, MIT 라이선스가 아니라 별도의 **Prebuilt Binaries License** 하에 제공됩니다. 해당 라이선스 문구는 각 바이너리 릴리스에 `wintun-LICENSE.txt`로 포함되며, [`third_party/wintun/LICENSE-prebuilt-dll.txt`](third_party/wintun/LICENSE-prebuilt-dll.txt)에서도 확인할 수 있습니다.
+
 ## 감사의 말
 
 - [korjwl1/wireguide](https://github.com/korjwl1/wireguide) — 업스트림 오픈소스 프로젝트

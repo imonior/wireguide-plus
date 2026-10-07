@@ -193,12 +193,15 @@ tasks:
       without it Connect fails with "Error loading wintun DLL: Unable to load
       library". The official binary is published at https://www.wintun.net/ and
       pinned here by SHA256. The filename mirrors the GOARCH selection in
-      internal/tunnel/wintun_cleanup_windows.go and third_party/wintun.
+      internal/tunnel/wintun_cleanup_windows.go and third_party/wintun. The
+      zip's Prebuilt Binaries License is copied to bin/ as wintun-LICENSE.txt
+      so the installer and portable zip carry it alongside the DLL.
     internal: true
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
     status:
       - test -f "{{.ROOT_DIR}}/{{.BIN_DIR}}/wintun-{{if eq .ARCH "386"}}x86{{else}}{{.ARCH}}{{end}}.dll"
+      - test -f "{{.ROOT_DIR}}/{{.BIN_DIR}}/wintun-LICENSE.txt"
     cmds:
       - cmd: powershell -NoProfile -ExecutionPolicy Bypass -File "{{.ROOT_DIR}}/build/windows/scripts/vendor-wintun.ps1" -Version "{{.WINTUN_VERSION}}" -Sha256 "{{.WINTUN_SHA256}}" -Arch "{{.ARCH}}" -OutDir "{{.ROOT_DIR}}/{{.BIN_DIR}}"
         platforms: [windows]

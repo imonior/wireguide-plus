@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.2] - 2026-10-07
+
+### 🔧 Changed
+
+- **The MIT license now ships with every binary artifact.** The app's own `LICENSE` used to live only in the source tree; it is now installed to the program directory by the Windows installer, copied into the macOS `.app` bundle's `Contents/Resources`, placed at `/usr/share/doc/wireguideplus/copyright` in the Linux deb (a Debian-policy requirement), and bundled into the Windows and Linux portable archives. The Wintun driver's Prebuilt Binaries License is likewise shipped next to `wintun-*.dll` on every channel.
+- **The GitHub Sponsors link pointed at the upstream author.** `.github/FUNDING.yml` still directed sponsorship to `korjwl1` — a leftover from the fork. It now points to `imonior`.
+- **Every README gained a License section.** All five languages now document the MIT license, the retained upstream declaration, and the separately-licensed Wintun driver.
+
+### 🛠 Internal
+
+- **Code comments are bilingual again** (English + Chinese) across the Windows tunnel, Wi-Fi profile and interface code and two Svelte components, per the project convention.
+
 ## [2.5.1] - 2026-10-05
 
 ### 🐛 Fixed

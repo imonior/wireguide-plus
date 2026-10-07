@@ -177,6 +177,14 @@ Section
         File "..\..\..\bin\wintun-x86.dll"
     !endif
 
+    # The DLL is licensed, not sold, under the Prebuilt Binaries License;
+    # install it next to the driver so the terms travel with the payload.
+    File "..\..\..\bin\wintun-LICENSE.txt"
+
+    # The application itself is distributed under the MIT License; install the
+    # full license text next to the binary so the terms travel with the program.
+    File /oname=LICENSE.txt "..\..\..\LICENSE"
+
     # Desktop shortcut: always created — the user cannot opt out.
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
