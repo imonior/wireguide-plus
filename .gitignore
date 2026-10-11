@@ -70,6 +70,7 @@ releases/*
 # `git add -A` and pushed to GitHub.
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.crt
