@@ -65,3 +65,21 @@ releases/*
 !releases/README.md
 !releases/README.zh.md
 
+# Secrets / credentials — never commit real keys, certificates, or .env files.
+# Without these patterns a locally generated key/cert/.env could be staged by
+# `git add -A` and pushed to GitHub.
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+
