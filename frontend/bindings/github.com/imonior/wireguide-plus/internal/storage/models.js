@@ -508,7 +508,7 @@ export class Settings {
              * KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
              * while the machine is idle — screen-saver, display sleep, session lock,
              * or (after wake) a brief suspend. ON by default: when enabled, tunnels
-             * that have no PersistentKeepalive of their own get one forced at runtime
+             * that left PersistentKeepalive UNSET get one forced at runtime
              * (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
              * instead of silently dying; a dead-but-interface-up link also freezes
              * its uptime counter (Layer A) instead of inflating it. A tunnel may opt

@@ -509,9 +509,9 @@ export class PeerConfig {
         }
         if (/** @type {any} */(false)) {
             /**
-             * Optional: seconds (0 = disabled)
+             * Optional: seconds; nil = unset (runtime fallback), 0 = explicitly disabled, >0 = user value
              * @member
-             * @type {number | undefined}
+             * @type {number | null | undefined}
              */
             this["persistent_keepalive"] = undefined;
         }
