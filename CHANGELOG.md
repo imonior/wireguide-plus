@@ -4,6 +4,22 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.5.3] - 2026-10-15
+
+### 🔧 Changed
+
+- **Persistent keepalive is now honoured exactly as written and persisted to disk.** `PersistentKeepalive` is parsed as a true tri-state: unset (empty) injects the 25-second default at connect time, `0` is an explicit disable that is respected and written to `<name>.conf`, and any positive value is used as-is. Previously an empty or `0` value was ambiguous and could silently leave the tunnel without keepalive. The saved value now survives reconnects and edits.
+- **The keepalive field and handshake behaviour are now explained in the UI.** The peer keepalive input shows its unit (seconds), and the tunnel detail view notes that WireGuard's ~120-second rekey interval is fixed and independent of keepalive — clarifying why a handshake can still occur around two minutes even with keepalive set.
+- **Saving a tunnel with an empty or zero keepalive now prompts the user.** A three-option dialog offers keeping `0` (for server / non-NAT users who know the implication), switching to the recommended 25 seconds, or going back to edit — preventing an accidentally dead tunnel.
+- **Release pages now show download counts.** GitHub does not display them, so a daily job reads each release asset's counter from the API and renders a "Download counts" table into the release body. Only that block is rewritten, and only when the numbers actually change.
+
+### 🐛 Fixed
+
+- **Auto-reconnect now actually triggers on a dead link.** The reconnect monitor records handshake age every cycle and treats a tunnel connected for more than 180 seconds without a handshake — including the zero-timestamp case where `LastHandshakeTime` is unset — as a dead link: it logs the condition and attempts a reconnect when policy allows. A companion bug that made the helper report success (`return nil`) when the reconnect policy blocked the attempt is also fixed, so a blocked reconnect is now reported honestly instead of being silently swallowed.
+- **Health Check is enabled by default.** Fresh installs and setting resets now start with Health Check on, matching the configuration most users need for reliable reconnection.
+- **Auto-reconnect on wake / network change now rebuilds every tunnel.** That path tore down only the first connected tunnel it found, so the following reconnect-all hit "is already connected" on the next one and aborted the whole attempt. In practice just one tunnel was ever rebuilt, and a tunnel stuck "connected but never handshaked" — the one that most needed rebuilding — was never touched. It now drains every connected tunnel first, so the reconnect starts from a clean slate.
+- **The keepalive field accepts a value typed with its unit.** The field is labelled with its unit, so `10s` is a natural thing to type; it used to fail parsing and discard the whole edit with only a generic error. `10s`, `25 sec` and `45 seconds` now parse as the number. Genuinely invalid input is still rejected.
+
 ## [2.5.2] - 2026-10-07
 
 ### 🔧 Changed

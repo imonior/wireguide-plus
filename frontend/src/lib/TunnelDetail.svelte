@@ -977,6 +977,7 @@
               </span>
             {/if}
           </div>
+          <p class="hero-note">{$t('tunnel.handshake_interval_note')}</p>
         {/if}
       </div>
     </div>
@@ -1605,6 +1606,11 @@
     color: var(--text-primary);
   }
   .hero-meta .meta-sep { opacity: 0.5; }
+  .hero-note {
+    margin: 8px 2px 0;
+    font: 400 11px/1.5 var(--font-sans);
+    color: var(--text-muted);
+  }
 
   /* ========== PRIMARY ACTION ==========
      Big full-width gradient button below the hero card. */

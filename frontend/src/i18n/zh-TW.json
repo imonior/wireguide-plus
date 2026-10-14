@@ -87,6 +87,7 @@
     "probe_outside": "範圍外",
     "allowed_ips": "允許的 IP",
     "handshake": "握手",
+    "handshake_interval_note": "每約 120 秒依協定重協商握手（固定，不受 PersistentKeepalive 影響）。PersistentKeepalive 僅按其設定間隔發保活包維持 NAT 通路；連續 180 秒無握手則自動重連。",
     "duration": "持續時間",
     "interface": "介面",
     "rx": "下載",
@@ -572,6 +573,8 @@
     "section_awg": "AmneziaWG 參數",
     "section_peer": "對端",
     "peer_n": "對端 {n}",
+    "keepalive_unit": "秒",
+    "keepalive_unit_hint": "單位：秒（0 = 停用，範圍 0–65535）。WireGuard 將此值視為秒，不寫單位。",
     "section_bind": "實體出口",
     "bind_egress": "出口網卡",
     "bind_auto": "自動（最優網卡）",
@@ -644,5 +647,12 @@
     "endpoint_host_empty": "{field}：Endpoint 主機為空",
     "bad_endpoint_port": "{field}：無效的 Endpoint 連接埠",
     "keepalive_range": "{field}：PersistentKeepalive 必須在 0–65535 之間，目前為 {got}"
+  },
+  "keepalive_zero": {
+    "title": "未設定 PersistentKeepalive",
+    "message": "對端若未設定或設為 0，將不傳送任何保活封包。在 NAT / 防火牆環境下，對應表會逾時，下一次握手無法抵達對端，通道會靜默假死，只能手動重連。約 120s 的重協商並不能維持閒置通道的連通性——它只在有流量時輪換金鑰。NAT 後客戶端建議：≥25s。",
+    "option_keep0": "我是伺服器 / 非 NAT 對端——保留 0（已知曉）",
+    "option_use25": "我在 NAT 後——使用建議的 25s",
+    "option_cancel": "返回手動修改"
   }
 }

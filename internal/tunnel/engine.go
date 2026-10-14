@@ -490,8 +490,13 @@ func buildIpcConfig(cfg *config.WireGuardConfig) (string, error) {
 		for _, cidr := range peer.AllowedIPs {
 			b.WriteString("allowed_ip=" + cidr + "\n")
 		}
-		if peer.PersistentKeepalive > 0 {
-			b.WriteString(fmt.Sprintf("persistent_keepalive_interval=%d\n", peer.PersistentKeepalive))
+		if peer.PersistentKeepalive != nil {
+			// Write verbatim, including 0: an explicit disable must reach
+			// the kernel; nil (already backfilled to 25 by the connect
+			// safety net) never arrives here in practice.
+			// 原样写出，含 0：显式禁用必须传达给内核；nil（已被连接兜底补成 25）
+			// 实际不会到达此处。
+			b.WriteString(fmt.Sprintf("persistent_keepalive_interval=%d\n", *peer.PersistentKeepalive))
 		}
 	}
 

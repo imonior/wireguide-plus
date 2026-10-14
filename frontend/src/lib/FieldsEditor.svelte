@@ -249,6 +249,14 @@
             <label class="fe-label" for="fe-peer-{key}">{key}{#if isRequired(key)}<span class="fe-req" title={$t('fields.required_hint')}>*</span>{/if}</label>
             <input class="fe-input" id="fe-peer-{key}" type="text" value={currentPeer[key] ?? ''}
               spellcheck="false" on:change={(e) => { setPeer(key, e.target.value); apply(); }} />
+            {#if key === 'PersistentKeepalive'}
+              <!-- WireGuard's PersistentKeepalive is written as a unitless integer that
+                   is always interpreted as SECONDS (0 = disabled, range 0–65535). The
+                   numeric input cannot carry a unit, so surface it as a hint beside it.
+                   WireGuard 的 PersistentKeepalive 写作无单位整数，恒按「秒」解释
+                   （0 = 禁用，范围 0–65535）。数字输入框无法承载单位，故在旁标注。 -->
+              <span class="fe-unit" title={$t('fields.keepalive_unit_hint')}>{$t('fields.keepalive_unit')}</span>
+            {/if}
           </div>
         {/each}
       </div>
@@ -384,6 +392,15 @@
     font-family: ui-monospace, monospace;
     border: 1px solid var(--border, #ccc); border-radius: 6px;
     background: var(--bg-input, transparent); color: inherit;
+  }
+  /* Unit hint shown beside unitless numeric fields (e.g. PersistentKeepalive,
+     whose value is always seconds in WireGuard). Muted, non-interactive.
+     无单位数值字段（如 PersistentKeepalive，WireGuard 中恒为秒）旁的单位提示，
+     弱色、不可交互。 */
+  .fe-unit {
+    flex-shrink: 0; font-size: 11px; font-family: ui-monospace, monospace;
+    opacity: 0.55; padding: 2px 6px; border: 1px dashed var(--border, #ccc);
+    border-radius: 5px; user-select: none;
   }
   .fe-peer-select { font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border, #ccc); background: transparent; color: inherit; }
   .fe-error { color: #d33; font-size: 12px; margin: 4px 0; }

@@ -96,7 +96,7 @@ type PeerConfig struct {
 	PresharedKey        string            `json:"preshared_key,omitempty"`        // Optional
 	Endpoint            string            `json:"endpoint,omitempty"`             // Optional: host:port
 	AllowedIPs          []string          `json:"allowed_ips"`                    // Required: CIDR list
-	PersistentKeepalive int               `json:"persistent_keepalive,omitempty"` // Optional: seconds (0 = disabled)
+	PersistentKeepalive *int              `json:"persistent_keepalive,omitempty"` // Optional: seconds; nil = unset (runtime fallback), 0 = explicitly disabled, >0 = user value
 	ExtraKeys           map[string]string `json:"extra_keys,omitempty"`           // Unrecognized keys preserved for round-tripping
 }
 

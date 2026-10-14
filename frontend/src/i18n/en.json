@@ -87,6 +87,7 @@
     "probe_outside": "outside routes",
     "allowed_ips": "Allowed IPs",
     "handshake": "Handshake",
+    "handshake_interval_note": "Rekeys ~every 120s by protocol (fixed, not set by PersistentKeepalive). PersistentKeepalive only sends keepalive packets on its interval to hold the NAT path open; 180s with no handshake triggers auto-reconnect.",
     "duration": "Duration",
     "interface": "Interface",
     "rx": "Download",
@@ -572,6 +573,8 @@
     "section_awg": "AmneziaWG parameters",
     "section_peer": "Peer",
     "peer_n": "Peer {n}",
+    "keepalive_unit": "seconds",
+    "keepalive_unit_hint": "Seconds (0 = disabled, range 0–65535). WireGuard treats this value as seconds with no unit.",
     "section_bind": "Physical egress",
     "bind_egress": "Egress interface",
     "bind_auto": "Auto (best underlay)",
@@ -644,5 +647,12 @@
     "endpoint_host_empty": "{field}: endpoint host is empty",
     "bad_endpoint_port": "{field}: invalid endpoint port",
     "keepalive_range": "{field}: PersistentKeepalive must be between 0 and 65535, got {got}"
+  },
+  "keepalive_zero": {
+    "title": "PersistentKeepalive not set",
+    "message": "A peer with PersistentKeepalive unset or set to 0 sends no keepalive packets. Behind a NAT / firewall this lets the mapping time out, so the next handshake cannot reach the peer and the tunnel silently stalls until a manual reconnect. The ~120s renegotiation does NOT keep an idle tunnel alive — it only rotates keys when there is traffic. Recommended for NAT'd clients: ≥25s.",
+    "option_keep0": "I run a server / non-NAT peer — keep 0 (I understand)",
+    "option_use25": "I'm behind NAT — use the recommended 25s",
+    "option_cancel": "Go back and edit manually"
   }
 }

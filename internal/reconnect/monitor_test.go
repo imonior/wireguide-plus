@@ -94,6 +94,27 @@ func (m *mockManager) DisconnectTunnel(name string) error {
 	return nil
 }
 
+func (m *mockManager) DisconnectAll() {
+	m.mu.Lock()
+	fn := m.disconnectFn
+	connected := m.connected
+	m.mu.Unlock()
+	if fn != nil {
+		// DisconnectAll has no return value, so a failing hook is swallowed
+		// exactly like the real Manager does (it only logs per tunnel).
+		// DisconnectAll 没有返回值，失败的钩子像真实 Manager 一样被吞掉
+		// （它只对每条隧道记日志）。
+		_ = fn()
+		return
+	}
+	if connected {
+		m.mu.Lock()
+		m.connected = false
+		m.activeName = ""
+		m.mu.Unlock()
+	}
+}
+
 func (m *mockManager) setConnected(connected bool, name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

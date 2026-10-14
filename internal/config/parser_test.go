@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -50,8 +51,112 @@ func TestParseValidConfig(t *testing.T) {
 	if len(peer.AllowedIPs) != 2 {
 		t.Errorf("expected 2 AllowedIPs, got %d", len(peer.AllowedIPs))
 	}
-	if peer.PersistentKeepalive != 25 {
-		t.Errorf("PersistentKeepalive mismatch: %d", peer.PersistentKeepalive)
+	if peer.PersistentKeepalive == nil || *peer.PersistentKeepalive != 25 {
+		t.Errorf("PersistentKeepalive mismatch: %v", peer.PersistentKeepalive)
+	}
+}
+
+// TestParseExplicitZeroKeepalive verifies that an explicit "0" is preserved
+// as a deliberate disable (&0), distinct from an absent line (nil → runtime
+// fallback). This distinction is what lets the save-time dialog honour a
+// server / non-NAT user's choice instead of silently overriding it.
+func TestParseExplicitZeroKeepalive(t *testing.T) {
+	conf := `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 0
+`
+	cfg, err := Parse(conf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	pk := cfg.Peers[0].PersistentKeepalive
+	if pk == nil {
+		t.Fatal("expected non-nil PersistentKeepalive for explicit 0")
+	}
+	if *pk != 0 {
+		t.Errorf("expected explicit 0, got %d", *pk)
+	}
+	// Round-trip must keep the explicit 0 (not drop it to no line).
+	if !strings.Contains(Serialize(cfg), "PersistentKeepalive = 0") {
+		t.Errorf("explicit 0 lost on serialize:\n%s", Serialize(cfg))
+	}
+}
+
+// TestParseUnsetKeepalive verifies an absent line parses to nil (unset),
+// which is the signal for the runtime fallback to apply.
+func TestParseUnsetKeepalive(t *testing.T) {
+	conf := `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+AllowedIPs = 0.0.0.0/0
+`
+	cfg, err := Parse(conf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Peers[0].PersistentKeepalive != nil {
+		t.Errorf("expected nil (unset) PersistentKeepalive, got %v", cfg.Peers[0].PersistentKeepalive)
+	}
+	// Serialize must NOT emit a line for the unset value.
+	if strings.Contains(Serialize(cfg), "PersistentKeepalive") {
+		t.Errorf("unset keepalive should produce no line:\n%s", Serialize(cfg))
+	}
+}
+
+// TestParseKeepaliveUnitSuffix verifies that a value typed with its unit
+// ("10s") is read as 10 instead of failing the parse. The editor labels the
+// field with its unit, so the suffix is a predictable input, and rejecting it
+// discarded the user's entire edit with only a generic parse error.
+func TestParseKeepaliveUnitSuffix(t *testing.T) {
+	const tmpl = `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = %s
+`
+	accepted := []struct {
+		raw  string
+		want int
+	}{
+		{"10s", 10},
+		{"25 s", 25},
+		{"30sec", 30},
+		{"15 secs", 15},
+		{"20 second", 20},
+		{"45 seconds", 45},
+		{"0s", 0},
+		{"25", 25},
+	}
+	for _, tc := range accepted {
+		cfg, err := Parse(fmt.Sprintf(tmpl, tc.raw))
+		if err != nil {
+			t.Fatalf("keepalive %q: unexpected error: %v", tc.raw, err)
+		}
+		pk := cfg.Peers[0].PersistentKeepalive
+		if pk == nil {
+			t.Fatalf("keepalive %q: expected non-nil, got nil", tc.raw)
+		}
+		if *pk != tc.want {
+			t.Errorf("keepalive %q: expected %d, got %d", tc.raw, tc.want, *pk)
+		}
+	}
+
+	// Genuinely invalid input must still be rejected outright.
+	for _, raw := range []string{"abc", "s", "-5", "10x"} {
+		if _, err := Parse(fmt.Sprintf(tmpl, raw)); err == nil {
+			t.Errorf("keepalive %q: expected parse error, got nil", raw)
+		}
 	}
 }
 

@@ -24,6 +24,12 @@ type TunnelManager interface {
 	AllStatuses() []*tunnel.ConnectionStatus
 	Disconnect() error
 	DisconnectTunnel(name string) error
+	// DisconnectAll tears down every connected tunnel. The all-tunnels
+	// reconnect path needs it: a single-tunnel teardown leaves the rest up
+	// and the following reconnect-all then aborts on ErrAlreadyConnected.
+	// DisconnectAll 拆掉所有已连接隧道。全隧道重连路径需要它：只拆一条会让
+	// 其余仍在线，随后的全量重连会在 ErrAlreadyConnected 上中止。
+	DisconnectAll()
 }
 
 // Config holds reconnection parameters.
@@ -63,6 +69,21 @@ type ReconnectFunc func(ctx context.Context, name string) error
 
 // StatusChangedFunc is called when reconnection state changes.
 type StatusChangedFunc func(state State)
+
+// ErrReconnectBlocked is returned by the helper's reconnectFn when the
+// automation policy gate (reconnectPolicyBlocked) refuses to bring a tunnel
+// back up. It is NOT a transport failure — the monitor must treat it as a
+// deliberate skip (log it, stop retrying this attempt) rather than arming the
+// exponential backoff or, worse, logging a misleading "reconnected
+// successfully". The 30s health loop will re-evaluate the policy on its next
+// tick, so a later policy change (network becomes known, rule flips) is still
+// picked up without manual intervention.
+// ErrReconnectBlocked 由 helper 的 reconnectFn 在自动化策略闸门
+// （reconnectPolicyBlocked）拒绝重连时返回。它不是传输失败——监视器应将其
+// 视为「有意跳过」（记日志、停止本次重试），而非启动退避或谎报「重连成功」。
+// 30 秒健康循环会在下一拍重新评估策略，因此策略后续变化（网络变已知、规则翻转）
+// 仍会被自动捕获，无需人工干预。
+var ErrReconnectBlocked = errors.New("reconnect blocked by automation policy")
 
 // FirewallSuspendFunc is called before disconnect during reconnection to
 // temporarily disable firewall rules (per-tunnel System DNS enforcement).
@@ -132,7 +153,11 @@ type Monitor struct {
 
 	// healthCheckEnabled controls whether the periodic handshake age
 	// check runs in monitorLoop. Can be toggled at runtime via
-	// SetHealthCheck. Default: true.
+	// SetHealthCheck. False at construction — the helper overrides it from
+	// persisted Settings at startup, whose default is now ON.
+	// healthCheckEnabled 控制 monitorLoop 是否运行周期性握手时长检测，可在
+	// 运行时通过 SetHealthCheck 切换。构造时为 false——helper 启动时会按
+	// 持久化设置覆盖，其默认值现已改为开启。
 	healthCheckEnabled bool
 }
 
@@ -148,7 +173,8 @@ func NewMonitor(manager TunnelManager, reconnectFn ReconnectFunc, statusFn Statu
 		networkDetector:    NewNetworkChangeDetector(),
 		sessionDetector:    NewSessionDetector(),
 		retries:            make(map[string]*retryState),
-		healthCheckEnabled: false, // default OFF — enable in Settings
+		healthCheckEnabled: false, // OFF at construction; helper applies the persisted default (now ON) via SetHealthCheck
+		// 构造时为关闭；helper 启动时通过 SetHealthCheck 套用持久化默认值（现开启）。
 	}
 }
 
@@ -338,7 +364,32 @@ func (m *Monitor) GetState() State {
 
 func (m *Monitor) monitorLoop() {
 	const checkInterval = 30 * time.Second
-	const handshakeStaleThreshold = 180 * time.Second // 3 minutes
+	// handshakeStaleThreshold is the ACTION threshold: if a connected
+	// tunnel's handshake age exceeds it, the monitor triggers a per-tunnel
+	// reconnect. It deliberately sits ABOVE the UI degraded flag
+	// (tunnel/domain handshakeStaleThreshold = 150s) so the UI warns a
+	// tunnel is degrading slightly before the monitor acts. It also sits
+	// well above the WireGuard protocol rekey interval (~120s, fixed by the
+	// protocol) and any sane PersistentKeepalive (commonly 25s). The chain
+	// of three time constants is:
+	//   • PersistentKeepalive (user, e.g. 25–30s): keeps the NAT/firewall
+	//     path warm with empty packets so the periodic rekey can reach the
+	//     peer. Prevention, not detection.
+	//   • ~120s rekey (protocol-fixed): refreshes last_handshake; NOT
+	//     affected by PersistentKeepalive's value.
+	//   • 150s degraded flag / 180s action (this app): detection + recovery
+	//     when prevention failed (peer down, NAT timeout < keepalive).
+	// 180s 是「动作」阈值：连接中的隧道握手老化超过它即触发按隧道重连。它刻意
+	// 高于 UI 劣化标志（tunnel/domain 的 handshakeStaleThreshold=150s），让 UI
+	// 在监视器动作前先示警；也远高于 WireGuard 协议重协商间隔（约 120s，协议固定）
+	// 与任何合理的 PersistentKeepalive（常取 25s）。三个时间常数的关系：
+	//   • PersistentKeepalive（用户设定，如 25–30s）：以空包维持 NAT/防火墙通路，
+	//     使周期性重协商能抵达对端。这是预防，不是检测。
+	//   • 约 120s 重协商（协议固定）：刷新 last_handshake；不受 PersistentKeepalive
+	//     数值影响。
+	//   • 150s 劣化标志 / 180s 动作（本应用）：预防失败（对端宕机、NAT 超时短于
+	//     keepalive）时的检测与恢复。
+	const handshakeStaleThreshold = 180 * time.Second
 
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
@@ -362,10 +413,7 @@ func (m *Monitor) monitorLoop() {
 			// tunnel is stale, disconnect and reconnect only THAT tunnel.
 			statuses := m.manager.AllStatuses()
 			for _, status := range statuses {
-				if status == nil || status.LastHandshakeTime.IsZero() {
-					continue
-				}
-				if status.State != domain.StateConnected {
+				if status == nil || status.State != domain.StateConnected {
 					continue
 				}
 				tunnelName := status.TunnelName
@@ -375,13 +423,67 @@ func (m *Monitor) monitorLoop() {
 				if disabled != nil && disabled(tunnelName) {
 					continue
 				}
-				age := time.Since(status.LastHandshakeTime)
+				// Compute handshake age and its basis.
+				// 计算握手老化时长及其基准。
+				//
+				// A tunnel that has NEVER completed a handshake reports a zero
+				// LastHandshakeTime. The old code skipped such tunnels
+				// entirely, so a connected tunnel whose peer is unreachable (or
+				// whose NAT hole closed before the very first handshake) was
+				// never auto-recovered — exactly the "cannot handshake" failure
+				// mode. Age it from ConnectedAt instead: a tunnel that stays
+				// connected longer than the stale threshold without EVER
+				// handshaking is dead and must be reconnected.
+				// 从未完成握手的隧道其 LastHandshakeTime 为零。旧代码直接跳过
+				// 此类隧道，导致一条对端不可达（或 NAT 洞在首次握手前已关闭）
+				// 却仍处连接态的隧道永不被自动恢复——正是「无法 handshake」的
+				// 成因。改为以 ConnectedAt 为基线 aging：连接时长超过 stale 阈值
+				// 却从未握上手，即为死链，必须重连。
+				var age time.Duration
+				var basis string
+				if status.LastHandshakeTime.IsZero() {
+					if status.ConnectedAt.IsZero() {
+						// Connection time unknown — cannot judge; skip.
+						// 连接时间未知，无法判断，跳过。
+						continue
+					}
+					age = time.Since(status.ConnectedAt)
+					basis = "connected_since"
+				} else {
+					age = time.Since(status.LastHandshakeTime)
+					basis = "last_handshake"
+				}
+				// Periodic visibility: record handshake health every tick so a
+				// dead upstream is diagnosable from the log even before the
+				// stale threshold — the log used to be blind to handshake state.
+				// 周期性可见性：每个检测周期都记录握手健康度，使对端失联在
+				// 超过阈值前即可从日志诊断——此前日志对握手状态完全不可见。
+				slog.Debug("handshake status",
+					"category", "tunnel",
+					"tunnel", tunnelName,
+					"basis", basis,
+					"last_handshake_age", age.Round(time.Second),
+					"threshold", handshakeStaleThreshold)
 				if age > handshakeStaleThreshold {
 					slog.Warn("handshake stale, triggering per-tunnel reconnect",
+						"category", "tunnel",
 						"tunnel", tunnelName,
+						"basis", basis,
 						"last_handshake_age", age.Round(time.Second),
 						"threshold", handshakeStaleThreshold)
 					m.triggerReconnectTunnel(tunnelName)
+				} else if age > handshakeStaleThreshold/2 {
+					// Surface an aging handshake at the default log level so the
+					// user sees the tunnel degrading in real time, not only at
+					// the stale moment.
+					// 以默认日志级别提示正在老化的握手，让用户实时看到隧道
+					// 劣化，而非只在触发重连的那一刻才知晓。
+					slog.Info("handshake aging",
+						"category", "tunnel",
+						"tunnel", tunnelName,
+						"basis", basis,
+						"last_handshake_age", age.Round(time.Second),
+						"threshold", handshakeStaleThreshold)
 				}
 			}
 		}
@@ -582,7 +684,20 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 		if tunnelName != "" {
 			disconnectErr = m.manager.DisconnectTunnel(tunnelName)
 		} else {
-			disconnectErr = m.manager.Disconnect()
+			// The all-tunnels path must tear down EVERY connected tunnel.
+			// Disconnect() only drops the first one it finds, so the
+			// subsequent reconnect-all hit ErrAlreadyConnected on the next
+			// tunnel and aborted the whole attempt: wake / network-change
+			// recovery silently healed one tunnel and never touched the
+			// others — a tunnel stuck "connected but never handshaked" could
+			// then never be rebuilt at all. DisconnectAll() drains every
+			// tunnel first so the reconnect starts from a clean slate.
+			// 全隧道路径必须拆掉每一个已连接隧道。Disconnect() 只拆它找到的第一条，
+			// 随后的全量重连会在下一条隧道上撞到 ErrAlreadyConnected 而整体中止：
+			// 唤醒/网络切换恢复只悄悄治好一条，其余永远碰不到——卡在「已连接但始终
+			// 没握手」的隧道因此根本无法重建。改用 DisconnectAll() 先清空所有隧道，
+			// 让重连面对干净状态。
+			m.manager.DisconnectAll()
 		}
 		if disconnectErr != nil {
 			var te *tunnel.TunnelError
@@ -631,7 +746,31 @@ func (m *Monitor) reconnectWithBackoff(ctx context.Context, tunnelName string, e
 
 		// Attempt reconnection — pass tunnel name so only the specific
 		// tunnel is reconnected when doing per-tunnel health recovery.
-		if err := m.reconnectFn(ctx, tunnelName); err != nil {
+		err := m.reconnectFn(ctx, tunnelName)
+		if errors.Is(err, ErrReconnectBlocked) {
+			// The automation policy gate refused this reconnect — that is a
+			// deliberate decision, not a transport failure. Log it clearly so
+			// the dead tunnel is diagnosable from the log (the old code
+			// returned nil here and the success branch below mislabelled it
+			// "reconnected successfully"), and stop this retry attempt without
+			// arming backoff. The 30s health loop re-evaluates next tick.
+			// 自动化策略闸门拒绝本次重连——这是有意决策而非传输失败。明确记录，
+			// 以便从日志诊断失联隧道（旧代码此处返回 nil，被下方成功分支误标为
+			// 「reconnected successfully」），并停止本次重试而不启动退避。
+			// 30 秒健康循环会在下一拍重新评估。
+			slog.Info("reconnect skipped: blocked by automation policy",
+				"category", "tunnel",
+				"tunnel", displayTunnel(tunnelName),
+				"attempt", attempt)
+			m.notifyStatus(State{Reconnecting: false})
+			m.mu.Lock()
+			if cur, ok := m.retries[tunnelName]; ok && cur == entry {
+				delete(m.retries, tunnelName)
+			}
+			m.mu.Unlock()
+			return
+		}
+		if err != nil {
 			slog.Warn("reconnection failed", "attempt", attempt, "tunnel", displayTunnel(tunnelName), "error", err)
 			// Re-enable firewall after failed attempt so the system stays
 			// protected between retries.

@@ -37,9 +37,23 @@ const handshakeStaleThreshold = 150 * time.Second
 // markHandshakeStale sets status.HandshakeStale. A freshly-connected tunnel
 // that simply hasn't handshaked yet is NOT flagged — only one that used to be
 // able to reach its peer and now cannot (up past the threshold, no handshake
-// within it).
+// within it), or one that has been connected past the threshold yet never
+// handshaked at all (dead peer / NAT hole closed before the first handshake).
+// The latter case is aged from ConnectedAt so the UI shows the degraded state
+// in step with the reconnect monitor, which also recovers it.
+// 标记 HandshakeStale。刚连接、尚未握手的隧道不标记；只有原本能抵达对端现在
+// 不能（连接超阈值且窗口内无握手），或连接已超阈值却从未握手（对端死 / NAT 洞在
+// 首次握手前关闭）才标记。后者以 ConnectedAt 为基线，使 UI 劣化态与负责恢复的
+// 重连监视器保持同步。
 func markHandshakeStale(s *domain.ConnectionStatus) {
-	if s == nil || s.LastHandshakeTime.IsZero() {
+	if s == nil {
+		return
+	}
+	if s.LastHandshakeTime.IsZero() {
+		if s.ConnectedAt.IsZero() {
+			return
+		}
+		s.HandshakeStale = time.Since(s.ConnectedAt) > handshakeStaleThreshold
 		return
 	}
 	if time.Since(s.ConnectedAt) < handshakeStaleThreshold {

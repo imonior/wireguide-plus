@@ -318,18 +318,28 @@ func (h *Helper) doConnectHeld(cfg *domain.WireGuardConfig) error {
 		}
 	}
 
-	// Keep connection on idle: when enabled (global default, per-tunnel
-	// override), force a PersistentKeepalive on peers that have none so a
-	// sleeping NIC / screen-saver / lock cannot silently kill the
-	// handshake. Injected at runtime only — the user's .conf is never
-	// rewritten, keeping it a portable standard WireGuard/AWG document. The
-	// connect cache (activeCfgs) carries the mutated copy, so a reconnect
-	// reuses the same keepalive.
-	if h.keepConnectionOnIdle(cfg.Name) {
-		for i := range cfg.Peers {
-			if cfg.Peers[i].PersistentKeepalive <= 0 {
-				cfg.Peers[i].PersistentKeepalive = defaultKeepaliveInterval
-			}
+	// Anti-stall keepalive safety net: a peer whose PersistentKeepalive was
+	// LEFT UNSET (nil) sends NO keepalive packets, so a stateful NAT/firewall
+	// mapping times out and the next handshake cannot reach the peer — the
+	// tunnel silently stalls until a manual reconnect (the original "cannot
+	// handshake" failure mode). Force a sane default (25s) at connect time
+	// ONLY for those unset peers. An EXPLICIT zero (the user chose "disable"
+	// after the save-time dialog — e.g. a server / non-NAT peer) is
+	// honoured, never overridden. Positive values pass through untouched.
+	// Decoupled from the "keep connection on idle" switch (heal-on-resume
+	// only); injected at runtime, the .conf is never rewritten here. The
+	// connect cache (activeCfgs) carries the mutated copy so a reconnect
+	// reuses it.
+	// 防假死 keepalive 兜底：仅当用户"留空未设"（nil）时，对端才不发任何保活包，
+	// 有状态 NAT/防火墙映射超时后下次握手无法抵达对端——隧道静默假死（即最初
+	// 「无法 handshake」的根因）。连接时只为这些未设的对端注入合理默认 25s。
+	// 显式 0（用户在保存弹窗中确认"禁用"，如服务端/非 NAT 对端）予以尊重、绝不覆盖；
+	// 正值原样通过。与「空闲保持连接」开关解耦（只管恢复时自愈），仅运行时注入，
+	// 此处不改写 .conf；连接缓存携带改动副本，重连复用之。
+	for i := range cfg.Peers {
+		if cfg.Peers[i].PersistentKeepalive == nil {
+			v := defaultKeepaliveInterval
+			cfg.Peers[i].PersistentKeepalive = &v
 		}
 	}
 

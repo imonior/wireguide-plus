@@ -87,6 +87,7 @@
     "probe_outside": "범위 밖",
     "allowed_ips": "허용 IP",
     "handshake": "핸드셰이크",
+    "handshake_interval_note": "핸드셰이크는 약 120초마다 프로토콜상 재협상됩니다(고정, PersistentKeepalive와 무관). PersistentKeepalive는 설정한 간격으로 키프알라이브만 보내 NAT 경로를 유지하며, 180초 동안 핸드셰이크가 없으면 자동 재연결됩니다.",
     "duration": "연결 시간",
     "interface": "인터페이스",
     "rx": "다운로드",
@@ -572,6 +573,8 @@
     "section_awg": "AmneziaWG 파라미터",
     "section_peer": "피어",
     "peer_n": "피어 {n}",
+    "keepalive_unit": "초",
+    "keepalive_unit_hint": "단위는 초입니다(0 = 사용 안 함, 범위 0–65535). WireGuard는 이 값을 단위 없는 초로 해석합니다.",
     "section_bind": "물리적 출구",
     "bind_egress": "출구 인터페이스",
     "bind_auto": "자동(최적 NIC)",
@@ -644,5 +647,12 @@
     "endpoint_host_empty": "{field}: Endpoint 호스트가 비어 있습니다",
     "bad_endpoint_port": "{field}: Endpoint 포트가 잘못되었습니다",
     "keepalive_range": "{field}: PersistentKeepalive 는 0–65535 사이여야 합니다(현재 {got})"
+  },
+  "keepalive_zero": {
+    "title": "PersistentKeepalive 미설정",
+    "message": "PersistentKeepalive가 미설정이거나 0으로 설정된 피어는 keepalive 패킷을 보내지 않습니다. NAT/방화벽 뒤에서는 매핑이 만료되어 다음 핸드셰이크가 상대방에 도달하지 못하고 터널이 조용히 멈춰 수동 재연결이 필요해집니다. 약 120초 재협상은 유휴 터널의 연결을 유지하지 않으며, 트래픽이 있을 때만 키를 교체합니다. NAT 뒤 클라이언트에는 25초 이상을 권장합니다.",
+    "option_keep0": "서버 / NAT 외부 피어입니다 — 0 유지 (이해함)",
+    "option_use25": "NAT 뒤에 있습니다 — 권장 25초 사용",
+    "option_cancel": "돌아가서 수동 편집"
   }
 }

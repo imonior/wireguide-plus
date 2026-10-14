@@ -5,6 +5,7 @@
   import TunnelDetail from './lib/TunnelDetail.svelte';
   import ConflictWarning from './lib/ConflictWarning.svelte';
   import AddressConflictDialog from './lib/AddressConflictDialog.svelte';
+  import KeepaliveZeroDialog from './lib/KeepaliveZeroDialog.svelte';
   import ConfigEditor from './lib/ConfigEditor.svelte';
   import ScriptEditor from './lib/ScriptEditor.svelte';
   import FieldsEditor from './lib/FieldsEditor.svelte';
@@ -45,6 +46,11 @@
   let showEditor = false;
   let showSettings = false;
   let showConflictWarning = false;
+  let showKeepaliveDialog = false;
+  let keepaliveSaveName = '';
+  let keepaliveContent = '';
+  let keepaliveOriginalName = '';
+  let keepaliveWasNew = false;
   let showZipResult = false;
   let zipResults = [];
   let conflictList = [];
@@ -813,6 +819,67 @@
     awgPendingRun = null;
   }
 
+  // --- Keepalive save guard -------------------------------------------------
+  // True when any [Peer] block lacks a POSITIVE PersistentKeepalive (absent
+  // line, or an explicit 0 / negative value). Such a peer sends no keepalive
+  // packets; behind a NAT/firewall the mapping times out and the tunnel
+  // silently stalls. The save-time dialog turns that into an informed choice.
+  function hasZeroOrUnsetKeepalive(content) {
+    const idx = content.indexOf('[Peer]');
+    if (idx < 0) return false;
+    const peerBlocks = content.slice(idx).split(/(?=\[Peer\])/);
+    for (const block of peerBlocks) {
+      if (!block.startsWith('[Peer]')) continue;
+      const m = block.match(/PersistentKeepalive\s*=\s*(-?\d+)/i);
+      if (!m) return true;
+      if (parseInt(m[1], 10) <= 0) return true;
+    }
+    return false;
+  }
+
+  // For every peer lacking a positive keepalive, replace (or add) the
+  // PersistentKeepalive line with the given value. Peers that already have a
+  // positive value are left untouched.
+  function ensurePeerKeepalive(content, value) {
+    const idx = content.indexOf('[Peer]');
+    if (idx < 0) return content;
+    const head = content.slice(0, idx);
+    const peerBlocks = content.slice(idx).split(/(?=\[Peer\])/);
+    let rebuilt = head;
+    for (const block of peerBlocks) {
+      if (!block.startsWith('[Peer]')) {
+        rebuilt += block;
+        continue;
+      }
+      const m = block.match(/PersistentKeepalive\s*=\s*(-?\d+)/i);
+      if (m && parseInt(m[1], 10) > 0) {
+        rebuilt += block; // already positive — keep as-is
+        continue;
+      }
+      // Drop any zero/negative keepalive line, then append the chosen value.
+      let body = block.replace(/^\s*PersistentKeepalive\s*=\s*-?\d+\s*$/im, '');
+      body = body.replace(/\s+$/, '');
+      if (body.length && !body.endsWith('\n')) body += '\n';
+      body += 'PersistentKeepalive = ' + value + '\n';
+      rebuilt += body;
+    }
+    return rebuilt;
+  }
+
+  function onKeepaliveResolved(e) {
+    showKeepaliveDialog = false;
+    const action = e && e.detail && e.detail.action;
+    if (action === 'cancel') return; // back to the editor, nothing saved
+    let content = keepaliveContent;
+    if (action === 'use25') content = ensurePeerKeepalive(keepaliveContent, 25);
+    else if (action === 'keep0') content = ensurePeerKeepalive(keepaliveContent, 0);
+    // Re-run the normal save path (re-validates the rewritten content and
+    // chains through the AWG reminder gate). A disconnected tunnel is NOT
+    // auto-connected here — persistEditorSave only reconnects one it had to
+    // stop first; an unconnected tunnel simply gets its file updated.
+    gateAWGReminder(content, () => persistEditorSave(keepaliveSaveName, content, keepaliveOriginalName, keepaliveWasNew));
+  }
+
   async function doSave(e) {
     const { name: rawName, content: saveContent } = e.detail;
     logStep('editor save event name="' + rawName + '" bytes=' + (saveContent || '').length);
@@ -873,7 +940,18 @@
       showToast($t('editor.save_failed_detail', { err: errText(err) }));
       return;
     }
-    gateAWGReminder(saveContent, () => persistEditorSave(saveName, saveContent, originalName, wasNew));
+    if (hasZeroOrUnsetKeepalive(saveContent)) {
+      // Surface the choice before saving: keep 0 (server/non-NAT), switch to
+      // the recommended 25s (NAT'd client), or return to edit. The file is
+      // never rewritten until the user decides.
+      showKeepaliveDialog = true;
+      keepaliveSaveName = saveName;
+      keepaliveContent = saveContent;
+      keepaliveOriginalName = originalName;
+      keepaliveWasNew = wasNew;
+    } else {
+      gateAWGReminder(saveContent, () => persistEditorSave(saveName, saveContent, originalName, wasNew));
+    }
   }
 
   // Is this tunnel currently up? Checked against both lists on purpose:
@@ -1263,14 +1341,14 @@
 {#if isPopup}
   <StatusPopup />
 {:else}
-<div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration) && currentView === 'tunnels' ? true : undefined}>
+<div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog) && currentView === 'tunnels' ? true : undefined}>
   <!-- Wails adds .file-drop-target-active class to .app when dragging files.
        We only render the overlay when drop-target is actually active — i.e.
        on the tunnels view with no modal open — so it can never steal clicks
        from modals. The data-file-drop-target attribute above also removes
        the drop affordance entirely in those states so Wails doesn't even
        detect the drag. -->
-  {#if currentView === 'tunnels' && !(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration)}
+  {#if currentView === 'tunnels' && !(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog)}
     <div class="drop-overlay">
       <div class="drop-overlay-content">
         <div class="drop-icon">
@@ -1539,6 +1617,10 @@
 
   {#if addressConflict}
     <AddressConflictDialog conflict={addressConflict} on:resolved={onAddressConflictResolved} />
+  {/if}
+
+  {#if showKeepaliveDialog}
+    <KeepaliveZeroDialog on:resolved={onKeepaliveResolved} />
   {/if}
 
   <EgressLostDialog

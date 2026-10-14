@@ -56,7 +56,7 @@ type Settings struct {
 	// KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
 	// while the machine is idle — screen-saver, display sleep, session lock,
 	// or (after wake) a brief suspend. ON by default: when enabled, tunnels
-	// that have no PersistentKeepalive of their own get one forced at runtime
+	// that left PersistentKeepalive UNSET get one forced at runtime
 	// (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
 	// instead of silently dying; a dead-but-interface-up link also freezes
 	// its uptime counter (Layer A) instead of inflating it. A tunnel may opt
@@ -329,7 +329,7 @@ func DefaultSettings() *Settings {
 		Theme:                "system", // follows OS dark/light mode
 		TrayIconStyle:        "color",
 		NotifyDurationMs:     10000, // 10s default notification duration
-		HealthCheck:          false,
+		HealthCheck:          true,  // periodic handshake monitoring + auto-reconnect ON by default / 周期性握手监测与自动重连默认开启
 		KeepConnectionOnIdle: true,  // keep tunnels alive through idle/screen-saver/lock by default
 		PreventSystemSleep:   false, // opt-in: an invasive power override, leave it to the user
 		PinInterface:         false, // off by default — enable for dual-network setups

@@ -162,7 +162,7 @@
     // existed, instead of showing an OFF the user never chose.
     disconnect_on_quit: true,
     notify_duration_ms: DEFAULT_NOTIFY_DURATION,
-    health_check: false,
+    health_check: true,
     // Backend default is true (a missing key means true); mirrored here so the
     // toggle renders ON for a config.json written before the key existed,
     // instead of showing an OFF the user never chose.

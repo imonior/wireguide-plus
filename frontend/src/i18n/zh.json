@@ -87,6 +87,7 @@
     "probe_outside": "范围外",
     "allowed_ips": "允许的 IP",
     "handshake": "握手",
+    "handshake_interval_note": "每约 120 秒按协议重协商握手（固定，不受 PersistentKeepalive 影响）。PersistentKeepalive 仅按其设定间隔发保活包维持 NAT 通路；连续 180 秒无握手则自动重连。",
     "duration": "时长",
     "interface": "接口",
     "rx": "下载",
@@ -572,6 +573,8 @@
     "section_awg": "AmneziaWG 参数",
     "section_peer": "对端",
     "peer_n": "对端 {n}",
+    "keepalive_unit": "秒",
+    "keepalive_unit_hint": "单位：秒（0 = 禁用，范围 0–65535）。WireGuard 将此值视为秒，不写单位。",
     "section_bind": "物理出口",
     "bind_egress": "出口网卡",
     "bind_auto": "自动（最优网卡）",
@@ -644,5 +647,12 @@
     "endpoint_host_empty": "{field}：Endpoint 主机为空",
     "bad_endpoint_port": "{field}：无效的 Endpoint 端口",
     "keepalive_range": "{field}：PersistentKeepalive 必须在 0–65535 之间，当前为 {got}"
+  },
+  "keepalive_zero": {
+    "title": "未设置 PersistentKeepalive",
+    "message": "对端若未设置或设为 0，将不发送任何保活包。在 NAT / 防火墙环境下，映射会超时，下一次握手无法抵达对端，隧道会静默假死，只能手动重连。约 120s 的重协商并不能维持空闲隧道的连通性——它只在有流量时轮换密钥。NAT 后客户端建议：≥25s。",
+    "option_keep0": "我是服务端 / 非 NAT 对端——保留 0（已知晓）",
+    "option_use25": "我在 NAT 后——使用推荐的 25s",
+    "option_cancel": "返回手动修改"
   }
 }

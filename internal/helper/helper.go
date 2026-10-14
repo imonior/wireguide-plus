@@ -648,11 +648,18 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		}
 		// Policy gate: a stale-handshake detection on this tunnel must not
 		// connect it against its automation rules (the IP-reconfig flap
-		// case). Returning nil, not an error: a refusal is a decision, not
-		// a failure, and an error would arm the retry backoff to try the
-		// same refused connect again.
+		// case). Refusals are a decision, not a transport failure, so we
+		// return the sentinel ErrReconnectBlocked rather than nil: the
+		// monitor logs it as a deliberate skip and stops this attempt
+		// without arming backoff (the 30s health loop re-evaluates next
+		// tick), instead of the old behaviour of returning nil and being
+		// mislabelled "reconnected successfully".
+		// 策略闸门：本隧道的失活握手检测不得违反其自动化规则重连。拒绝是决策而非
+		// 传输失败，故返回哨兵 ErrReconnectBlocked 而非 nil——监视器将其记为有意
+		// 跳过并停止本次尝试（不启动退避，30 秒健康循环下一拍重评），而非旧行为
+		// 返回 nil 被误标为「reconnected successfully」。
 		if h.reconnectPolicyBlocked(name) {
-			return nil
+			return reconnect.ErrReconnectBlocked
 		}
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("reconnect %q cancelled before Connect: %w", name, err)

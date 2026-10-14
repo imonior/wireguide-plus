@@ -196,10 +196,16 @@ func validatePeer(peer *PeerConfig, index int, result *ValidationResult) {
 		}
 	}
 
-	// PersistentKeepalive: optional, valid range
-	if peer.PersistentKeepalive < 0 || peer.PersistentKeepalive > 65535 {
-		result.addError(prefix+".PersistentKeepalive", "keepalive_range",
-			fmt.Sprintf("must be between 0 and 65535, got %d", peer.PersistentKeepalive))
+	// PersistentKeepalive: optional, valid range 0–65535. nil means unset
+	// (runtime fallback) and is always valid; an explicit 0 is a deliberate
+	// "disabled" choice and is also valid.
+	// PersistentKeepalive：可选项，合法范围 0–65535。nil 表示未设（运行时兜底），
+	// 恒合法；显式 0 是有意的"禁用"选择，同样合法。
+	if peer.PersistentKeepalive != nil {
+		if *peer.PersistentKeepalive < 0 || *peer.PersistentKeepalive > 65535 {
+			result.addError(prefix+".PersistentKeepalive", "keepalive_range",
+				fmt.Sprintf("must be between 0 and 65535, got %d", *peer.PersistentKeepalive))
+		}
 	}
 }
 

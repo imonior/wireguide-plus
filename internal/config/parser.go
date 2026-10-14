@@ -217,11 +217,17 @@ func parsePeerKey(peer *PeerConfig, key, value string, lineNum int) error {
 		}
 		peer.AllowedIPs = append(peer.AllowedIPs, add...)
 	case "persistentkeepalive":
-		n, err := strconv.Atoi(value)
+		n, err := parseKeepaliveSeconds(value)
 		if err != nil {
 			return fmt.Errorf("line %d: invalid PersistentKeepalive value: %q", lineNum, value)
 		}
-		peer.PersistentKeepalive = n
+		// Store a pointer so the three states stay distinguishable:
+		// absent line → nil (unset, runtime fallback), explicit "0" → &0
+		// (deliberate disable), positive → &n (user value).
+		// 用指针区分三种状态：缺省行 → nil（未设，运行时兜底）；显式 0 → &0
+		// （有意禁用）；正值 → &n（用户设定值）。
+		v := n
+		peer.PersistentKeepalive = &v
 	default:
 		slog.Warn("ignoring unknown [Peer] key", "line", lineNum, "key", key)
 		if peer.ExtraKeys == nil {
@@ -230,6 +236,38 @@ func parsePeerKey(peer *PeerConfig, key, value string, lineNum int) error {
 		peer.ExtraKeys[key] = value
 	}
 	return nil
+}
+
+// parseKeepaliveSeconds reads a PersistentKeepalive value. A bare integer is
+// the canonical form ("25"), but the editor labels the field with its unit, so
+// users routinely type or paste the unit along with the number ("25s",
+// "25 sec", "25 seconds"). Accepting the suffix turns a hard parse failure —
+// which silently discarded the whole edit — into the value the user meant.
+// Anything that is not a non-negative integer (with or without a seconds
+// suffix) is still rejected.
+// parseKeepaliveSeconds 解析 PersistentKeepalive 取值。规范形式是纯整数（"25"），
+// 但编辑器给该字段标注了单位，用户常把单位一起输入或粘贴进来（"25s"、
+// "25 sec"、"25 seconds"）。接受该后缀，可把「整次编辑被静默丢弃」的硬性解析
+// 失败变成用户真正想填的值。非「可带秒后缀的非负整数」的输入依然拒绝。
+func parseKeepaliveSeconds(raw string) (int, error) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	// Longest suffix first so "seconds" is not shortened to a bare "s" and
+	// leave an unparseable remainder behind.
+	// 后缀按由长到短匹配，避免 "seconds" 只被截掉 "s" 而留下无法解析的残串。
+	for _, suffix := range []string{"seconds", "second", "secs", "sec", "s"} {
+		if strings.HasSuffix(s, suffix) {
+			s = strings.TrimSpace(strings.TrimSuffix(s, suffix))
+			break
+		}
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("negative keepalive: %d", n)
+	}
+	return n, nil
 }
 
 // Serialize converts a WireGuardConfig back to .conf file format.
@@ -312,8 +350,13 @@ func Serialize(cfg *WireGuardConfig) string {
 		if len(peer.AllowedIPs) > 0 {
 			b.WriteString("AllowedIPs = " + strings.Join(peer.AllowedIPs, ", ") + "\n")
 		}
-		if peer.PersistentKeepalive > 0 {
-			b.WriteString("PersistentKeepalive = " + strconv.Itoa(peer.PersistentKeepalive) + "\n")
+		if peer.PersistentKeepalive != nil {
+			// Write the value verbatim, including 0: an explicit "0" must
+			// survive a round-trip as a deliberate disable, while nil (unset)
+			// produces no line at all.
+			// 原样写出，含 0：显式 0 作为"有意禁用"必须保留；nil（未设）
+			// 则不写该行。
+			b.WriteString("PersistentKeepalive = " + strconv.Itoa(*peer.PersistentKeepalive) + "\n")
 		}
 		for k, v := range peer.ExtraKeys {
 			b.WriteString(k + " = " + v + "\n")

@@ -87,6 +87,7 @@
     "probe_outside": "範囲外",
     "allowed_ips": "許可 IP",
     "handshake": "ハンドシェイク",
+    "handshake_interval_note": "ハンドシェイクは約120秒ごとにプロトコルで再交渉されます（固定、PersistentKeepalive の影響なし）。PersistentKeepalive は設定間隔でキープアライブを送るだけで NAT 経路を維持し、180秒握手がなければ自動再接続します。",
     "duration": "接続時間",
     "interface": "インターフェース",
     "rx": "ダウンロード",
@@ -572,6 +573,8 @@
     "section_awg": "AmneziaWG パラメータ",
     "section_peer": "ピア",
     "peer_n": "ピア {n}",
+    "keepalive_unit": "秒",
+    "keepalive_unit_hint": "単位は秒（0 = 無効、範囲 0–65535）。WireGuard はこの値を単位なしの秒として扱います。",
     "section_bind": "物理的な出口",
     "bind_egress": "出口インターフェース",
     "bind_auto": "自動（最適 NIC）",
@@ -644,5 +647,12 @@
     "endpoint_host_empty": "{field}：Endpoint のホストが空です",
     "bad_endpoint_port": "{field}：Endpoint のポートが無効です",
     "keepalive_range": "{field}：PersistentKeepalive は 0〜65535 の間である必要があります（現在 {got}）"
+  },
+  "keepalive_zero": {
+    "title": "PersistentKeepalive が未設定",
+    "message": "PersistentKeepalive が未設定、または 0 に設定されたピアはキープアライブパケットを送信しません。NAT/ファイアウォールの背後ではマッピングがタイムアウトし、次のハンドシェイクが対端に届かず、トンネルはサイレントに停滞し手動再接続が必要になります。約 120 秒の再交渉はアイドル状態のトンネルの接続を維持しません——トラフィックがある時のみ鍵をローテーションします。NAT 内クライアントには 25 秒以上を推奨します。",
+    "option_keep0": "サーバー / NAT 外のピアです——0 のまま（理解済み）",
+    "option_use25": "NAT 内にいます——推奨の 25 秒を使用",
+    "option_cancel": "戻って手動で編集"
   }
 }
