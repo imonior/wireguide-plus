@@ -713,7 +713,8 @@ jobs:
           go run ./tools/updatesign sign -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
           go run ./tools/updatesign verify -pub "$UPDATE_SIGNING_PUBKEY" -in artifacts/SHA256SUMS -sig artifacts/SHA256SUMS.sig
 
-      # Release body = the latest version's section from the curated,
+      # Release body = a language switcher (same endonym convention as the
+      # READMEs) + the latest version's section from the curated,
       # English-by-default CHANGELOG.md (same convention as README.md) +
       # the static "📦 Downloads" asset guide / checksums / Full Changelog
       # / SignPath footer. That footer is the exact structure every release
@@ -727,7 +728,7 @@ jobs:
       # tag (not the whole file) and keep it English — scoped to this
       # release while matching the old page layout (changelog, then the
       # download/footer tail).
-      - name: Build release body (curated changelog + asset/download tail)
+      - name: Build release body (language switcher + curated changelog + asset/download tail)
         run: |
           set -euo pipefail
           cur="${{ github.ref_name }}"
@@ -736,9 +737,13 @@ jobs:
           prev="${prev:-$cur}"
           ver="${cur#v}"
           echo "current tag: $cur   previous tag: $prev   version: $ver"
+          # Language switcher first: this body is the English section, so the
+          # other four languages are links pinned to this very tag (their
+          # content therefore matches the release, not a later main).
+          sed -e "s#__CUR__#$cur#g" -e "s#__VER__#$ver#g" build/release-head.md.tmpl > RELEASE_NOTES.md
           # Latest changelog section, with the "## [x.y.z] - date" header line
           # dropped so the body reads like a changelog (matches the old layout).
-          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 > RELEASE_NOTES.md
+          awk '/^## \[/ { if (p) exit; p=1 } p' CHANGELOG.md | tail -n +2 >> RELEASE_NOTES.md
           # Append the asset/download/footer tail with version placeholders filled.
           sed -e "s#__CUR__#$cur#g" -e "s#__VER__#$ver#g" -e "s#__PREV__#$prev#g" build/release-tail.md.tmpl >> RELEASE_NOTES.md
           # Same rule as the refresh workflow: any placeholder the three
