@@ -252,7 +252,15 @@ type Helper struct {
 	// can connect tunnels that aren't already in activeCfgs — i.e.
 	// the user has never opened them via the GUI in this session.
 	userTunnelStore *storage.TunnelStore
-	userAppSupport  string
+	// settingsStore reads the same settings.json the GUI writes. The
+	// endpoint-failover tuning (master switch, thresholds, cooldown) is read
+	// here on each reconnect so a settings change takes effect on the next
+	// dead-link cycle without restarting the privileged helper.
+	// settingsStore 读取与 GUI 相同的 settings.json。endpoint 容灾的调参
+	// （总开关、阈值、冷却）在每次重连时从这里读取，使设置变更在下一个死链周期
+	// 即生效，无需重启特权 helper。
+	settingsStore  *storage.SettingsStore
+	userAppSupport string
 
 	// logsDir and ownerUID are captured at startup so the
 	// RepairLogOwnership RPC handler can re-apply ownership to the user-side
@@ -368,6 +376,7 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	if appSupport, err := deriveUserAppSupport(ownerUID); err == nil && appSupport != "" {
 		h.userAppSupport = appSupport
 		h.userTunnelStore = storage.NewTunnelStore(filepath.Join(appSupport, "tunnels"))
+		h.settingsStore = storage.NewSettingsStore(appSupport)
 	}
 
 	// Create/repair the user-owned log dir BEFORE the daily handler first
@@ -664,6 +673,12 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("reconnect %q cancelled before Connect: %w", name, err)
 		}
+		// Endpoint failover: the link is being rebuilt anyway, so this is
+		// the one moment where moving to another candidate costs nothing.
+		// No-op unless the tunnel opted in.
+		// Endpoint failover：反正这条链路要重建，此刻换到另一个候选是零成本的。
+		// 未启用的隧道不会发生任何事。
+		h.maybeSwitchEndpoint(name, cfg)
 		h.connectMu.Lock()
 		err := h.manager.ConnectWithContext(ctx, cfg)
 		h.connectMu.Unlock()
@@ -697,6 +712,7 @@ func (h *Helper) reconnectFn(ctx context.Context, name string) error {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("reconnect-all cancelled mid-loop: %w", err)
 		}
+		h.maybeSwitchEndpoint(cfg.Name, cfg)
 		h.connectMu.Lock()
 		err := h.manager.ConnectWithContext(ctx, cfg)
 		h.connectMu.Unlock()

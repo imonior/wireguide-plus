@@ -77,6 +77,7 @@
     loadProbeSlots($selectedTunnel);
     loadDetail($selectedTunnel.name);
     loadAutomationState($selectedTunnel.name);
+    loadEndpointSettings($selectedTunnel.name);
   }
 
   // Per-tunnel notes. Populated from TunnelInfo.notes in the store, edited
@@ -672,6 +673,127 @@
     return match || $connectionStatus;
   })();
 
+  // --- Endpoint candidates (failover) ---
+  // The .conf keeps a single Endpoint; the alternatives live in the tunnel's
+  // sidecar and are dialled automatically when the current one is dead or
+  // markedly slower. Off by default — the list is inert until armed here.
+  let epSettings = { active: '', candidates: [], auto_switch: false };
+  // The global master switch (Settings → Advanced → Endpoint failover). When
+  // it is off, no tunnel switches endpoints and this per-tunnel toggle is
+  // greyed out; its stored value is preserved, not cleared.
+  // 全局总开关（设置 → 高级 → Endpoint 容灾）。关闭时任何隧道都不切 endpoint，
+  // 本每隧道开关灰掉；其已存值被保留而非清空。
+  let endpointMasterEnabled = true;
+  let epDraft = '';
+  let epError = '';
+  let epBusy = false;
+  let epMeasuring = false;
+  let epMeasurements = [];
+
+  async function loadEndpointSettings(name) {
+    epError = '';
+    epDraft = '';
+    epMeasurements = [];
+    if (!name) {
+      epSettings = { active: '', candidates: [], auto_switch: false };
+      return;
+    }
+    try {
+      const s = await TunnelService.GetEndpointSettings(name);
+      epSettings = {
+        active: s?.active || '',
+        candidates: Array.isArray(s?.candidates) ? [...s.candidates] : [],
+        auto_switch: s?.auto_switch === true,
+      };
+      // The per-tunnel toggle only does anything while the global master
+      // switch is on; read it so the UI can grey the toggle (and keep the
+      // stored per-tunnel choice intact) when it is off.
+      // 每隧道开关只有在全局总开关开启时才生效；读它以便总开关关闭时把开关灰掉
+      // （同时保留每隧道已存的选择）。
+      try {
+        const gs = await TunnelService.GetSettings();
+        endpointMasterEnabled = gs?.endpoint_failover_enabled !== false;
+      } catch (_) {
+        endpointMasterEnabled = true;
+      }
+    } catch (e) {
+      epSettings = { active: '', candidates: [], auto_switch: false };
+      console.error('loadEndpointSettings for', name, e);
+    }
+  }
+
+  async function addEndpointCandidate() {
+    const v = String(epDraft || '').trim();
+    if (!v) return;
+    const name = $selectedTunnel?.name;
+    if (!name) return;
+    epBusy = true;
+    try {
+      await TunnelService.SetEndpointCandidates(name, [...epSettings.candidates, v]);
+      epDraft = '';
+      epError = '';
+      await loadEndpointSettings(name);
+    } catch (e) {
+      // Keep the typed text: reverting it would erase the very value the
+      // message is about.
+      epError = errText(e);
+    } finally {
+      epBusy = false;
+    }
+  }
+
+  async function removeEndpointCandidate(value) {
+    const name = $selectedTunnel?.name;
+    if (!name) return;
+    epBusy = true;
+    try {
+      await TunnelService.SetEndpointCandidates(
+        name,
+        epSettings.candidates.filter((c) => c !== value),
+      );
+      epError = '';
+      await loadEndpointSettings(name);
+    } catch (e) {
+      epError = errText(e);
+    } finally {
+      epBusy = false;
+    }
+  }
+
+  async function toggleEndpointAutoSwitch(e) {
+    const name = $selectedTunnel?.name;
+    if (!name || !endpointMasterEnabled) return;
+    const on = !!e.target.checked;
+    epSettings = { ...epSettings, auto_switch: on };
+    try {
+      await TunnelService.SetEndpointAutoSwitch(name, on);
+      epError = '';
+    } catch (e) {
+      epSettings = { ...epSettings, auto_switch: !on };
+      epError = errText(e);
+    }
+  }
+
+  async function measureEndpointCandidates() {
+    const name = $selectedTunnel?.name;
+    if (!name) return;
+    epMeasuring = true;
+    try {
+      const rows = await TunnelService.MeasureEndpointCandidates(name);
+      epMeasurements = Array.isArray(rows) ? rows : [];
+      epError = '';
+    } catch (e) {
+      epMeasurements = [];
+      epError = errText(e);
+    } finally {
+      epMeasuring = false;
+    }
+  }
+
+  function epMeasurementFor(addr) {
+    return epMeasurements.find((m) => m && m.address === addr);
+  }
+
   async function loadDetail(name) {
     try {
       detail = await TunnelService.GetTunnelDetail(name);
@@ -1220,6 +1342,64 @@
             {/if}
           </div>
         </div>
+      </div>
+    {/if}
+
+    <!-- ENDPOINT CANDIDATES: alternative addresses for this peer. The .conf
+         still holds one Endpoint; this list is what failover may dial. -->
+    {#if $selectedTunnel?.endpoint}
+      <div class="endpoint-candidates">
+        <div class="endpoint-candidates-head">
+          <h3 class="section-label">{$t('tunnel.endpoint_candidates')}</h3>
+          <label class="endpoint-switch-toggle">
+            <input type="checkbox" checked={epSettings.auto_switch}
+              disabled={!endpointMasterEnabled || epSettings.candidates.length < 2}
+              on:change={toggleEndpointAutoSwitch} />
+            <span>{$t('tunnel.endpoint_auto_switch')}</span>
+          </label>
+          {#if !endpointMasterEnabled}
+            <span class="endpoint-master-off">{$t('tunnel.endpoint_auto_switch_disabled')}</span>
+          {/if}
+          <button class="hint-toggle" type="button" on:click={measureEndpointCandidates}
+            disabled={epMeasuring}>
+            {epMeasuring ? $t('tunnel.endpoint_measuring') : $t('tunnel.endpoint_measure')}
+          </button>
+        </div>
+        <p class="endpoint-candidates-hint">{$t('tunnel.endpoint_candidates_hint')}</p>
+        <div class="endpoint-candidate-list">
+          {#each epSettings.candidates as cand (cand)}
+            <div class="endpoint-candidate" class:endpoint-candidate-active={cand === epSettings.active}>
+              <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
+              {#if cand === epSettings.active}
+                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_active')}</span>
+              {/if}
+              {#if epMeasurementFor(cand)}
+                <span class="endpoint-candidate-ms"
+                  class:ms-ok={epMeasurementFor(cand).reachable}
+                  class:ms-bad={!epMeasurementFor(cand).reachable}>
+                  {epMeasurementFor(cand).reachable
+                    ? `${Math.round(epMeasurementFor(cand).latency_ms)} ms`
+                    : $t('tunnel.endpoint_unreachable')}
+                </span>
+              {/if}
+              <button class="endpoint-candidate-del" type="button"
+                title={$t('tunnel.endpoint_candidate_remove')}
+                disabled={epBusy || cand === epSettings.active}
+                on:click={() => removeEndpointCandidate(cand)}>×</button>
+            </div>
+          {/each}
+        </div>
+        <div class="endpoint-candidate-add">
+          <input type="text" spellcheck="false" autocomplete="off"
+            placeholder={$t('tunnel.endpoint_candidate_placeholder')}
+            bind:value={epDraft}
+            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEndpointCandidate(); } }} />
+          <button class="btn-secondary" type="button" disabled={epBusy}
+            on:click={addEndpointCandidate}>{$t('tunnel.endpoint_candidate_add')}</button>
+        </div>
+        {#if epError}
+          <div class="endpoint-candidate-error">{epError}</div>
+        {/if}
       </div>
     {/if}
 
@@ -1870,6 +2050,116 @@
     min-width: 0;
   }
   .latency-target-col .probe-target-card { flex: 1 1 auto; }
+
+  /* ---- Endpoint candidates (failover list) ---- */
+  .endpoint-candidates {
+    margin-top: 10px;
+  }
+  .endpoint-candidates-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .endpoint-switch-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .endpoint-master-off {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background-color: var(--bg-secondary, rgba(120, 120, 128, 0.08));
+  }
+  .endpoint-candidates-hint {
+    margin: 4px 0 6px;
+    font-size: 11px;
+    line-height: 15px;
+    color: var(--text-muted);
+  }
+  .endpoint-candidate-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .endpoint-candidate {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background-color: var(--bg-secondary, rgba(120, 120, 128, 0.08));
+  }
+  .endpoint-candidate-active {
+    box-shadow: inset 2px 0 0 var(--green);
+  }
+  .endpoint-candidate-addr {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .endpoint-candidate-badge {
+    font-size: 10px;
+    color: var(--green);
+    white-space: nowrap;
+  }
+  .endpoint-candidate-ms {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .endpoint-candidate-ms.ms-ok { color: var(--green); }
+  .endpoint-candidate-ms.ms-bad { color: var(--red, #FF453A); }
+  .endpoint-candidate-del {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .endpoint-candidate-del:hover:enabled {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .endpoint-candidate-del:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .endpoint-candidate-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .endpoint-candidate-add input[type="text"] {
+    flex: 1;
+    min-width: 120px;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .endpoint-candidate-error {
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--red, #FF453A);
+    word-break: break-word;
+  }
   .latency-head {
     display: flex;
     align-items: baseline;

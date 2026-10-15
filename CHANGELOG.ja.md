@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.6.0] - 2026-10-15
+
+### ✨ 追加
+
+- **Endpoint フェイルオーバー（複数 Endpoint）。** 複数の Endpoint 候補を持つトンネルは、最も応答の早い到達可能なものへ自動的に切り替え、現在の Endpoint が到達不能になると即座にフェイルオーバーします。制御は二層式です。全体マスタースイッチ（設定 → 詳細）とトンネルごとの個別トグル——新規トンネルはマスタースイッチから自身のトグル状態を引き継ぎます。閾値・余裕・持續期間・クールダウンはすべて設定 → 詳細 で調整できます。
+- **プロキシミラーと公開 IP 表示。** 更新・メタデータ取得用の GitHub 高速ミラーを設定（設定 → プロキシ）でき、現在の公開 IP と地理位置をひと目で確認できます（設定 → プロキシ）。
+
 ## [2.5.3] - 2026-10-15
 
 ### 🔧 変更

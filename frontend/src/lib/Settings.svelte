@@ -178,12 +178,27 @@
     compact_list: false,
     proxy_mode: 'direct',
     proxy_url: '',
+    // null = "never customized" → the backend falls back to its built-in
+    // defaults. An empty array is a real, persisted choice: the user
+    // deleted every mirror and wants none offered.
+    proxy_mirrors: null,
+    // Public IP / geolocation lookup on page open. Opt-out, not opt-in,
+    // so the readout is discoverable; the provider is always shown.
+    public_ip_lookup: true,
     log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
     history_retention_days: DEFAULT_HISTORY_RETENTION_DAYS,
     enable_wg_scripts: false,
     // Strict default: the gate is OFF until the persisted settings are
     // actually read back as ON. Never assume an unread feature flag.
     enable_awg: false,
+    // Endpoint failover (multi-endpoint automatic selection). Master switch
+    // defaults ON (a missing key means enabled); the tuning knobs default
+    // to the backend's safe values but are clamped on save.
+    endpoint_failover_enabled: true,
+    endpoint_threshold_ms: 150,
+    endpoint_margin_pct: 30,
+    endpoint_sustained_sec: 30,
+    endpoint_cooldown_sec: 300,
   };
   let loaded = false;
   let appVersion = '';
@@ -227,6 +242,10 @@
         // remembered value restored when switching back to a custom
         // mirror / manual proxy.
         settings.proxy_url = s.proxy_url || '';
+        // Mirror list: a persisted array is authoritative (even when
+        // empty); null/undefined means "never customized" → defaults.
+        settings.proxy_mirrors = Array.isArray(s.proxy_mirrors) ? [...s.proxy_mirrors] : null;
+        settings.public_ip_lookup = s.public_ip_lookup === false ? false : true;
         // Log retention: 0 in config.json means "default (7)".
         const retention = Number(s.log_retention_days);
         settings.log_retention_days = VALID_LOG_RETENTION_DAYS.includes(retention) ? retention : DEFAULT_LOG_RETENTION_DAYS;
@@ -237,6 +256,19 @@
           : DEFAULT_HISTORY_RETENTION_DAYS;
         settings.enable_wg_scripts = s.enable_wg_scripts ?? false;
         settings.enable_awg = s.enable_awg === true;
+        // Endpoint failover: master switch defaults ON (nil on the Go side →
+        // enabled); tuning knobs fall back to the backend's safe defaults.
+        settings.endpoint_failover_enabled = s.endpoint_failover_enabled === false ? false : true;
+        settings.endpoint_threshold_ms = Number(s.endpoint_threshold_ms) >= 1 ? Number(s.endpoint_threshold_ms) : 150;
+        settings.endpoint_margin_pct = Number(s.endpoint_margin_pct) >= 1 ? Number(s.endpoint_margin_pct) : 30;
+        settings.endpoint_sustained_sec = Number(s.endpoint_sustained_sec) >= 0 ? Number(s.endpoint_sustained_sec) : 30;
+        settings.endpoint_cooldown_sec = Number(s.endpoint_cooldown_sec) >= 240 ? Number(s.endpoint_cooldown_sec) : 300;
+        // Measure direct + every mirror, and resolve the public IP, as soon
+        // as the page opens — both are read-only lookups the user would
+        // otherwise have to click for. Fire-and-forget: a failed lookup
+        // must never block the settings page from rendering.
+        runMirrorScan();
+        loadPublicIP();
       }
     } catch (e) {
       console.error('load settings:', e);
@@ -312,10 +344,17 @@
         compact_list: settings.compact_list,
         proxy_mode: settings.proxy_mode,
         proxy_url: settings.proxy_url,
+        proxy_mirrors: settings.proxy_mirrors,
+        public_ip_lookup: settings.public_ip_lookup,
         log_retention_days: settings.log_retention_days,
         history_retention_days: settings.history_retention_days,
         enable_wg_scripts: settings.enable_wg_scripts,
         enable_awg: settings.enable_awg,
+        endpoint_failover_enabled: settings.endpoint_failover_enabled,
+        endpoint_threshold_ms: settings.endpoint_threshold_ms,
+        endpoint_margin_pct: settings.endpoint_margin_pct,
+        endpoint_sustained_sec: settings.endpoint_sustained_sec,
+        endpoint_cooldown_sec: settings.endpoint_cooldown_sec,
       });
     } catch (e) {
       console.error('save settings:', e);
@@ -609,14 +648,31 @@
   //     directly. No local proxy software needed.
   //   - manual: requests still go to api.github.com but tunnel through a
   //     locally running HTTP/SOCKS5 proxy (Clash etc.).
-  const MIRROR_PRESETS = [
-    { value: 'https://ghfast.top', label: 'ghfast.top' },
-    { value: 'https://gh-proxy.com', label: 'gh-proxy.com' },
-    { value: 'https://ghproxy.net', label: 'ghproxy.net' },
-    { value: 'https://mirror.ghproxy.com', label: 'mirror.ghproxy.com' },
+  // Built-in starting point for the mirror list. It is only a seed:
+  // every entry is deletable, and "restore defaults" brings them back.
+  // Kept here as well as in Go so the <select> never renders empty while
+  // settings are still loading.
+  const DEFAULT_MIRRORS = [
+    'https://ghfast.top',
+    'https://gh-proxy.com',
+    'https://ghproxy.net',
+    'https://mirror.ghproxy.com',
   ];
 
-  // Current <select> value: 'direct', one of the mirror presets,
+  // Effective list: a persisted array wins (including an empty one, which
+  // is how "delete them all" survives a restart); null → defaults.
+  $: mirrorList = Array.isArray(settings.proxy_mirrors) ? settings.proxy_mirrors : DEFAULT_MIRRORS;
+  $: mirrorRows = mirrorList.map((value) => ({ value, label: mirrorHost(value) }));
+
+  function mirrorHost(value) {
+    try {
+      return new URL(value).host || value;
+    } catch (e) {
+      return value;
+    }
+  }
+
+  // Current <select> value: 'direct', one of the mirrored presets,
   // 'mirror' (custom mirror prefix), or 'manual'.
   // Must be a reactive statement, not a plain helper: Svelte can't trace
   // which settings fields a function body reads, so a template
@@ -624,8 +680,112 @@
   // settings — the select would stay stuck on "Direct" after reopening
   // the settings screen.
   $: proxySelect = settings.proxy_mode === 'mirror'
-    ? (MIRROR_PRESETS.some((p) => p.value === settings.proxy_url) ? settings.proxy_url : 'mirror')
+    ? (mirrorList.includes(settings.proxy_url) ? settings.proxy_url : 'mirror')
     : (settings.proxy_mode === 'manual' ? 'manual' : 'direct');
+
+  // --- Mirror list management + automatic measurement ---
+  // Rows come back from one batch probe (direct + every mirror) fired when
+  // the page opens, so the user sees which path actually works right now
+  // instead of guessing.
+  let mirrorScan = { running: false, rows: [] };
+  let newMirror = '';
+  let publicIP = { loading: false, info: null };
+
+  // Indexed by "direct" or by mirror prefix. A reactive map (not a
+  // function) so the template re-renders when a scan lands.
+  $: scanRows = (() => {
+    const map = {};
+    for (const r of mirrorScan.rows || []) {
+      if (r && r.kind === 'direct') map.direct = r;
+      else if (r && r.label) map[r.label] = r;
+    }
+    return map;
+  })();
+
+  $: publicLocation = (() => {
+    const i = publicIP.info;
+    if (!i || !i.ok) return '';
+    return [i.country, i.region, i.city].filter((x) => x && String(x).trim() !== '').join(' / ');
+  })();
+
+  // Read the list straight off `settings` rather than the `mirrorList`
+  // derived value: this runs from load(), before Svelte has flushed
+  // reactive statements, so mirrorList would still be stale there.
+  function currentMirrorList() {
+    return Array.isArray(settings.proxy_mirrors) ? settings.proxy_mirrors : DEFAULT_MIRRORS;
+  }
+
+  async function runMirrorScan() {
+    const list = currentMirrorList();
+    mirrorScan = { running: true, rows: mirrorScan.rows };
+    try {
+      const res = await TunnelService.TestMirrorConnectivity(list);
+      mirrorScan = { running: false, rows: Array.isArray(res) ? res : [] };
+    } catch (e) {
+      console.warn('mirror scan failed:', e);
+      mirrorScan = { running: false, rows: [] };
+    }
+  }
+
+  async function loadPublicIP() {
+    if (!settings.public_ip_lookup) {
+      publicIP = { loading: false, info: null };
+      return;
+    }
+    publicIP = { loading: true, info: null };
+    try {
+      const info = await TunnelService.GetPublicIPInfo();
+      publicIP = { loading: false, info: info || null };
+    } catch (e) {
+      publicIP = { loading: false, info: { ok: false, error: String(e) } };
+    }
+  }
+
+  function addMirror() {
+    const v = String(newMirror || '').trim().replace(/\/+$/, '');
+    if (!v) return;
+    const list = [...currentMirrorList()];
+    if (!list.includes(v)) list.push(v);
+    settings.proxy_mirrors = list;
+    newMirror = '';
+    settings = settings;
+    scheduleSave();
+    runMirrorScan();
+  }
+
+  function onMirrorAddKey(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addMirror();
+    }
+  }
+
+  function removeMirror(value) {
+    settings.proxy_mirrors = currentMirrorList().filter((m) => m !== value);
+    // Deleting the mirror that is currently in use falls back to direct:
+    // leaving proxy_url pointing at a deleted mirror would keep sending
+    // update checks to an address the user just rejected.
+    if (settings.proxy_mode === 'mirror' && settings.proxy_url === value) {
+      settings.proxy_mode = 'direct';
+    }
+    settings = settings;
+    scheduleSave();
+    runMirrorScan();
+  }
+
+  function restoreMirrors() {
+    settings.proxy_mirrors = [...DEFAULT_MIRRORS];
+    settings = settings;
+    scheduleSave();
+    runMirrorScan();
+  }
+
+  function onPublicIPToggle(e) {
+    settings.public_ip_lookup = !!e.target.checked;
+    settings = settings;
+    scheduleSave();
+    loadPublicIP();
+  }
 
   function onProxyChange(e) {
     const v = e.target.value;
@@ -873,6 +1033,36 @@
           <div class="settings-section">
             <h4 class="section-title">{$t('settings.proxy')}</h4>
             <div class="settings-card">
+              <!-- Where this machine appears to be — the fastest way to see
+                   whether the configured path actually changes the egress. -->
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label">{$t('settings.public_ip')}</label>
+                  <p class="setting-desc">
+                    {#if !settings.public_ip_lookup}
+                      {$t('settings.public_ip_disabled')}
+                    {:else if publicIP.loading}
+                      {$t('settings.public_ip_loading')}
+                    {:else if publicIP.info?.ok}
+                      {publicLocation}{#if publicIP.info.isp} · {publicIP.info.isp}{/if}
+                      {#if publicIP.info.provider}
+                        {' '}— {$t('settings.public_ip_hint', { provider: publicIP.info.provider })}
+                      {/if}
+                    {:else if publicIP.info}
+                      {$t('settings.public_ip_failed', { err: publicIP.info.error })}
+                    {/if}
+                  </p>
+                </div>
+                <div class="public-ip-value">{publicIP.info?.ok ? publicIP.info.ip : '—'}</div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="public-ip-toggle">{$t('settings.public_ip_toggle')}</label>
+                </div>
+                <input id="public-ip-toggle" type="checkbox"
+                  checked={settings.public_ip_lookup}
+                  on:change={onPublicIPToggle} />
+              </div>
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="proxy-select">{$t('settings.proxy')}</label>
@@ -880,7 +1070,7 @@
                 </div>
                 <select id="proxy-select" value={proxySelect} on:change={onProxyChange}>
                   <option value="direct">{$t('settings.proxy_direct')}</option>
-                  {#each MIRROR_PRESETS as p}
+                  {#each mirrorRows as p}
                     <option value={p.value}>{p.label}</option>
                   {/each}
                   <option value="mirror">{$t('settings.proxy_mirror_custom')}</option>
@@ -905,6 +1095,54 @@
                     on:input={onProxyUrlInput} />
                 </div>
               {/if}
+              <!-- Managed mirror list: every preset is removable, and the
+                   measured latency tells the user which one to keep. -->
+              <div class="setting-row setting-row--column">
+                <div class="setting-info">
+                  <label class="setting-label">{$t('settings.proxy_mirror_list')}</label>
+                  <p class="setting-desc">{$t('settings.proxy_mirror_list_hint')}</p>
+                </div>
+                <div class="mirror-list">
+                  <div class="mirror-row mirror-row--direct">
+                    <span class="mirror-host">{$t('settings.proxy_direct')}</span>
+                    <span class="mirror-state" class:ok={scanRows.direct?.ok} class:bad={scanRows.direct && !scanRows.direct.ok}>
+                      {#if mirrorScan.running}
+                        {$t('settings.proxy_scanning')}
+                      {:else if scanRows.direct?.ok}
+                        {$t('settings.proxy_test_ok', { n: scanRows.direct.latency_ms })}
+                      {:else if scanRows.direct}
+                        {$t('settings.proxy_test_fail', { err: scanRows.direct.error })}
+                      {/if}
+                    </span>
+                  </div>
+                  {#each mirrorRows as m}
+                    <div class="mirror-row">
+                      <span class="mirror-host" title={m.value}>{m.label}</span>
+                      <span class="mirror-state" class:ok={scanRows[m.value]?.ok} class:bad={scanRows[m.value] && !scanRows[m.value].ok}>
+                        {#if mirrorScan.running}
+                          {$t('settings.proxy_scanning')}
+                        {:else if scanRows[m.value]?.ok}
+                          {$t('settings.proxy_test_ok', { n: scanRows[m.value].latency_ms })}
+                        {:else if scanRows[m.value]}
+                          {$t('settings.proxy_test_fail', { err: scanRows[m.value].error })}
+                        {/if}
+                      </span>
+                      <button class="mirror-del" title={$t('settings.proxy_mirror_delete')}
+                        on:click={() => removeMirror(m.value)}>×</button>
+                    </div>
+                  {/each}
+                  {#if mirrorRows.length === 0}
+                    <p class="mirror-empty">{$t('settings.proxy_mirror_empty')}</p>
+                  {/if}
+                  <div class="mirror-add">
+                    <input type="text" bind:value={newMirror}
+                      placeholder={$t('settings.proxy_mirror_add_placeholder')}
+                      on:keydown={onMirrorAddKey} />
+                    <button class="btn-secondary" on:click={addMirror}>{$t('settings.proxy_mirror_add')}</button>
+                    <button class="btn-secondary" on:click={restoreMirrors}>{$t('settings.proxy_mirror_restore')}</button>
+                  </div>
+                </div>
+              </div>
               <div class="setting-row setting-row--test">
                 <div class="setting-info"></div>
                 <div class="proxy-test-wrap">
@@ -924,6 +1162,60 @@
           </div>
 
         {:else if activeTab === 'advanced'}
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.endpoint_failover')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="endpoint-failover-master">{$t('settings.endpoint_failover_master')}</label>
+                  <p class="setting-desc">{$t('settings.endpoint_failover_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="endpoint-failover-master" type="checkbox"
+                    checked={settings.endpoint_failover_enabled}
+                    on:change={(e) => { settings.endpoint_failover_enabled = e.target.checked; scheduleSave(); }} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="endpoint-threshold">{$t('settings.endpoint_threshold')}</label>
+                  <p class="setting-desc">{$t('settings.endpoint_threshold_hint')}</p>
+                </div>
+                <input id="endpoint-threshold" type="number" min="1" step="1"
+                  disabled={!settings.endpoint_failover_enabled}
+                  bind:value={settings.endpoint_threshold_ms} on:change={scheduleSave} />
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="endpoint-margin">{$t('settings.endpoint_margin')}</label>
+                  <p class="setting-desc">{$t('settings.endpoint_margin_hint')}</p>
+                </div>
+                <input id="endpoint-margin" type="number" min="1" step="1"
+                  disabled={!settings.endpoint_failover_enabled}
+                  bind:value={settings.endpoint_margin_pct} on:change={scheduleSave} />
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="endpoint-sustained">{$t('settings.endpoint_sustained')}</label>
+                  <p class="setting-desc">{$t('settings.endpoint_sustained_hint')}</p>
+                </div>
+                <input id="endpoint-sustained" type="number" min="0" step="1"
+                  disabled={!settings.endpoint_failover_enabled}
+                  bind:value={settings.endpoint_sustained_sec} on:change={scheduleSave} />
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="endpoint-cooldown">{$t('settings.endpoint_cooldown')}</label>
+                  <p class="setting-desc">{$t('settings.endpoint_cooldown_hint')}</p>
+                </div>
+                <input id="endpoint-cooldown" type="number" min="240" step="1"
+                  disabled={!settings.endpoint_failover_enabled}
+                  bind:value={settings.endpoint_cooldown_sec} on:change={scheduleSave} />
+              </div>
+            </div>
+          </div>
+
           <div class="settings-section">
             <h4 class="section-title">{$t('settings.section_dns')}</h4>
             <div class="settings-card">
@@ -1569,6 +1861,91 @@
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+  /* ---- Public IP readout + managed mirror list ---- */
+  .setting-row--column {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .public-ip-value {
+    font: 500 13px/18px var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .mirror-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mirror-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background-color: var(--bg-secondary, rgba(120, 120, 128, 0.08));
+  }
+  .mirror-row--direct .mirror-host {
+    font-weight: 500;
+  }
+  .mirror-host {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mirror-state {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mirror-state.ok {
+    color: var(--green);
+  }
+  .mirror-state.bad {
+    color: var(--red, #FF453A);
+  }
+  .mirror-del {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .mirror-del:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .mirror-empty {
+    margin: 2px 0;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .mirror-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .mirror-add input[type="text"] {
+    flex: 1;
+    min-width: 140px;
+    font-size: 12px;
+    padding: 4px 8px;
   }
   .proxy-test-ok {
     color: var(--green);

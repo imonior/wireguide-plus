@@ -389,6 +389,59 @@ export class DNSServer {
 }
 
 /**
+ * EndpointSettings is the tunnel editor's view of endpoint failover: the
+ * address currently written into the .conf, the candidate list, and whether
+ * automatic selection is armed.
+ * EndpointSettings 是隧道编辑器看到的 endpoint  failover 视图：.conf 里当前写入的
+ * 地址、候选列表，以及是否启用了自动选择。
+ */
+export class EndpointSettings {
+    /**
+     * Creates a new EndpointSettings instance.
+     * @param {Partial<EndpointSettings>} [$$source = {}] - The source object to create the EndpointSettings.
+     */
+    constructor($$source = {}) {
+        if (!("active" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["active"] = "";
+        }
+        if (!("candidates" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["candidates"] = [];
+        }
+        if (!("auto_switch" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["auto_switch"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EndpointSettings instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {EndpointSettings}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("candidates" in $$parsedSource) {
+            $$parsedSource["candidates"] = $$createField1_0($$parsedSource["candidates"]);
+        }
+        return new EndpointSettings(/** @type {Partial<EndpointSettings>} */($$parsedSource));
+    }
+}
+
+/**
  * KnownSSIDs is the response shape for GetKnownSSIDs. The frontend uses
  * it to render a picker so users can tap saved networks instead of
  * retyping SSIDs they've already joined.
@@ -431,6 +484,84 @@ export class KnownSSIDs {
             $$parsedSource["known"] = $$createField1_0($$parsedSource["known"]);
         }
         return new KnownSSIDs(/** @type {Partial<KnownSSIDs>} */($$parsedSource));
+    }
+}
+
+/**
+ * MirrorTestRow is one row of the Settings → Proxy connectivity table:
+ * either the direct GitHub API endpoint or one accelerator mirror.
+ * MirrorTestRow 是「设置 → 代理」连通性表格中的一行：要么是 GitHub API 直连，
+ * 要么是某个加速镜像。
+ */
+export class MirrorTestRow {
+    /**
+     * Creates a new MirrorTestRow instance.
+     * @param {Partial<MirrorTestRow>} [$$source = {}] - The source object to create the MirrorTestRow.
+     */
+    constructor($$source = {}) {
+        if (!("kind" in $$source)) {
+            /**
+             * Kind is "direct" or "mirror". The frontend picks the translated
+             * label from it, because the direct row has no URL of its own.
+             * Kind 取值 "direct" 或 "mirror"。前端据此选择本地化文案，
+             * 因为直连那一行本身没有 URL。
+             * @member
+             * @type {string}
+             */
+            this["kind"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Label is the mirror prefix this row belongs to ("" for direct), so
+             * the UI can line the result up with its own list without parsing the
+             * probed URL.
+             * Label 是本行对应的镜像前缀（直连为空串），前端据此把结果与自己的列表
+             * 对齐，无需反解被探测的 URL。
+             * @member
+             * @type {string | undefined}
+             */
+            this["label"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["target"] = undefined;
+        }
+        if (!("ok" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["ok"] = false;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MirrorTestRow instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {MirrorTestRow}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MirrorTestRow(/** @type {Partial<MirrorTestRow>} */($$parsedSource));
     }
 }
 
@@ -580,6 +711,97 @@ export class PublicDNSRefresh {
             $$parsedSource["effective"] = $$createField1_0($$parsedSource["effective"]);
         }
         return new PublicDNSRefresh(/** @type {Partial<PublicDNSRefresh>} */($$parsedSource));
+    }
+}
+
+/**
+ * PublicIPInfo is the "where does this machine appear to be" readout shown
+ * at the top of Settings → Proxy: the egress IP plus the geolocation a
+ * third-party service reports for it.
+ * PublicIPInfo 是「设置 → 代理」顶部展示的「本机对外看起来在哪」读数：
+ * 出口 IP 加上第三方服务报告的归属地。
+ */
+export class PublicIPInfo {
+    /**
+     * Creates a new PublicIPInfo instance.
+     * @param {Partial<PublicIPInfo>} [$$source = {}] - The source object to create the PublicIPInfo.
+     */
+    constructor($$source = {}) {
+        if (!("ok" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["ok"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["ip"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["country"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["region"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["city"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["isp"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["provider"] = undefined;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PublicIPInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PublicIPInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new PublicIPInfo(/** @type {Partial<PublicIPInfo>} */($$parsedSource));
     }
 }
 

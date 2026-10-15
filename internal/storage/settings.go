@@ -156,6 +156,85 @@ type Settings struct {
 	// "https://ghfast.top").
 	ProxyURL string `json:"proxy_url,omitempty"`
 
+	// ProxyMirrors is the user-managed list of GitHub accelerator mirror
+	// prefixes offered by Settings → Proxy. nil means "never customized",
+	// in which case EffectiveProxyMirrors falls back to DefaultProxyMirrors;
+	// an empty (but non-nil) slice means the user deleted every mirror and
+	// wants none offered. The tag deliberately omits `omitempty`: with it,
+	// both nil and [] serialize to nothing and a deleted list would
+	// silently resurrect the defaults on the next load.
+	// ProxyMirrors 是用户在「设置 → 代理」中自行管理的 GitHub 加速镜像前缀列表。
+	// nil 表示「从未自定义」，此时 EffectiveProxyMirrors 回落到 DefaultProxyMirrors；
+	// 空但非 nil 的切片表示用户删光了所有镜像、一个都不想要。这里刻意不加
+	// `omitempty`：否则 nil 与 [] 都会序列化成空，删掉的列表会在下次读取时悄悄复活。
+	ProxyMirrors []string `json:"proxy_mirrors"`
+
+	// PublicIPLookup gates the "current public IP + geolocation" readout in
+	// Settings → Proxy. The lookup necessarily discloses the machine's
+	// public IP to a third-party service, so the provider name is always
+	// shown next to the result; nil (never set) means enabled, which keeps
+	// the feature discoverable while leaving a permanent opt-out.
+	// PublicIPLookup 控制「设置 → 代理」里的「当前公网 IP + 归属地」读数。
+	// 该查询必然要把本机公网 IP 暴露给第三方服务，因此结果旁边永远显示服务商名；
+	// nil（从未设置）视为启用，既保证功能可见，也留下永久的关闭开关。
+	PublicIPLookup *bool `json:"public_ip_lookup,omitempty"`
+
+	// EndpointFailover is the GLOBAL master switch for multi-endpoint
+	// candidate selection. nil (never set) counts as enabled, the default —
+	// every other install already behaves as if it were on, and an upgrade
+	// must not silently disable a feature the user never toggled. When off,
+	// NO tunnel switches endpoints, even one with auto_switch armed: the
+	// per-tunnel toggle becomes inert and is greyed out in the UI. The
+	// per-tunnel switch is therefore a refinement of this master switch,
+	// never its replacement.
+	// EndpointFailover 是多 endpoint 候选选择的**全局总开关**。nil（从未设置）
+	// 视为启用（默认）——其它安装本就表现得像开着，升级不能静默关掉用户从没动过的功能。
+	// 关闭时，任何隧道都不会切换 endpoint，即便它已开启 auto_switch：每隧道开关失效、
+	// 并在界面灰掉。因此每隧道开关只是本总开关的细化，绝不是它的替代品。
+	EndpointFailover *bool `json:"endpoint_failover_enabled,omitempty"`
+
+	// EndpointThresholdMs is the latency (ms) above which the current
+	// candidate is even considered for replacement. Below it the current
+	// address is "good enough" and the app never churns. 0 is clamped to the
+	// default (150) so a hand-edited 0 cannot disable the floor entirely.
+	// EndpointThresholdMs 是当前候选延迟超过该值（毫秒）才被考虑替换的门槛。
+	// 低于它当前地址即「够好」，应用绝不折腾。0 会被钳到默认值（150），
+	// 以免手改的 0 把门槛整个取消。
+	EndpointThresholdMs int `json:"endpoint_threshold_ms,omitempty"`
+
+	// EndpointMarginPct is how much faster (relative to the current latency)
+	// an alternative must be to replace it. A smaller margin causes more
+	// switching; 0 is clamped to the default (30) so two near-equal
+	// addresses never trade places on noise.
+	// EndpointMarginPct 是备选相对当前延迟必须「快出多少个百分点」才会替换。
+	// 幅度越小切换越频繁；0 钳到默认值（30），避免两个差不多快的地址在噪声上互切。
+	EndpointMarginPct int `json:"endpoint_margin_pct,omitempty"`
+
+	// EndpointSustainedSec is the confirmation window for an IMPROVEMENT
+	// switch: the better candidate must be observed across this many seconds
+	// (two switch opportunities at least that far apart) before the app
+	// moves. It guards against a single transient probe flipping the
+	// address. A failover (current unreachable) is always immediate. 0 means
+	// "commit on the first observation" — no sustained gate.
+	// EndpointSustainedSec 是「择优」切换的确认窗口：备选必须在这么长时间内被持续观察到更优
+	// （两次切换机会至少相隔这么久）才会移动。它防止单次瞬冲探测就翻转地址。
+	// 故障切换（当前不可达）永远立即执行。0 表示「首次观察到即提交」——不加持续门控。
+	EndpointSustainedSec int `json:"endpoint_sustained_sec,omitempty"`
+
+	// EndpointCooldownSec is the minimum gap between two automatic switches
+	// on the same tunnel. It is clamped to >= MinEndpointCooldownSec (240) so
+	// it always exceeds the 180s dead-link action window
+	// (internal/reconnect/monitor.go): a freshly switched endpoint must get a
+	// full dead-link evaluation cycle before it is eligible to switch again,
+	// otherwise a slow-but-alive link could churn on the same cadence as
+	// dead-link detection. The default (DefaultEndpointCooldownSec, 300) keeps
+	// a comfortable margin.
+	// EndpointCooldownSec 是同一隧道两次自动切换之间的最小间隔。它被钳到 ≥ MinEndpointCooldownSec（240），
+	// 从而恒大于 180s 的死链动作窗口（internal/reconnect/monitor.go）：刚切到的地址必须
+	// 拿到一个完整的死链评估周期才有资格再切，否则一个慢但活着的链会和死链检测同频抖动。
+	// 默认 DefaultEndpointCooldownSec（300）留了舒服的余量。
+	EndpointCooldownSec int `json:"endpoint_cooldown_sec,omitempty"`
+
 	// DNSTestPublicServers is the user's customized list of public DNS
 	// resolvers probed as a cross-check by the DNS leak test. nil or empty
 	// means "no customization" — the effective list falls back to the
@@ -342,7 +421,131 @@ func DefaultSettings() *Settings {
 		ListSort:             "name_asc",
 		ListActiveOnTop:      true,
 		ListPaneWidth:        240,
+
+		// Endpoint failover: master on by default; the tuning knobs match
+		// the package-level defaults in internal/endpoint so a fresh config
+		// and an explicit one behave identically.
+		// Endpoint 容灾：总开关默认开；调参默认值与 internal/endpoint 的包级默认一致，
+		// 使全新配置与显式配置行为相同。
+		EndpointThresholdMs:  150,
+		EndpointMarginPct:    30,
+		EndpointSustainedSec: 30,
+		EndpointCooldownSec:  DefaultEndpointCooldownSec,
 	}
+}
+
+// DefaultProxyMirrors are the built-in GitHub accelerator prefixes offered
+// in Settings → Proxy until the user edits the list. They are only a
+// starting point: every one of them can be deleted, and restoring the
+// defaults brings them back. A copy is returned so callers cannot mutate
+// the package-level list by accident.
+// DefaultProxyMirrors 是「设置 → 代理」内置的 GitHub 加速镜像前缀，用户在编辑列表
+// 之前看到的就这些。它们只是起点：每一个都可以被删除，恢复默认即可找回。
+// 返回副本，避免调用方误改包级列表。
+func DefaultProxyMirrors() []string {
+	return []string{
+		"https://ghfast.top",
+		"https://gh-proxy.com",
+		"https://ghproxy.net",
+		"https://mirror.ghproxy.com",
+	}
+}
+
+// EffectiveProxyMirrors returns the mirror prefixes the UI should offer. A
+// nil ProxyMirrors (never customized) yields the defaults; any non-nil
+// slice — including an empty one — is authoritative, so "delete them all"
+// sticks across restarts.
+// EffectiveProxyMirrors 返回界面应当展示的镜像前缀。nil（从未自定义）回落到默认；
+// 任何非 nil 切片（含空切片）都以它为准，因此「全部删除」能在重启后保持。
+func (s *Settings) EffectiveProxyMirrors() []string {
+	if s == nil || s.ProxyMirrors == nil {
+		return DefaultProxyMirrors()
+	}
+	return append([]string(nil), s.ProxyMirrors...)
+}
+
+// PublicIPLookupEnabled reports whether Settings may query the public IP /
+// geolocation service. nil (never set) counts as enabled; an explicit false
+// disables it permanently.
+// PublicIPLookupEnabled 判断设置页是否允许查询公网 IP / 归属地服务。
+// nil（从未设置）视为启用；显式 false 表示用户永久关闭。
+func (s *Settings) PublicIPLookupEnabled() bool {
+	if s == nil || s.PublicIPLookup == nil {
+		return true
+	}
+	return *s.PublicIPLookup
+}
+
+// EndpointFailoverEnabled reports whether the global multi-endpoint master
+// switch is on. nil (never set) counts as enabled — the default.
+// EndpointFailoverEnabled 返回全局多 endpoint 总开关是否开启。nil（从未设置）视为开启——默认。
+func (s *Settings) EndpointFailoverEnabled() bool {
+	if s == nil || s.EndpointFailover == nil {
+		return true
+	}
+	return *s.EndpointFailover
+}
+
+// EffectiveEndpointThresholdMs returns the latency floor, defaulting to 150
+// when unset and clamped to at least 1 (0 would remove the floor).
+// EffectiveEndpointThresholdMs 返回延迟门槛，未设置时为 150，且钳到至少 1（0 会取消门槛）。
+func (s *Settings) EffectiveEndpointThresholdMs() int {
+	if s == nil || s.EndpointThresholdMs < 1 {
+		return 150
+	}
+	return s.EndpointThresholdMs
+}
+
+// EffectiveEndpointMarginPct returns the improvement margin, defaulting to 30
+// when unset and clamped to at least 1 (0 would let equal addresses trade).
+// EffectiveEndpointMarginPct 返回改善幅度，未设置时为 30，且钳到至少 1（0 会让相等的地址互切）。
+func (s *Settings) EffectiveEndpointMarginPct() int {
+	if s == nil || s.EndpointMarginPct < 1 {
+		return 30
+	}
+	return s.EndpointMarginPct
+}
+
+// EffectiveEndpointSustainedSec returns the improvement confirmation window.
+// 0 (the default-equivalent) means "commit on first observation" — there is
+// no minimum, so 0 is NOT clamped to a default.
+// EffectiveEndpointSustainedSec 返回择优确认窗口。0（等价默认）表示「首次观察到即提交」——
+// 没有下限，因此 0 不被钳制成默认值。
+func (s *Settings) EffectiveEndpointSustainedSec() int {
+	if s == nil {
+		return 0
+	}
+	if s.EndpointSustainedSec < 0 {
+		return 0
+	}
+	return s.EndpointSustainedSec
+}
+
+// MinEndpointCooldownSec and DefaultEndpointCooldownSec are the single source
+// of truth for the endpoint-switch cooldown. The floor must stay above the
+// 180s dead-link action window (internal/reconnect/monitor.go) so a freshly
+// switched endpoint gets a full dead-link evaluation cycle before it may
+// switch again. SaveSettings, EffectiveEndpointCooldownSec and the helper-side
+// re-check all reference these constants instead of hard-coding the numbers.
+// MinEndpointCooldownSec 与 DefaultEndpointCooldownSec 是 endpoint 切换冷却的单一真相源。
+// 下限必须高于 180s 死链动作窗口（internal/reconnect/monitor.go），使刚切到的地址拿到一个
+// 完整死链评估周期才有资格再切。SaveSettings、EffectiveEndpointCooldownSec 与 helper 端
+// 再校验都引用这两个常量，而非把数字写死。
+const (
+	MinEndpointCooldownSec     = 240
+	DefaultEndpointCooldownSec = 300
+)
+
+// EffectiveEndpointCooldownSec returns the switch cooldown, defaulting to
+// DefaultEndpointCooldownSec and clamped to at least MinEndpointCooldownSec so
+// it always exceeds the 180s dead-link window.
+// EffectiveEndpointCooldownSec 返回切换冷却，默认 DefaultEndpointCooldownSec，
+// 且钳到至少 MinEndpointCooldownSec，恒大于 180s 死链窗口。
+func (s *Settings) EffectiveEndpointCooldownSec() int {
+	if s == nil || s.EndpointCooldownSec < MinEndpointCooldownSec {
+		return DefaultEndpointCooldownSec
+	}
+	return s.EndpointCooldownSec
 }
 
 // AutoUpdateCheckEnabled returns the effective value, treating nil

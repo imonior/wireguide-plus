@@ -23,6 +23,9 @@ import * as diag$0 from "../diag/models.js";
 import * as domain$0 from "../domain/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as endpoint$0 from "../endpoint/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as ipc$0 from "../ipc/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -346,6 +349,21 @@ export function GetCurrentSubnets() {
 }
 
 /**
+ * GetEndpointSettings returns the candidate list for the tunnel editor. The
+ * active endpoint always reads back from the .conf (never from the meta), so
+ * what the user sees is what WireGuard will actually dial.
+ * GetEndpointSettings 返回供隧道编辑器使用的候选列表。生效地址始终从 .conf 读取
+ * （绝不取自 meta），因此用户看到的就是 WireGuard 真正会去连的那个地址。
+ * @param {string} name
+ * @returns {$CancellablePromise<$models.EndpointSettings>}
+ */
+export function GetEndpointSettings(name) {
+    return $Call.ByID(4131813805, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType12($result);
+    }));
+}
+
+/**
  * GetHookFromText extracts the current command for one hook from raw
  * .conf content.
  * @param {string} content
@@ -364,7 +382,7 @@ export function GetHookFromText(content, hook) {
  */
 export function GetKnownSSIDs() {
     return $Call.ByID(591870616).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType12($result);
+        return $$createType13($result);
     }));
 }
 
@@ -383,6 +401,31 @@ export function GetPublicDNSServers() {
 }
 
 /**
+ * GetPublicIPInfo resolves the machine's current public (egress) IP and the
+ * geolocation reported for it. It is a third-party lookup by definition —
+ * the request necessarily discloses the public IP to whichever service
+ * answers — so the winning provider's name is returned too and shown in the
+ * UI, and the whole thing is gated by Settings.PublicIPLookupEnabled.
+ * 
+ * The lookup deliberately ignores the app's proxy configuration: the point
+ * of the readout is "how this machine looks to the internet", and routing
+ * it through a manual proxy would report the proxy instead.
+ * 
+ * GetPublicIPInfo 解析本机当前的公网（出口）IP 及其归属地。它本质上就是一次
+ * 第三方查询——请求必然会把公网 IP 暴露给应答的那家服务——因此顺带返回
+ * 命中服务商的名字并在界面上显示，整体还受 Settings.PublicIPLookupEnabled 开关约束。
+ * 
+ * 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
+ * 若经由手动代理转发，报出来的就是代理的 IP 了。
+ * @returns {$CancellablePromise<$models.PublicIPInfo>}
+ */
+export function GetPublicIPInfo() {
+    return $Call.ByID(2877467589).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType14($result);
+    }));
+}
+
+/**
  * GetRoutingTable returns the current OS routing table, flagging every row
  * whose interface matches an active tunnel so the UI can distinguish
  * VPN traffic from direct traffic.
@@ -390,7 +433,7 @@ export function GetPublicDNSServers() {
  */
 export function GetRoutingTable() {
     return $Call.ByID(1939855255).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType16($result);
     }));
 }
 
@@ -399,7 +442,7 @@ export function GetRoutingTable() {
  */
 export function GetSettings() {
     return $Call.ByID(3436066580).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType18($result);
     }));
 }
 
@@ -411,7 +454,7 @@ export function GetSettings() {
  */
 export function GetStatus() {
     return $Call.ByID(1904259883).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType20($result);
     }));
 }
 
@@ -422,7 +465,7 @@ export function GetStatus() {
  */
 export function GetTunnelBinding(name) {
     return $Call.ByID(1947637108, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
     }));
 }
 
@@ -434,7 +477,7 @@ export function GetTunnelBinding(name) {
  */
 export function GetTunnelDetail(name) {
     return $Call.ByID(1211015818, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType24($result);
     }));
 }
 
@@ -446,7 +489,7 @@ export function GetTunnelDetail(name) {
  */
 export function GetTunnelFields(content) {
     return $Call.ByID(2828369410, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType24($result);
+        return $$createType26($result);
     }));
 }
 
@@ -457,7 +500,7 @@ export function GetTunnelFields(content) {
  */
 export function GetTunnelPolicies(name) {
     return $Call.ByID(688340561, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType28($result);
     }));
 }
 
@@ -467,7 +510,7 @@ export function GetTunnelPolicies(name) {
  */
 export function GetUpdateState() {
     return $Call.ByID(1422034669).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType27($result);
+        return $$createType29($result);
     }));
 }
 
@@ -488,7 +531,7 @@ export function GetVersion() {
  */
 export function ImportConfig(name, content) {
     return $Call.ByID(3041138216, name, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType29($result);
+        return $$createType31($result);
     }));
 }
 
@@ -502,7 +545,7 @@ export function ImportConfig(name, content) {
  */
 export function ImportQRFromBytes(data, name) {
     return $Call.ByID(3697630092, data, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType29($result);
+        return $$createType31($result);
     }));
 }
 
@@ -515,7 +558,7 @@ export function ImportQRFromBytes(data, name) {
  */
 export function ImportQRFromPath(path, name) {
     return $Call.ByID(1276410894, path, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType29($result);
+        return $$createType31($result);
     }));
 }
 
@@ -530,7 +573,7 @@ export function ImportQRFromPath(path, name) {
  */
 export function ImportSettings() {
     return $Call.ByID(3314465931).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -542,7 +585,7 @@ export function ImportSettings() {
  */
 export function ImportZip(path) {
     return $Call.ByID(4220907101, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType33($result);
+        return $$createType35($result);
     }));
 }
 
@@ -554,7 +597,7 @@ export function ImportZip(path) {
  */
 export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType33($result);
+        return $$createType35($result);
     }));
 }
 
@@ -566,7 +609,7 @@ export function ImportZipData(data) {
  */
 export function ListPhysicalInterfaces() {
     return $Call.ByID(682080878).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType35($result);
+        return $$createType37($result);
     }));
 }
 
@@ -584,7 +627,7 @@ export function ListPhysicalInterfaces() {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType36($result);
+        return $$createType38($result);
     }));
 }
 
@@ -599,7 +642,7 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType36($result);
+        return $$createType38($result);
     }));
 }
 
@@ -619,6 +662,21 @@ export function LogFrontend(message) {
 }
 
 /**
+ * MeasureEndpointCandidates pings every candidate (plus the active endpoint)
+ * once and reports each latency, so the editor can show WHY a candidate is
+ * preferred instead of asking the user to trust it.
+ * MeasureEndpointCandidates 对每个候选（含生效地址）各 ping 一次并回报延迟，
+ * 编辑器因此能展示「为什么选它」，而不是让用户盲信。
+ * @param {string} name
+ * @returns {$CancellablePromise<endpoint$0.Measurement[]>}
+ */
+export function MeasureEndpointCandidates(name) {
+    return $Call.ByID(1642477622, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType40($result);
+    }));
+}
+
+/**
  * MigrateLegacyData copies the legacy config/tunnels/logs into the current
  * locations. Overwrite controls whether existing target files are replaced;
  * IncludeLogs controls whether the legacy logs directory is migrated.
@@ -627,7 +685,7 @@ export function LogFrontend(message) {
  */
 export function MigrateLegacyData(opts) {
     return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType38($result);
+        return $$createType42($result);
     }));
 }
 
@@ -691,7 +749,7 @@ export function OpenURL(url) {
  */
 export function PendingAddressConflicts() {
     return $Call.ByID(3872522765).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType44($result);
     }));
 }
 
@@ -712,7 +770,7 @@ export function PendingAddressConflicts() {
  */
 export function PolicyReport(name) {
     return $Call.ByID(1901060591, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType41($result);
+        return $$createType45($result);
     }));
 }
 
@@ -723,7 +781,7 @@ export function PolicyReport(name) {
  */
 export function PolicyReportAll() {
     return $Call.ByID(3331289786).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType41($result);
+        return $$createType45($result);
     }));
 }
 
@@ -801,7 +859,7 @@ export function ReconcileHistoryFromStatus(activeNames, handshakeMap, rxByTunnel
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType43($result);
+        return $$createType47($result);
     }));
 }
 
@@ -856,7 +914,7 @@ export function ResolveDNSPathConflict(tunnel, action) {
  */
 export function ResolveScriptRef(command) {
     return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType45($result);
+        return $$createType49($result);
     }));
 }
 
@@ -886,7 +944,7 @@ export function ResumeAutoConnect(tunnel) {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType47($result);
+        return $$createType51($result);
     }));
 }
 
@@ -1000,6 +1058,42 @@ export function ScriptsDir() {
  */
 export function SetApp(app) {
     return $Call.ByID(2191543932, app);
+}
+
+/**
+ * SetEndpointAutoSwitch arms or disarms automatic candidate selection.
+ * Switching it off never moves the active endpoint: the tunnel keeps using
+ * whatever address is in the .conf until the user changes it by hand.
+ * SetEndpointAutoSwitch 打开或关闭候选自动选择。关掉它绝不会挪动生效地址：
+ * 隧道会继续用 .conf 里那个地址，直到用户手动修改。
+ * @param {string} name
+ * @param {boolean} enabled
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetEndpointAutoSwitch(name, enabled) {
+    return $Call.ByID(3536100459, name, enabled);
+}
+
+/**
+ * SetEndpointCandidates stores the candidate list. The tunnel's current
+ * endpoint is kept as the first candidate even if the caller omits it —
+ * dropping it would let a failover strand the tunnel on an address the user
+ * can no longer get back to.
+ * 
+ * Values are validated as host:port, the same shape the .conf's Endpoint
+ * accepts, so a typo is rejected here instead of at connect time.
+ * 
+ * SetEndpointCandidates 保存候选列表。即便调用方没有带上，隧道当前的 endpoint
+ * 也会被保留为第一个候选——丢掉它会让一次故障切换把隧道丢在一个用户再也回不去的地址上。
+ * 
+ * 每个值都按 host:port 校验（与 .conf 的 Endpoint 同形），所以拼写错误在这里就被拒绝，
+ * 而不是等到连接时才炸。
+ * @param {string} name
+ * @param {string[]} candidates
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetEndpointCandidates(name, candidates) {
+    return $Call.ByID(796160462, name, candidates);
 }
 
 /**
@@ -1170,6 +1264,35 @@ export function SetUpdateScheduler(sched, store) {
 }
 
 /**
+ * TestMirrorConnectivity probes the direct GitHub API endpoint plus every
+ * given mirror prefix in parallel and returns one row per target: reachable
+ * rows first, fastest first, failures last. The Settings page calls it as
+ * soon as it opens, so the user sees — without clicking anything — whether
+ * direct works at all and which mirror is actually fastest right now.
+ * 
+ * The probe is an HTTP round-trip against the real API URL, NOT an ICMP
+ * ping: an accelerator mirror is an HTTP reverse proxy for the API, so "the
+ * host answers ICMP" says nothing about whether it can serve the request.
+ * A mirror that is up but broken (or that no longer proxies GitHub) would
+ * otherwise be ranked first on a perfectly healthy-looking ping.
+ * 
+ * TestMirrorConnectivity 并行探测 GitHub API 直连与每个镜像前缀，每个目标返回一行：
+ * 可达的排在前面（快的在前），失败的排在后面。设置页一打开就调用它，
+ * 用户无需点击即可看到直连是否可用、以及当前哪个镜像真的最快。
+ * 
+ * 探测是对真实 API URL 做一次 HTTP 往返，而**不是** ICMP ping：加速镜像本质是
+ * API 的 HTTP 反向代理，因此「主机能回应 ICMP」根本不代表它能把请求代理成功。
+ * 否则一个「活着但已经不能代理 GitHub」的镜像会凭漂亮的 ping 值排到第一位。
+ * @param {string[]} prefixes
+ * @returns {$CancellablePromise<$models.MirrorTestRow[]>}
+ */
+export function TestMirrorConnectivity(prefixes) {
+    return $Call.ByID(1083645311, prefixes).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType53($result);
+    }));
+}
+
+/**
  * TestProxy performs a round-trip request to the GitHub Releases API using
  * the given proxy configuration and reports success plus latency. The
  * Settings → Proxy "test connection" button calls this so the user can
@@ -1190,7 +1313,7 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType48($result);
+        return $$createType54($result);
     }));
 }
 
@@ -1261,40 +1384,46 @@ const $$createType8 = storage$0.Session.createFrom;
 const $$createType9 = $Create.Array($$createType8);
 const $$createType10 = $models.CurrentNetwork.createFrom;
 const $$createType11 = $Create.Array($Create.Any);
-const $$createType12 = $models.KnownSSIDs.createFrom;
-const $$createType13 = $models.RouteEntry.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = storage$0.Settings.createFrom;
-const $$createType16 = $Create.Nullable($$createType15);
-const $$createType17 = domain$0.ConnectionStatus.createFrom;
+const $$createType12 = $models.EndpointSettings.createFrom;
+const $$createType13 = $models.KnownSSIDs.createFrom;
+const $$createType14 = $models.PublicIPInfo.createFrom;
+const $$createType15 = $models.RouteEntry.createFrom;
+const $$createType16 = $Create.Array($$createType15);
+const $$createType17 = storage$0.Settings.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = $models.TunnelMetaBinding.createFrom;
+const $$createType19 = domain$0.ConnectionStatus.createFrom;
 const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = domain$0.WireGuardConfig.createFrom;
+const $$createType21 = $models.TunnelMetaBinding.createFrom;
 const $$createType22 = $Create.Nullable($$createType21);
-const $$createType23 = $models.TunnelFields.createFrom;
+const $$createType23 = domain$0.WireGuardConfig.createFrom;
 const $$createType24 = $Create.Nullable($$createType23);
-const $$createType25 = $models.TunnelPolicies.createFrom;
+const $$createType25 = $models.TunnelFields.createFrom;
 const $$createType26 = $Create.Nullable($$createType25);
-const $$createType27 = $models.UpdateState.createFrom;
-const $$createType28 = $models.TunnelInfo.createFrom;
-const $$createType29 = $Create.Nullable($$createType28);
-const $$createType30 = $models.SettingsImportResult.createFrom;
+const $$createType27 = $models.TunnelPolicies.createFrom;
+const $$createType28 = $Create.Nullable($$createType27);
+const $$createType29 = $models.UpdateState.createFrom;
+const $$createType30 = $models.TunnelInfo.createFrom;
 const $$createType31 = $Create.Nullable($$createType30);
-const $$createType32 = $models.ZipImportResult.createFrom;
-const $$createType33 = $Create.Array($$createType32);
-const $$createType34 = $models.PhysicalInterface.createFrom;
+const $$createType32 = $models.SettingsImportResult.createFrom;
+const $$createType33 = $Create.Nullable($$createType32);
+const $$createType34 = $models.ZipImportResult.createFrom;
 const $$createType35 = $Create.Array($$createType34);
-const $$createType36 = $Create.Array($$createType28);
-const $$createType37 = storage$0.MigrateResult.createFrom;
-const $$createType38 = $Create.Nullable($$createType37);
-const $$createType39 = ipc$0.AddressConflictPayload.createFrom;
+const $$createType36 = $models.PhysicalInterface.createFrom;
+const $$createType37 = $Create.Array($$createType36);
+const $$createType38 = $Create.Array($$createType30);
+const $$createType39 = endpoint$0.Measurement.createFrom;
 const $$createType40 = $Create.Array($$createType39);
-const $$createType41 = policy$0.Report.createFrom;
-const $$createType42 = $models.PublicDNSRefresh.createFrom;
-const $$createType43 = $Create.Nullable($$createType42);
-const $$createType44 = $models.ScriptRef.createFrom;
-const $$createType45 = $Create.Nullable($$createType44);
-const $$createType46 = $models.DNSLeakResult.createFrom;
+const $$createType41 = storage$0.MigrateResult.createFrom;
+const $$createType42 = $Create.Nullable($$createType41);
+const $$createType43 = ipc$0.AddressConflictPayload.createFrom;
+const $$createType44 = $Create.Array($$createType43);
+const $$createType45 = policy$0.Report.createFrom;
+const $$createType46 = $models.PublicDNSRefresh.createFrom;
 const $$createType47 = $Create.Nullable($$createType46);
-const $$createType48 = $models.TestProxyResult.createFrom;
+const $$createType48 = $models.ScriptRef.createFrom;
+const $$createType49 = $Create.Nullable($$createType48);
+const $$createType50 = $models.DNSLeakResult.createFrom;
+const $$createType51 = $Create.Nullable($$createType50);
+const $$createType52 = $models.MirrorTestRow.createFrom;
+const $$createType53 = $Create.Array($$createType52);
+const $$createType54 = $models.TestProxyResult.createFrom;

@@ -454,6 +454,14 @@ func (s *TunnelService) Connect(name string) error {
 		}
 	}
 
+	// Endpoint failover: when the tunnel armed auto-switch and has more
+	// than one candidate, dial the one that actually answers best right
+	// now. No-op for every other tunnel, so nothing else about this path
+	// changes.
+	// Endpoint failover：若隧道启用了自动切换且候选多于一个，就拨当前实测最优的那个。
+	// 对其它隧道是空操作，本路径的其它行为一概不变。
+	s.applyEndpointChoice(name, cfg)
+
 	// A manual connect latches the tunnel ON: the user has spoken, so the
 	// automation engine must not silently tear it back down until they
 	// disconnect it by hand once or the app restarts. This also clears any

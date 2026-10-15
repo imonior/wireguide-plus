@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.6.0] - 2026-10-15
+
+### ✨ 新增
+
+- **Endpoint 容灾（多 Endpoint）。** 配置多个 Endpoint 候选的隧道会自动择优切换到最快可达的地址，并在当前地址不可达时立即故障切换。控制分两层：全局总开关（设置 → 高级）与每隧道独立开关——新建隧道自动从总开关派生其自身开关状态。阈值、幅度、持续窗口与冷却均可在设置 → 高级 中调整。
+- **代理镜像与公网 IP 显示。** 在设置 → 代理 中配置用于更新与元数据获取的 GitHub 加速镜像，并直接查看当前公网 IP 与地理位置。
+
 ## [2.5.3] - 2026-10-15
 
 ### 🔧 变更

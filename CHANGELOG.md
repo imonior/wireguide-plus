@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.6.0] - 2026-10-15
+
+### ✨ Added
+
+- **Endpoint failover (multi-endpoint).** A tunnel with multiple endpoint candidates now automatically switches to the fastest reachable one and fails over instantly when the current endpoint becomes unreachable. Gating is two-tier: a global master switch (Settings → Advanced) and a per-tunnel toggle — new tunnels derive their per-tunnel state from the master switch. Threshold, margin, sustain window and cooldown are all tunable in Settings → Advanced.
+- **Proxy mirrors & public-IP display.** Configure GitHub accelerator mirrors for update and metadata fetches (Settings → Proxy), and view your current public IP and geolocation at a glance (Settings → Proxy).
+
 ## [2.5.3] - 2026-10-15
 
 ### 🔧 Changed

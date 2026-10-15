@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -451,6 +453,24 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 	if settings.LogRetentionDays > 90 {
 		settings.LogRetentionDays = 90
 	}
+	// Endpoint failover tuning: keep the values inside their safe ranges so a
+	// hand-edited or out-of-range payload cannot arm a nonsensical switch
+	// policy. The cooldown floor (240s) is the important one — it must stay
+	// above the 180s dead-link action window.
+	// Endpoint 容灾调参：把值收进安全区间，避免手改或越界的载荷武装出无意义的切换策略。
+	// 冷却下限（240s）最关键——必须高于 180s 的死链动作窗口。
+	if settings.EndpointThresholdMs < 1 {
+		settings.EndpointThresholdMs = 150
+	}
+	if settings.EndpointMarginPct < 1 {
+		settings.EndpointMarginPct = 30
+	}
+	if settings.EndpointSustainedSec < 0 {
+		settings.EndpointSustainedSec = 0
+	}
+	if settings.EndpointCooldownSec < storage.MinEndpointCooldownSec {
+		settings.EndpointCooldownSec = storage.MinEndpointCooldownSec
+	}
 
 	// Update, not Save: the payload arrived from a snapshot the frontend took
 	// before this call, so the write has to merge onto the file's current
@@ -634,6 +654,27 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 	if prev.ProxyURL != next.ProxyURL {
 		out = append(out, "proxy_url")
 	}
+	if !sameStrings(prev.ProxyMirrors, next.ProxyMirrors) {
+		out = append(out, "proxy_mirrors")
+	}
+	if prev.PublicIPLookupEnabled() != next.PublicIPLookupEnabled() {
+		out = append(out, "public_ip_lookup")
+	}
+	if prev.EndpointFailoverEnabled() != next.EndpointFailoverEnabled() {
+		out = append(out, "endpoint_failover")
+	}
+	if prev.EffectiveEndpointThresholdMs() != next.EffectiveEndpointThresholdMs() {
+		out = append(out, "endpoint_threshold_ms")
+	}
+	if prev.EffectiveEndpointMarginPct() != next.EffectiveEndpointMarginPct() {
+		out = append(out, "endpoint_margin_pct")
+	}
+	if prev.EffectiveEndpointSustainedSec() != next.EffectiveEndpointSustainedSec() {
+		out = append(out, "endpoint_sustained_sec")
+	}
+	if prev.EffectiveEndpointCooldownSec() != next.EffectiveEndpointCooldownSec() {
+		out = append(out, "endpoint_cooldown_sec")
+	}
 	if prev.LogRetentionDays != next.LogRetentionDays {
 		out = append(out, "log_retention_days")
 	}
@@ -650,6 +691,23 @@ func changedSettingsFields(prev, next *storage.Settings) []string {
 		out = append(out, "automation")
 	}
 	return out
+}
+
+// sameStrings compares two string slices by content, treating nil and
+// empty as equal. Used for list-valued settings where the audit log must
+// not fire just because a list went from absent to present-but-empty.
+// sameStrings 按内容比较两个字符串切片，nil 与空视为相等。用于列表型设置，
+// 避免「从缺省变为空列表」这种无意义差异触发审计日志。
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // automationEqual compares two Automation policies by value. The struct
@@ -747,6 +805,378 @@ func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
 		return TestProxyResult{OK: false, Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
 	}
 	return TestProxyResult{OK: true, LatencyMs: int(time.Since(start).Milliseconds())}
+}
+
+// MirrorTestRow is one row of the Settings → Proxy connectivity table:
+// either the direct GitHub API endpoint or one accelerator mirror.
+// MirrorTestRow 是「设置 → 代理」连通性表格中的一行：要么是 GitHub API 直连，
+// 要么是某个加速镜像。
+type MirrorTestRow struct {
+	// Kind is "direct" or "mirror". The frontend picks the translated
+	// label from it, because the direct row has no URL of its own.
+	// Kind 取值 "direct" 或 "mirror"。前端据此选择本地化文案，
+	// 因为直连那一行本身没有 URL。
+	Kind string `json:"kind"`
+	// Label is the mirror prefix this row belongs to ("" for direct), so
+	// the UI can line the result up with its own list without parsing the
+	// probed URL.
+	// Label 是本行对应的镜像前缀（直连为空串），前端据此把结果与自己的列表
+	// 对齐，无需反解被探测的 URL。
+	Label     string `json:"label,omitempty"`
+	Target    string `json:"target,omitempty"`
+	OK        bool   `json:"ok"`
+	LatencyMs int    `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// mirrorProbeTimeout bounds a single mirror probe. It matches TestProxy so
+// the two readouts in the same panel are directly comparable.
+// mirrorProbeTimeout 限制单个镜像探测的耗时，与 TestProxy 保持一致，
+// 好让同一面板里的两个读数可以直接比较。
+const mirrorProbeTimeout = 8 * time.Second
+
+// TestMirrorConnectivity probes the direct GitHub API endpoint plus every
+// given mirror prefix in parallel and returns one row per target: reachable
+// rows first, fastest first, failures last. The Settings page calls it as
+// soon as it opens, so the user sees — without clicking anything — whether
+// direct works at all and which mirror is actually fastest right now.
+//
+// The probe is an HTTP round-trip against the real API URL, NOT an ICMP
+// ping: an accelerator mirror is an HTTP reverse proxy for the API, so "the
+// host answers ICMP" says nothing about whether it can serve the request.
+// A mirror that is up but broken (or that no longer proxies GitHub) would
+// otherwise be ranked first on a perfectly healthy-looking ping.
+//
+// TestMirrorConnectivity 并行探测 GitHub API 直连与每个镜像前缀，每个目标返回一行：
+// 可达的排在前面（快的在前），失败的排在后面。设置页一打开就调用它，
+// 用户无需点击即可看到直连是否可用、以及当前哪个镜像真的最快。
+//
+// 探测是对真实 API URL 做一次 HTTP 往返，而**不是** ICMP ping：加速镜像本质是
+// API 的 HTTP 反向代理，因此「主机能回应 ICMP」根本不代表它能把请求代理成功。
+// 否则一个「活着但已经不能代理 GitHub」的镜像会凭漂亮的 ping 值排到第一位。
+func (s *TunnelService) TestMirrorConnectivity(prefixes []string) []MirrorTestRow {
+	type job struct {
+		kind   string
+		label  string
+		target string
+	}
+
+	jobs := make([]job, 0, len(prefixes)+1)
+	jobs = append(jobs, job{kind: "direct", target: update.APIEndpoint()})
+	for _, raw := range prefixes {
+		p := strings.TrimSpace(raw)
+		if p == "" {
+			continue
+		}
+		if !update.ValidMirrorPrefix(p) {
+			// Rejected before any request: an invalid prefix can only
+			// fail, and naming the reason beats surfacing an opaque
+			// transport error. The row keeps the prefix as its label so
+			// the UI can still place it.
+			// 在发请求之前就拒绝：非法前缀只会失败，直接点明原因
+			// 好过抛出一个看不懂的传输层错误。
+			jobs = append(jobs, job{kind: "mirror", label: p, target: ""})
+			continue
+		}
+		jobs = append(jobs, job{kind: "mirror", label: p, target: update.MirroredEndpoint(p)})
+	}
+
+	rows := make([]MirrorTestRow, len(jobs))
+	var wg sync.WaitGroup
+	for i, j := range jobs {
+		wg.Add(1)
+		go func(idx int, jb job) {
+			defer wg.Done()
+			rows[idx] = probeMirrorTarget(jb.kind, jb.label, jb.target)
+		}(i, j)
+	}
+	wg.Wait()
+
+	// Reachable first (fastest first), failures after — the ordering the
+	// panel wants, computed here so the frontend stays dumb.
+	// 可达的在前（快的在前），失败的在后——面板要的顺序，在这里算好，
+	// 前端就不必再做排序。
+	sort.SliceStable(rows, func(a, b int) bool {
+		if rows[a].OK != rows[b].OK {
+			return rows[a].OK
+		}
+		if !rows[a].OK {
+			return false // keep failure rows in input order
+		}
+		return rows[a].LatencyMs < rows[b].LatencyMs
+	})
+	return rows
+}
+
+// probeMirrorTarget performs the single HTTP round-trip behind one result
+// row. An empty target (an already-rejected prefix) short-circuits to a
+// failure row instead of issuing a request.
+// probeMirrorTarget 执行一行结果背后的那一次 HTTP 往返。target 为空
+// （前缀已被判定非法）时直接短路成失败行，不再发请求。
+func probeMirrorTarget(kind, label, target string) MirrorTestRow {
+	row := MirrorTestRow{Kind: kind, Label: label, Target: target}
+	if target == "" {
+		row.Error = "invalid mirror prefix"
+		return row
+	}
+	client := &http.Client{Timeout: mirrorProbeTimeout, Transport: &http.Transport{}}
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), mirrorProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		row.Error = err.Error()
+		return row
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		row.Error = err.Error()
+		return row
+	}
+	defer resp.Body.Close()
+	// Drain (bounded) so the connection can be reused and the timing
+	// covers the whole response, not just the headers.
+	// 排空（限量）以便连接可复用，也让计时覆盖整个响应而不只是响应头。
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	row.LatencyMs = int(time.Since(start).Milliseconds())
+	if resp.StatusCode >= 400 {
+		row.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return row
+	}
+	row.OK = true
+	return row
+}
+
+// PublicIPInfo is the "where does this machine appear to be" readout shown
+// at the top of Settings → Proxy: the egress IP plus the geolocation a
+// third-party service reports for it.
+// PublicIPInfo 是「设置 → 代理」顶部展示的「本机对外看起来在哪」读数：
+// 出口 IP 加上第三方服务报告的归属地。
+type PublicIPInfo struct {
+	OK        bool   `json:"ok"`
+	IP        string `json:"ip,omitempty"`
+	Country   string `json:"country,omitempty"`
+	Region    string `json:"region,omitempty"`
+	City      string `json:"city,omitempty"`
+	ISP       string `json:"isp,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	LatencyMs int    `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// publicIPProviders are tried in parallel; the first one that answers wins.
+// Each entry is a plain JSON endpoint that returns both the IP and some
+// geolocation, so a single call covers the whole readout. The list starts
+// with services that answer from mainland China (where GitHub is often
+// unreachable and the proxy panel matters most) and ends with an IP-only
+// source, which still beats showing nothing.
+// publicIPProviders 并行尝试，先回答的胜出。每一项都是返回 IP 与部分归属地信息的
+// JSON 端点，一次调用即可填满整个读数。列表以在中国大陆也能应答的服务开头
+// （那里 GitHub 常不可达，代理面板最有用），最后放一个只给 IP 的源——
+// 总比什么都不显示强。
+var publicIPProviders = []struct {
+	name   string
+	url    string
+	decode func(body []byte, info *PublicIPInfo) error
+}{
+	{
+		name: "ip-api.com",
+		url:  "http://ip-api.com/json/?fields=status,message,country,regionName,city,isp,query",
+		decode: func(body []byte, info *PublicIPInfo) error {
+			var v struct {
+				Status  string `json:"status"`
+				Message string `json:"message"`
+				Country string `json:"country"`
+				Region  string `json:"regionName"`
+				City    string `json:"city"`
+				ISP     string `json:"isp"`
+				Query   string `json:"query"`
+			}
+			if err := json.Unmarshal(body, &v); err != nil {
+				return err
+			}
+			if v.Status != "success" {
+				return fmt.Errorf("%s", orDefault(v.Message, "lookup failed"))
+			}
+			info.IP, info.Country, info.Region, info.City, info.ISP = v.Query, v.Country, v.Region, v.City, v.ISP
+			return nil
+		},
+	},
+	{
+		name: "ipapi.co",
+		url:  "https://ipapi.co/json/",
+		decode: func(body []byte, info *PublicIPInfo) error {
+			var v struct {
+				IP          string `json:"ip"`
+				CountryName string `json:"country_name"`
+				Region      string `json:"region"`
+				City        string `json:"city"`
+				Org         string `json:"org"`
+				Error       bool   `json:"error"`
+				Reason      string `json:"reason"`
+			}
+			if err := json.Unmarshal(body, &v); err != nil {
+				return err
+			}
+			if v.Error {
+				return fmt.Errorf("%s", orDefault(v.Reason, "lookup failed"))
+			}
+			info.IP, info.Country, info.Region, info.City, info.ISP = v.IP, v.CountryName, v.Region, v.City, v.Org
+			return nil
+		},
+	},
+	{
+		name: "ipwho.is",
+		url:  "https://ipwho.is/",
+		decode: func(body []byte, info *PublicIPInfo) error {
+			var v struct {
+				Success bool   `json:"success"`
+				Message string `json:"message"`
+				IP      string `json:"ip"`
+				Country string `json:"country"`
+				Region  string `json:"region"`
+				City    string `json:"city"`
+				Conn    struct {
+					Org string `json:"org"`
+					ISP string `json:"isp"`
+				} `json:"connection"`
+			}
+			if err := json.Unmarshal(body, &v); err != nil {
+				return err
+			}
+			if !v.Success {
+				return fmt.Errorf("%s", orDefault(v.Message, "lookup failed"))
+			}
+			isp := v.Conn.ISP
+			if isp == "" {
+				isp = v.Conn.Org
+			}
+			info.IP, info.Country, info.Region, info.City, info.ISP = v.IP, v.Country, v.Region, v.City, isp
+			return nil
+		},
+	},
+	{
+		name: "ipify.org",
+		url:  "https://api.ipify.org?format=json",
+		decode: func(body []byte, info *PublicIPInfo) error {
+			var v struct {
+				IP string `json:"ip"`
+			}
+			if err := json.Unmarshal(body, &v); err != nil {
+				return err
+			}
+			info.IP = v.IP // IP-only source: no geolocation
+			return nil
+		},
+	},
+}
+
+// orDefault returns s when non-empty, else fallback. Keeps provider error
+// messages from rendering as an empty string in the UI.
+// orDefault 在 s 非空时返回 s，否则返回 fallback，避免服务商的错误信息
+// 在界面上渲染成空字符串。
+func orDefault(s, fallback string) string {
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
+}
+
+// publicIPTimeout bounds the whole lookup. All providers race, so the
+// common case is well under a second; this only caps a fully black-holed
+// network.
+// publicIPTimeout 限制整次查询。所有服务商并行竞速，正常情况远不到一秒，
+// 这个超时只为兜住完全黑洞的网络。
+const publicIPTimeout = 6 * time.Second
+
+// GetPublicIPInfo resolves the machine's current public (egress) IP and the
+// geolocation reported for it. It is a third-party lookup by definition —
+// the request necessarily discloses the public IP to whichever service
+// answers — so the winning provider's name is returned too and shown in the
+// UI, and the whole thing is gated by Settings.PublicIPLookupEnabled.
+//
+// The lookup deliberately ignores the app's proxy configuration: the point
+// of the readout is "how this machine looks to the internet", and routing
+// it through a manual proxy would report the proxy instead.
+//
+// GetPublicIPInfo 解析本机当前的公网（出口）IP 及其归属地。它本质上就是一次
+// 第三方查询——请求必然会把公网 IP 暴露给应答的那家服务——因此顺带返回
+// 命中服务商的名字并在界面上显示，整体还受 Settings.PublicIPLookupEnabled 开关约束。
+//
+// 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
+// 若经由手动代理转发，报出来的就是代理的 IP 了。
+func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
+	settings, _ := s.settingsStore.Load()
+	if !settings.PublicIPLookupEnabled() {
+		return PublicIPInfo{Error: "disabled"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), publicIPTimeout)
+	defer cancel()
+
+	type attempt struct {
+		info PublicIPInfo
+	}
+	ch := make(chan attempt, len(publicIPProviders))
+	for _, p := range publicIPProviders {
+		go func(name, rawURL string, decode func([]byte, *PublicIPInfo) error) {
+			info := PublicIPInfo{Provider: name}
+			start := time.Now()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+			if err != nil {
+				info.Error = err.Error()
+				ch <- attempt{info}
+				return
+			}
+			client := &http.Client{Timeout: publicIPTimeout, Transport: &http.Transport{}}
+			resp, err := client.Do(req)
+			if err != nil {
+				info.Error = err.Error()
+				ch <- attempt{info}
+				return
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+			info.LatencyMs = int(time.Since(start).Milliseconds())
+			if err != nil {
+				info.Error = err.Error()
+				ch <- attempt{info}
+				return
+			}
+			if resp.StatusCode >= 400 {
+				info.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+				ch <- attempt{info}
+				return
+			}
+			if err := decode(body, &info); err != nil {
+				info.Error = err.Error()
+				ch <- attempt{info}
+				return
+			}
+			if info.IP == "" {
+				info.Error = "empty response"
+				ch <- attempt{info}
+				return
+			}
+			info.OK = true
+			ch <- attempt{info}
+		}(p.name, p.url, p.decode)
+	}
+
+	// First success wins; if every provider fails, report the first error
+	// so the UI shows something actionable.
+	// 第一个成功的胜出；若全部失败，报出第一个错误，好让界面显示可读的原因。
+	var firstErr string
+	for i := 0; i < len(publicIPProviders); i++ {
+		a := <-ch
+		if a.info.OK {
+			return a.info
+		}
+		if firstErr == "" && a.info.Error != "" {
+			firstErr = a.info.Error
+		}
+	}
+	return PublicIPInfo{Error: orDefault(firstErr, "all providers failed")}
 }
 
 // SaveAutomationRules atomically replaces one tunnel's Automation policy:

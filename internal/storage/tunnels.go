@@ -488,6 +488,78 @@ type TunnelMeta struct {
 	// cleared on every app start, this survives restarts. Lives in the
 	// sidecar, never the .conf.
 	AutomationDisabled bool `json:"automation_disabled,omitempty"`
+
+	// EndpointCandidates lists the alternate "host:port" addresses this
+	// peer may be reached at. The FIRST element is the preferred one; the
+	// .conf's Endpoint keeps holding the single currently-active address,
+	// so the file stays valid for wg / wg-quick and every other client —
+	// the candidate list lives here, in the sidecar, never in the .conf.
+	// Empty (or a single element) means "no alternatives": the tunnel then
+	// behaves byte-for-byte as it did before this feature existed.
+	// EndpointCandidates 是同一个 peer 可能的备用「host:port」地址列表，
+	// 第一个元素为首选。.conf 的 Endpoint 仍然只保存当前生效的那一个地址，
+	// 因此该文件对 wg / wg-quick 以及其它客户端始终有效——候选列表放在这个
+	// sidecar 里，绝不写进 .conf。为空（或只有一个元素）即「没有备选」，
+	// 此时隧道的行为与引入该功能之前逐字节相同。
+	EndpointCandidates []string `json:"endpoint_candidates,omitempty"`
+
+	// EndpointAutoSwitch arms automatic selection among the candidates.
+	// OFF by default: picking a different address on the user's behalf is
+	// only wanted once they have asked for it.
+	// EndpointAutoSwitch 打开候选之间的自动选择。默认关闭：替用户换地址
+	// 这件事，只有在用户明确要求后才应该发生。
+	EndpointAutoSwitch bool `json:"endpoint_auto_switch,omitempty"`
+}
+
+// EndpointCandidateList returns the stored candidates, normalized (trimmed,
+// de-duplicated, empties dropped) while preserving the user's order. Order
+// is the preference order and breaks ties when two candidates measure the
+// same.
+// EndpointCandidateList 返回归一化后的候选（去空白、去重、丢空项），
+// 并保持用户的顺序。顺序即偏好顺序，也是两个候选测得同样快时的裁决依据。
+func (m *TunnelMeta) EndpointCandidateList() []string {
+	if m == nil {
+		return nil
+	}
+	out := make([]string, 0, len(m.EndpointCandidates))
+	seen := make(map[string]bool, len(m.EndpointCandidates))
+	for _, raw := range m.EndpointCandidates {
+		v := strings.TrimSpace(raw)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
+}
+
+// SetEndpointCandidates stores the candidate list, normalized the same way
+// EndpointCandidateList reads it back.
+// SetEndpointCandidates 保存候选列表，归一化方式与 EndpointCandidateList 读取时一致。
+func (m *TunnelMeta) SetEndpointCandidates(list []string) {
+	out := make([]string, 0, len(list))
+	seen := make(map[string]bool, len(list))
+	for _, raw := range list {
+		v := strings.TrimSpace(raw)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		m.EndpointCandidates = nil
+		return
+	}
+	m.EndpointCandidates = out
+}
+
+// EndpointAutoSwitchEnabled reports whether automatic candidate selection is
+// armed for this tunnel.
+// EndpointAutoSwitchEnabled 返回该隧道是否启用了候选自动选择。
+func (m *TunnelMeta) EndpointAutoSwitchEnabled() bool {
+	return m != nil && m.EndpointAutoSwitch
 }
 
 // ProbeTargetSlotCount is how many probe-target rows the tunnel editor

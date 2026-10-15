@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/config"
+	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 	_ "golang.org/x/image/webp" // ...or WebP (Safari/Chrome image caches, modern web exports)
@@ -126,10 +127,27 @@ func (s *TunnelService) importZipReader(r *zip.Reader) ([]ZipImportResult, error
 // ImportConfig parses, validates, and saves a tunnel config under the given
 // name. Returns a TunnelInfo for optimistic UI display.
 func (s *TunnelService) ImportConfig(name, content string) (*TunnelInfo, error) {
+	existed := s.tunnelStore.Exists(name)
 	cfg, err := s.tunnelStore.ImportFromContent(name, content)
 	if err != nil {
 		slog.Warn("tunnel: import failed", "category", "tunnel", "tunnel", name, "error", err)
 		return nil, err
+	}
+	// A freshly imported tunnel inherits the global master switch as its
+	// per-tunnel auto-switch default: when the master is on, new tunnels
+	// start armed; when it is off, they start inert (and the UI greys the
+	// toggle). Existing tunnels keep their own stored choice — re-importing
+	// one never flips it.
+	// 刚导入的隧道把全局总开关作为它每隧道自动切换的默认：总开关开时新隧道默认武装；
+	// 总开关关时默认 inert（界面同时灰掉开关）。已存在的隧道保留自己的存储值——
+	// 重新导入不会翻转它。
+	if !existed {
+		if settings, _ := s.settingsStore.Load(); settings != nil {
+			armed := settings.EndpointFailoverEnabled()
+			_ = s.tunnelStore.UpdateMeta(name, func(meta *storage.TunnelMeta) {
+				meta.EndpointAutoSwitch = armed
+			})
+		}
 	}
 	endpoint := ""
 	if len(cfg.Peers) > 0 {
