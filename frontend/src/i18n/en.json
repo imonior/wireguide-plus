@@ -66,6 +66,11 @@
     "connect": "Connect",
     "disconnect": "Disconnect",
     "endpoint_auto_switch_disabled": "Disabled by global setting",
+    "endpoint_mode_off": "Off",
+    "endpoint_mode_reconnect": "On reconnect",
+    "endpoint_mode_dynamic": "Dynamic",
+    "endpoint_mode_dynamic_hint": "Switches proactively when the policy holds; each switch briefly reconnects the tunnel",
+    "endpoint_effective_values": "Switch policy: threshold {threshold} ms · margin {margin}% · sustain {sustained}s · cooldown {cooldown}s",
     "manual_connect_tip": "Connect manually (forces a connect, ignoring every automation rule)",
     "manual_disconnect_tip": "Disconnect manually (forces a disconnect, ignoring every automation rule)",
     "helper_recovering": "Helper is recovering — please retry in a moment.",
@@ -298,6 +303,8 @@
     "public_ip_disabled": "Public IP lookup is turned off.",
     "public_ip_loading": "Looking up…",
     "public_ip_failed": "Lookup failed: {err}",
+    "public_ip_stale": "refresh failed at {time}, showing the previous result",
+    "proxy_mirror_retest": "Re-test",
     "public_ip_hint": "reported by {provider}"
   },
   "confirm": {
@@ -305,7 +312,10 @@
     "delete_message": "Are you sure you want to delete \"{name}\"?",
     "yes": "Delete",
     "no": "Cancel",
-    "disconnect_first": "Disconnect the tunnel first"
+    "disconnect_first": "Disconnect the tunnel first",
+    "rename_connected_title": "Rename connected tunnel",
+    "rename_connected_message": "\"{name}\" is connected. A tunnel's name is also its config file name, so a connected tunnel cannot be renamed — disconnect it first.",
+    "rename_disconnect_rename": "Disconnect and rename"
   },
   "log": {
     "open_folder": "Open log folder",

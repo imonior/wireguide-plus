@@ -1097,6 +1097,23 @@ export function SetEndpointCandidates(name, candidates) {
 }
 
 /**
+ * SetEndpointSwitchMode selects WHEN automatic switching may happen, as one
+ * actionable choice: "off" disarms switching entirely, "reconnect" arms it
+ * for reconnect-time evaluation only (the historical behaviour), and
+ * "dynamic" additionally lets the helper switch proactively while the
+ * tunnel is connected. Switching mode off never moves the active endpoint.
+ * SetEndpointSwitchMode 选择自动切换的发生时机，作为一个可操作选项："off" 完全
+ * 关闭切换；"reconnect" 仅在重连时评估（历史行为）；"dynamic" 额外允许 helper
+ * 在隧道连接期间主动切换。切换为 off 绝不会挪动生效地址。
+ * @param {string} name
+ * @param {string} mode
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetEndpointSwitchMode(name, mode) {
+    return $Call.ByID(4293132523, name, mode);
+}
+
+/**
  * SetHealthCheck enables or disables the tunnel health check monitor.
  * @param {boolean} enabled
  * @returns {$CancellablePromise<void>}

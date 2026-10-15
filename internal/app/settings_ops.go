@@ -964,23 +964,28 @@ type PublicIPInfo struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// publicIPProviders are tried in parallel; the first one that answers wins.
-// Each entry is a plain JSON endpoint that returns both the IP and some
-// geolocation, so a single call covers the whole readout. The list starts
-// with services that answer from mainland China (where GitHub is often
-// unreachable and the proxy panel matters most) and ends with an IP-only
-// source, which still beats showing nothing.
-// publicIPProviders 并行尝试，先回答的胜出。每一项都是返回 IP 与部分归属地信息的
-// JSON 端点，一次调用即可填满整个读数。列表以在中国大陆也能应答的服务开头
-// （那里 GitHub 常不可达，代理面板最有用），最后放一个只给 IP 的源——
-// 总比什么都不显示强。
+// publicIPProviders are tried in parallel. A geolocation-capable answer
+// (geo: true) wins immediately; if only an IP-only source has answered, the
+// lookup grants the rest a short grace window before settling for the bare
+// IP (see GetPublicIPInfo). Each entry is a plain JSON endpoint that returns
+// both the IP and some geolocation, so a single call covers the whole
+// readout. The list starts with services that answer from mainland China
+// (where GitHub is often unreachable and the proxy panel matters most) and
+// ends with an IP-only source, which still beats showing nothing.
+// publicIPProviders 并行尝试。归属地源（geo: true）一应答立即胜出；若只有
+// 纯 IP 源应答，查询会给其余源一个短暂宽限窗口，超时才接受裸 IP（见
+// GetPublicIPInfo）。每一项都是返回 IP 与部分归属地信息的 JSON 端点，一次
+// 调用即可填满整个读数。列表以在中国大陆也能应答的服务开头（那里 GitHub
+// 常不可达，代理面板最有用），最后放一个只给 IP 的源——总比什么都不显示强。
 var publicIPProviders = []struct {
 	name   string
 	url    string
+	geo    bool
 	decode func(body []byte, info *PublicIPInfo) error
 }{
 	{
 		name: "ip-api.com",
+		geo:  true,
 		url:  "http://ip-api.com/json/?fields=status,message,country,regionName,city,isp,query",
 		decode: func(body []byte, info *PublicIPInfo) error {
 			var v struct {
@@ -1004,6 +1009,7 @@ var publicIPProviders = []struct {
 	},
 	{
 		name: "ipapi.co",
+		geo:  true,
 		url:  "https://ipapi.co/json/",
 		decode: func(body []byte, info *PublicIPInfo) error {
 			var v struct {
@@ -1027,6 +1033,7 @@ var publicIPProviders = []struct {
 	},
 	{
 		name: "ipwho.is",
+		geo:  true,
 		url:  "https://ipwho.is/",
 		decode: func(body []byte, info *PublicIPInfo) error {
 			var v struct {
@@ -1057,6 +1064,7 @@ var publicIPProviders = []struct {
 	},
 	{
 		name: "ipify.org",
+		geo:  false, // IP-only source: no geolocation / 纯 IP 源：无归属地
 		url:  "https://api.ipify.org?format=json",
 		decode: func(body []byte, info *PublicIPInfo) error {
 			var v struct {
@@ -1089,6 +1097,14 @@ func orDefault(s, fallback string) string {
 // 这个超时只为兜住完全黑洞的网络。
 const publicIPTimeout = 6 * time.Second
 
+// publicIPGeoGrace is how long the lookup keeps waiting for a
+// geolocation-capable provider after a faster IP-only source has already
+// answered. An IP without its location is only a fallback, so a couple of
+// extra seconds is worth the complete readout.
+// publicIPGeoGrace 是纯 IP 源抢先应答后，继续等待归属地源的宽限时长。
+// 没有归属地的 IP 只是兜底，多等几秒换来完整的读数是值得的。
+const publicIPGeoGrace = 3 * time.Second
+
 // GetPublicIPInfo resolves the machine's current public (egress) IP and the
 // geolocation reported for it. It is a third-party lookup by definition —
 // the request necessarily discloses the public IP to whichever service
@@ -1116,23 +1132,24 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 
 	type attempt struct {
 		info PublicIPInfo
+		geo  bool
 	}
 	ch := make(chan attempt, len(publicIPProviders))
 	for _, p := range publicIPProviders {
-		go func(name, rawURL string, decode func([]byte, *PublicIPInfo) error) {
+		go func(name, rawURL string, geo bool, decode func([]byte, *PublicIPInfo) error) {
 			info := PublicIPInfo{Provider: name}
 			start := time.Now()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 			if err != nil {
 				info.Error = err.Error()
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			client := &http.Client{Timeout: publicIPTimeout, Transport: &http.Transport{}}
 			resp, err := client.Do(req)
 			if err != nil {
 				info.Error = err.Error()
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			defer resp.Body.Close()
@@ -1140,41 +1157,80 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 			info.LatencyMs = int(time.Since(start).Milliseconds())
 			if err != nil {
 				info.Error = err.Error()
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			if resp.StatusCode >= 400 {
 				info.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			if err := decode(body, &info); err != nil {
 				info.Error = err.Error()
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			if info.IP == "" {
 				info.Error = "empty response"
-				ch <- attempt{info}
+				ch <- attempt{info: info}
 				return
 			}
 			info.OK = true
-			ch <- attempt{info}
-		}(p.name, p.url, p.decode)
+			ch <- attempt{info: info}
+		}(p.name, p.url, p.geo, p.decode)
 	}
 
-	// First success wins; if every provider fails, report the first error
-	// so the UI shows something actionable.
-	// 第一个成功的胜出；若全部失败，报出第一个错误，好让界面显示可读的原因。
+	// A geolocation-capable answer beats a faster IP-only one: the point of
+	// the readout is the location, so when an IP-only source wins the race
+	// the lookup keeps the remaining providers on the hook for a short grace
+	// window before falling back to the bare IP. If every provider fails,
+	// the first error is reported so the UI shows something actionable.
+	// 归属地源的答案优先于更快的纯 IP 源：这个读数的核心就是归属地，所以当
+	// 纯 IP 源抢先应答时，查询会再给其余源一个短暂的宽限窗口，超时才回退到
+	// 裸 IP。若全部失败，报出第一个错误，好让界面显示可读的原因。
+	var ipOnlyRes *PublicIPInfo
 	var firstErr string
-	for i := 0; i < len(publicIPProviders); i++ {
-		a := <-ch
-		if a.info.OK {
-			return a.info
+	grace := time.NewTimer(publicIPGeoGrace)
+	defer grace.Stop()
+	graceArmed := false
+	remaining := len(publicIPProviders)
+	for remaining > 0 {
+		select {
+		case a := <-ch:
+			remaining--
+			if a.info.OK {
+				if a.geo {
+					return a.info
+				}
+				if ipOnlyRes == nil {
+					info := a.info
+					ipOnlyRes = &info
+					if !graceArmed {
+						grace.Reset(publicIPGeoGrace)
+						graceArmed = true
+					}
+				}
+				continue
+			}
+			if firstErr == "" && a.info.Error != "" {
+				firstErr = a.info.Error
+			}
+		case <-grace.C:
+			graceArmed = false
+			if ipOnlyRes != nil {
+				return *ipOnlyRes
+			}
+			// No IP-only answer yet — keep waiting for the rest.
+			// 还没有纯 IP 结果——继续等其余源。
+		case <-ctx.Done():
+			if ipOnlyRes != nil {
+				return *ipOnlyRes
+			}
+			return PublicIPInfo{Error: orDefault(firstErr, "all providers failed")}
 		}
-		if firstErr == "" && a.info.Error != "" {
-			firstErr = a.info.Error
-		}
+	}
+	if ipOnlyRes != nil {
+		return *ipOnlyRes
 	}
 	return PublicIPInfo{Error: orDefault(firstErr, "all providers failed")}
 }

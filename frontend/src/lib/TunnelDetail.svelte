@@ -677,13 +677,17 @@
   // The .conf keeps a single Endpoint; the alternatives live in the tunnel's
   // sidecar and are dialled automatically when the current one is dead or
   // markedly slower. Off by default — the list is inert until armed here.
-  let epSettings = { active: '', candidates: [], auto_switch: false };
+  let epSettings = { active: '', candidates: [], auto_switch: false, switch_mode: 'off' };
   // The global master switch (Settings → Advanced → Endpoint failover). When
   // it is off, no tunnel switches endpoints and this per-tunnel toggle is
   // greyed out; its stored value is preserved, not cleared.
   // 全局总开关（设置 → 高级 → Endpoint 容灾）。关闭时任何隧道都不切 endpoint，
   // 本每隧道开关灰掉；其已存值被保留而非清空。
   let endpointMasterEnabled = true;
+  // Effective switch-policy knobs read from the global settings, shown
+  // read-only in the endpoint section (null = not loaded yet).
+  // 从全局设置读到的生效切换策略参数，在 endpoint 区只读展示（null = 尚未加载）。
+  let endpointPolicy = null;
   let epDraft = '';
   let epError = '';
   let epBusy = false;
@@ -695,7 +699,7 @@
     epDraft = '';
     epMeasurements = [];
     if (!name) {
-      epSettings = { active: '', candidates: [], auto_switch: false };
+      epSettings = { active: '', candidates: [], auto_switch: false, switch_mode: 'off' };
       return;
     }
     try {
@@ -704,6 +708,7 @@
         active: s?.active || '',
         candidates: Array.isArray(s?.candidates) ? [...s.candidates] : [],
         auto_switch: s?.auto_switch === true,
+        switch_mode: s?.switch_mode || (s?.auto_switch === true ? 'reconnect' : 'off'),
       };
       // The per-tunnel toggle only does anything while the global master
       // switch is on; read it so the UI can grey the toggle (and keep the
@@ -713,11 +718,27 @@
       try {
         const gs = await TunnelService.GetSettings();
         endpointMasterEnabled = gs?.endpoint_failover_enabled !== false;
+        // Effective switch-policy knobs (same normalization Settings uses),
+        // shown read-only so the user can read the policy a tunnel is
+        // subject to without opening Settings.
+        // 生效的切换策略参数（与设置页相同的归一化），只读展示，用户无需
+        // 打开设置即可知道隧道当前受什么策略约束。
+        endpointPolicy = {
+          threshold: Number(gs?.endpoint_threshold_ms) >= 1 ? Number(gs.endpoint_threshold_ms) : 150,
+          margin: Number(gs?.endpoint_margin_pct) >= 1 ? Number(gs.endpoint_margin_pct) : 30,
+          sustained: Number(gs?.endpoint_sustained_sec) >= 0 ? Number(gs.endpoint_sustained_sec) : 30,
+          cooldown: Number(gs?.endpoint_cooldown_sec) >= 240 ? Number(gs.endpoint_cooldown_sec) : 300,
+        };
       } catch (_) {
         endpointMasterEnabled = true;
       }
+      // Fresh measurements for the newly selected tunnel — the per-candidate
+      // latency is meant to be live, not leftover from the previous tunnel.
+      // 给新选中的隧道拿一份新鲜测速——每候选延迟要的是实时值，不是上一条
+      // 隧道的残留。
+      if (epSettings.candidates.length > 0) measureEndpointCandidates(true);
     } catch (e) {
-      epSettings = { active: '', candidates: [], auto_switch: false };
+      epSettings = { active: '', candidates: [], auto_switch: false, switch_mode: 'off' };
       console.error('loadEndpointSettings for', name, e);
     }
   }
@@ -760,31 +781,44 @@
     }
   }
 
-  async function toggleEndpointAutoSwitch(e) {
+  // setEndpointMode persists one of the three switch-timing choices the user
+  // can make: off / reconnect-only / dynamic. The mode IS the switch —
+  // "off" disarms auto-switch, the other two arm it with the matching
+  // timing — so there is no separate boolean to keep in sync.
+  // setEndpointMode 持久化用户三选一的切换时机：关闭 / 仅断开后 / 动态。
+  // 模式本身就是开关——"off" 关闭自动切换，另外两档以对应时机启用——
+  // 因此不需要再维护一个单独的布尔值。
+  async function setEndpointMode(mode) {
     const name = $selectedTunnel?.name;
     if (!name || !endpointMasterEnabled) return;
-    const on = !!e.target.checked;
-    epSettings = { ...epSettings, auto_switch: on };
+    if (mode === epSettings.switch_mode) return;
+    const prev = epSettings.switch_mode;
+    epSettings = { ...epSettings, switch_mode: mode, auto_switch: mode !== 'off' };
     try {
-      await TunnelService.SetEndpointAutoSwitch(name, on);
+      await TunnelService.SetEndpointSwitchMode(name, mode);
       epError = '';
     } catch (e) {
-      epSettings = { ...epSettings, auto_switch: !on };
+      epSettings = { ...epSettings, switch_mode: prev, auto_switch: prev !== 'off' };
       epError = errText(e);
     }
   }
 
-  async function measureEndpointCandidates() {
+  // silent=true is for the automatic refreshes: a background probe failing
+  // is routine (offline moments, ICMP blocked) and must not spam the error
+  // line that manual actions use.
+  // silent=true 用于自动刷新：后台探测失败是常态（离线瞬间、ICMP 被拦），
+  // 不应像手动操作那样把错误刷进错误栏。
+  async function measureEndpointCandidates(silent = false) {
     const name = $selectedTunnel?.name;
-    if (!name) return;
+    if (!name || epSettings.candidates.length === 0) return;
     epMeasuring = true;
     try {
       const rows = await TunnelService.MeasureEndpointCandidates(name);
       epMeasurements = Array.isArray(rows) ? rows : [];
-      epError = '';
+      if (!silent) epError = '';
     } catch (e) {
       epMeasurements = [];
-      epError = errText(e);
+      if (!silent) epError = errText(e);
     } finally {
       epMeasuring = false;
     }
@@ -911,11 +945,27 @@
   function handleKeydown(e) {
     if (e.key !== 'Escape') return;
     if (showDeleteConfirm) cancelDelete();
+    else if (showRenameConfirm) showRenameConfirm = false;
     else if (renaming) cancelRename();
   }
+  // Periodic refresh of the per-candidate latency while the detail view is
+  // open — reuses the existing one-shot measure API (no new backend stream)
+  // and stays out of the latency-probe target slots entirely.
+  // 详情页打开期间周期性刷新每候选延迟——复用现有的一次性测速 API（不加
+  // 后端流），也完全不占用延迟探测的 target 槽位。
+  let epAutoTimer = null;
   if (typeof window !== 'undefined') {
+    epAutoTimer = setInterval(() => {
+      if (document.hidden) return;
+      const t = $selectedTunnel;
+      if (!t?.endpoint || epMeasuring || epBusy) return;
+      measureEndpointCandidates(true);
+    }, 30000);
     window.addEventListener('keydown', handleKeydown);
-    onDestroy(() => window.removeEventListener('keydown', handleKeydown));
+    onDestroy(() => {
+      clearInterval(epAutoTimer);
+      window.removeEventListener('keydown', handleKeydown);
+    });
   }
 
   function formatBytes(bytes) {
@@ -936,11 +986,28 @@
   // flag short-circuits that blur-driven commit.
   let renameCancelled = false;
 
+  // Rename-while-connected confirmation. A connected tunnel cannot be
+  // renamed — the tunnel name is also its config file name and the running
+  // interface is tracked by it — so clicking edit while connected opens a
+  // dialog with a "disconnect and rename" action instead of the inline
+  // bottom-of-panel error that is easy to miss.
+  // 连接中改名的确认对话框。连接中的隧道无法改名——隧道名同时是它的
+  // 配置文件名，运行中的接口也按这个名字跟踪——因此连接时点击编辑不再
+  // 走底部那条容易漏看的内联报错，而是弹出对话框，提供「断开并改名」。
+  let showRenameConfirm = false;
+  let renameConfirmBtn = null;
+
   async function startRename() {
     if (isConnected) {
-      error = $t('confirm.disconnect_first');
+      showRenameConfirm = true;
+      await tick();
+      renameConfirmBtn?.focus();
       return;
     }
+    beginRename();
+  }
+
+  async function beginRename() {
     renameValue = $selectedTunnel.name;
     renameCancelled = false;
     renaming = true;
@@ -949,6 +1016,18 @@
     await tick();
     renameInput?.focus();
     renameInput?.select();
+  }
+
+  async function confirmRenameDisconnect() {
+    showRenameConfirm = false;
+    // disconnect() swallows its own failures into `error`; an empty error
+    // after it returns means the tunnel is down and renaming may proceed.
+    // disconnect() 把自己的失败吞进 `error`；它返回后 error 为空即隧道
+    // 已断开，可以改名。
+    error = '';
+    await disconnect();
+    if (error) return;
+    beginRename();
   }
 
   async function commitRename() {
@@ -1351,28 +1430,44 @@
       <div class="endpoint-candidates">
         <div class="endpoint-candidates-head">
           <h3 class="section-label">{$t('tunnel.endpoint_candidates')}</h3>
-          <label class="endpoint-switch-toggle">
-            <input type="checkbox" checked={epSettings.auto_switch}
-              disabled={!endpointMasterEnabled || epSettings.candidates.length < 2}
-              on:change={toggleEndpointAutoSwitch} />
-            <span>{$t('tunnel.endpoint_auto_switch')}</span>
-          </label>
-          {#if !endpointMasterEnabled}
-            <span class="endpoint-master-off">{$t('tunnel.endpoint_auto_switch_disabled')}</span>
-          {/if}
           <button class="hint-toggle" type="button" on:click={measureEndpointCandidates}
             disabled={epMeasuring}>
             {epMeasuring ? $t('tunnel.endpoint_measuring') : $t('tunnel.endpoint_measure')}
           </button>
         </div>
+        <!-- Switch-timing selector: the user's choice, not ours. "reconnect"
+             is the default and changes nothing historically; "dynamic" lets
+             the helper switch proactively (one brief reconnect per switch). -->
+        <div class="endpoint-mode-row">
+          <span class="endpoint-mode-label">{$t('tunnel.endpoint_auto_switch')}</span>
+          <div class="endpoint-mode-switch" role="radiogroup" aria-label={$t('tunnel.endpoint_auto_switch')}>
+            {#each [
+              { mode: 'off', key: 'tunnel.endpoint_mode_off' },
+              { mode: 'reconnect', key: 'tunnel.endpoint_mode_reconnect' },
+              { mode: 'dynamic', key: 'tunnel.endpoint_mode_dynamic' },
+            ] as opt (opt.mode)}
+              <button type="button" role="radio" aria-checked={epSettings.switch_mode === opt.mode}
+                class="endpoint-mode-btn" class:endpoint-mode-btn-active={epSettings.switch_mode === opt.mode}
+                disabled={!endpointMasterEnabled || epSettings.candidates.length < 2}
+                on:click={() => setEndpointMode(opt.mode)}>
+                {$t(opt.key)}
+              </button>
+            {/each}
+          </div>
+          {#if !endpointMasterEnabled}
+            <span class="endpoint-master-off">{$t('tunnel.endpoint_auto_switch_disabled')}</span>
+          {:else if epSettings.switch_mode === 'dynamic'}
+            <span class="endpoint-mode-hint">{$t('tunnel.endpoint_mode_dynamic_hint')}</span>
+          {/if}
+        </div>
         <p class="endpoint-candidates-hint">{$t('tunnel.endpoint_candidates_hint')}</p>
+        {#if endpointPolicy}
+          <p class="endpoint-effective">{$t('tunnel.endpoint_effective_values', endpointPolicy)}</p>
+        {/if}
         <div class="endpoint-candidate-list">
           {#each epSettings.candidates as cand (cand)}
             <div class="endpoint-candidate" class:endpoint-candidate-active={cand === epSettings.active}>
               <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
-              {#if cand === epSettings.active}
-                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_active')}</span>
-              {/if}
               {#if epMeasurementFor(cand)}
                 <span class="endpoint-candidate-ms"
                   class:ms-ok={epMeasurementFor(cand).reachable}
@@ -1381,6 +1476,9 @@
                     ? `${Math.round(epMeasurementFor(cand).latency_ms)} ms`
                     : $t('tunnel.endpoint_unreachable')}
                 </span>
+              {/if}
+              {#if cand === epSettings.active}
+                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_active')}</span>
               {/if}
               <button class="endpoint-candidate-del" type="button"
                 title={$t('tunnel.endpoint_candidate_remove')}
@@ -1485,6 +1583,26 @@
       <div class="confirm-footer">
         <button class="dialog-btn dialog-btn-ghost" on:click={cancelDelete}>{$t('confirm.no')}</button>
         <button class="dialog-btn dialog-btn-danger" bind:this={deleteConfirmBtn} on:click={confirmDelete}>{$t('confirm.yes')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showRenameConfirm}
+  <div class="confirm-backdrop" on:click={() => { showRenameConfirm = false; }}>
+    <div class="confirm-dialog" on:click|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+      <div class="dialog-header">
+        <div class="dialog-icon-tile danger">
+          <Icon name="triangle-alert" size={18} strokeWidth={2} />
+        </div>
+        <div class="dialog-header-text">
+          <h3>{$t('confirm.rename_connected_title')}</h3>
+        </div>
+      </div>
+      <p class="dialog-message">{$t('confirm.rename_connected_message', { name: $selectedTunnel.name })}</p>
+      <div class="confirm-footer">
+        <button class="dialog-btn dialog-btn-ghost" on:click={() => { showRenameConfirm = false; }}>{$t('confirm.no')}</button>
+        <button class="dialog-btn dialog-btn-danger" bind:this={renameConfirmBtn} on:click={confirmRenameDisconnect}>{$t('confirm.rename_disconnect_rename')}</button>
       </div>
     </div>
   </div>
@@ -2069,6 +2187,48 @@
     color: var(--text-secondary);
     cursor: pointer;
   }
+  .endpoint-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 2px 0 4px;
+  }
+  .endpoint-mode-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .endpoint-mode-switch {
+    display: inline-flex;
+    border: 1px solid var(--border-color, rgba(120, 120, 128, 0.24));
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .endpoint-mode-btn {
+    padding: 2px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border-color, rgba(120, 120, 128, 0.24));
+    cursor: pointer;
+  }
+  .endpoint-mode-btn:last-child {
+    border-right: none;
+  }
+  .endpoint-mode-btn-active {
+    color: var(--text-primary);
+    background-color: var(--bg-secondary, rgba(120, 120, 128, 0.12));
+    font-weight: 500;
+  }
+  .endpoint-mode-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .endpoint-mode-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
   .endpoint-master-off {
     display: inline-block;
     margin-left: 4px;
@@ -2082,6 +2242,11 @@
     margin: 4px 0 6px;
     font-size: 11px;
     line-height: 15px;
+    color: var(--text-muted);
+  }
+  .endpoint-effective {
+    margin: 2px 0 0;
+    font-size: 12px;
     color: var(--text-muted);
   }
   .endpoint-candidate-list {

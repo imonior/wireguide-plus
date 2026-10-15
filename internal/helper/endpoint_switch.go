@@ -49,6 +49,21 @@ func (t *switchTracker) allow(name string, cooldown time.Duration) bool {
 	return true
 }
 
+// inCooldown is the read-only counterpart of allow: it reports whether a
+// switch is currently blocked WITHOUT stamping the clock. The dynamic
+// evaluation loop uses it so a periodic probe that finds nothing to do
+// never starts a cooldown it cannot honour.
+// inCooldown 是 allow 的只读版：只报告切换当前是否被挡，不打时间戳。
+// 动态评估循环用它，保证一次什么都没做的周期探测不会启动一个自己无法兑现的冷却。
+func (t *switchTracker) inCooldown(name string, cooldown time.Duration) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if prev, ok := t.at[name]; ok && time.Since(prev) < cooldown {
+		return true
+	}
+	return false
+}
+
 // pendingImprovement records a proposed IMPROVEMENT switch (not a failover)
 // that has not yet cleared the sustained-confirmation gate. The switch only
 // commits when the same candidate is proposed again at least sustainedSec
@@ -66,6 +81,58 @@ var pendingImprovements = struct {
 	mu sync.Mutex
 	m  map[string]pendingImprovement
 }{m: make(map[string]pendingImprovement)}
+
+// blessedSwitch hands a confirmed improvement decision from the dynamic
+// evaluation loop to the reconnect path. The loop measures and waits out the
+// sustained window; when the gate passes it blesses (candidate, tunnel) and
+// triggers a reconnect. maybeSwitchEndpoint — running inside that reconnect
+// — takes the blessing to skip the sustained gate it would otherwise fail
+// (its own confirmImprovement state was just consumed by the loop), then
+// re-measures: if the improvement no longer reproduces, the blessing simply
+// expires unused and nothing switches.
+// blessedSwitch 把动态评估循环确认过的择优决定交接给重连路径。循环负责测量并
+// 等满持续窗口；门通过后对（隧道，候选）打上祝福并触发重连。运行在重连内的
+// maybeSwitchEndpoint 凭祝福跳过持续门（它自己的 confirmImprovement 状态刚被
+// 循环消费掉），随后仍会现场复测——若改进不再复现，祝福自然过期，什么都不会切。
+type blessing struct {
+	candidate string
+	at        time.Time
+}
+
+// blessingTTL bounds how long a confirmed decision stays redeemable. It only
+// needs to cover the gap between the loop's confirmation and the reconnect
+// path's own measurement — seconds, not minutes.
+// blessingTTL 限定一条已确认决定的有效期。它只需覆盖从循环确认到重连路径复测
+// 之间的间隙——以秒计，而非分钟。
+const blessingTTL = 90 * time.Second
+
+var blessedSwitches = struct {
+	mu sync.Mutex
+	m  map[string]blessing
+}{m: make(map[string]blessing)}
+
+// blessEndpointSwitch records a confirmed improvement for name/candidate.
+// blessEndpointSwitch 为 name/candidate 记录一条已确认的择优切换。
+func blessEndpointSwitch(name, candidate string) {
+	blessedSwitches.mu.Lock()
+	defer blessedSwitches.mu.Unlock()
+	blessedSwitches.m[name] = blessing{candidate: candidate, at: time.Now()}
+}
+
+// takeBlessing consumes a fresh blessing matching name/candidate. A stale or
+// mismatched blessing is dropped either way.
+// takeBlessing 消费一条与 name/candidate 匹配且未过期的祝福。过期或不匹配的
+// 祝福无论哪种情况都会被丢弃。
+func takeBlessing(name, candidate string) bool {
+	blessedSwitches.mu.Lock()
+	defer blessedSwitches.mu.Unlock()
+	b, ok := blessedSwitches.m[name]
+	if !ok {
+		return false
+	}
+	delete(blessedSwitches.m, name)
+	return b.candidate == candidate && time.Since(b.at) < blessingTTL
+}
 
 // maybeSwitchEndpoint rotates a tunnel to a better endpoint candidate before
 // an imminent reconnect. It is the "the link died, try the other door" half
@@ -102,9 +169,6 @@ func (h *Helper) maybeSwitchEndpoint(name string, cfg *domain.WireGuardConfig) {
 	if !meta.EndpointAutoSwitchEnabled() || len(candidates) < 2 {
 		return
 	}
-	if !endpointSwitches.allow(name, effectiveCooldown(settings)) {
-		return
-	}
 	active := firstPeerEndpoint(cfg)
 	if active == "" {
 		return
@@ -117,13 +181,25 @@ func (h *Helper) maybeSwitchEndpoint(name string, cfg *domain.WireGuardConfig) {
 	if chosen == "" {
 		return
 	}
+	// The cooldown stamp lives here — after a candidate was actually chosen
+	// — so an evaluation that finds nothing to switch (the common case on a
+	// healthy link) does not burn the cooldown for nothing.
+	// 冷却打点放在这里——真的选出了候选之后——使一次没东西可切的评估
+	// （健康链路上的常态）不会白白烧掉冷却期。
+	if !endpointSwitches.allow(name, effectiveCooldown(settings)) {
+		return
+	}
 	if !failover {
-		// Improvement only: require the better candidate to have been
-		// observed across the sustained window before committing, so one
-		// noisy probe does not move a live link. Record and wait.
-		// 仅择优：要求备选在持续窗口内被持续观察到更优才提交，避免一次噪声探测
-		// 就挪动活着的链。记录并等待。
-		if !confirmImprovement(name, chosen, settings.EffectiveEndpointSustainedSec()) {
+		// Improvement only. A blessing from the dynamic loop's sustained
+		// confirmation redeems the gate directly; otherwise require the
+		// better candidate to have been observed across the sustained
+		// window before committing, so one noisy probe does not move a
+		// live link.
+		// 仅择优。动态循环持续确认后的祝福可直接兑换本门；否则要求更优
+		// 候选在持续窗口内被持续观察到才提交，避免一次噪声探测就挪动
+		// 活着的链。
+		if !takeBlessing(name, chosen) &&
+			!confirmImprovement(name, chosen, settings.EffectiveEndpointSustainedSec()) {
 			return
 		}
 	}

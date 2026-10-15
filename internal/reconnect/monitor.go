@@ -495,6 +495,18 @@ func (m *Monitor) triggerReconnect() {
 	m.triggerReconnectTunnel("")
 }
 
+// TriggerTunnelReconnect requests a controlled disconnect + reconnect of one
+// tunnel through the exact same gated path the health loop uses (automation
+// gates, backoff, endpoint re-evaluation). It is the entry point for the
+// dynamic endpoint-switch loop: the loop decides WHEN a reconnect is worth
+// its cost, the monitor owns HOW it happens.
+// TriggerTunnelReconnect 通过与健康循环完全相同的受控路径（自动化门控、退避、
+// endpoint 重评估）请求断开并重连单条隧道。它是动态 endpoint 切换循环的入口：
+// 循环负责判断「何时值得付这次重连的代价」，监视器负责「如何发生」。
+func (m *Monitor) TriggerTunnelReconnect(tunnelName string) {
+	m.triggerReconnectTunnel(tunnelName)
+}
+
 func (m *Monitor) triggerReconnectTunnel(tunnelName string) {
 	// Authoritative gate for named-tunnel reconnects: a tunnel that has opted
 	// out of automation must never be auto-reconnected by the dead-connection

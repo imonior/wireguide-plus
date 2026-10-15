@@ -444,6 +444,12 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// address conflict, which no engine path may touch until the user decides.
 	h.monitor.SetAutomationDisabledPredicate(h.automationBlockedForReconnect)
 	h.monitor.Start()
+	// Dynamic endpoint-switch loop: for tunnels that opted into proactive
+	// switching, periodically re-evaluate candidates and reconnect when the
+	// improvement rule holds. Exits with h.done during cleanup.
+	// 动态 endpoint 切换循环：对选择了主动切换的隧道周期重评估候选，
+	// 改进规则成立时触发重连。cleanup 关闭 h.done 时退出。
+	h.goSafe("endpoint-dynamic", h.endpointDynamicLoop)
 
 	// Register RPC handlers
 	h.registerHandlers()

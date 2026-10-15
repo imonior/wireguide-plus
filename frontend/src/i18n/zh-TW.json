@@ -66,6 +66,11 @@
     "connect": "連線",
     "disconnect": "中斷",
     "endpoint_auto_switch_disabled": "已被全域設定停用",
+    "endpoint_mode_off": "關閉",
+    "endpoint_mode_reconnect": "中斷後",
+    "endpoint_mode_dynamic": "動態",
+    "endpoint_mode_dynamic_hint": "符合策略時主動切換；每次切換會短暫中斷重連",
+    "endpoint_effective_values": "切換策略：閾值 {threshold} ms · 幅度 {margin}% · 持續 {sustained}s · 冷卻 {cooldown}s",
     "manual_connect_tip": "手動連線（將強制執行連線，忽略任何自動規則）",
     "manual_disconnect_tip": "手動中斷（將強制執行中斷，忽略任何自動規則）",
     "helper_recovering": "背景服務正在復原——請稍後重試。",
@@ -298,6 +303,8 @@
     "public_ip_disabled": "公開 IP 查詢已關閉。",
     "public_ip_loading": "查詢中…",
     "public_ip_failed": "查詢失敗：{err}",
+    "public_ip_stale": "{time} 重新整理失敗，顯示的是上次結果",
+    "proxy_mirror_retest": "重新測速",
     "public_ip_hint": "由 {provider} 提供"
   },
   "confirm": {
@@ -305,7 +312,10 @@
     "delete_message": "確定要刪除「{name}」嗎？",
     "yes": "刪除",
     "no": "取消",
-    "disconnect_first": "請先中斷隧道連線"
+    "disconnect_first": "請先中斷隧道連線",
+    "rename_connected_title": "重新命名已連線的隧道",
+    "rename_connected_message": "「{name}」正在連線中。隧道名稱同時是它的設定檔名稱，連線中的隧道無法重新命名——需要先中斷連線。",
+    "rename_disconnect_rename": "中斷連線並重新命名"
   },
   "log": {
     "open_folder": "打開日誌目錄",

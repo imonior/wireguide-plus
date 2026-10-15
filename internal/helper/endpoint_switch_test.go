@@ -122,3 +122,71 @@ func TestFirstPeerEndpoint(t *testing.T) {
 		t.Fatalf("want first peer endpoint a:51820, got %q", got)
 	}
 }
+
+// TestSwitchTracker_InCooldownReadOnly: inCooldown mirrors allow's blocking
+// decision WITHOUT stamping the clock — a probe that only reads must not
+// start a cooldown it cannot honour.
+// TestSwitchTracker_InCooldownReadOnly：inCooldown 与 allow 的拦截结论一致，
+// 但不打时间戳——只读的探测不能启动一个自己无法兑现的冷却。
+func TestSwitchTracker_InCooldownReadOnly(t *testing.T) {
+	endpointSwitches.mu.Lock()
+	delete(endpointSwitches.at, "t-ro")
+	endpointSwitches.mu.Unlock()
+	if endpointSwitches.inCooldown("t-ro", minEndpointCooldown) {
+		t.Fatal("unknown tunnel is not in cooldown")
+	}
+	// Read-only check must not arm the tracker.
+	// 只读检查不得给追踪器打点。
+	if endpointSwitches.inCooldown("t-ro", minEndpointCooldown) {
+		t.Fatal("read-only check must not start a cooldown")
+	}
+	if !endpointSwitches.allow("t-ro", minEndpointCooldown) {
+		t.Fatal("allow should still be available after read-only checks")
+	}
+	if !endpointSwitches.inCooldown("t-ro", minEndpointCooldown) {
+		t.Fatal("after allow stamps, inCooldown must report blocked")
+	}
+}
+
+// TestBlessingRoundTrip: bless → take redeems exactly once for the matching
+// candidate; a mismatched candidate or a second take finds nothing.
+// TestBlessingRoundTrip：祝福 → 领取对匹配候选恰好兑现一次；候选不匹配或
+// 二次领取都一无所获。
+func TestBlessingRoundTrip(t *testing.T) {
+	name := "t-bless"
+	blessedSwitches.mu.Lock()
+	delete(blessedSwitches.m, name)
+	blessedSwitches.mu.Unlock()
+
+	blessEndpointSwitch(name, "b:51820")
+	if !takeBlessing(name, "b:51820") {
+		t.Fatal("fresh matching blessing should redeem")
+	}
+	if takeBlessing(name, "b:51820") {
+		t.Fatal("blessing is single-use")
+	}
+
+	blessEndpointSwitch(name, "b:51820")
+	if takeBlessing(name, "c:51820") {
+		t.Fatal("mismatched candidate must not redeem")
+	}
+	// The mismatched take consumed the entry; re-bless for cleanliness.
+	// 不匹配的领取已消费条目；为后续测试干净起见重新祝福。
+	blessedSwitches.mu.Lock()
+	delete(blessedSwitches.m, name)
+	blessedSwitches.mu.Unlock()
+}
+
+// TestBlessingExpiry: a blessing older than blessingTTL is dropped, not
+// redeemed — the dynamic decision must not outlive its measurement.
+// TestBlessingExpiry：超过 blessingTTL 的祝福应被丢弃而非兑现——动态决定
+// 不能比它的测量活得更久。
+func TestBlessingExpiry(t *testing.T) {
+	name := "t-expire"
+	blessedSwitches.mu.Lock()
+	blessedSwitches.m[name] = blessing{candidate: "b:51820", at: time.Now().Add(-blessingTTL - time.Second)}
+	blessedSwitches.mu.Unlock()
+	if takeBlessing(name, "b:51820") {
+		t.Fatal("expired blessing must not redeem")
+	}
+}

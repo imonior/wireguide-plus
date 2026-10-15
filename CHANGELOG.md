@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.0] - 2026-10-15
+
+### ✨ Added
+
+- **Per-tunnel endpoint switch modes.** The per-tunnel endpoint control is now a three-state selector: **off**; **switch on reconnect** — candidates are re-ranked whenever the tunnel connects or disconnects, for any reason; and **dynamic** — a background loop keeps measuring candidates and moves the tunnel to a materially faster endpoint after a sustained confirmation window. The UI now shows exactly what the system does, and users who prefer the previous behaviour can keep it.
+- **Live candidate latency in tunnel details.** While a tunnel's detail view is open, each endpoint candidate is measured automatically every 30 seconds (and immediately when candidates are added, removed or selected), displayed as an independent module; the effective failover policy values are shown read-only next to it.
+- **Rename a connected tunnel.** The edit button next to a connected tunnel's name opens a dialog offering to disconnect and rename in one step.
+
+### 🔧 Changed
+
+- **Proxy panel polish.** Public-IP lookup prefers geolocation-capable providers (with a short grace window so location data is not dropped when a faster non-geo provider answers first); mirrors can be re-tested on demand, rows are sorted by measured latency, and the last known public IP is retained (marked stale) while a fresh lookup runs.
+- **Advanced settings reordered.** Options are regrouped by workflow: WireGuard scripts and AmneziaWG first, then connection and endpoint failover, DNS, logging and backup.
+
 ## [2.6.0] - 2026-10-15
 
 ### ✨ Added

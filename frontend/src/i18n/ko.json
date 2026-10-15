@@ -66,6 +66,11 @@
     "connect": "연결",
     "disconnect": "연결 해제",
     "endpoint_auto_switch_disabled": "전역 설정에 의해 비활성화됨",
+    "endpoint_mode_off": "끄기",
+    "endpoint_mode_reconnect": "재연결 시",
+    "endpoint_mode_dynamic": "동적",
+    "endpoint_mode_dynamic_hint": "정책을 충족하면 능동적으로 전환합니다. 전환할 때마다 터널이 잠시 재연결됩니다",
+    "endpoint_effective_values": "전환 정책: 임계값 {threshold} ms · 마진 {margin}% · 지속 {sustained}초 · 쿨다운 {cooldown}초",
     "manual_connect_tip": "수동 연결(강제로 연결하고 모든 자동 규칙을 무시합니다)",
     "manual_disconnect_tip": "수동 연결 해제(강제로 연결을 해제하고 모든 자동 규칙을 무시합니다)",
     "helper_recovering": "헬퍼가 복구 중입니다 — 잠시 후 다시 시도하세요.",
@@ -298,6 +303,8 @@
     "public_ip_disabled": "공인 IP 조회가 꺼져 있습니다.",
     "public_ip_loading": "조회 중…",
     "public_ip_failed": "조회 실패: {err}",
+    "public_ip_stale": "{time} 새로고침 실패 — 이전 결과 표시 중",
+    "proxy_mirror_retest": "다시 테스트",
     "public_ip_hint": "제공: {provider}"
   },
   "confirm": {
@@ -305,7 +312,10 @@
     "delete_message": "\"{name}\"을(를) 삭제하시겠습니까?",
     "yes": "삭제",
     "no": "취소",
-    "disconnect_first": "먼저 연결을 해제하세요"
+    "disconnect_first": "먼저 연결을 해제하세요",
+    "rename_connected_title": "연결된 터널 이름 변경",
+    "rename_connected_message": "\"{name}\"이(가) 연결 중입니다. 터널 이름은 설정 파일 이름이기도 하므로 연결 중에는 이름을 변경할 수 없습니다. 먼저 연결을 해제하세요.",
+    "rename_disconnect_rename": "연결 해제 후 이름 변경"
   },
   "log": {
     "open_folder": "로그 폴더 열기",

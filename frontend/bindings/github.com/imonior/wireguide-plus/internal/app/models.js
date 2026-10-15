@@ -422,6 +422,17 @@ export class EndpointSettings {
              */
             this["auto_switch"] = false;
         }
+        if (!("switch_mode" in $$source)) {
+            /**
+             * SwitchMode is the normalized switch timing: "off", "reconnect" or
+             * "dynamic" (see storage.TunnelMeta.EndpointSwitchTiming).
+             * SwitchMode 是归一化的切换时机："off" / "reconnect" / "dynamic"
+             * （见 storage.TunnelMeta.EndpointSwitchTiming）。
+             * @member
+             * @type {string}
+             */
+            this["switch_mode"] = "";
+        }
 
         Object.assign(this, $$source);
     }

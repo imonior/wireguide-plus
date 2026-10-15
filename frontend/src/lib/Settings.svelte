@@ -662,7 +662,21 @@
   // Effective list: a persisted array wins (including an empty one, which
   // is how "delete them all" survives a restart); null → defaults.
   $: mirrorList = Array.isArray(settings.proxy_mirrors) ? settings.proxy_mirrors : DEFAULT_MIRRORS;
-  $: mirrorRows = mirrorList.map((value) => ({ value, label: mirrorHost(value) }));
+  // Display order follows the latest scan: reachable rows fastest-first,
+  // then failures, then rows not yet measured (stored order). The stored
+  // list itself is never reordered — this only affects presentation.
+  // 展示顺序跟随最近一次测速：可达行按延迟升序，失败行其后，未测行保持
+  // 存储顺序。存储的列表本身不会被重排——这只影响展示。
+  $: mirrorRows = (() => {
+    const rows = mirrorList.map((value) => ({ value, label: mirrorHost(value) }));
+    const rank = (r) => {
+      const s = scanRows[r.value];
+      if (!s) return 2;
+      return s.ok ? 0 : 1;
+    };
+    const lat = (r) => (scanRows[r.value]?.latency_ms ?? Number.MAX_SAFE_INTEGER);
+    return [...rows].sort((a, b) => rank(a) - rank(b) || lat(a) - lat(b));
+  })();
 
   function mirrorHost(value) {
     try {
@@ -689,7 +703,7 @@
   // instead of guessing.
   let mirrorScan = { running: false, rows: [] };
   let newMirror = '';
-  let publicIP = { loading: false, info: null };
+  let publicIP = { loading: false, info: null, errAt: 0, error: '' };
 
   // Indexed by "direct" or by mirror prefix. A reactive map (not a
   // function) so the template re-renders when a scan lands.
@@ -729,17 +743,28 @@
 
   async function loadPublicIP() {
     if (!settings.public_ip_lookup) {
-      publicIP = { loading: false, info: null };
+      publicIP = { loading: false, info: null, errAt: 0, error: '' };
       return;
     }
-    publicIP = { loading: true, info: null };
+    const prev = publicIP.info;
+    publicIP = { ...publicIP, loading: true };
     try {
       const info = await TunnelService.GetPublicIPInfo();
-      publicIP = { loading: false, info: info || null };
+      if (info?.ok) {
+        publicIP = { loading: false, info, errAt: 0, error: '' };
+      } else {
+        // Keep showing the previous readout: an IP that was right a moment
+        // ago beats an empty dash. The failure time is shown next to it.
+        // 保留上次的读数：一分钟前还是对的 IP 好过空的「—」。失败时间显示
+        // 在读数旁边。
+        publicIP = { loading: false, info: prev, errAt: Date.now(), error: info?.error || '' };
+      }
     } catch (e) {
-      publicIP = { loading: false, info: { ok: false, error: String(e) } };
+      publicIP = { loading: false, info: prev, errAt: Date.now(), error: String(e) };
     }
   }
+
+  $: staleTime = publicIP.errAt ? new Date(publicIP.errAt).toLocaleTimeString() : '';
 
   function addMirror() {
     const v = String(newMirror || '').trim().replace(/\/+$/, '');
@@ -1041,15 +1066,18 @@
                   <p class="setting-desc">
                     {#if !settings.public_ip_lookup}
                       {$t('settings.public_ip_disabled')}
-                    {:else if publicIP.loading}
+                    {:else if publicIP.loading && !publicIP.info}
                       {$t('settings.public_ip_loading')}
                     {:else if publicIP.info?.ok}
                       {publicLocation}{#if publicIP.info.isp} · {publicIP.info.isp}{/if}
                       {#if publicIP.info.provider}
                         {' '}— {$t('settings.public_ip_hint', { provider: publicIP.info.provider })}
                       {/if}
-                    {:else if publicIP.info}
-                      {$t('settings.public_ip_failed', { err: publicIP.info.error })}
+                      {#if publicIP.errAt}
+                        {' '}— <span class="public-ip-stale">{$t('settings.public_ip_stale', { time: staleTime })}</span>
+                      {/if}
+                    {:else if publicIP.info || publicIP.errAt}
+                      {$t('settings.public_ip_failed', { err: publicIP.info?.error || publicIP.error || '' })}
                     {/if}
                   </p>
                 </div>
@@ -1098,9 +1126,15 @@
               <!-- Managed mirror list: every preset is removable, and the
                    measured latency tells the user which one to keep. -->
               <div class="setting-row setting-row--column">
-                <div class="setting-info">
-                  <label class="setting-label">{$t('settings.proxy_mirror_list')}</label>
-                  <p class="setting-desc">{$t('settings.proxy_mirror_list_hint')}</p>
+                <div class="mirror-list-head">
+                  <div class="setting-info">
+                    <label class="setting-label">{$t('settings.proxy_mirror_list')}</label>
+                    <p class="setting-desc">{$t('settings.proxy_mirror_list_hint')}</p>
+                  </div>
+                  <button class="btn-secondary mirror-retest" type="button"
+                    on:click={runMirrorScan} disabled={mirrorScan.running}>
+                    {mirrorScan.running ? $t('settings.proxy_scanning') : $t('settings.proxy_mirror_retest')}
+                  </button>
                 </div>
                 <div class="mirror-list">
                   <div class="mirror-row mirror-row--direct">
@@ -1162,6 +1196,124 @@
           </div>
 
         {:else if activeTab === 'advanced'}
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_wg_scripts')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="wg-scripts">{$t('settings.wg_scripts')}</label>
+                  <p class="setting-desc">{$t('settings.wg_scripts_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="wg-scripts" type="checkbox" checked={settings.enable_wg_scripts} on:change={onWgScriptsChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              {#if wgScriptsWarn}
+                <div class="wg-scripts-warn">
+                  <p class="wg-scripts-warn-text">{$t('settings.wg_scripts_warn')}</p>
+                  <div class="wg-scripts-warn-actions">
+                    <button class="btn btn--primary" on:click={onWgScriptsWarnConfirm}>{$t('settings.wg_scripts_enable')}</button>
+                    <button class="btn" on:click={onWgScriptsWarnCancel}>{$t('settings.wg_scripts_cancel')}</button>
+                  </div>
+                </div>
+              {/if}
+              {#if settings.enable_wg_scripts}
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <span class="setting-label">{$t('settings.scripts_folder')}</span>
+                    <p class="setting-desc">{$t('settings.scripts_folder_hint')}</p>
+                  </div>
+                  <button class="folder-btn" on:click={() => openFolder('scripts')} disabled={openingFolder}>
+                    {$t('settings.open_folder')}
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_awg')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="awg-support">{$t('settings.enable_awg')}</label>
+                  <p class="setting-desc">{$t('settings.enable_awg_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="awg-support" type="checkbox" checked={settings.enable_awg} on:change={onAwgChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              {#if awgWarn}
+                <!-- Inline highlight bar, identical structure and styling to
+                     the wg-scripts confirm — a nested modal was explicitly
+                     rejected by the user. -->
+                <div class="wg-scripts-warn">
+                  <p class="wg-scripts-warn-text">{$t('settings.awg_confirm')}</p>
+                  <div class="wg-scripts-warn-actions">
+                    <button class="btn btn--primary" on:click={onAwgWarnConfirm}>{$t('settings.awg_confirm_enable')}</button>
+                    <button class="btn" on:click={onAwgWarnCancel}>{$t('settings.awg_confirm_cancel')}</button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_connection')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="health-check">{$t('settings.health_check')}</label>
+                  <p class="setting-desc">{$t('settings.health_check_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="health-check" type="checkbox"
+                    checked={settings.health_check}
+                    on:change={onHealthCheckChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="keep-connection-on-idle">{$t('settings.keep_connection_on_idle')}</label>
+                  <p class="setting-desc">{$t('settings.keep_connection_on_idle_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="keep-connection-on-idle" type="checkbox"
+                    checked={settings.keep_connection_on_idle}
+                    on:change={onKeepConnectionOnIdleChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="prevent-system-sleep">{$t('settings.prevent_system_sleep')}</label>
+                  <p class="setting-desc">{$t('settings.prevent_system_sleep_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="prevent-system-sleep" type="checkbox"
+                    checked={settings.prevent_system_sleep}
+                    on:change={onPreventSystemSleepChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="pin-interface">{$t('settings.pin_interface')}</label>
+                  <p class="setting-desc">{$t('settings.pin_interface_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="pin-interface" type="checkbox"
+                    checked={settings.pin_interface}
+                    on:change={onPinInterfaceChange} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-section">
             <h4 class="section-title">{$t('settings.endpoint_failover')}</h4>
             <div class="settings-card">
@@ -1235,60 +1387,6 @@
           </div>
 
           <div class="settings-section">
-            <h4 class="section-title">{$t('settings.section_connection')}</h4>
-            <div class="settings-card">
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="health-check">{$t('settings.health_check')}</label>
-                  <p class="setting-desc">{$t('settings.health_check_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="health-check" type="checkbox"
-                    checked={settings.health_check}
-                    on:change={onHealthCheckChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="keep-connection-on-idle">{$t('settings.keep_connection_on_idle')}</label>
-                  <p class="setting-desc">{$t('settings.keep_connection_on_idle_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="keep-connection-on-idle" type="checkbox"
-                    checked={settings.keep_connection_on_idle}
-                    on:change={onKeepConnectionOnIdleChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="prevent-system-sleep">{$t('settings.prevent_system_sleep')}</label>
-                  <p class="setting-desc">{$t('settings.prevent_system_sleep_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="prevent-system-sleep" type="checkbox"
-                    checked={settings.prevent_system_sleep}
-                    on:change={onPreventSystemSleepChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="pin-interface">{$t('settings.pin_interface')}</label>
-                  <p class="setting-desc">{$t('settings.pin_interface_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="pin-interface" type="checkbox"
-                    checked={settings.pin_interface}
-                    on:change={onPinInterfaceChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-section">
             <h4 class="section-title">{$t('settings.section_logging')}</h4>
             <div class="settings-card">
               <div class="setting-row">
@@ -1346,70 +1444,6 @@
               </div>
               {#if folderError}
                 <div class="folder-error">{$t('settings.open_folder_failed')}: {folderError}</div>
-              {/if}
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <h4 class="section-title">{$t('settings.section_wg_scripts')}</h4>
-            <div class="settings-card">
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="wg-scripts">{$t('settings.wg_scripts')}</label>
-                  <p class="setting-desc">{$t('settings.wg_scripts_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="wg-scripts" type="checkbox" checked={settings.enable_wg_scripts} on:change={onWgScriptsChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              {#if wgScriptsWarn}
-                <div class="wg-scripts-warn">
-                  <p class="wg-scripts-warn-text">{$t('settings.wg_scripts_warn')}</p>
-                  <div class="wg-scripts-warn-actions">
-                    <button class="btn btn--primary" on:click={onWgScriptsWarnConfirm}>{$t('settings.wg_scripts_enable')}</button>
-                    <button class="btn" on:click={onWgScriptsWarnCancel}>{$t('settings.wg_scripts_cancel')}</button>
-                  </div>
-                </div>
-              {/if}
-              {#if settings.enable_wg_scripts}
-                <div class="setting-row">
-                  <div class="setting-info">
-                    <span class="setting-label">{$t('settings.scripts_folder')}</span>
-                    <p class="setting-desc">{$t('settings.scripts_folder_hint')}</p>
-                  </div>
-                  <button class="folder-btn" on:click={() => openFolder('scripts')} disabled={openingFolder}>
-                    {$t('settings.open_folder')}
-                  </button>
-                </div>
-              {/if}
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <h4 class="section-title">{$t('settings.section_awg')}</h4>
-            <div class="settings-card">
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
-                  <label class="setting-label" for="awg-support">{$t('settings.enable_awg')}</label>
-                  <p class="setting-desc">{$t('settings.enable_awg_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="awg-support" type="checkbox" checked={settings.enable_awg} on:change={onAwgChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              {#if awgWarn}
-                <!-- Inline highlight bar, identical structure and styling to
-                     the wg-scripts confirm — a nested modal was explicitly
-                     rejected by the user. -->
-                <div class="wg-scripts-warn">
-                  <p class="wg-scripts-warn-text">{$t('settings.awg_confirm')}</p>
-                  <div class="wg-scripts-warn-actions">
-                    <button class="btn btn--primary" on:click={onAwgWarnConfirm}>{$t('settings.awg_confirm_enable')}</button>
-                    <button class="btn" on:click={onAwgWarnCancel}>{$t('settings.awg_confirm_cancel')}</button>
-                  </div>
-                </div>
               {/if}
             </div>
           </div>
@@ -1871,6 +1905,20 @@
   .public-ip-value {
     font: 500 13px/18px var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .public-ip-stale {
+    color: var(--text-muted);
+  }
+  .mirror-list-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+  }
+  .mirror-retest {
+    flex-shrink: 0;
     white-space: nowrap;
   }
   .mirror-list {

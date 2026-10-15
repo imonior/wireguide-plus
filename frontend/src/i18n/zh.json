@@ -66,6 +66,11 @@
     "connect": "连接",
     "disconnect": "断开",
     "endpoint_auto_switch_disabled": "已被全局设置禁用",
+    "endpoint_mode_off": "关闭",
+    "endpoint_mode_reconnect": "断开后",
+    "endpoint_mode_dynamic": "动态",
+    "endpoint_mode_dynamic_hint": "满足策略时主动切换；每次切换会短暂断开重连",
+    "endpoint_effective_values": "切换策略：阈值 {threshold} ms · 幅度 {margin}% · 持续 {sustained}s · 冷却 {cooldown}s",
     "manual_connect_tip": "手动连接（将强制执行连接，忽略任何自动规则）",
     "manual_disconnect_tip": "手动断开（将强制执行断开，忽略任何自动规则）",
     "helper_recovering": "后台服务正在恢复——请稍后重试。",
@@ -298,6 +303,8 @@
     "public_ip_disabled": "公网 IP 查询已关闭。",
     "public_ip_loading": "查询中…",
     "public_ip_failed": "查询失败：{err}",
+    "public_ip_stale": "{time} 刷新失败，显示的是上次结果",
+    "proxy_mirror_retest": "重新测速",
     "public_ip_hint": "由 {provider} 提供"
   },
   "confirm": {
@@ -305,7 +312,10 @@
     "delete_message": "确定要删除“{name}”吗？",
     "yes": "删除",
     "no": "取消",
-    "disconnect_first": "请先断开隧道"
+    "disconnect_first": "请先断开隧道",
+    "rename_connected_title": "重命名已连接的隧道",
+    "rename_connected_message": "“{name}”正在连接中。隧道名称同时是它的配置文件名，连接中的隧道无法重命名——需要先断开。",
+    "rename_disconnect_rename": "断开并重命名"
   },
   "log": {
     "open_folder": "打开日志目录",

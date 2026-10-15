@@ -509,7 +509,35 @@ type TunnelMeta struct {
 	// EndpointAutoSwitch 打开候选之间的自动选择。默认关闭：替用户换地址
 	// 这件事，只有在用户明确要求后才应该发生。
 	EndpointAutoSwitch bool `json:"endpoint_auto_switch,omitempty"`
+
+	// EndpointSwitchMode selects WHEN automatic switching may happen, for
+	// tunnels with EndpointAutoSwitch armed. "" (and any unknown value)
+	// means "reconnect": evaluate only when the tunnel is being reconnected
+	// anyway — the historical behaviour, zero disturbance. "dynamic" means
+	// the helper also re-evaluates periodically and proactively reconnects
+	// when the improvement rule holds across the sustained window; each
+	// such switch is one brief reconnect by design (there is no UAPI
+	// hot-switch). The choice belongs to the user, never to us.
+	// EndpointSwitchMode 选择自动切换的发生时机（仅对已启用 EndpointAutoSwitch
+	// 的隧道有意义）。空值（及未知值）表示 "reconnect"：只在隧道本来就要重连时
+	// 评估——即历史行为，零打扰。"dynamic" 表示 helper 还会周期评估，在改进规则
+	// 于持续窗口内成立时主动重连切换；每次切换按设计就是一次短暂重连
+	// （没有 UAPI 热切换）。这个选择权属于用户，不属于我们。
+	EndpointSwitchMode string `json:"endpoint_switch_mode,omitempty"`
 }
+
+// Switch-timing mode values stored in TunnelMeta.EndpointSwitchMode.
+// TunnelMeta.EndpointSwitchMode 中存储的切换时机模式值。
+const (
+	// EndpointSwitchReconnect is the default: evaluate candidates only when
+	// a reconnect is happening anyway.
+	// EndpointSwitchReconnect 是默认值：只在本来就要重连时评估候选。
+	EndpointSwitchReconnect = "reconnect"
+	// EndpointSwitchDynamic additionally evaluates periodically and
+	// proactively switches when the improvement rule holds.
+	// EndpointSwitchDynamic 额外周期评估，改进规则成立时主动切换。
+	EndpointSwitchDynamic = "dynamic"
+)
 
 // EndpointCandidateList returns the stored candidates, normalized (trimmed,
 // de-duplicated, empties dropped) while preserving the user's order. Order
@@ -560,6 +588,36 @@ func (m *TunnelMeta) SetEndpointCandidates(list []string) {
 // EndpointAutoSwitchEnabled 返回该隧道是否启用了候选自动选择。
 func (m *TunnelMeta) EndpointAutoSwitchEnabled() bool {
 	return m != nil && m.EndpointAutoSwitch
+}
+
+// EndpointSwitchTiming normalizes the stored switch mode to one of "off",
+// "reconnect" or "dynamic". Disarmed tunnels are always "off"; an armed
+// tunnel with an empty or unknown mode falls back to "reconnect", which
+// keeps every pre-existing sidecar (and every caller that predates the
+// mode field) on exactly its historical behaviour.
+// EndpointSwitchTiming 把存储的切换模式归一化为 "off" / "reconnect" / "dynamic"
+// 之一。未启用的隧道恒为 "off"；已启用但模式为空或未知的回落到 "reconnect"，
+// 使所有既有 sidecar（以及早于该字段的所有调用方）保持与历史完全一致的行为。
+func (m *TunnelMeta) EndpointSwitchTiming() string {
+	if m == nil || !m.EndpointAutoSwitch {
+		return "off"
+	}
+	switch m.EndpointSwitchMode {
+	case EndpointSwitchDynamic:
+		return EndpointSwitchDynamic
+	default:
+		return EndpointSwitchReconnect
+	}
+}
+
+// EndpointSwitchDynamic reports whether this tunnel opted into proactive
+// (dynamic) switching — the helper may re-evaluate periodically and switch
+// without waiting for a reconnect. It never returns true for a tunnel that
+// has not armed auto-switch itself.
+// EndpointSwitchDynamic 返回该隧道是否选择了主动（动态）切换——helper 可以周期
+// 评估并在不等待重连的情况下切换。对未启用自动切换的隧道恒返回 false。
+func (m *TunnelMeta) EndpointSwitchDynamic() bool {
+	return m.EndpointSwitchTiming() == EndpointSwitchDynamic
 }
 
 // ProbeTargetSlotCount is how many probe-target rows the tunnel editor

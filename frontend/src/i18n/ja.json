@@ -66,6 +66,11 @@
     "connect": "接続",
     "disconnect": "切断",
     "endpoint_auto_switch_disabled": "全体設定で無効化されています",
+    "endpoint_mode_off": "オフ",
+    "endpoint_mode_reconnect": "再接続時",
+    "endpoint_mode_dynamic": "動的",
+    "endpoint_mode_dynamic_hint": "ポリシーを満たすと能動的に切り替えます。切り替えのたびにトンネルが一瞬再接続されます",
+    "endpoint_effective_values": "切替ポリシー: しきい値 {threshold} ms · マージン {margin}% · 継続 {sustained}s · クールダウン {cooldown}s",
     "manual_connect_tip": "手動接続（接続を強制し、すべての自動ルールを無視します）",
     "manual_disconnect_tip": "手動切断（切断を強制し、すべての自動ルールを無視します）",
     "helper_recovering": "ヘルパーを復旧中です — 少し時間をおいてから再試行してください。",
@@ -298,6 +303,8 @@
     "public_ip_disabled": "グローバル IP の検索は無効です。",
     "public_ip_loading": "検索中…",
     "public_ip_failed": "検索に失敗しました：{err}",
+    "public_ip_stale": "{time} の更新に失敗しました。前回の結果を表示中",
+    "proxy_mirror_retest": "再測定",
     "public_ip_hint": "提供元: {provider}"
   },
   "confirm": {
@@ -305,7 +312,10 @@
     "delete_message": "\"{name}\" を削除しますか?",
     "yes": "削除",
     "no": "キャンセル",
-    "disconnect_first": "先にトンネルを切断してください"
+    "disconnect_first": "先にトンネルを切断してください",
+    "rename_connected_title": "接続中のトンネルの名前を変更",
+    "rename_connected_message": "\"{name}\" は接続中です。トンネル名は設定ファイルの名前でもあるため、接続中は名前を変更できません。先に切断してください。",
+    "rename_disconnect_rename": "切断して名前を変更"
   },
   "log": {
     "open_folder": "ログフォルダを開く",

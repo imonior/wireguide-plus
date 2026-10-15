@@ -60,7 +60,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Tunnel policies** — per-tunnel DNS resolution paths, force specific domains through the tunnel, traffic protection, default DNS, and deterministic conflict resolution.
 - **Latency probe** — per-tunnel latency probing with multiple targets in parallel; each candidate (public resolvers 8.8.8.8 / 223.5.5.5, the tunnel endpoint, and any custom address or domain) is probed simultaneously and shown with its resolved IP, kind and round-trip time. On split tunnels, custom targets are validated against the tunnel's AllowedIPs coverage before they are saved. Targets are re-probed immediately after saving, and a domain endpoint shows the address it currently resolves to in the tunnel header.
 
-- **Endpoint failover (multi-endpoint)** — a tunnel with several endpoint candidates now automatically switches to the fastest reachable one and fails over instantly when the current endpoint goes unreachable. A global master switch (Settings → Advanced) plus a per-tunnel toggle gate it; new tunnels inherit their toggle from the master switch. Threshold, margin, sustain window and cooldown are all tunable in Settings → Advanced.
+- **Endpoint failover (multi-endpoint)** — a tunnel with several endpoint candidates automatically switches to the fastest reachable one and fails over instantly when the current endpoint goes unreachable. A global master switch (Settings → Advanced) gates it, and each tunnel picks its own switching mode: **off**, **switch on reconnect** (candidates are re-ranked whenever the tunnel connects or disconnects, for any reason) or **dynamic** (the background keeps measuring candidates and moves the tunnel to a materially faster endpoint after a sustained confirmation window). Threshold, margin, sustain window and cooldown are all tunable in Settings → Advanced.
 - **Proxy mirrors & public-IP display** — configure GitHub accelerator mirrors for update and metadata fetches, and see your current public IP and geolocation at a glance (Settings → Proxy).
 
 ## Fixes & enhancements over upstream wireguide
@@ -89,6 +89,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
    adjustable dwell time; status-change bubbles stay until handled).
 5. **Window title & interaction polish** and more.
 6. **AmneziaWG (AWG) protocol support** — a new protocol backend (amneziawg-go) for AmneziaWG tunnels, the obfuscated WireGuard fork that resists DPI. Configs are auto-detected, tunnels are badged in the UI, and an opt-out switch lives in Settings → Advanced.
+7. **Rename a connected tunnel** — the edit button next to a connected tunnel's name opens a dialog offering to disconnect the tunnel and rename it in one step.
 
 ## Automation rules
 

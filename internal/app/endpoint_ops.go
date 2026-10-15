@@ -21,6 +21,11 @@ type EndpointSettings struct {
 	Active     string   `json:"active"`
 	Candidates []string `json:"candidates"`
 	AutoSwitch bool     `json:"auto_switch"`
+	// SwitchMode is the normalized switch timing: "off", "reconnect" or
+	// "dynamic" (see storage.TunnelMeta.EndpointSwitchTiming).
+	// SwitchMode 是归一化的切换时机："off" / "reconnect" / "dynamic"
+	// （见 storage.TunnelMeta.EndpointSwitchTiming）。
+	SwitchMode string `json:"switch_mode"`
 }
 
 // GetEndpointSettings returns the candidate list for the tunnel editor. The
@@ -43,6 +48,7 @@ func (s *TunnelService) GetEndpointSettings(name string) (EndpointSettings, erro
 	if meta != nil {
 		out.Candidates = meta.EndpointCandidateList()
 		out.AutoSwitch = meta.EndpointAutoSwitchEnabled()
+		out.SwitchMode = meta.EndpointSwitchTiming()
 	}
 	return out, nil
 }
@@ -104,6 +110,38 @@ func (s *TunnelService) SetEndpointAutoSwitch(name string, enabled bool) error {
 	}
 	return s.tunnelStore.UpdateMeta(name, func(meta *storage.TunnelMeta) {
 		meta.EndpointAutoSwitch = enabled
+	})
+}
+
+// SetEndpointSwitchMode selects WHEN automatic switching may happen, as one
+// actionable choice: "off" disarms switching entirely, "reconnect" arms it
+// for reconnect-time evaluation only (the historical behaviour), and
+// "dynamic" additionally lets the helper switch proactively while the
+// tunnel is connected. Switching mode off never moves the active endpoint.
+// SetEndpointSwitchMode 选择自动切换的发生时机，作为一个可操作选项："off" 完全
+// 关闭切换；"reconnect" 仅在重连时评估（历史行为）；"dynamic" 额外允许 helper
+// 在隧道连接期间主动切换。切换为 off 绝不会挪动生效地址。
+func (s *TunnelService) SetEndpointSwitchMode(name, mode string) error {
+	if !s.tunnelStore.Exists(name) {
+		return fmt.Errorf("tunnel %q does not exist", name)
+	}
+	return s.tunnelStore.UpdateMeta(name, func(meta *storage.TunnelMeta) {
+		switch mode {
+		case storage.EndpointSwitchDynamic:
+			meta.EndpointAutoSwitch = true
+			meta.EndpointSwitchMode = storage.EndpointSwitchDynamic
+		case storage.EndpointSwitchReconnect:
+			meta.EndpointAutoSwitch = true
+			meta.EndpointSwitchMode = storage.EndpointSwitchReconnect
+		default:
+			// "off" and anything unexpected both mean: stop switching.
+			// The stored mode is cleared so a later re-arm starts from
+			// the reconnect default, not from a stale choice.
+			// "off" 与任何意外值都表示：停止切换。同时清空已存模式，
+			// 之后重新启用时从 reconnect 默认值开始，而不是残留旧选择。
+			meta.EndpointAutoSwitch = false
+			meta.EndpointSwitchMode = ""
+		}
 	})
 }
 
