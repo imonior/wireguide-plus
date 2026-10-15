@@ -108,6 +108,13 @@
     return $t('update.last_checked', { time });
   }
 
+  // Reactive label: the template must read this variable directly. Calling
+  // formatLastChecked() there compiles inside $.untrack, so the
+  // late-arriving GetUpdateState result only surfaced on the next 60 s tick.
+  // 响应式标签：模板必须直接读取该变量。在模板里调用 formatLastChecked() 会被
+  // 编译进 $.untrack，晚到的 GetUpdateState 结果要等下一次 60 秒 tick 才刷新。
+  $: lastCheckedLabel = formatLastChecked(updateState?.last_check_unix, nowTick);
+
 
   function aboutRequestUpdate() {
     if ($connectionStatus?.state === 'connected') {
@@ -741,26 +748,49 @@
     }
   }
 
+  // Sequence token: a newer load (page reopen, toggle flip) invalidates an
+  // in-flight attempt so a stale answer can never overwrite fresh state.
+  // 序号令牌：新一次加载（重开页面、切换开关）会让在途尝试作废，过期的
+  // 结果绝不能覆盖新状态。
+  let publicIPSeq = 0;
   async function loadPublicIP() {
     if (!settings.public_ip_lookup) {
+      publicIPSeq++;
       publicIP = { loading: false, info: null, errAt: 0, error: '' };
       return;
     }
-    const prev = publicIP.info;
-    publicIP = { ...publicIP, loading: true };
-    try {
-      const info = await TunnelService.GetPublicIPInfo();
-      if (info?.ok) {
-        publicIP = { loading: false, info, errAt: 0, error: '' };
-      } else {
-        // Keep showing the previous readout: an IP that was right a moment
-        // ago beats an empty dash. The failure time is shown next to it.
-        // 保留上次的读数：一分钟前还是对的 IP 好过空的「—」。失败时间显示
-        // 在读数旁边。
-        publicIP = { loading: false, info: prev, errAt: Date.now(), error: info?.error || '' };
+    const seq = ++publicIPSeq;
+    const attempt = async () => {
+      const prev = publicIP.info;
+      publicIP = { ...publicIP, loading: true };
+      try {
+        const info = await TunnelService.GetPublicIPInfo();
+        if (seq !== publicIPSeq) return;
+        if (info?.ok) {
+          publicIP = { loading: false, info, errAt: 0, error: '' };
+        } else {
+          // Keep showing the previous readout: an IP that was right a moment
+          // ago beats an empty dash. The failure time is shown next to it.
+          // 保留上次的读数：一分钟前还是对的 IP 好过空的「—」。失败时间显示
+          // 在读数旁边。
+          publicIP = { loading: false, info: prev, errAt: Date.now(), error: info?.error || '' };
+        }
+      } catch (e) {
+        if (seq !== publicIPSeq) return;
+        publicIP = { loading: false, info: prev, errAt: Date.now(), error: String(e) };
       }
-    } catch (e) {
-      publicIP = { loading: false, info: prev, errAt: Date.now(), error: String(e) };
+    };
+    await attempt();
+    // One silent retry. On networks where the provider list is only
+    // intermittently reachable (tunnel up/down transitions, GFW flakiness)
+    // a first attempt can lose the race with a route change even though the
+    // very same lookup succeeds seconds later — observed in real testing.
+    // 静默重试一次。在服务源只能间歇性到达的网络里（隧道上下线切换、被墙
+    // 抖动），首次尝试可能恰好输给一次路由变化，而几秒后同样的查询就能
+    // 成功——真实测试中实测出现过。
+    if (seq === publicIPSeq && !publicIP.info?.ok) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (seq === publicIPSeq) await attempt();
     }
   }
 
@@ -843,6 +873,17 @@
 
   // { testing, ok, latency, error }
   let proxyTestState = null;
+  // Only the paths the mirror scan cannot cover need this button: a manual
+  // proxy, or a custom mirror prefix that is not in the managed list. Direct
+  // and every listed mirror are already probed by the scan rows above — a
+  // second button measuring the same targets again produced two numbers for
+  // one path, which read as a contradiction.
+  // 只有镜像扫描覆盖不到的线路才需要这个按钮：手动代理，以及不在管理列表
+  // 里的自定义镜像前缀。直连与列表里的每个镜像都已由上方的扫描行探测——
+  // 再放一个按钮重复测同一目标，会得出两个数字，看起来像互相矛盾。
+  $: proxyTestVisible =
+    settings.proxy_mode === 'manual' ||
+    (settings.proxy_mode === 'mirror' && !mirrorList.includes(settings.proxy_url));
   async function onTestProxy() {
     // Test whatever is currently selected: direct, the active mirror
     // prefix, or the manual proxy URL.
@@ -1177,6 +1218,7 @@
                   </div>
                 </div>
               </div>
+              {#if proxyTestVisible}
               <div class="setting-row setting-row--test">
                 <div class="setting-info"></div>
                 <div class="proxy-test-wrap">
@@ -1192,6 +1234,7 @@
                   {/if}
                 </div>
               </div>
+              {/if}
             </div>
           </div>
 
@@ -1500,7 +1543,7 @@
                   <button class="check-btn" on:click={aboutCheckNow} disabled={aboutChecking}>
                     {aboutChecking ? $t('update.checking') : $t('update.check_now')}
                   </button>
-                  <span class="check-meta">{formatLastChecked(updateState?.last_check_unix, nowTick)}</span>
+                  <span class="check-meta">{lastCheckedLabel}</span>
                 </div>
                 {#if updateState?.is_dev_build}
                   <!-- Explains why "Never checked" sticks even on a healthy install:

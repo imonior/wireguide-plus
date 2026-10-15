@@ -984,6 +984,51 @@ var publicIPProviders = []struct {
 	decode func(body []byte, info *PublicIPInfo) error
 }{
 	{
+		// ipip.net is FIRST because it is the one provider that reliably
+		// answers from mainland China networks, where this panel matters
+		// most and where ip-api / ipapi.co / ipwho.is / ipify are all
+		// blocked or hijacked (verified on a real CN connection: timeouts,
+		// HTML hijack pages, connection resets). Its `location` array is
+		// [country, province, city, district, isp].
+		// ipip.net 排第一，因为它是唯一在中国大陆网络下稳定应答的服务商——
+		// 而大陆恰是这个面板最有用、ip-api / ipapi.co / ipwho.is / ipify
+		// 全部被墙或被劫持的地方（在真实大陆连接上实测：超时、HTML 劫持页、
+		// 连接重置）。其 location 数组为 [国家, 省, 市, 区, 运营商]。
+		name: "ipip.net",
+		geo:  true,
+		url:  "https://myip.ipip.net/json",
+		decode: func(body []byte, info *PublicIPInfo) error {
+			var v struct {
+				Ret  string `json:"ret"`
+				Data struct {
+					IP       string   `json:"ip"`
+					Location []string `json:"location"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(body, &v); err != nil {
+				return err
+			}
+			if v.Ret != "ok" {
+				return fmt.Errorf("%s", orDefault(v.Ret, "lookup failed"))
+			}
+			info.IP = v.Data.IP
+			loc := v.Data.Location
+			if len(loc) > 0 {
+				info.Country = loc[0]
+			}
+			if len(loc) > 1 {
+				info.Region = loc[1]
+			}
+			if len(loc) > 2 {
+				info.City = loc[2]
+			}
+			if len(loc) > 4 {
+				info.ISP = loc[4]
+			}
+			return nil
+		},
+	},
+	{
 		name: "ip-api.com",
 		geo:  true,
 		url:  "http://ip-api.com/json/?fields=status,message,country,regionName,city,isp,query",
@@ -1145,6 +1190,14 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 				ch <- attempt{info: info}
 				return
 			}
+			// Go's default UA ("Go-http-client/2.0") gets hung up on by
+			// ipip.net (verified: named UAs get 200, the default one
+			// times out). A plain product UA fixes that without pretending
+			// to be a browser.
+			// Go 默认 UA（"Go-http-client/2.0"）会被 ipip.net 挂起（实测：
+			// 任何命名 UA 都是 200，默认 UA 超时）。带上朴素的产品 UA 即可，
+			// 无须伪装成浏览器。
+			req.Header.Set("User-Agent", "wireguideplus")
 			client := &http.Client{Timeout: publicIPTimeout, Transport: &http.Transport{}}
 			resp, err := client.Do(req)
 			if err != nil {

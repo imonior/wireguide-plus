@@ -186,9 +186,22 @@
     return resolveRefLocal(cmd) ? 'scripts.status_file' : 'scripts.status_inline';
   }
 
-  function rowClass(hook) {
-    return hookCmd(hook) ? 'hook-row has-value' : 'hook-row';
-  }
+  // Per-hook view model the template reads directly. Calling hookCmd() from
+  // the template compiles inside $.untrack — Svelte 5 only tracks syntactic
+  // references, so a hook applied after mount never re-rendered the status
+  // text, the row class or the button states.
+  // 每钩子的视图模型，供模板直接读取。模板里调用 hookCmd() 会被编译进
+  // $.untrack——Svelte 5 只按语法引用追踪，挂载后应用的钩子不会触发状态
+  // 文本、行样式与按钮态的重渲染。
+  $: hookView = (() => {
+    const out = {};
+    for (const hook of HOOKS) {
+      const cmd = hookCmd(hook);
+      const ref = cmd ? resolveRefLocal(cmd) : null;
+      out[hook] = { cmd, ref, name: ref ? baseName(ref) : '' };
+    }
+    return out;
+  })();
 </script>
 
 {#if enabled}
@@ -204,14 +217,14 @@
          dialog. -->
     <div class="hooks-grid">
       {#each HOOKS as hook}
-        <div class={rowClass(hook)}>
+        <div class="hook-row" class:has-value={hookView[hook].cmd}>
         <div class="hook-info">
           <span class="hook-name">{hook}</span>
-          <span class="hook-status" title={hookCmd(hook)}>
-            {#if hookCmd(hook) && resolveRefLocal(hookCmd(hook))}
-              {baseName(resolveRefLocal(hookCmd(hook)))}
-            {:else if hookCmd(hook)}
-              {$t('scripts.status_inline')} — {hookCmd(hook)}
+          <span class="hook-status" title={hookView[hook].cmd}>
+            {#if hookView[hook].ref}
+              {hookView[hook].name}
+            {:else if hookView[hook].cmd}
+              {$t('scripts.status_inline')} — {hookView[hook].cmd}
             {:else}
               {$t('scripts.status_empty')}
             {/if}
@@ -224,10 +237,10 @@
           <button class="hook-btn" title={$t('scripts.new_blank')} disabled={busyHook !== ''} on:click={() => newBlank(hook)}>
             {$t('scripts.new_blank')}
           </button>
-          <button class="hook-btn" title={$t('scripts.edit_code')} disabled={busyHook !== '' || !hookCmd(hook)} on:click={() => editCode(hook)}>
+          <button class="hook-btn" title={$t('scripts.edit_code')} disabled={busyHook !== '' || !hookView[hook].cmd} on:click={() => editCode(hook)}>
             {$t('scripts.edit_code')}
           </button>
-          <button class="hook-btn hook-btn-danger" title={$t('scripts.clear')} disabled={busyHook !== '' || !hookCmd(hook)} on:click={() => applyHook(hook, '')}>
+          <button class="hook-btn hook-btn-danger" title={$t('scripts.clear')} disabled={busyHook !== '' || !hookView[hook].cmd} on:click={() => applyHook(hook, '')}>
             {$t('scripts.clear')}
           </button>
         </div>

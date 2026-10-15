@@ -208,12 +208,22 @@
   //     same string twice.
   // A slot therefore only shows text when it really adds information: what a
   // typed HOSTNAME currently points at.
-  function slotResolved(i) {
-    const typed = (probeSlots[i] || '').trim();
-    const live = probeSlotLive[i] || probeSlotResolved[i] || '';
-    if (!live || live === typed) return '';
-    return live;
-  }
+  // What each probe slot resolves to right now, as a map the template reads
+  // directly. A helper function called from the template is compiled inside
+  // $.untrack, so writes to the arrays below would never re-render the row;
+  // the map keeps every source tracked (same pattern as epMeasurementMap).
+  // 每个探测槽位当前解析到的地址，以模板可直接读取的 map 形式给出。模板里调用
+  // 辅助函数会被编译进 $.untrack，直接给下面的数组赋值不会触发重渲染；用 map
+  // 保持所有来源可追踪（与 epMeasurementMap 同一模式）。
+  $: probeSlotResolvedMap = (() => {
+    const out = {};
+    for (let i = 0; i < PROBE_SLOTS; i++) {
+      const typed = (probeSlots[i] || '').trim();
+      const live = probeSlotLive[i] || probeSlotResolved[i] || '';
+      out[i] = (!live || live === typed) ? '' : live;
+    }
+    return out;
+  })();
 
   // --- Probe target slots -------------------------------------------------
   //
@@ -824,9 +834,23 @@
     }
   }
 
-  function epMeasurementFor(addr) {
-    return epMeasurements.find((m) => m && m.address === addr);
-  }
+  // Indexed by candidate address. This MUST be a reactive statement, not a
+  // helper function called from the template: Svelte 5 tracks template
+  // dependencies syntactically, so `epMeasurementFor(cand)` hid
+  // `epMeasurements` behind an opaque call — the compiler even wrapped it in
+  // `$.untrack` — and reassigning `epMeasurements` never re-rendered the
+  // latency column. Reading the map inline keeps it tracked.
+  // 按候选地址索引。这里必须是响应式语句，不能是模板里调用的辅助函数：
+  // Svelte 5 按语法引用追踪模板依赖，`epMeasurementFor(cand)` 把
+  // `epMeasurements` 藏在不透明调用后面（编译器甚至给它套了 `$.untrack`），
+  // 重赋值 `epMeasurements` 永远不会触发延迟列重渲染。内联读 map 才会被追踪。
+  $: epMeasurementMap = (() => {
+    const map = {};
+    for (const m of epMeasurements || []) {
+      if (m && m.address) map[m.address] = m;
+    }
+    return map;
+  })();
 
   async function loadDetail(name) {
     try {
@@ -1346,8 +1370,8 @@
                         bind:value={probeSlots[i]}
                         on:input={onProbeSlotInput}
                         on:keydown={(e) => onProbeSlotKeydown(e, i)} />
-                      {#if slotResolved(i)}
-                        <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                      {#if probeSlotResolvedMap[i]}
+                        <span class="probe-slot-resolved mono" title={probeSlotResolvedMap[i]}>{probeSlotResolvedMap[i]}</span>
                       {/if}
                       {#if probePendingSlots[i]}
                         <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
@@ -1374,8 +1398,8 @@
                       bind:value={probeSlots[i]}
                       on:input={onProbeSlotInput}
                       on:keydown={(e) => onProbeSlotKeydown(e, i)} />
-                    {#if slotResolved(i)}
-                      <span class="probe-slot-resolved mono" title={slotResolved(i)}>{slotResolved(i)}</span>
+                    {#if probeSlotResolvedMap[i]}
+                      <span class="probe-slot-resolved mono" title={probeSlotResolvedMap[i]}>{probeSlotResolvedMap[i]}</span>
                     {/if}
                     {#if probePendingSlots[i]}
                       <span class="probe-slot-pending" title={$t('tunnel.latency_probing')}>
@@ -1430,7 +1454,8 @@
       <div class="endpoint-candidates">
         <div class="endpoint-candidates-head">
           <h3 class="section-label">{$t('tunnel.endpoint_candidates')}</h3>
-          <button class="hint-toggle" type="button" on:click={measureEndpointCandidates}
+          <button class="hint-toggle" type="button"
+            on:click={() => measureEndpointCandidates(false)}
             disabled={epMeasuring}>
             {epMeasuring ? $t('tunnel.endpoint_measuring') : $t('tunnel.endpoint_measure')}
           </button>
@@ -1468,12 +1493,12 @@
           {#each epSettings.candidates as cand (cand)}
             <div class="endpoint-candidate" class:endpoint-candidate-active={cand === epSettings.active}>
               <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
-              {#if epMeasurementFor(cand)}
+              {#if epMeasurementMap[cand]}
                 <span class="endpoint-candidate-ms"
-                  class:ms-ok={epMeasurementFor(cand).reachable}
-                  class:ms-bad={!epMeasurementFor(cand).reachable}>
-                  {epMeasurementFor(cand).reachable
-                    ? `${Math.round(epMeasurementFor(cand).latency_ms)} ms`
+                  class:ms-ok={epMeasurementMap[cand].reachable}
+                  class:ms-bad={!epMeasurementMap[cand].reachable}>
+                  {epMeasurementMap[cand].reachable
+                    ? `${Math.round(epMeasurementMap[cand].latency_ms)} ms`
                     : $t('tunnel.endpoint_unreachable')}
                 </span>
               {/if}
@@ -1487,6 +1512,9 @@
             </div>
           {/each}
         </div>
+        <!-- ICMP caveat: an unreachable row does NOT mean the tunnel is dead.
+             Many servers drop ping; the switch decision uses handshakes. -->
+        <p class="endpoint-icmp-note">{$t('tunnel.endpoint_icmp_note')}</p>
         <div class="endpoint-candidate-add">
           <input type="text" spellcheck="false" autocomplete="off"
             placeholder={$t('tunnel.endpoint_candidate_placeholder')}
@@ -2286,6 +2314,12 @@
   }
   .endpoint-candidate-ms.ms-ok { color: var(--green); }
   .endpoint-candidate-ms.ms-bad { color: var(--red, #FF453A); }
+  .endpoint-icmp-note {
+    margin: 6px 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
   .endpoint-candidate-del {
     flex-shrink: 0;
     width: 20px;

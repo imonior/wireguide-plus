@@ -4,6 +4,19 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.1] - 2026-10-15
+
+### 🐛 Fixed
+
+- **Endpoint candidate latency now renders in tunnel details.** Measurements were assigned correctly but never displayed: Svelte 5 tracks dependencies by syntactic reference, and the lookup helper ran inside an untracked callback, so re-assignment never triggered a re-render. Latency is now read from a reactive map the template consumes directly, updating immediately (and every 30 s while the detail view is open).
+- **Public-IP geolocation on networks where the overseas providers are blocked.** On many mainland-China networks all four lookup providers are unreachable or hijacked, leaving geolocation permanently empty. A China-reachable provider is now tried first, requests carry an explicit User-Agent, and a failed lookup is retried once silently.
+- **Three more panels that froze after mount** (same root cause as the latency bug): the probe-slot "currently resolves to" indicator, the script panel's per-hook status text, row styling and button states after picking, clearing or editing a script, and the update page's "last checked" label when the state arrives late.
+- **The manual "measure" button silently swallowed failures.** A stray event argument disabled error reporting; failures now surface normally.
+
+### 🔧 Changed
+
+- **Proxy panel wording and layout.** "Look up public IP" is now "Fetch the public IP" (all languages follow); the bottom test button appears only for paths the mirror scan does not cover — a manual proxy or a custom mirror outside the list — and is labelled "Test this path", so it no longer contradicts the per-row scan results; an ICMP note under the candidate list explains that a ping-blocked server is not a dead tunnel.
+
 ## [2.7.0] - 2026-10-15
 
 ### ✨ Added
