@@ -807,16 +807,17 @@ export class Settings {
         if (/** @type {any} */(false)) {
             /**
              * EndpointCooldownSec is the minimum gap between two automatic switches
-             * on the same tunnel. It is clamped to >= 240 so it always exceeds the
-             * 180s dead-link action window (internal/reconnect/monitor.go): a freshly
-             * switched endpoint must get a full dead-link evaluation cycle before it
-             * is eligible to switch again, otherwise a slow-but-alive link could
-             * churn on the same cadence as dead-link detection. The default (300)
-             * keeps a comfortable margin.
-             * EndpointCooldownSec 是同一隧道两次自动切换之间的最小间隔。它被钳到 ≥240，
+             * on the same tunnel. It is clamped to >= MinEndpointCooldownSec (240) so
+             * it always exceeds the 180s dead-link action window
+             * (internal/reconnect/monitor.go): a freshly switched endpoint must get a
+             * full dead-link evaluation cycle before it is eligible to switch again,
+             * otherwise a slow-but-alive link could churn on the same cadence as
+             * dead-link detection. The default (DefaultEndpointCooldownSec, 300) keeps
+             * a comfortable margin.
+             * EndpointCooldownSec 是同一隧道两次自动切换之间的最小间隔。它被钳到 ≥ MinEndpointCooldownSec（240），
              * 从而恒大于 180s 的死链动作窗口（internal/reconnect/monitor.go）：刚切到的地址必须
              * 拿到一个完整的死链评估周期才有资格再切，否则一个慢但活着的链会和死链检测同频抖动。
-             * 默认 300 留了舒服的余量。
+             * 默认 DefaultEndpointCooldownSec（300）留了舒服的余量。
              * @member
              * @type {number | undefined}
              */
