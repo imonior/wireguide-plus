@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.3] - 2026-10-16
+
+### ✨ Added
+
+- **Live update progress in Settings → About.** The About tab now shows the same download/install progress bar and phase label as the main-window update banner, instead of a static "Updating..." label that looked like a hang. It mirrors the backend `update_progress` event through the same subscription the banner uses.
+
+### 🐛 Fixed
+
+- **Public-IP geolocation now matches the app language.** The readout used to show whichever provider answered first in the parallel race — ipip.net in Chinese, the Western providers in English — so it could be in the wrong language for the UI. The lookup now prefers a provider whose answer language matches the resolved UI language (Chinese for any `zh*` variant, English otherwise), keeping the readout consistent with the rest of the app; an off-language result is still accepted as a fallback when the matching provider is unreachable.
+
 ## [2.7.2] - 2026-10-16
 
 ### 🔧 Changed

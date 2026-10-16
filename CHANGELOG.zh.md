@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.3] - 2026-10-16
+
+### ✨ 新增
+
+- **设置 → 关于页显示实时升级进度。** 关于页现在与主窗口升级横幅一样显示下载/安装进度条与阶段文案，不再是一直停在静态的「更新中…」、看起来像卡死。它通过与主窗口横幅相同的订阅，镜像后端 `update_progress` 事件。
+
+### 🐛 修复
+
+- **公网 IP 归属地现在与界面语言一致。** 此前读数采用并行竞速中第一个应答的服务商——ipip.net 返回中文、西方服务商返回英文——因而可能与界面语言不符。查询现在优先选用答案语言与已解析界面语言一致的服务商（任意 `zh*` 变体用中文，其余用英文），使读数与界面其余部分一致；当匹配语言的服务商不可达时，仍会回退接受异语言结果。
+
 ## [2.7.2] - 2026-10-16
 
 ### 🔧 变更

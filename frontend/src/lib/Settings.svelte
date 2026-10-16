@@ -22,6 +22,16 @@
 
   let aboutUpdating = false;
   let aboutShowVpnWarn = false;
+  // Live phase + percent mirrored from the backend `update_progress`
+  // event so the About tab shows the same download progress the main
+  // window banner does (see UpdateNotice.svelte). Without this the
+  // Update button sat on a static "Updating…" label that read as a hang.
+  // 实时阶段与百分比镜像自后端 `update_progress` 事件，使 About 页与主窗口
+  // 横幅一样显示下载进度（参见 UpdateNotice.svelte）。否则更新按钮会一直
+  // 停在静态的 “Updating…” 文案，看起来像卡死了。
+  let aboutUpdatePhase = '';
+  let aboutUpdatePercent = 0;
+  let unsubUpdateProgress = null;
   // updateState mirrors UpdateState DTO from GetUpdateState. Used by the
   // About tab to show last-checked timestamp + brew detection + an
   // explicit "Check now" button (the launch-only check we used to do
@@ -115,6 +125,15 @@
   // 编译进 $.untrack，晚到的 GetUpdateState 结果要等下一次 60 秒 tick 才刷新。
   $: lastCheckedLabel = formatLastChecked(updateState?.last_check_unix, nowTick);
 
+  // Same phase-label mapping as UpdateNotice. Reactive variable (not a
+  // template function call) so it tracks phase/percent outside untrack.
+  // 与 UpdateNotice 相同的阶段文案映射。用响应式变量（而非模板内函数调用），
+  // 确保 phase/percent 在 untrack 之外被追踪、UI 实时刷新。
+  $: aboutPhaseLabel = aboutUpdatePhase === 'download' ? $t('update.progress_download', { percent: aboutUpdatePercent })
+    : aboutUpdatePhase === 'refresh' ? $t('update.progress_refresh')
+    : aboutUpdatePhase === 'install' ? $t('update.progress_install')
+    : '';
+
 
   function aboutRequestUpdate() {
     if ($connectionStatus?.state === 'connected') {
@@ -136,6 +155,8 @@
       aboutCheckResult = ($t('update.install_failed') || 'Update failed') + ': ' + (e?.message || e);
     } finally {
       aboutUpdating = false;
+      aboutUpdatePhase = '';
+      aboutUpdatePercent = 0;
     }
   }
 
@@ -764,7 +785,13 @@
       const prev = publicIP.info;
       publicIP = { ...publicIP, loading: true };
       try {
-        const info = await TunnelService.GetPublicIPInfo();
+        // Pass the resolved UI language so the backend can prefer a
+        // geolocation provider that answers in the same language (see
+        // GetPublicIPInfo). 'auto' resolves through navigator.language.
+        // 传入已解析的界面语言，让后端优先选同语言的归属地服务商（见
+        // GetPublicIPInfo）。'auto' 经 navigator.language 解析。
+        const lang = settings.language === 'auto' ? detectLanguage() : settings.language;
+        const info = await TunnelService.GetPublicIPInfo(lang);
         if (seq !== publicIPSeq) return;
         if (info?.ok) {
           publicIP = { loading: false, info, errAt: 0, error: '' };
@@ -918,6 +945,7 @@
   onDestroy(() => {
     window.removeEventListener('keydown', onKeyDown);
     if (settingsChangedUnsub) settingsChangedUnsub();
+    if (unsubUpdateProgress) unsubUpdateProgress();
     if (saveTimer) {
       clearTimeout(saveTimer);
       save();
@@ -955,6 +983,15 @@
   onMount(() => {
     window.addEventListener('keydown', onKeyDown);
     settingsChangedUnsub = Events.On('settings_changed', onSettingsChanged);
+    // Mirror the backend download/install progress into the About tab
+    // (same event the main window banner listens to). Torn down in
+    // onDestroy below so each Settings open owns exactly one subscription.
+    // 把后端下载/安装进度镜像进 About 页（与主窗口横幅监听同一事件）。
+    // 在下方 onDestroy 中拆除，保证每次打开设置只持有一份订阅。
+    unsubUpdateProgress = Events.On('update_progress', (e) => {
+      aboutUpdatePhase = e?.data?.phase || '';
+      aboutUpdatePercent = e?.data?.percent || 0;
+    });
     // 60 s tick so the "Last checked Nm ago" line keeps current while
     // the Settings modal is open. Cleanup is in onDestroy above.
     nowTimer = setInterval(() => { nowTick = Date.now(); }, 60000);
@@ -1539,6 +1576,14 @@
                     </span>
                   {/if}
                 </div>
+                {#if aboutUpdating}
+                  <div class="about-progress" role="status" aria-live="polite">
+                    <div class="about-progress-label">{aboutPhaseLabel || $t('update.updating')}</div>
+                    <div class="about-progress-track">
+                      <div class="about-progress-fill" style="width: {aboutUpdatePercent}%"></div>
+                    </div>
+                  </div>
+                {/if}
                 <div class="about-check-row">
                   <button class="check-btn" on:click={aboutCheckNow} disabled={aboutChecking}>
                     {aboutChecking ? $t('update.checking') : $t('update.check_now')}
@@ -2157,6 +2202,35 @@
     align-items: center;
     gap: 10px;
     margin-top: 8px;
+  }
+
+  /* Live download/install progress under the About update pills — mirrors
+     the main window banner so the two surfaces stay consistent.
+     关于页更新按钮下方的实时下载/安装进度条，与主窗口横幅保持一致。 */
+  .about-progress {
+    margin-top: 10px;
+  }
+  .about-progress-label {
+    font: 500 12px/16px var(--font-sans);
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-feature-settings: "tnum";
+  }
+  .about-progress-track {
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+    overflow: hidden;
+  }
+  .about-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 200ms ease;
+    min-width: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .about-progress-fill { transition: none; }
   }
   .check-btn {
     height: 24px;

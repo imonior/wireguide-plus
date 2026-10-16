@@ -1135,6 +1135,29 @@ func orDefault(s, fallback string) string {
 	return s
 }
 
+// wantsChineseGeo reports whether the geolocation readout should prefer a
+// Chinese answer for the given UI language. Any Chinese variant (zh, zh-CN,
+// zh-TW, zh-Hans, zh-Hant, …) does; every other language prefers the
+// English-answering Western providers.
+// wantsChineseGeo 判断给定界面语言是否应优先取中文归属地。任何中文变体
+// （zh / zh-CN / zh-TW / zh-Hans / zh-Hant …）都优先；其余语言一律优先用
+// 英文应答的西方服务商。
+func wantsChineseGeo(lang string) bool {
+	return strings.HasPrefix(strings.ToLower(lang), "zh")
+}
+
+// providerMatchesLang reports whether a provider's native answer language
+// matches the preferred geolocation language. ipip.net answers in Chinese;
+// ip-api.com / ipapi.co / ipwho.is answer in English.
+// providerMatchesLang 判断某服务商的母语答案语言是否匹配偏好的归属地语言。
+// ipip.net 用中文应答；ip-api.com / ipapi.co / ipwho.is 用英文应答。
+func providerMatchesLang(provider string, preferChinese bool) bool {
+	if preferChinese {
+		return provider == "ipip.net"
+	}
+	return provider == "ip-api.com" || provider == "ipapi.co" || provider == "ipwho.is"
+}
+
 // publicIPTimeout bounds the whole lookup. All providers race, so the
 // common case is well under a second; this only caps a fully black-holed
 // network.
@@ -1166,7 +1189,12 @@ const publicIPGeoGrace = 3 * time.Second
 //
 // 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
 // 若经由手动代理转发，报出来的就是代理的 IP 了。
-func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
+func (s *TunnelService) GetPublicIPInfo(lang string) PublicIPInfo {
+	// lang is the resolved UI language (e.g. "zh", "zh-TW", "en", "ja",
+	// "ko"); it selects which provider's locale the geolocation is preferred
+	// in, so the readout matches the rest of the UI.
+	// lang 为已解析的界面语言（如 "zh" / "zh-TW" / "en" / "ja" / "ko"），它
+	// 决定归属地优先采用哪种语言，使读数与界面其余部分一致。
 	settings, _ := s.settingsStore.Load()
 	if !settings.PublicIPLookupEnabled() {
 		return PublicIPInfo{Error: "disabled"}
@@ -1233,19 +1261,31 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 		}(p.name, p.url, p.geo, p.decode)
 	}
 
-	// A geolocation-capable answer beats a faster IP-only one: the point of
-	// the readout is the location, so when an IP-only source wins the race
-	// the lookup keeps the remaining providers on the hook for a short grace
-	// window before falling back to the bare IP. If every provider fails,
-	// the first error is reported so the UI shows something actionable.
-	// 归属地源的答案优先于更快的纯 IP 源：这个读数的核心就是归属地，所以当
-	// 纯 IP 源抢先应答时，查询会再给其余源一个短暂的宽限窗口，超时才回退到
-	// 裸 IP。若全部失败，报出第一个错误，好让界面显示可读的原因。
+	// Prefer a geolocation answer in the UI's language. The providers return
+	// fixed-locale strings — ipip.net in Chinese, the Western endpoints in
+	// English — so a language match is what keeps the readout consistent with
+	// the rest of the UI. A mismatched-language geo, then a bare IP, are
+	// accepted only after the grace window, and only as fallbacks (so a
+	// Chinese user abroad, or an English user on a mainland link where the
+	// Western endpoints are blocked, still gets something instead of nothing).
+	// 优先取与界面同语言的归属地。各服务商返回固定语言——ipip.net 用中文、
+	// 西方端点用英文——语言匹配才能让读数与界面其余部分一致。异语言归属地、
+	// 再到裸 IP，只在宽限窗口过后才作为兜底接受（身处国外的中国用户、或西方
+	// 端点被墙的大陆链路上的英语用户，仍能拿到结果而非空白）。
+	preferChinese := wantsChineseGeo(lang)
+
+	var geoAnyRes *PublicIPInfo
 	var ipOnlyRes *PublicIPInfo
 	var firstErr string
 	grace := time.NewTimer(publicIPGeoGrace)
 	defer grace.Stop()
 	graceArmed := false
+	armGrace := func() {
+		if !graceArmed {
+			grace.Reset(publicIPGeoGrace)
+			graceArmed = true
+		}
+	}
 	remaining := len(publicIPProviders)
 	for remaining > 0 {
 		select {
@@ -1253,15 +1293,20 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 			remaining--
 			if a.info.OK {
 				if a.geo {
-					return a.info
+					if providerMatchesLang(a.info.Provider, preferChinese) {
+						return a.info
+					}
+					if geoAnyRes == nil {
+						info := a.info
+						geoAnyRes = &info
+						armGrace()
+					}
+					continue
 				}
 				if ipOnlyRes == nil {
 					info := a.info
 					ipOnlyRes = &info
-					if !graceArmed {
-						grace.Reset(publicIPGeoGrace)
-						graceArmed = true
-					}
+					armGrace()
 				}
 				continue
 			}
@@ -1270,17 +1315,26 @@ func (s *TunnelService) GetPublicIPInfo() PublicIPInfo {
 			}
 		case <-grace.C:
 			graceArmed = false
+			if geoAnyRes != nil {
+				return *geoAnyRes
+			}
 			if ipOnlyRes != nil {
 				return *ipOnlyRes
 			}
-			// No IP-only answer yet — keep waiting for the rest.
-			// 还没有纯 IP 结果——继续等其余源。
+			// No answer yet — keep waiting for the rest.
+			// 还没有结果——继续等其余源。
 		case <-ctx.Done():
+			if geoAnyRes != nil {
+				return *geoAnyRes
+			}
 			if ipOnlyRes != nil {
 				return *ipOnlyRes
 			}
 			return PublicIPInfo{Error: orDefault(firstErr, "all providers failed")}
 		}
+	}
+	if geoAnyRes != nil {
+		return *geoAnyRes
 	}
 	if ipOnlyRes != nil {
 		return *ipOnlyRes

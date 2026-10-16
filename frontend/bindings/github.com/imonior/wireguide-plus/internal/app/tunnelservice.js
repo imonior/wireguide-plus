@@ -417,10 +417,11 @@ export function GetPublicDNSServers() {
  * 
  * 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
  * 若经由手动代理转发，报出来的就是代理的 IP 了。
+ * @param {string} lang
  * @returns {$CancellablePromise<$models.PublicIPInfo>}
  */
-export function GetPublicIPInfo() {
-    return $Call.ByID(2877467589).then(/** @type {($result: any) => any} */(($result) => {
+export function GetPublicIPInfo(lang) {
+    return $Call.ByID(2877467589, lang).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType14($result);
     }));
 }
