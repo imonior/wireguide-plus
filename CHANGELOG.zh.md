@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.2] - 2026-10-16
+
+### 🔧 变更
+
+- **Endpoint 面板文案。** 每隧道的切换控件现改名为「切换时机」：它是一个三态选择器（关闭 / 重连时 / 动态），描述的是「何时切换」而非二元的自动开关，其提示文案与候选列表提示在五语言中同步重写。
+- **英文动态模式提示去掉了法律腔**，改用更平实的措辞。
+- **每个 Endpoint 候选现在都显示状态徽标。** 此前仅有当前生效的候选显示徽标；未使用的候选现在显示灰色的「未使用」徽标，列表状态一目了然。
+
 ## [2.7.1] - 2026-10-15
 
 ### 🐛 修复

@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.2] - 2026-10-16
+
+### 🔧 変更
+
+- **Endpoint パネルの文言。** トンネルごとの切り替えコントロールは「切り替えタイミング」に改名されました。これは三態セレクター（オフ / 再接続時 / 動的）で、「いつ切り替えるか」を示すものであり、単なる自動オンオフではありません。ヒントと候補リストのヒントは 5 言語で書き直されました。
+- **英語の動的モードヒントの硬い表現を和らげ**、平易な表現にしました。
+- **すべての Endpoint 候補に状態バッジを表示。** これまでは有効な候補のみバッジを表示していましたが、未使用の候補にも灰色の「未使用」バッジを表示するようになり、リストの状態が一目でわかるようになりました。
+
 ## [2.7.1] - 2026-10-15
 
 ### 🐛 修正

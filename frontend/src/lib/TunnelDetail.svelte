@@ -1464,8 +1464,8 @@
              is the default and changes nothing historically; "dynamic" lets
              the helper switch proactively (one brief reconnect per switch). -->
         <div class="endpoint-mode-row">
-          <span class="endpoint-mode-label">{$t('tunnel.endpoint_auto_switch')}</span>
-          <div class="endpoint-mode-switch" role="radiogroup" aria-label={$t('tunnel.endpoint_auto_switch')}>
+          <span class="endpoint-mode-label">{$t('tunnel.endpoint_switch_timing')}</span>
+          <div class="endpoint-mode-switch" role="radiogroup" aria-label={$t('tunnel.endpoint_switch_timing')}>
             {#each [
               { mode: 'off', key: 'tunnel.endpoint_mode_off' },
               { mode: 'reconnect', key: 'tunnel.endpoint_mode_reconnect' },
@@ -1503,7 +1503,9 @@
                 </span>
               {/if}
               {#if cand === epSettings.active}
-                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_active')}</span>
+                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_in_use')}</span>
+              {:else}
+                <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
               {/if}
               <button class="endpoint-candidate-del" type="button"
                 title={$t('tunnel.endpoint_candidate_remove')}
@@ -2306,6 +2308,9 @@
     font-size: 10px;
     color: var(--green);
     white-space: nowrap;
+  }
+  .endpoint-candidate-badge-idle {
+    color: var(--text-muted);
   }
   .endpoint-candidate-ms {
     font-size: 11px;

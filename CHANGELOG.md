@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.7.2] - 2026-10-16
+
+### 🔧 Changed
+
+- **Endpoint panel wording.** The per-tunnel switch control is now labelled "Switch timing" — it is a three-state selector (off / on reconnect / dynamic) describing *when* switching happens, not a binary auto-switch. Its hint and the candidate-list hint were reworded in all five languages.
+- **English dynamic-mode hint de-lawyered** for plainer wording.
+- **Every endpoint candidate now shows a state badge.** Previously only the active endpoint displayed a badge; inactive candidates now show a muted "not in use" badge, so the list reads consistently at a glance.
+
 ## [2.7.1] - 2026-10-15
 
 ### 🐛 Fixed
