@@ -4,6 +4,13 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [2.8.1] - 2026-10-23
+
+### 🐛 수정
+
+- **자체 scheme을 가진 Windows 프록시가 더 이상 “프록시 없음”으로 읽히지 않습니다.** 레지스트리 `ProxyServer` 값이 프로토콜별 항목으로 저장되고 주소 자체에 scheme이 붙어 있을 때（`https=https://proxy.corp:8080` — 일부 도구와 손으로 편집한 레지스트리가 쓰는 형태）기존 구현은 scheme을 한 번 더 붙여 유효하지 않은 주소를 만들었습니다. “시스템 따르기”는 프록시가 설정되지 않았다고 보고했고, 프록시가 실제로 설정된 기기에서도 모든 업데이트가 직접 나갔습니다. 이러한 값은 이제 원래대로 유지됩니다. 파서를 Windows 전용 파일에서 내보내어 항목 우선순위와 scheme 규칙이 모든 플랫폼에서 단위 테스트되도록 했습니다.
+- **SOCKS4 주소를 더 이상 시스템 프록시로 받지 않습니다.** Go의 HTTP 전송은 http·https·socks5·socks5h만 다이얼하고, 다른 scheme은 CONNECT 줄로 대화합니다 — 그래서 `socks4://` 주소는 요청마다 이해하기 어려운 프록시 측 오류를 내고, 직접 연결로 대체하지도 않았습니다. 이제 “프록시 없음”으로 보고해 앱이 실제로 쓸 수 있는 그 집합과 일치시킅니다.
+
 ## [2.8.0] - 2026-10-23
 
 ### ✨ 추가

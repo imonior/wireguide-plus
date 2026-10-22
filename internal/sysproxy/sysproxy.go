@@ -39,14 +39,25 @@ import (
 // 「这不是代理地址」的信号。
 const maxProxyLen = 512
 
-// proxySchemes are the URL schemes accepted as a proxy address — the ones
-// Go's http.Transport can actually dial through. The whitelist also keeps
-// "file://" and "data://" out: a proxy address must never be able to turn
-// an outbound request into a local file read.
-// proxySchemes 是可用作代理地址的 URL 方案，即 Go 的 http.Transport 真正能
-// 拨出去的那几个。白名单同时把 "file://" 与 "data://" 挡在外面：一个代理地址
-// 不该有本事把对外请求变成本地文件读取。
-var proxySchemes = []string{"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
+// proxySchemes are the URL schemes accepted as a proxy address — exactly
+// the ones Go's http.Transport can dial through. net/http/transport.go
+// documents that set ("http", "https", "socks5", "socks5h") and routes
+// every other scheme down the HTTP-proxy path, where it would be spoken to
+// with CONNECT lines — so a socks4:// address, say, would be sent to a
+// SOCKS4 server that cannot parse them and every request would fail with a
+// confusing proxy-side error instead of falling back to a direct
+// connection. Such an address is therefore reported as "no proxy" rather
+// than half-used. The whitelist also keeps "file://" and "data://" out: a
+// proxy address must never be able to turn an outbound request into a
+// local file read.
+// proxySchemes 是可用作代理地址的 URL 方案——正好是 Go 的 http.Transport
+// 拨得出去的那几个。net/http/transport.go 写明的就是这个集合（"http"、
+// "https"、"socks5"、"socks5h"），其余方案一律走 HTTP 代理路径、被塞以
+// CONNECT 行——于是 socks4:// 这样的地址会被发给解析不了它的 SOCKS4 服务器，
+// 每个请求都以难以理解的代理侧错误失败，而不是退回直连。所以这类地址报「没有
+// 代理」，不做半吊子使用。白名单同时把 "file://" 与 "data://" 挡在外面：
+// 一个代理地址不该有本事把对外请求变成本地文件读取。
+var proxySchemes = []string{"http", "https", "socks5", "socks5h"}
 
 // detectTimeout bounds one call to an external detection command. Reading
 // the system proxy is never worth blocking the caller on.
@@ -275,6 +286,107 @@ func gnomeProxy() string {
 
 func gnomeEntry(schema string) (string, uint32, bool) {
 	return ParseGnomeEntry(gsettings(schema, "host"), gsettings(schema, "port"))
+}
+
+// windowsServer turns the Windows "ProxyServer" value into one proxy
+// address. Windows stores either a bare "host:port" (one proxy for every
+// protocol) or a semicolon-separated list such as
+// "http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:7891".
+//
+// HTTPS wins over HTTP over SOCKS because every outbound request this app
+// makes is https. A bare entry with no protocol prefix applies to
+// everything and is used as-is.
+//
+// A value that already carries its own scheme — "http=http://host:port",
+// which some tools and hand-edited registries write — is preserved
+// verbatim. Prefixing another scheme onto it would produce
+// "http://http://host:port", which normalize throws away: the proxy would
+// silently read as "no proxy" and every update would leave the machine
+// directly, on a machine that is in fact proxied.
+//
+// It lives here rather than in sysproxy_windows.go because it is a pure
+// string function: keeping it beside ParseScutil and ParseGnomeEntry means
+// its entry-priority and scheme rules are unit-tested on every platform
+// instead of only where the registry itself can be read.
+//
+// windowsServer 把 Windows 的 "ProxyServer" 值转成一个代理地址。Windows 要么
+// 存一个裸的 "host:port"（所有协议共用），要么存分号分隔的列表，如
+// "http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:7891"。
+//
+// 优先 HTTPS 再 HTTP 再 SOCKS，因为本应用发出的请求都是 https。不带协议前缀的
+// 裸条目对所有协议生效，原样使用。
+//
+// 自带方案的值——"http=http://host:port"，某些工具与手改的注册表会这样写——
+// 原样保留。再拼一个方案会得到 "http://http://host:port"，被 normalize 丢弃：
+// 代理会悄悄变成「没有代理」，全部更新流量直连外出，而机器上其实配着代理。
+//
+// 它放在这里而不是 sysproxy_windows.go，因为它是个纯字符串函数：与
+// ParseScutil、ParseGnomeEntry 相邻意味着它的条目优先级与方案规则在每个
+// 平台上都有单测覆盖，而不是只有能读注册表的平台上才有。
+func windowsServer(server string) string {
+	if server == "" {
+		return ""
+	}
+	if !strings.Contains(server, "=") {
+		// One address for every protocol. A scheme has to be added because
+		// Windows stores it bare and a bare "host:port" is not a URL.
+		// 所有协议共用一个地址。Windows 存的是裸地址，而裸的 "host:port"
+		// 不是 URL，需要补上方案。
+		if strings.Contains(server, "://") {
+			return server
+		}
+		return "http://" + server
+	}
+	var httpAddr, socksAddr string
+	for _, part := range strings.Split(server, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		scheme, addr, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		// A value that already carries a scheme is kept as written; see the
+		// comment above for why double-prefixing is worse than useless.
+		// 自带方案的值按原样保留；原因见上方注释——双重前缀不只是没用，
+		// 还会让整个代理悄悄失效。
+		own := strings.Contains(addr, "://")
+		switch strings.ToLower(strings.TrimSpace(scheme)) {
+		case "https":
+			// An HTTPS entry is an HTTP proxy spoken to over CONNECT, same
+			// as macOS's HTTPSProxy.
+			// HTTPS 条目是用 CONNECT 的 HTTP 代理，与 macOS 的 HTTPSProxy 同理。
+			if own {
+				return addr
+			}
+			return "http://" + addr
+		case "http":
+			if httpAddr == "" {
+				if own {
+					httpAddr = addr
+				} else {
+					httpAddr = "http://" + addr
+				}
+			}
+		case "socks", "socks5":
+			if socksAddr == "" {
+				if own {
+					socksAddr = addr
+				} else {
+					socksAddr = "socks5://" + addr
+				}
+			}
+		}
+	}
+	if httpAddr != "" {
+		return httpAddr
+	}
+	return socksAddr
 }
 
 // stripQuotes removes one layer of surrounding single or double quotes.

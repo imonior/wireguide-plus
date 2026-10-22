@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.1] - 2026-10-23
+
+### 🐛 修正
+
+- **scheme 付きアドレスの Windows プロキシが「プロキシなし」と読まれなくなりました。** レジストリの `ProxyServer` 値がプロトコル別エントリで、かつアドレス自体に scheme が付いている場合（`https=https://proxy.corp:8080`——一部のツールや手編集されたレジストリが書く形）、旧実装は scheme をもう一つ前置して無効なアドレスを作っていました。「システムに従う」はプロキシが未設定と報告し、プロキシが実際に設定されている機器でもすべての更新が直接送出されていました。このような値は今やそのまま保持され、パーサーを Windows 専用ファイルから移したことで、エントリの優先順位と scheme 規則がすべてのプラットフォームで単体テストされるようになりました。
+- **SOCKS4 アドレスをシステムプロキシとして受け入れなくなりました。** Go の HTTP トランスポートがダイヤルできるのは http・https・socks5・socks5h のみで、他の scheme は CONNECT 行で話しかけられます。`socks4://` アドレスは接続ごとに理解しにくいプロキシ側エラーを出し、直接接続へのフォールバックもしませんでした。今は「プロキシなし」と報告され、アプリが実際に使える集合と一致します。
+
 ## [2.8.0] - 2026-10-23
 
 ### ✨ 追加

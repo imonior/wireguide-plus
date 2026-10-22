@@ -119,6 +119,17 @@ func TestNormalizeAcceptsOnlySchemePlusAuthority(t *testing.T) {
 		"http://\x01127.0.0.1:1",
 		"http://@:1",
 		"http://" + string(make([]byte, maxProxyLen)) + ":1",
+		// socks4/socks4a are NOT usable proxy addresses for this app: Go's
+		// http.Transport only dials http/https/socks5/socks5h and would
+		// speak CONNECT to a SOCKS4 server. Reporting them keeps "follow
+		// system" honest — a direct connection instead of a guaranteed
+		// proxy-side failure.
+		// socks4/socks4a 对本应用不是可用地址：Go 的 http.Transport 只拨
+		// http/https/socks5/socks5h，否则会对 SOCKS4 服务器说 CONNECT。
+		// 拒掉它们才能让「跟随系统」诚实——宁可直连，也不要注定失败的
+		// 代理侧错误。
+		"socks4://10.0.0.1:1080",
+		"socks4a://10.0.0.1:1080",
 	}
 	for _, in := range bad {
 		if got := normalize(in); got != "" {
@@ -142,6 +153,77 @@ func TestStripQuotes(t *testing.T) {
 	} {
 		if got := stripQuotes(in); got != want {
 			t.Fatalf("stripQuotes(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The Windows ProxyServer value comes in three shapes: a bare address, a
+// bare address with its own scheme, and a per-protocol list. What is
+// asserted is *which entry wins and which scheme it is emitted with*: a
+// wrong scheme makes the dialer speak the wrong protocol to a healthy
+// port, and the user only ever sees "the update check failed" with no
+// reason.
+// Windows 的 ProxyServer 值有三种形状：裸地址、自带方案的裸地址、分协议列表。
+// 这里断言的是**取哪一条、以及用哪个方案产出**：方案拼错会让拨号端对着一个
+// 健康的端口说错协议，而用户只看得到「更新检查失败」。
+func TestWindowsServerParsesRegistryShapes(t *testing.T) {
+	ok := []struct{ in, want string }{
+		// Bare address: one proxy for every protocol; a scheme has to be
+		// added because Windows stores it bare.
+		// 裸地址：所有协议共用；Windows 存的是裸值，需要补上方案。
+		{"127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"proxy.corp:8080", "http://proxy.corp:8080"},
+		// A bare value that already carries a scheme is kept as written.
+		// 自带方案的裸值按原样保留。
+		{"http://127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"socks5://10.0.0.1:1080", "socks5://10.0.0.1:1080"},
+		// Per-protocol list: https wins over http over socks, whatever
+		// order the entries appear in.
+		// 分协议列表：无论条目顺序如何，https 胜过 http 胜过 socks。
+		{"http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:7891", "http://127.0.0.1:7890"},
+		{"socks=127.0.0.1:7891;http=127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"http=127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"socks=127.0.0.1:7891", "socks5://127.0.0.1:7891"},
+		// Empty entries are skipped rather than treated as configured.
+		// 空条目被跳过，而不是当成已配置。
+		{"https=;http=127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"http=;socks=127.0.0.1:7891", "socks5://127.0.0.1:7891"},
+		{"https=;http=;socks=", ""},
+		// A per-protocol value carrying its own scheme is preserved
+		// verbatim — the shape some tools and hand-edited registries write.
+		// Prefixing another scheme would double it into an address
+		// normalize rejects, silently reading as "no proxy".
+		// 自带方案的分协议值原样保留——某些工具与手改的注册表正是这种形状。
+		// 再拼一个方案会双重前缀成被 normalize 拒绝的地址，悄悄变成「没有代理」。
+		{"https=https://proxy.corp:8080;http=127.0.0.1:7890", "https://proxy.corp:8080"},
+		{"http=http://127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"socks=socks5://127.0.0.1:7891", "socks5://127.0.0.1:7891"},
+	}
+	for _, c := range ok {
+		if got := windowsServer(c.in); got != c.want {
+			t.Errorf("windowsServer(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Every shape windowsServer can emit must still be a usable address after
+// normalize — a shape that parses here but dies there is a silent "no
+// proxy": the panel reports the system has no proxy configured and every
+// update leaves the machine directly. This is the regression guard for the
+// double-prefixed "http://https://…" bug.
+// windowsServer 产出的每种形状都必须过得了 normalize——在这里解析成功却在
+// 那里死掉的形状就是一次静默的「没有代理」：面板报告系统没配代理，全部更新
+// 直连外出。这是 "http://https://…" 双重前缀 bug 的回归防线。
+func TestWindowsServerOutputSurvivesNormalize(t *testing.T) {
+	for _, in := range []string{
+		"127.0.0.1:7890",
+		"http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:7891",
+		"https=https://proxy.corp:8080;http=127.0.0.1:7890",
+		"http=http://127.0.0.1:7890",
+		"socks=socks5://127.0.0.1:7891",
+	} {
+		if got := normalize(windowsServer(in)); got == "" {
+			t.Errorf("normalize(windowsServer(%q)) = \"\", want a usable address", in)
 		}
 	}
 }

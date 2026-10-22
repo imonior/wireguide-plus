@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.1] - 2026-10-23
+
+### 🐛 Fixed
+
+- **A Windows proxy whose address carries its own scheme no longer reads as "no proxy".** When the registry's `ProxyServer` value lists per-protocol entries with the address already carrying a scheme (`https=https://proxy.corp:8080` — the shape some tools and hand-edited registries write) the address was prefixed a second time and then rejected as invalid. "Follow system" reported that no proxy was configured and every update left the machine directly, on a machine that was in fact proxied. Such a value is now kept as written, and the parser moved out of the Windows-only file so its entry-priority and scheme rules are unit-tested on every platform.
+- **SOCKS4 addresses are no longer accepted as system proxies.** Go's HTTP transport dials http, https, socks5 and socks5h only; any other scheme is spoken to with CONNECT lines, so a `socks4://` address produced confusing proxy-side errors on every request instead of falling back to a direct connection. It is now reported as "no proxy", matching what the app can actually use.
+
 ## [2.8.0] - 2026-10-23
 
 ### ✨ Added

@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.1] - 2026-10-23
+
+### 🐛 修復
+
+- **自帶方案的 Windows 代理不再被讀成「沒有代理」。** 當註冊表 `ProxyServer` 以分協定形式儲存、且位址自帶方案時（如 `https=https://proxy.corp:8080`——某些工具與手改的註冊表正是這種形狀），舊實作會再搭一個方案前綴，產出被判為非法的位址。於是「跟隨系統」報告系統沒有設定代理，全部更新流量直接外出，而機器上其實配著可用的代理。這類值現在按原樣保留；解析函式同時移出 Windows 專屬檔案，條目優先順序與方案規則從此在每個平台上都有單元測試覆蓋。
+- **SOCKS4 位址不再被當作系統代理接受。** Go 的 HTTP 傳輸層只擇 http、https、socks5、socks5h，其餘方案會被塞以 CONNECT 行——於是 `socks4://` 位址讓每個請求都報難以理解的代理側錯誤，而不是退回直接。現在它報「沒有代理」，與本應用真正能用的那一集合對齊。
+
 ## [2.8.0] - 2026-10-23
 
 ### ✨ 新增
