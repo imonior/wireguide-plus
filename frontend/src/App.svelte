@@ -1454,7 +1454,7 @@
       {#if currentView === 'tunnels'}
         <div class="tunnels-view">
           <div class="tunnel-list-pane" style="width: {$listPaneWidth}px;">
-            <TunnelList on:import={handleImportOpen} on:new={handleNewTunnelOpen} />
+            <TunnelList {TunnelService} on:import={handleImportOpen} on:new={handleNewTunnelOpen} />
           </div>
           <div class="pane-resizer" class:resizing
             on:mousedown={onResizeStart} on:dblclick={onResizeReset} on:keydown={onResizeKeydown}

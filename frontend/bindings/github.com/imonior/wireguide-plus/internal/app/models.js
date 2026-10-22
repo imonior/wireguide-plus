@@ -1176,6 +1176,53 @@ export class TunnelInfo {
 }
 
 /**
+ * TunnelManualOverride reports one tunnel's manual latch to the UI: which
+ * way the user overrode automation. Override is "off" (the user
+ * disconnected by hand, so every connect rule for the tunnel is suppressed)
+ * or "on" (the user connected by hand, so every disconnect rule is
+ * suppressed). The two latches are mutually exclusive, so a tunnel carries
+ * at most one of them.
+ * TunnelManualOverride 向界面上报单隧道的手动闩锁：用户把自动化覆盖到了哪
+ * 个方向。Override 为 "off"（用户手动断开，该隧道的连接类规则全部被抑制）
+ * 或 "on"（用户手动连接，断开类规则全部被抑制）。两个闩锁互斥，故一个隧道
+ * 最多只带其中一个。
+ */
+export class TunnelManualOverride {
+    /**
+     * Creates a new TunnelManualOverride instance.
+     * @param {Partial<TunnelManualOverride>} [$$source = {}] - The source object to create the TunnelManualOverride.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("override" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["override"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TunnelManualOverride instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TunnelManualOverride}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TunnelManualOverride(/** @type {Partial<TunnelManualOverride>} */($$parsedSource));
+    }
+}
+
+/**
  * TunnelMetaBinding is the wire form of the per-tunnel egress binding.
  */
 export class TunnelMetaBinding {
@@ -1291,6 +1338,123 @@ export class TunnelPolicies {
             $$parsedSource["domains"] = $$createField1_0($$parsedSource["domains"]);
         }
         return new TunnelPolicies(/** @type {Partial<TunnelPolicies>} */($$parsedSource));
+    }
+}
+
+/**
+ * UpdatePathResult is the measured outcome of one UpdatePathSpec. It echoes
+ * the spec back so the frontend can match results to its own rows by value
+ * rather than by position — a row can appear or disappear between the moment
+ * the probe is fired and the moment it returns.
+ * 
+ * UpdatePathResult 是某一条 UpdatePathSpec 的量测结果。它把 spec 原样带回，
+ * 前端因此能按值（而非按位置）把结果对上自己的行——发出探测到结果返回之间，
+ * 列表可能已经增删过行。
+ */
+export class UpdatePathResult {
+    /**
+     * Creates a new UpdatePathResult instance.
+     * @param {Partial<UpdatePathResult>} [$$source = {}] - The source object to create the UpdatePathResult.
+     */
+    constructor($$source = {}) {
+        if (!("mode" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mode"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("ok" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["ok"] = false;
+        }
+        if (!("latency_ms" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["latency_ms"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UpdatePathResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {UpdatePathResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UpdatePathResult(/** @type {Partial<UpdatePathResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * UpdatePathSpec is one row of the Settings → Proxy path list: a complete
+ * description of one way an update request can go out. "How the request
+ * leaves" (direct / system / manual) and "where it goes" (GitHub or a
+ * mirror prefix) are mutually exclusive categories rather than stacked
+ * options, which is why a single row carries both.
+ * 
+ * UpdatePathSpec 是「设置 → 代理」通路列表里的一行：一条升级请求外出方式的完整
+ * 描述。「怎么出去」（直连 / 跟随系统 / 手动代理）与「去哪里」（GitHub 或某个
+ * 镜像前缀）是互斥的分类而非可叠加的选项，所以一行同时带着这两项。
+ */
+export class UpdatePathSpec {
+    /**
+     * Creates a new UpdatePathSpec instance.
+     * @param {Partial<UpdatePathSpec>} [$$source = {}] - The source object to create the UpdatePathSpec.
+     */
+    constructor($$source = {}) {
+        if (!("mode" in $$source)) {
+            /**
+             * Mode is "direct", "system", "mirror" or "manual".
+             * Mode 取值 "direct" / "system" / "mirror" / "manual"。
+             * @member
+             * @type {string}
+             */
+            this["mode"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * URL is the mirror prefix when Mode is "mirror", or the proxy address
+             * when Mode is "manual"; empty otherwise.
+             * Mode 为 "mirror" 时是镜像前缀，为 "manual" 时是代理地址，其余为空。
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UpdatePathSpec instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {UpdatePathSpec}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UpdatePathSpec(/** @type {Partial<UpdatePathSpec>} */($$parsedSource));
     }
 }
 

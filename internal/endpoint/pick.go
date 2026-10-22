@@ -16,9 +16,11 @@
 package endpoint
 
 import (
+	"context"
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/imonior/wireguide-plus/internal/diag"
 )
@@ -26,10 +28,18 @@ import (
 // Measurement is the outcome of probing one endpoint candidate.
 // Measurement 是对一个 endpoint 候选探测的结果。
 type Measurement struct {
-	Address   string  `json:"address"`
-	Reachable bool    `json:"reachable"`
-	LatencyMs float64 `json:"latency_ms"`
-	Error     string  `json:"error,omitempty"`
+	Address string `json:"address"`
+	// ResolvedIP is what the endpoint's HOST resolves to right now: the
+	// public address behind a DDNS name. Literal-IP endpoints resolve to
+	// themselves, so the column is populated for every row and an empty
+	// value means one thing only — the lookup failed.
+	// ResolvedIP 是 endpoint 的 HOST 当前解析到的地址，即 DDNS 名字背后的公网
+	// 地址。字面 IP 的 endpoint 解析为自身，因此每一行都有值，空值只表示一件事：
+	// 解析失败。
+	ResolvedIP string  `json:"resolved_ip,omitempty"`
+	Reachable  bool    `json:"reachable"`
+	LatencyMs  float64 `json:"latency_ms"`
+	Error      string  `json:"error,omitempty"`
 }
 
 // Switch tuning knobs. A switch is disruptive enough (it rewrites the
@@ -83,6 +93,50 @@ func Host(addr string) string {
 	return strings.TrimSpace(addr)
 }
 
+// resolveTimeout bounds a name lookup inside Measure. The resolver has no
+// timeout of its own and Measure is called straight from the editor, so an
+// unbound lookup on a dead DNS server would freeze the whole candidate panel
+// on the system resolver's schedule (tens of seconds) instead of failing
+// fast like the ICMP probe beside it.
+// resolveTimeout 为 Measure 内的名字解析设上限。解析器自身没有超时，而 Measure
+// 是由编辑器直接调用的，因此在 DNS 服务器不可达时，无上限的解析会把整个候选面板
+// 冻结在系统解析器的节奏上（几十秒），而不是像旁边的 ICMP 探测那样快速失败。
+const resolveTimeout = 3 * time.Second
+
+// ResolveHost returns the address an endpoint host currently points at.
+// A literal IP resolves to itself; a name is looked up and its first IPv4
+// address returned (falling back to the first answer when there is no A
+// record). "" means the lookup failed — the editor renders that as an em
+// dash rather than a stale or guessed value.
+// ResolveHost 返回 endpoint 主机当前指向的地址。字面 IP 解析为自身；域名则查
+// 询并返回其第一个 IPv4 地址（没有 A 记录时退回第一个应答）。"" 表示解析失败——
+// 编辑器把它渲染成破折号，而不是一个陈旧或猜测的值。
+func ResolveHost(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+	defer cancel()
+	ips, err := (&net.Resolver{}).LookupIP(ctx, "ip", host)
+	if err != nil || len(ips) == 0 {
+		return ""
+	}
+	// IPv4 first: a WireGuard endpoint may have both, and the v4 address is
+	// the one users recognise as "the public IP" of a host.
+	// 优先 IPv4：WireGuard endpoint 可能同时有两类地址，而 v4 才是用户认作
+	// 「这台主机的公网 IP」的那个。
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			return v4.String()
+		}
+	}
+	return ips[0].String()
+}
+
 // Normalize trims, drops empties and removes duplicates while preserving
 // order. Order is the user's preference order and is what breaks ties, so it
 // must survive normalization.
@@ -122,7 +176,7 @@ func Measure(candidates []string) []Measurement {
 		wg.Add(1)
 		go func(idx int, addr string) {
 			defer wg.Done()
-			m := Measurement{Address: addr}
+			m := Measurement{Address: addr, ResolvedIP: ResolveHost(Host(addr))}
 			res := diag.PingEndpoint(Host(addr))
 			if res == nil {
 				m.Error = "probe failed"

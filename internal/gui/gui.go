@@ -442,6 +442,14 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 		} else {
 			tray.SetIcon(trayOffIconDark)
 		}
+		// Double left click shows the main window, while a single left click
+		// keeps opening the menu natively. No OnClick handler is registered
+		// here on purpose: Wails gives a macOS status item either native menu
+		// tracking or a click callback, never both, and OnDoubleClick is only
+		// wired up in the Windows backend. The monitor in tray_click_darwin.go
+		// detects the double from the NSEvent stream and re-posts a lone
+		// click so the menu still opens along Wails' own path.
+		installTrayDoubleClickMonitor(showDock)
 	} else {
 		tray.SetLabel("WireGuide Plus")
 		// Windows and Linux need an explicit icon at startup. Without it,

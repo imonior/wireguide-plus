@@ -6,8 +6,73 @@
   import { appSettings } from '../stores/settings.js';
   import { t } from '../i18n/index.js';
 
+  // Bound backend service, injected by App.svelte. Optional so the list still
+  // renders in isolation; the manual-override notice simply stays hidden.
+  // 由 App.svelte 注入的后端服务。设为可选，列表仍可独立渲染，只是手动覆盖
+  // 提示会保持隐藏。
+  export let TunnelService = null;
+
   const dispatch = createEventDispatcher();
   let search = '';
+
+  // Tunnels the user has taken over by hand (manual connect / disconnect).
+  // While a latch holds, the matching automation rules are suppressed — which
+  // is otherwise invisible, so the list states it next to the row.
+  // 被用户手动接管（手动连接/断开）的隧道。闩锁期间匹配的自动化规则是被抑制
+  // 的——这一点原本不可见，故列表在行旁明示。
+  let manualOverrides = [];
+  let restoringName = '';
+  let overrideSeq = 0;
+  $: manualOverrideMap = (() => {
+    const m = {};
+    for (const o of manualOverrides || []) {
+      if (o && o.name) m[o.name] = o.override;
+    }
+    return m;
+  })();
+
+  // Reload exactly when the active/established sets change — that is the
+  // moment a manual connect or disconnect has just latched (or released) a
+  // tunnel. Keying on the status broadcast itself would re-query at the
+  // helper's 1 Hz rate for no reason.
+  // 仅在 active/established 集合变化时重载——那正是手动连接或断开刚刚闩住
+  // （或释放）某条隧道的时刻。若直接以状态广播为键，会以 helper 的 1 Hz 频率
+  // 无意义地重复查询。
+  $: statusSignature = [
+    ($connectionStatus?.active_tunnels || []).join(','),
+    ($connectionStatus?.established_tunnels || []).join(','),
+  ].join('|');
+  $: if (TunnelService) void loadManualOverrides(statusSignature);
+
+  async function loadManualOverrides(_sig) {
+    if (!TunnelService) return;
+    const seq = ++overrideSeq;
+    try {
+      const list = await TunnelService.GetManualOverrides();
+      if (seq !== overrideSeq) return;
+      manualOverrides = Array.isArray(list) ? list : [];
+    } catch (_) {
+      // A failed read must never hide the list: no overrides shown is the
+      // pre-feature behaviour, not a broken one.
+      if (seq === overrideSeq) manualOverrides = [];
+    }
+  }
+
+  // Hand the tunnel back to its automation rules by releasing whichever
+  // manual latch it carries (off or on — they are mutually exclusive).
+  // 释放该隧道所带的手动闩锁（off 或 on，二者互斥），把它交还给自动化规则。
+  async function restoreAutomation(name) {
+    if (!TunnelService || !name || restoringName) return;
+    restoringName = name;
+    try {
+      await TunnelService.ClearManualOverride(name);
+      manualOverrides = (manualOverrides || []).filter((o) => o.name !== name);
+    } catch (e) {
+      console.warn('failed to restore automation for tunnel:', name, e);
+    } finally {
+      restoringName = '';
+    }
+  }
 
   $: filtered = ($tunnels || []).filter(tun =>
     tun.name.toLowerCase().includes(search.toLowerCase())
@@ -21,6 +86,11 @@
   // is still connecting and may yet fail (boot-time DNS miss, pending
   // handshake), and painting that green is exactly what made a failed attempt
   // look like "connected, then silently dropped".
+  //
+  // Green still needs a handshake on top of it: "established" only says the
+  // interface came up, and it stays true forever for a tunnel whose peer never
+  // answers. So the green pill is established AND handshook — the same claim
+  // the tray bubble makes (see gui.upTunnelSet).
   $: activeSet = new Set($connectionStatus?.active_tunnels || []);
   // Older helpers send only active_tunnels; falling back to it there is the
   // best available answer, and newer ones always send established_tunnels
@@ -143,7 +213,7 @@
         <button
           class="tunnel-item"
           class:active={$selectedTunnel?.name === tun.name}
-          class:connected={establishedSet.has(tun.name)}
+          class:connected={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
           class:pending={pendingSet.has(tun.name)}
           aria-current={$selectedTunnel?.name === tun.name ? 'true' : undefined}
           on:click={() => select(tun)}
@@ -170,6 +240,19 @@
             {/if}
           </div>
         </button>
+        <!-- Manual-override notice. Sits as a SIBLING of the row button, never
+             inside it: a <button> may not contain another <button>, and the
+             restore action needs its own focusable control. -->
+        {#if manualOverrideMap[tun.name]}
+          <div class="manual-override" role="status">
+            <span class="mo-text">{$t(manualOverrideMap[tun.name] === 'off' ? 'tunnel.manual_override_off' : 'tunnel.manual_override_on')}</span>
+            <button
+              class="mo-restore"
+              disabled={restoringName === tun.name}
+              on:click={() => restoreAutomation(tun.name)}
+            >{$t('tunnel.restore_automation')}</button>
+          </div>
+        {/if}
       {/each}
     {/if}
   </div>
@@ -364,6 +447,46 @@
                   box-shadow var(--dur-base) var(--ease-out);
     }
   }
+  /* --- Manual override notice ---
+     The user took this tunnel over by hand, so its automation rules are dead
+     until restored. Rendered directly under the row so the reason is visible
+     exactly where the connect/disconnect was clicked. */
+  .manual-override {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0 4px;
+    padding: 5px 10px 6px 24px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--text-muted) 9%, transparent);
+  }
+  .mo-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-muted);
+  }
+  .mo-restore {
+    flex: none;
+    height: 20px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .mo-restore:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .mo-restore:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
   .tunnel-item:hover {
     background: var(--bg-hover);
   }

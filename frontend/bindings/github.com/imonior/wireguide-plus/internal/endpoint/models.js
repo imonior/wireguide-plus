@@ -23,6 +23,20 @@ export class Measurement {
              */
             this["address"] = "";
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * ResolvedIP is what the endpoint's HOST resolves to right now: the
+             * public address behind a DDNS name. Literal-IP endpoints resolve to
+             * themselves, so the column is populated for every row and an empty
+             * value means one thing only — the lookup failed.
+             * ResolvedIP 是 endpoint 的 HOST 当前解析到的地址，即 DDNS 名字背后的公网
+             * 地址。字面 IP 的 endpoint 解析为自身，因此每一行都有值，空值只表示一件事：
+             * 解析失败。
+             * @member
+             * @type {string | undefined}
+             */
+            this["resolved_ip"] = undefined;
+        }
         if (!("reachable" in $$source)) {
             /**
              * @member

@@ -23,6 +23,7 @@ import (
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/logging"
 	"github.com/imonior/wireguide-plus/internal/storage"
+	"github.com/imonior/wireguide-plus/internal/sysproxy"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
@@ -755,14 +756,27 @@ type TestProxyResult struct {
 }
 
 // TestProxy performs a round-trip request to the GitHub Releases API using
-// the given proxy configuration and reports success plus latency. The
-// Settings → Proxy "test connection" button calls this so the user can
-// verify a proxy works before saving it.
+// the given proxy configuration and reports success plus latency.
 //
-// mode is one of "direct", "mirror" or "manual":
+// The Settings → Proxy panel no longer calls this: it measures every row at
+// once through TestUpdatePaths, which is the same probe expressed per row.
+// TestProxy stays as the single-path entry point — a caller that wants one
+// answer about one path, without building a list — and shares
+// PathTransport/PathRequestURL with it so the two can never disagree.
+//
+// TestProxy 用给定的代理配置向 GitHub Releases API 发一次往返请求，报告是否
+// 成功与耗时。
+//
+// 「设置 → 代理」面板已经不再调用它：那里现在经 TestUpdatePaths 一次量完所有行，
+// 而 TestUpdatePaths 就是同一探测按行表达的版本。TestProxy 作为单通路入口保留
+// 下来——给只想问一条通路、不想先凑一个列表的调用方——并与它共用
+// PathTransport / PathRequestURL，因此两者不可能给出互相矛盾的答案。
+//
+// mode is one of "direct", "system", "mirror" or "manual":
 //   - "direct": rawURL ignored; a plain Transport (explicitly ignoring any
 //     environment HTTP_PROXY/HTTPS_PROXY, which is what "direct" means in
 //     the UI).
+//   - "system": the OS proxy is asked for at request time.
 //   - "mirror": rawURL is a GitHub accelerator mirror prefix (e.g.
 //     "https://ghfast.top"); the API endpoint is fetched directly through
 //     "<mirror>/<official endpoint>".
@@ -771,23 +785,22 @@ type TestProxyResult struct {
 func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
 	start := time.Now()
 	client := &http.Client{Timeout: 8 * time.Second}
-	target := update.APIEndpoint()
 	switch mode {
 	case "mirror":
 		if !update.ValidMirrorPrefix(rawURL) {
 			return TestProxyResult{OK: false, Error: "invalid mirror prefix (need e.g. https://ghfast.top)"}
 		}
-		client.Transport = &http.Transport{}
-		target = update.MirroredEndpoint(rawURL)
 	case "manual":
 		u, err := url.Parse(rawURL)
 		if err != nil || !update.ValidProxyURL(u) {
 			return TestProxyResult{OK: false, Error: "invalid proxy URL (need e.g. http://127.0.0.1:7890)"}
 		}
-		client.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
-	default: // "direct"
-		client.Transport = &http.Transport{}
 	}
+	// One mapping for both halves of the request, so the probe cannot
+	// disagree with what the same setting would actually do.
+	// 请求的两半共用同一份映射，探测因此不会与同一条设置真正会做的事分歧。
+	client.Transport = update.PathTransport(mode, rawURL)
+	target := update.PathRequestURL(mode, rawURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -805,6 +818,124 @@ func (s *TunnelService) TestProxy(mode, rawURL string) TestProxyResult {
 		return TestProxyResult{OK: false, Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
 	}
 	return TestProxyResult{OK: true, LatencyMs: int(time.Since(start).Milliseconds())}
+}
+
+// SystemProxy returns the proxy address the operating system currently
+// reports, or "" when it reports none. The Settings → Proxy panel shows it
+// next to the "Follow system" row so that row never has to be taken on
+// faith: it either names the address in use or says there isn't one.
+//
+// SystemProxy 返回操作系统当前报告的代理地址，没有时返回空串。「设置 → 代理」
+// 面板把它显示在「跟随系统」这一行旁边，于是这一行不必靠猜：要么写出正在用的
+// 地址，要么说明系统没配代理。
+func (s *TunnelService) SystemProxy() string {
+	return sysproxy.Resolve()
+}
+
+// UpdatePathSpec is one row of the Settings → Proxy path list: a complete
+// description of one way an update request can go out. "How the request
+// leaves" (direct / system / manual) and "where it goes" (GitHub or a
+// mirror prefix) are mutually exclusive categories rather than stacked
+// options, which is why a single row carries both.
+//
+// UpdatePathSpec 是「设置 → 代理」通路列表里的一行：一条升级请求外出方式的完整
+// 描述。「怎么出去」（直连 / 跟随系统 / 手动代理）与「去哪里」（GitHub 或某个
+// 镜像前缀）是互斥的分类而非可叠加的选项，所以一行同时带着这两项。
+type UpdatePathSpec struct {
+	// Mode is "direct", "system", "mirror" or "manual".
+	// Mode 取值 "direct" / "system" / "mirror" / "manual"。
+	Mode string `json:"mode"`
+	// URL is the mirror prefix when Mode is "mirror", or the proxy address
+	// when Mode is "manual"; empty otherwise.
+	// Mode 为 "mirror" 时是镜像前缀，为 "manual" 时是代理地址，其余为空。
+	URL string `json:"url"`
+}
+
+// UpdatePathResult is the measured outcome of one UpdatePathSpec. It echoes
+// the spec back so the frontend can match results to its own rows by value
+// rather than by position — a row can appear or disappear between the moment
+// the probe is fired and the moment it returns.
+//
+// UpdatePathResult 是某一条 UpdatePathSpec 的量测结果。它把 spec 原样带回，
+// 前端因此能按值（而非按位置）把结果对上自己的行——发出探测到结果返回之间，
+// 列表可能已经增删过行。
+type UpdatePathResult struct {
+	Mode      string `json:"mode"`
+	URL       string `json:"url"`
+	OK        bool   `json:"ok"`
+	LatencyMs int    `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// maxPathProbe caps how many rows a single call may probe. The list is
+// bounded by the UI regardless; the cap stops a malformed payload from
+// turning into a burst of concurrent outbound requests.
+// maxPathProbe 限制单次调用可探测的行数。列表本来就有界面兜着，这个上限只是防止
+// 一个畸形载荷变成一串并发外发请求。
+const maxPathProbe = 16
+
+// TestUpdatePaths measures every row of the Settings → Proxy path list in
+// parallel. Each row sends the real request an update check would send
+// (rewritten through that row's own mirror prefix when it has one), out
+// through that row's own way of leaving the machine — so the number beside a
+// row is "what choosing this row actually costs right now".
+//
+// Rows are probed concurrently because they are independent network paths:
+// measuring them in series would make the last one look slow simply because
+// it happened to be measured last.
+//
+// TestUpdatePaths 并行测量「设置 → 代理」通路列表的每一行。每一行都发出更新检查
+// 真会发的那个请求（该行带镜像前缀时按前缀改写），并经该行自己的出口方式出去——
+// 于是行旁那个数字就是「选这一行当下实际要花多久」。
+//
+// 各行并行探测，因为它们彼此是独立的网络通路：串行测量会让最后一行仅仅因为
+// 恰好最后被测而显得慢。
+func (s *TunnelService) TestUpdatePaths(specs []UpdatePathSpec) []UpdatePathResult {
+	if len(specs) > maxPathProbe {
+		specs = specs[:maxPathProbe]
+	}
+	out := make([]UpdatePathResult, len(specs))
+	var wg sync.WaitGroup
+	for i, spec := range specs {
+		wg.Add(1)
+		go func(idx int, sp UpdatePathSpec) {
+			defer wg.Done()
+			out[idx] = probeUpdatePath(sp)
+		}(i, spec)
+	}
+	wg.Wait()
+	return out
+}
+
+// probeUpdatePath performs the single HTTP round-trip behind one path row.
+// probeUpdatePath 执行一行通路背后那一次 HTTP 往返。
+func probeUpdatePath(spec UpdatePathSpec) UpdatePathResult {
+	res := UpdatePathResult{Mode: spec.Mode, URL: spec.URL}
+	ctx, cancel := context.WithTimeout(context.Background(), mirrorProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, update.PathRequestURL(spec.Mode, spec.URL), nil)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	client := &http.Client{Timeout: mirrorProbeTimeout, Transport: update.PathTransport(spec.Mode, spec.URL)}
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	defer resp.Body.Close()
+	// Drain (bounded) so the timing covers the whole response, not just the
+	// headers. 排空（限量）以便计时覆盖整个响应而不只是响应头。
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	res.LatencyMs = int(time.Since(start).Milliseconds())
+	if resp.StatusCode >= 400 {
+		res.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return res
+	}
+	res.OK = true
+	return res
 }
 
 // MirrorTestRow is one row of the Settings → Proxy connectivity table:
@@ -837,9 +968,19 @@ const mirrorProbeTimeout = 8 * time.Second
 
 // TestMirrorConnectivity probes the direct GitHub API endpoint plus every
 // given mirror prefix in parallel and returns one row per target: reachable
-// rows first, fastest first, failures last. The Settings page calls it as
-// soon as it opens, so the user sees — without clicking anything — whether
-// direct works at all and which mirror is actually fastest right now.
+// rows first, fastest first, failures last.
+//
+// The Settings → Proxy panel no longer calls this: its list now covers
+// direct, the OS proxy, manual addresses and mirrors alike, and it measures
+// that list through TestUpdatePaths. This one stays as the mirror-only
+// sweep, and both share the same transport/URL mapping.
+//
+// TestMirrorConnectivity 并行探测 GitHub API 直连与每个镜像前缀，每个目标返回一行：
+// 可达的排在前面（快的在前），失败的排在后面。
+//
+// 「设置 → 代理」面板已经不再调用它：那里的列表现在同时覆盖直连、系统代理、手动
+// 地址与镜像，并统一由 TestUpdatePaths 测量。这里作为「只扫镜像」的那份保留下来，
+// 两者共用同一份 transport / URL 映射。
 //
 // The probe is an HTTP round-trip against the real API URL, NOT an ICMP
 // ping: an accelerator mirror is an HTTP reverse proxy for the API, so "the
@@ -1179,16 +1320,21 @@ const publicIPGeoGrace = 3 * time.Second
 // answers — so the winning provider's name is returned too and shown in the
 // UI, and the whole thing is gated by Settings.PublicIPLookupEnabled.
 //
-// The lookup deliberately ignores the app's proxy configuration: the point
-// of the readout is "how this machine looks to the internet", and routing
-// it through a manual proxy would report the proxy instead.
+// The lookup goes out through the currently selected update path, because
+// the row lives in the proxy panel and answers "where does traffic sent
+// through this path appear to come from". With a proxy selected the egress
+// genuinely is the proxy's, and reporting the bare machine IP there would
+// describe a path the app is not actually using. Mirror mode leaves
+// directly: a mirror only rewrites GitHub URLs, it is not an outbound route.
 //
 // GetPublicIPInfo 解析本机当前的公网（出口）IP 及其归属地。它本质上就是一次
 // 第三方查询——请求必然会把公网 IP 暴露给应答的那家服务——因此顺带返回
 // 命中服务商的名字并在界面上显示，整体还受 Settings.PublicIPLookupEnabled 开关约束。
 //
-// 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
-// 若经由手动代理转发，报出来的就是代理的 IP 了。
+// 该查询经**当前选中的升级通路**发出，因为这个读数就在代理面板里，回答的是
+// 「走这条路出去的流量看起来来自哪里」。选了代理时出口确实就是代理的，此时报出
+// 裸机 IP 等于在描述一条应用并没在走的路。镜像模式是直连出去的：镜像只改写
+// GitHub 的 URL，它不是出口路由。
 func (s *TunnelService) GetPublicIPInfo(lang string) PublicIPInfo {
 	// lang is the resolved UI language (e.g. "zh", "zh-TW", "en", "ja",
 	// "ko"); it selects which provider's locale the geolocation is preferred
@@ -1202,6 +1348,11 @@ func (s *TunnelService) GetPublicIPInfo(lang string) PublicIPInfo {
 
 	ctx, cancel := context.WithTimeout(context.Background(), publicIPTimeout)
 	defer cancel()
+
+	// One transport for every provider: the egress is a property of the
+	// selected path, not of whichever service answers.
+	// 所有服务商共用一个 transport：出口是所选通路的属性，跟哪家应答无关。
+	transport := update.PathTransport(settings.ProxyMode, settings.ProxyURL)
 
 	type attempt struct {
 		info PublicIPInfo
@@ -1226,7 +1377,7 @@ func (s *TunnelService) GetPublicIPInfo(lang string) PublicIPInfo {
 			// 任何命名 UA 都是 200，默认 UA 超时）。带上朴素的产品 UA 即可，
 			// 无须伪装成浏览器。
 			req.Header.Set("User-Agent", "wireguideplus")
-			client := &http.Client{Timeout: publicIPTimeout, Transport: &http.Transport{}}
+			client := &http.Client{Timeout: publicIPTimeout, Transport: transport}
 			resp, err := client.Do(req)
 			if err != nil {
 				info.Error = err.Error()

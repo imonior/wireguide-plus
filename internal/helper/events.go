@@ -232,6 +232,8 @@ func (h *Helper) statusDTO() ipc.ConnectionStatus {
 	// Established = setup actually finished. UI entities that assert "connected"
 	// to the user read this one, so a tunnel still negotiating (DNS failing,
 	// handshake pending) cannot be advertised as up and then silently vanish.
+	// It is the interface-level fact only: consumers that claim a working
+	// tunnel intersect it with the per-tunnel handshake flag.
 	result.EstablishedTunnels = h.manager.EstablishedTunnels()
 
 	// Snapshot the latency cache once per call so we don't take the

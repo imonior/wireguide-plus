@@ -686,6 +686,74 @@ func (s *TunnelService) ClearAllManualOverrides() {
 	}
 }
 
+// TunnelManualOverride reports one tunnel's manual latch to the UI: which
+// way the user overrode automation. Override is "off" (the user
+// disconnected by hand, so every connect rule for the tunnel is suppressed)
+// or "on" (the user connected by hand, so every disconnect rule is
+// suppressed). The two latches are mutually exclusive, so a tunnel carries
+// at most one of them.
+// TunnelManualOverride 向界面上报单隧道的手动闩锁：用户把自动化覆盖到了哪
+// 个方向。Override 为 "off"（用户手动断开，该隧道的连接类规则全部被抑制）
+// 或 "on"（用户手动连接，断开类规则全部被抑制）。两个闩锁互斥，故一个隧道
+// 最多只带其中一个。
+type TunnelManualOverride struct {
+	Name     string `json:"name"`
+	Override string `json:"override"`
+}
+
+// GetManualOverrides lists every tunnel the user has taken manual control
+// of, together with the direction of the override. The UI surfaces this so a
+// silently-suppressed automation rule is never a mystery: while a latch
+// holds, the matching rules are dead until the user restores them.
+// GetManualOverrides 列出所有已被用户手动接管的隧道及其覆盖方向。界面据此
+// 提示——闩锁期间匹配的规则其实已经失效，直到用户恢复。
+func (s *TunnelService) GetManualOverrides() ([]TunnelManualOverride, error) {
+	if s.settingsStore == nil {
+		return nil, nil
+	}
+	cfg, err := s.settingsStore.Load()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TunnelManualOverride, 0, len(cfg.ManualOffTunnels)+len(cfg.ManualOnTunnels))
+	for _, n := range cfg.ManualOffTunnels {
+		out = append(out, TunnelManualOverride{Name: n, Override: "off"})
+	}
+	for _, n := range cfg.ManualOnTunnels {
+		out = append(out, TunnelManualOverride{Name: n, Override: "on"})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// ClearManualOverride releases a single tunnel's manual latch — whichever
+// direction it is latched — handing that one tunnel back to its automation
+// rules. This is the UI's "restore automation" action: narrower than
+// ClearAllManualOverrides, which releases every tunnel at once.
+// ClearManualOverride 释放单个隧道的手动闩锁（不论方向），仅把这一条隧道
+// 交还给自动化规则。这是界面上的「恢复自动规则」动作：比一次释放全部隧道的
+// ClearAllManualOverrides 更精确。
+func (s *TunnelService) ClearManualOverride(name string) error {
+	if name == "" {
+		return fmt.Errorf("automation: empty tunnel name")
+	}
+	if s.settingsStore == nil {
+		return errors.New("automation: settings store unavailable")
+	}
+	if err := s.settingsStore.Update(func(cfg *storage.Settings) error {
+		cfg.ClearManualOff(name)
+		cfg.ClearManualOn(name)
+		return nil
+	}); err != nil {
+		slog.Warn("failed to clear manual latch", "tunnel", name, "error", err)
+		return err
+	}
+	slog.Info("automation: manual latch cleared by user — rules active again",
+		"category", "network",
+		"tunnel", name)
+	return nil
+}
+
 // snapshotActiveStats returns (tunnelName, rx, tx) for the tunnel about to
 // disconnect. Empty wantName picks the primary active tunnel. Returns zero
 // values on any error — capturing stats is best-effort and never blocks

@@ -291,11 +291,12 @@
         settings.endpoint_margin_pct = Number(s.endpoint_margin_pct) >= 1 ? Number(s.endpoint_margin_pct) : 30;
         settings.endpoint_sustained_sec = Number(s.endpoint_sustained_sec) >= 0 ? Number(s.endpoint_sustained_sec) : 30;
         settings.endpoint_cooldown_sec = Number(s.endpoint_cooldown_sec) >= 240 ? Number(s.endpoint_cooldown_sec) : 300;
-        // Measure direct + every mirror, and resolve the public IP, as soon
-        // as the page opens — both are read-only lookups the user would
-        // otherwise have to click for. Fire-and-forget: a failed lookup
-        // must never block the settings page from rendering.
-        runMirrorScan();
+        // Measure every update path and resolve the public IP as soon as the
+        // page opens — both are read-only lookups the user would otherwise
+        // have to click for. Fire-and-forget: a failed lookup must never
+        // block the settings page from rendering.
+        runPathScan();
+        loadSystemProxy();
         loadPublicIP();
       }
     } catch (e) {
@@ -669,16 +670,27 @@
   }
 
   // --- Proxy (for update checks) ---
-  // Two distinct outbound paths, both for networks that cannot reach
-  // api.github.com directly (e.g. mainland China):
-  //   - mirror: the API URL is rewritten through a public accelerator
-  //     prefix (https://ghproxy.net/https://api.github.com/...) and fetched
-  //     directly. No local proxy software needed.
-  //   - manual: requests still go to api.github.com but tunnel through a
-  //     locally running HTTP/SOCKS5 proxy (Clash etc.).
+  // Only two things leave this app: the update check and the installer
+  // download. Both go out through one chosen "update path", and a path is a
+  // mutually exclusive category rather than a set of stacked options:
+  //   - direct / system: how the request leaves (nothing / the OS proxy).
+  //   - mirror: where it goes — the GitHub URL is rewritten through a
+  //     public accelerator prefix. No local proxy software needed.
+  //   - manual: still api.github.com, but tunneled through a locally
+  //     running HTTP/SOCKS5 proxy (Clash etc.).
+  // Picking one row therefore resets the other dimension: a mirror is not
+  // "a proxy plus a prefix", it is a different way out entirely.
+  //
+  // 只有两样东西会离开本应用：更新检查与安装包下载。二者都经一条选定的
+  // 「升级通路」外出，而通路是互斥的分类，不是可叠加的选项：
+  //   - direct / system：请求怎么出去（不用代理 / 用系统代理）。
+  //   - mirror：请求去哪里——GitHub 的 URL 经公共加速前缀改写。无需本地代理软件。
+  //   - manual：仍然去 api.github.com，但经本地运行的 HTTP/SOCKS5 代理（Clash 等）。
+  // 因此选中一行会把另一维退回：镜像不是「代理 + 前缀」，它是完全不同的一种走法。
+  //
   // Built-in starting point for the mirror list. It is only a seed:
   // every entry is deletable, and "restore defaults" brings them back.
-  // Kept here as well as in Go so the <select> never renders empty while
+  // Kept here as well as in Go so the list never renders empty while
   // settings are still loading.
   const DEFAULT_MIRRORS = [
     'https://ghfast.top',
@@ -690,59 +702,90 @@
   // Effective list: a persisted array wins (including an empty one, which
   // is how "delete them all" survives a restart); null → defaults.
   $: mirrorList = Array.isArray(settings.proxy_mirrors) ? settings.proxy_mirrors : DEFAULT_MIRRORS;
-  // Display order follows the latest scan: reachable rows fastest-first,
-  // then failures, then rows not yet measured (stored order). The stored
-  // list itself is never reordered — this only affects presentation.
-  // 展示顺序跟随最近一次测速：可达行按延迟升序，失败行其后，未测行保持
-  // 存储顺序。存储的列表本身不会被重排——这只影响展示。
-  $: mirrorRows = (() => {
-    const rows = mirrorList.map((value) => ({ value, label: mirrorHost(value) }));
-    const rank = (r) => {
-      const s = scanRows[r.value];
-      if (!s) return 2;
-      return s.ok ? 0 : 1;
-    };
-    const lat = (r) => (scanRows[r.value]?.latency_ms ?? Number.MAX_SAFE_INTEGER);
-    return [...rows].sort((a, b) => rank(a) - rank(b) || lat(a) - lat(b));
-  })();
+  // The path list: one row per way an update request can go out, rendered
+  // as a single-select list. Rows come from the saved settings plus the
+  // managed mirror list; a manual address or a custom mirror that is not in
+  // the list still gets its own row — otherwise it would keep working
+  // invisibly, with no way to see, re-select or delete it.
+  //
+  // 通路列表：每行是一种「升级请求外出的方式」，以单选列表呈现。行来自已保存
+  // 的设置加受管的镜像列表；不在列表里的手动地址或自定义镜像也会各占一行——
+  // 否则它会继续生效却看不见、选不中、删不掉。
+  //
+  // A reactive statement, not a template helper: Svelte cannot see which
+  // state a function body reads, so `pathRows` is computed here and only
+  // read (never computed) from the markup.
+  // 必须是响应式语句而不是模板里的辅助函数：Svelte 看不到函数体读了哪些状态，
+  // 所以 pathRows 在这里算好，模板里只负责读。
+  $: pathRows = buildPathRows(settings.proxy_mode, settings.proxy_url, mirrorList);
 
-  function mirrorHost(value) {
-    try {
-      return new URL(value).host || value;
-    } catch (e) {
-      return value;
+  function buildPathRows(mode, url, mirrors) {
+    // Addresses and prefixes are facts, not copy: they are printed verbatim
+    // (label). Only the two rows with no address carry a translated key.
+    // 地址与前缀是事实而非文案，原样印出（label）。只有那两个没有地址的行
+    // 才带待翻译的键。
+    const rows = [];
+    rows.push({ id: 'direct', kind: 'direct', mode: 'direct', url: '', labelKey: 'settings.proxy_direct_github' });
+    rows.push({ id: 'system', kind: 'system', mode: 'system', url: '', labelKey: 'settings.proxy_follow_system' });
+    if (mode === 'manual' && url) {
+      rows.push({ id: 'proxy:' + url, kind: 'proxy', mode: 'manual', url, label: url, deletable: true });
     }
+    for (const m of mirrors) {
+      rows.push({ id: 'mirror:' + m, kind: 'mirror', mode: 'mirror', url: m, label: m, deletable: true });
+    }
+    if (mode === 'mirror' && url && !mirrors.includes(url)) {
+      rows.push({ id: 'mirror:' + url, kind: 'mirror', mode: 'mirror', url, label: url, deletable: true });
+    }
+    return rows;
   }
 
-  // Current <select> value: 'direct', one of the mirrored presets,
-  // 'mirror' (custom mirror prefix), or 'manual'.
-  // Must be a reactive statement, not a plain helper: Svelte can't trace
-  // which settings fields a function body reads, so a template
-  // `value={fn()}` is evaluated once and never re-run after load() fills
-  // settings — the select would stay stuck on "Direct" after reopening
-  // the settings screen.
-  $: proxySelect = settings.proxy_mode === 'mirror'
-    ? (mirrorList.includes(settings.proxy_url) ? settings.proxy_url : 'mirror')
-    : (settings.proxy_mode === 'manual' ? 'manual' : 'direct');
+  // Which row is selected. Derived from the saved pair so the highlight can
+  // never drift from what the backend will actually use.
+  // 选中哪一行。由已保存的那对值派生，高亮因此不会与后端真正会走的路偏离。
+  $: activePathId = (() => {
+    const mode = settings.proxy_mode;
+    const url = settings.proxy_url || '';
+    if (mode === 'mirror' && url) return 'mirror:' + url;
+    if (mode === 'manual' && url) return 'proxy:' + url;
+    if (mode === 'system') return 'system';
+    return 'direct';
+  })();
 
-  // --- Mirror list management + automatic measurement ---
-  // Rows come back from one batch probe (direct + every mirror) fired when
-  // the page opens, so the user sees which path actually works right now
-  // instead of guessing.
-  let mirrorScan = { running: false, rows: [] };
+  // --- Path measurement ---
+  // Every row is timed with the real request an update check would send, out
+  // through that row's own way of leaving. Fired when the page opens so the
+  // user sees which path actually works right now instead of guessing;
+  // "Test speed" repeats it on demand.
+  //
+  // 每一行都用更新检查真会发的那个请求、经该行自己的出口方式计时。页面打开时
+  // 自动跑一次，让用户看到当下哪条路真的可用而不必猜；「测速」按钮按需重跑。
+  let pathScan = { running: false, rows: [] };
   let newMirror = '';
+  let newProxy = '';
+  // Why the typed address is refused, shown next to the add rows.
+  // 拒绝所填地址的原因，显示在添加行旁边。
+  let pathErr = '';
   let publicIP = { loading: false, info: null, errAt: 0, error: '' };
 
-  // Indexed by "direct" or by mirror prefix. A reactive map (not a
-  // function) so the template re-renders when a scan lands.
-  $: scanRows = (() => {
+  // Keyed by path id. A reactive map (not a template function call) so the
+  // rows re-render the moment a scan lands.
+  // 以通路 id 为键。响应式 map（而非模板里的函数调用），扫描一落地行就会重绘。
+  $: pathSpeedMap = (() => {
     const map = {};
-    for (const r of mirrorScan.rows || []) {
-      if (r && r.kind === 'direct') map.direct = r;
-      else if (r && r.label) map[r.label] = r;
+    for (const r of pathScan.rows || []) {
+      if (!r) continue;
+      if (r.mode === 'manual') map['proxy:' + r.url] = r;
+      else if (r.mode === 'mirror') map['mirror:' + r.url] = r;
+      else map[r.mode] = r;
     }
     return map;
   })();
+
+  // What the OS reports for "follow system": null until loaded, '' when it
+  // reports no proxy. Shown on that row so it is never taken on faith.
+  // 「跟随系统」读到什么：未加载为 null，系统没配代理为空串。显示在那一行的
+  // 旁边，于是这一行不必靠猜。
+  let systemProxyAddr = null;
 
   $: publicLocation = (() => {
     const i = publicIP.info;
@@ -757,15 +800,33 @@
     return Array.isArray(settings.proxy_mirrors) ? settings.proxy_mirrors : DEFAULT_MIRRORS;
   }
 
-  async function runMirrorScan() {
-    const list = currentMirrorList();
-    mirrorScan = { running: true, rows: mirrorScan.rows };
+  async function runPathScan() {
+    // Built from the raw state instead of the `pathRows` derived value: this
+    // runs from load() and right after a selection, before Svelte has
+    // flushed reactive statements — pathRows would still hold the previous
+    // list there.
+    // 用原始状态构建而不是读 `pathRows` 派生值：本函数在 load() 里、以及刚
+    // 选中一行之后就会被调用，此时 Svelte 还没刷新响应式语句，pathRows 里
+    // 还是上一份列表。
+    const specs = buildPathRows(settings.proxy_mode, settings.proxy_url, currentMirrorList())
+      .map((p) => ({ mode: p.mode, url: p.url || '' }));
+    if (specs.length === 0) return;
+    pathScan = { running: true, rows: pathScan.rows };
     try {
-      const res = await TunnelService.TestMirrorConnectivity(list);
-      mirrorScan = { running: false, rows: Array.isArray(res) ? res : [] };
+      const res = await TunnelService.TestUpdatePaths(specs);
+      pathScan = { running: false, rows: Array.isArray(res) ? res : [] };
     } catch (e) {
-      console.warn('mirror scan failed:', e);
-      mirrorScan = { running: false, rows: [] };
+      console.warn('path scan failed:', e);
+      pathScan = { running: false, rows: [] };
+    }
+  }
+
+  async function loadSystemProxy() {
+    try {
+      const v = await TunnelService.SystemProxy();
+      systemProxyAddr = v || '';
+    } catch (e) {
+      systemProxyAddr = '';
     }
   }
 
@@ -823,16 +884,133 @@
 
   $: staleTime = publicIP.errAt ? new Date(publicIP.errAt).toLocaleTimeString() : '';
 
+  // Selecting a row replaces the whole path: the two dimensions are
+  // categories, not layers, so the other one goes back to its default.
+  // 选中一行就是换掉整条通路：两维是分类而非叠加，因此另一维退回默认。
+  async function selectPath(row) {
+    pathErr = '';
+    settings.proxy_mode = row.mode;
+    settings.proxy_url = row.url || '';
+    settings = settings;
+    // Saved first: the two follow-up lookups read the backend's own copy of
+    // the settings, and a probe that runs before the write lands would
+    // measure the previous path.
+    // 先保存：后面两个查询读的是后端自己的那份设置，写在落地之前就探测等于
+    // 在量上一条通路。
+    await save();
+    runPathScan();
+    loadPublicIP();
+  }
+
+  async function deletePath(row) {
+    pathErr = '';
+    if (row.kind === 'mirror') {
+      if (mirrorList.includes(row.url)) {
+        settings.proxy_mirrors = currentMirrorList().filter((m) => m !== row.url);
+      }
+      // Deleting the row in use falls back to direct: leaving proxy_url
+      // pointing at a deleted address would keep sending update checks
+      // somewhere the user just rejected.
+      // 删掉正在用的那一行回退到直连：让 proxy_url 继续指向被删的地址，等于
+      // 继续把更新检查发往用户刚拒绝的地方。
+      if (settings.proxy_mode === 'mirror' && settings.proxy_url === row.url) {
+        settings.proxy_mode = 'direct';
+        settings.proxy_url = '';
+      }
+    } else if (row.kind === 'proxy') {
+      if (settings.proxy_mode === 'manual' && settings.proxy_url === row.url) {
+        settings.proxy_mode = 'direct';
+        settings.proxy_url = '';
+      }
+    }
+    settings = settings;
+    await save();
+    runPathScan();
+    loadPublicIP();
+  }
+
+  // An address the backend cannot use is refused here rather than stored:
+  // PathTransport falls back to no proxy on an unparsable one, so accepting
+  // it would leave a row that is selected and does nothing — and the panel
+  // would never say why.
+  // 后端用不了的地址在这里就拒绝而不存下来：PathTransport 遇到解析不了的地址
+  // 会退回不用代理，收下它会留下「选中了却不起作用」的一行，而面板永远不会
+  // 说明原因。
+  const PROXY_SCHEMES = ['http:', 'https:', 'socks4:', 'socks4a:', 'socks5:', 'socks5h:'];
+
+  function parseProxyAddr(v) {
+    if (!v || /\s/.test(v)) return null;
+    let u;
+    try {
+      u = new URL(v);
+    } catch (e) {
+      return null;
+    }
+    // A path segment has no meaning on a proxy address; accepting one would
+    // only make the user believe it took effect.
+    // 代理地址上的路径段没有语义，收下只会让人以为它起了作用。
+    if (!PROXY_SCHEMES.includes(u.protocol) || !u.hostname) return null;
+    if (u.pathname !== '' && u.pathname !== '/') return null;
+    return u.href.replace(/\/+$/, '');
+  }
+
+  function parseMirrorPrefix(v) {
+    if (!v || /\s/.test(v)) return null;
+    let u;
+    try {
+      u = new URL(v);
+    } catch (e) {
+      return null;
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (!u.hostname) return null;
+    if (u.pathname !== '' && u.pathname !== '/') return null;
+    return u.origin;
+  }
+
+  // A manual address becomes the selected path immediately — an address that
+  // was added but not chosen is indistinguishable from one that does nothing.
+  // 手动地址一加进来就成为选中的通路——加了却没选中的地址，与「加了但不起作用」
+  // 看起来毫无区别。
+  async function addManualProxy() {
+    const u = parseProxyAddr(String(newProxy || '').trim());
+    if (!u) {
+      pathErr = $t('settings.proxy_rejected');
+      return;
+    }
+    pathErr = '';
+    settings.proxy_mode = 'manual';
+    settings.proxy_url = u;
+    newProxy = '';
+    settings = settings;
+    await save();
+    runPathScan();
+    loadPublicIP();
+  }
+
+  function onProxyAddKey(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addManualProxy();
+    }
+  }
+
   function addMirror() {
-    const v = String(newMirror || '').trim().replace(/\/+$/, '');
-    if (!v) return;
+    const v = parseMirrorPrefix(String(newMirror || '').trim().replace(/\/+$/, ''));
+    if (!v) {
+      pathErr = $t('settings.proxy_mirror_rejected');
+      return;
+    }
+    pathErr = '';
     const list = [...currentMirrorList()];
     if (!list.includes(v)) list.push(v);
     settings.proxy_mirrors = list;
+    settings.proxy_mode = 'mirror';
+    settings.proxy_url = v;
     newMirror = '';
     settings = settings;
     scheduleSave();
-    runMirrorScan();
+    runPathScan();
   }
 
   function onMirrorAddKey(e) {
@@ -842,24 +1020,12 @@
     }
   }
 
-  function removeMirror(value) {
-    settings.proxy_mirrors = currentMirrorList().filter((m) => m !== value);
-    // Deleting the mirror that is currently in use falls back to direct:
-    // leaving proxy_url pointing at a deleted mirror would keep sending
-    // update checks to an address the user just rejected.
-    if (settings.proxy_mode === 'mirror' && settings.proxy_url === value) {
-      settings.proxy_mode = 'direct';
-    }
-    settings = settings;
-    scheduleSave();
-    runMirrorScan();
-  }
-
   function restoreMirrors() {
+    pathErr = '';
     settings.proxy_mirrors = [...DEFAULT_MIRRORS];
     settings = settings;
     scheduleSave();
-    runMirrorScan();
+    runPathScan();
   }
 
   function onPublicIPToggle(e) {
@@ -867,61 +1033,6 @@
     settings = settings;
     scheduleSave();
     loadPublicIP();
-  }
-
-  function onProxyChange(e) {
-    const v = e.target.value;
-    if (v === 'direct') {
-      settings.proxy_mode = 'direct';
-      // Keep settings.proxy_url as history — switching back to a custom
-      // mirror or a local proxy restores the last used address instead
-      // of showing an empty input.
-    } else if (v === 'manual') {
-      settings.proxy_mode = 'manual';
-      settings.proxy_url = settings.proxy_url || '';
-    } else if (v === 'mirror') {
-      // "Custom mirror" — keep whatever prefix is already typed.
-      settings.proxy_mode = 'mirror';
-      settings.proxy_url = settings.proxy_url || 'https://';
-    } else {
-      // One of the mirror presets.
-      settings.proxy_mode = 'mirror';
-      settings.proxy_url = v;
-    }
-    proxyTestState = null;
-    scheduleSave();
-  }
-
-  function onProxyUrlInput(e) {
-    settings.proxy_url = e.target.value;
-    proxyTestState = null;
-    scheduleSave();
-  }
-
-  // { testing, ok, latency, error }
-  let proxyTestState = null;
-  // Only the paths the mirror scan cannot cover need this button: a manual
-  // proxy, or a custom mirror prefix that is not in the managed list. Direct
-  // and every listed mirror are already probed by the scan rows above — a
-  // second button measuring the same targets again produced two numbers for
-  // one path, which read as a contradiction.
-  // 只有镜像扫描覆盖不到的线路才需要这个按钮：手动代理，以及不在管理列表
-  // 里的自定义镜像前缀。直连与列表里的每个镜像都已由上方的扫描行探测——
-  // 再放一个按钮重复测同一目标，会得出两个数字，看起来像互相矛盾。
-  $: proxyTestVisible =
-    settings.proxy_mode === 'manual' ||
-    (settings.proxy_mode === 'mirror' && !mirrorList.includes(settings.proxy_url));
-  async function onTestProxy() {
-    // Test whatever is currently selected: direct, the active mirror
-    // prefix, or the manual proxy URL.
-    const target = settings.proxy_mode === 'direct' ? '' : settings.proxy_url;
-    proxyTestState = { testing: true, ok: false, latency: 0, error: '' };
-    try {
-      const res = await TunnelService.TestProxy(settings.proxy_mode, target);
-      proxyTestState = { testing: false, ok: !!res.ok, latency: res.latency_ms || 0, error: res.error || '' };
-    } catch (err) {
-      proxyTestState = { testing: false, ok: false, latency: 0, error: String(err) };
-    }
   }
 
   // Reflect settings applied by another client (the CLI) live, so the
@@ -1169,109 +1280,84 @@
                   checked={settings.public_ip_lookup}
                   on:change={onPublicIPToggle} />
               </div>
-              <div class="setting-row">
-                <div class="setting-info">
-                  <label class="setting-label" for="proxy-select">{$t('settings.proxy')}</label>
-                  <p class="setting-desc">{$t('settings.proxy_hint')}</p>
-                </div>
-                <select id="proxy-select" value={proxySelect} on:change={onProxyChange}>
-                  <option value="direct">{$t('settings.proxy_direct')}</option>
-                  {#each mirrorRows as p}
-                    <option value={p.value}>{p.label}</option>
-                  {/each}
-                  <option value="mirror">{$t('settings.proxy_mirror_custom')}</option>
-                  <option value="manual">{$t('settings.proxy_manual')}</option>
-                </select>
-              </div>
-              {#if settings.proxy_mode === 'mirror' || settings.proxy_mode === 'manual'}
-                <div class="setting-row">
-                  <div class="setting-info">
-                    <label class="setting-label" for="proxy-url">
-                      {settings.proxy_mode === 'mirror' ? $t('settings.proxy_mirror_label') : $t('settings.proxy_url')}
-                    </label>
-                    <p class="setting-desc">
-                      {settings.proxy_mode === 'mirror' ? $t('settings.proxy_mirror_hint') : $t('settings.proxy_manual_hint')}
-                    </p>
-                  </div>
-                  <input id="proxy-url" type="text"
-                    value={settings.proxy_url}
-                    placeholder={settings.proxy_mode === 'mirror'
-                      ? $t('settings.proxy_mirror_placeholder')
-                      : $t('settings.proxy_url_placeholder')}
-                    on:input={onProxyUrlInput} />
-                </div>
-              {/if}
-              <!-- Managed mirror list: every preset is removable, and the
-                   measured latency tells the user which one to keep. -->
+              <!-- The path list: one row per way an update request can go
+                   out, single-select. The measured latency tells the user
+                   which one to keep. -->
               <div class="setting-row setting-row--column">
-                <div class="mirror-list-head">
+                <div class="path-list-head">
                   <div class="setting-info">
-                    <label class="setting-label">{$t('settings.proxy_mirror_list')}</label>
-                    <p class="setting-desc">{$t('settings.proxy_mirror_list_hint')}</p>
+                    <h5 class="path-subhead">{$t('settings.proxy_path')}</h5>
+                    <p class="setting-desc">{$t('settings.proxy_path_hint')}</p>
                   </div>
-                  <button class="btn-secondary mirror-retest" type="button"
-                    on:click={runMirrorScan} disabled={mirrorScan.running}>
-                    {mirrorScan.running ? $t('settings.proxy_scanning') : $t('settings.proxy_mirror_retest')}
+                  <button class="btn-secondary path-retest" type="button"
+                    on:click={runPathScan} disabled={pathScan.running}>
+                    {pathScan.running ? $t('settings.proxy_scanning') : $t('settings.proxy_test_speed')}
                   </button>
                 </div>
-                <div class="mirror-list">
-                  <div class="mirror-row mirror-row--direct">
-                    <span class="mirror-host">{$t('settings.proxy_direct')}</span>
-                    <span class="mirror-state" class:ok={scanRows.direct?.ok} class:bad={scanRows.direct && !scanRows.direct.ok}>
-                      {#if mirrorScan.running}
-                        {$t('settings.proxy_scanning')}
-                      {:else if scanRows.direct?.ok}
-                        {$t('settings.proxy_test_ok', { n: scanRows.direct.latency_ms })}
-                      {:else if scanRows.direct}
-                        {$t('settings.proxy_test_fail', { err: scanRows.direct.error })}
+                <div class="path-list">
+                  {#each pathRows as p (p.id)}
+                    <label class="path-row" class:path-row--active={p.id === activePathId}>
+                      <input type="radio" name="update-path"
+                        checked={p.id === activePathId}
+                        on:change={() => selectPath(p)} />
+                      <span class="path-label" title={p.label || ''}>
+                        {p.labelKey ? $t(p.labelKey) : p.label}
+                      </span>
+                      {#if p.kind === 'system'}
+                        <!-- Naming the address the OS reports keeps this row
+                             from being a guess the user has to trust. -->
+                        <span class="path-note">
+                          {systemProxyAddr === null ? '' : (systemProxyAddr || $t('settings.proxy_system_none'))}
+                        </span>
                       {/if}
-                    </span>
-                  </div>
-                  {#each mirrorRows as m}
-                    <div class="mirror-row">
-                      <span class="mirror-host" title={m.value}>{m.label}</span>
-                      <span class="mirror-state" class:ok={scanRows[m.value]?.ok} class:bad={scanRows[m.value] && !scanRows[m.value].ok}>
-                        {#if mirrorScan.running}
+                      <span class="path-ms"
+                        class:ok={pathSpeedMap[p.id]?.ok}
+                        class:bad={pathSpeedMap[p.id] && !pathSpeedMap[p.id].ok}>
+                        {#if pathScan.running}
                           {$t('settings.proxy_scanning')}
-                        {:else if scanRows[m.value]?.ok}
-                          {$t('settings.proxy_test_ok', { n: scanRows[m.value].latency_ms })}
-                        {:else if scanRows[m.value]}
-                          {$t('settings.proxy_test_fail', { err: scanRows[m.value].error })}
+                        {:else if pathSpeedMap[p.id]?.ok}
+                          {$t('settings.proxy_test_ok', { n: pathSpeedMap[p.id].latency_ms })}
+                        {:else if pathSpeedMap[p.id]}
+                          {$t('settings.proxy_test_fail', { err: pathSpeedMap[p.id].error })}
                         {/if}
                       </span>
-                      <button class="mirror-del" title={$t('settings.proxy_mirror_delete')}
-                        on:click={() => removeMirror(m.value)}>×</button>
-                    </div>
+                      {#if p.deletable}
+                        <!-- Inside a <label>, so the click has to be stopped
+                             from also flipping the radio. -->
+                        <button class="path-del" type="button" title={$t('settings.proxy_mirror_delete')}
+                          on:click={(e) => { e.preventDefault(); e.stopPropagation(); deletePath(p); }}>×</button>
+                      {/if}
+                    </label>
                   {/each}
-                  {#if mirrorRows.length === 0}
-                    <p class="mirror-empty">{$t('settings.proxy_mirror_empty')}</p>
-                  {/if}
-                  <div class="mirror-add">
+                  <p class="setting-desc path-speed-hint">{$t('settings.proxy_speed_hint')}</p>
+                  <div class="path-add">
+                    <span class="path-add-label">{$t('settings.proxy_manual')}</span>
+                    <input type="text" bind:value={newProxy}
+                      placeholder={$t('settings.proxy_url_placeholder')}
+                      on:keydown={onProxyAddKey} />
+                    <button class="btn-secondary" type="button" on:click={addManualProxy}>
+                      {$t('settings.proxy_mirror_add')}
+                    </button>
+                  </div>
+                  <div class="path-add">
+                    <span class="path-add-label">{$t('settings.proxy_mirror_custom')}</span>
                     <input type="text" bind:value={newMirror}
                       placeholder={$t('settings.proxy_mirror_add_placeholder')}
                       on:keydown={onMirrorAddKey} />
-                    <button class="btn-secondary" on:click={addMirror}>{$t('settings.proxy_mirror_add')}</button>
-                    <button class="btn-secondary" on:click={restoreMirrors}>{$t('settings.proxy_mirror_restore')}</button>
+                    <button class="btn-secondary" type="button" on:click={addMirror}>
+                      {$t('settings.proxy_mirror_add')}
+                    </button>
+                    <button class="btn-secondary" type="button" on:click={restoreMirrors}>
+                      {$t('settings.proxy_mirror_restore')}
+                    </button>
                   </div>
-                </div>
-              </div>
-              {#if proxyTestVisible}
-              <div class="setting-row setting-row--test">
-                <div class="setting-info"></div>
-                <div class="proxy-test-wrap">
-                  <button class="btn-secondary" on:click={onTestProxy} disabled={proxyTestState?.testing}>
-                    {proxyTestState?.testing ? $t('settings.proxy_testing') : $t('settings.proxy_test')}
-                  </button>
-                  {#if proxyTestState && !proxyTestState.testing}
-                    {#if proxyTestState.ok}
-                      <span class="proxy-test-ok">{$t('settings.proxy_test_ok', { n: proxyTestState.latency })}</span>
-                    {:else}
-                      <span class="proxy-test-fail">{$t('settings.proxy_test_fail', { err: proxyTestState.error })}</span>
-                    {/if}
+                  {#if pathErr}
+                    <p class="setting-desc path-err">{pathErr}</p>
                   {/if}
+                  <p class="setting-desc">{$t('settings.proxy_path_proxy_hint')}</p>
+                  <p class="setting-desc">{$t('settings.proxy_mirror_hint')}</p>
                 </div>
               </div>
-              {/if}
             </div>
           </div>
 
@@ -1998,57 +2084,81 @@
   .public-ip-stale {
     color: var(--text-muted);
   }
-  .mirror-list-head {
+  .path-list-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
     width: 100%;
   }
-  .mirror-retest {
+  .path-subhead {
+    margin: 0;
+    font: 600 12px/16px var(--font-sans);
+    color: var(--text-primary);
+  }
+  .path-retest {
     flex-shrink: 0;
     white-space: nowrap;
   }
-  .mirror-list {
+  .path-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
-  .mirror-row {
+  .path-row {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
     border-radius: 6px;
     background-color: var(--bg-secondary, rgba(120, 120, 128, 0.08));
+    cursor: pointer;
   }
-  .mirror-row--direct .mirror-host {
-    font-weight: 500;
+  .path-row--active {
+    box-shadow: inset 0 0 0 1px var(--green);
   }
-  .mirror-host {
+  .path-row input[type="radio"] {
+    flex-shrink: 0;
+    margin: 0;
+  }
+  /* Addresses and prefixes are facts, so they are set in monospace and
+     never wrapped — a wrapped URL reads as two different addresses. */
+  .path-label {
     flex: 1;
     min-width: 0;
-    font-size: 12px;
+    font: 12px/16px var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mirror-state {
+  .path-note {
+    flex-shrink: 0;
+    max-width: 38%;
+    font: 11px/16px var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .path-ms {
+    flex-shrink: 0;
+    min-width: 76px;
+    text-align: right;
     font-size: 11px;
     color: var(--text-muted);
     white-space: nowrap;
+  }
+  .path-ms.ok {
+    color: var(--green);
+  }
+  .path-ms.bad {
+    color: var(--red, #FF453A);
     max-width: 45%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .mirror-state.ok {
-    color: var(--green);
-  }
-  .mirror-state.bad {
-    color: var(--red, #FF453A);
-  }
-  .mirror-del {
+  .path-del {
     flex-shrink: 0;
     width: 20px;
     height: 20px;
@@ -2061,38 +2171,32 @@
     line-height: 1;
     cursor: pointer;
   }
-  .mirror-del:hover {
+  .path-del:hover {
     background-color: var(--bg-hover);
     color: var(--text-primary);
   }
-  .mirror-empty {
-    margin: 2px 0;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .mirror-add {
+  .path-add {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
     margin-top: 2px;
   }
-  .mirror-add input[type="text"] {
+  .path-add-label {
+    flex-shrink: 0;
+    min-width: 104px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .path-add input[type="text"] {
     flex: 1;
     min-width: 140px;
     font-size: 12px;
     padding: 4px 8px;
   }
-  .proxy-test-ok {
-    color: var(--green);
-    font-size: 12px;
-    white-space: nowrap;
-  }
-  .proxy-test-fail {
+  .path-err {
+    margin-top: 2px;
     color: var(--red, #FF453A);
-    font-size: 12px;
-    word-break: break-all;
-    max-width: 320px;
   }
   select:hover {
     background-color: var(--bg-hover);

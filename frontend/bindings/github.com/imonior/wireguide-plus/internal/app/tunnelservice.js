@@ -175,6 +175,21 @@ export function ClearConnectionHistory() {
 }
 
 /**
+ * ClearManualOverride releases a single tunnel's manual latch — whichever
+ * direction it is latched — handing that one tunnel back to its automation
+ * rules. This is the UI's "restore automation" action: narrower than
+ * ClearAllManualOverrides, which releases every tunnel at once.
+ * ClearManualOverride 释放单个隧道的手动闩锁（不论方向），仅把这一条隧道
+ * 交还给自动化规则。这是界面上的「恢复自动规则」动作：比一次释放全部隧道的
+ * ClearAllManualOverrides 更精确。
+ * @param {string} name
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearManualOverride(name) {
+    return $Call.ByID(1631022270, name);
+}
+
+/**
  * CloseHistorySessions closes any open history sessions with the given reason.
  * Called from gui.Run during shutdown so the UI doesn't show phantom "Active"
  * rows after a quit.
@@ -387,6 +402,21 @@ export function GetKnownSSIDs() {
 }
 
 /**
+ * GetManualOverrides lists every tunnel the user has taken manual control
+ * of, together with the direction of the override. The UI surfaces this so a
+ * silently-suppressed automation rule is never a mystery: while a latch
+ * holds, the matching rules are dead until the user restores them.
+ * GetManualOverrides 列出所有已被用户手动接管的隧道及其覆盖方向。界面据此
+ * 提示——闩锁期间匹配的规则其实已经失效，直到用户恢复。
+ * @returns {$CancellablePromise<$models.TunnelManualOverride[]>}
+ */
+export function GetManualOverrides() {
+    return $Call.ByID(587903948).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType15($result);
+    }));
+}
+
+/**
  * GetPublicDNSServers returns the public-resolver cross-check list the DNS
  * leak test will probe — i.e. the same list effectivePublicResolvers
  * computes. The UI seeds its editable list from this value; saving an edited
@@ -407,22 +437,27 @@ export function GetPublicDNSServers() {
  * answers — so the winning provider's name is returned too and shown in the
  * UI, and the whole thing is gated by Settings.PublicIPLookupEnabled.
  * 
- * The lookup deliberately ignores the app's proxy configuration: the point
- * of the readout is "how this machine looks to the internet", and routing
- * it through a manual proxy would report the proxy instead.
+ * The lookup goes out through the currently selected update path, because
+ * the row lives in the proxy panel and answers "where does traffic sent
+ * through this path appear to come from". With a proxy selected the egress
+ * genuinely is the proxy's, and reporting the bare machine IP there would
+ * describe a path the app is not actually using. Mirror mode leaves
+ * directly: a mirror only rewrites GitHub URLs, it is not an outbound route.
  * 
  * GetPublicIPInfo 解析本机当前的公网（出口）IP 及其归属地。它本质上就是一次
  * 第三方查询——请求必然会把公网 IP 暴露给应答的那家服务——因此顺带返回
  * 命中服务商的名字并在界面上显示，整体还受 Settings.PublicIPLookupEnabled 开关约束。
  * 
- * 该查询刻意不走应用自己的代理配置：这个读数的意义是「本机在互联网上长什么样」，
- * 若经由手动代理转发，报出来的就是代理的 IP 了。
+ * 该查询经**当前选中的升级通路**发出，因为这个读数就在代理面板里，回答的是
+ * 「走这条路出去的流量看起来来自哪里」。选了代理时出口确实就是代理的，此时报出
+ * 裸机 IP 等于在描述一条应用并没在走的路。镜像模式是直连出去的：镜像只改写
+ * GitHub 的 URL，它不是出口路由。
  * @param {string} lang
  * @returns {$CancellablePromise<$models.PublicIPInfo>}
  */
 export function GetPublicIPInfo(lang) {
     return $Call.ByID(2877467589, lang).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType16($result);
     }));
 }
 
@@ -434,7 +469,7 @@ export function GetPublicIPInfo(lang) {
  */
 export function GetRoutingTable() {
     return $Call.ByID(1939855255).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType18($result);
     }));
 }
 
@@ -443,7 +478,7 @@ export function GetRoutingTable() {
  */
 export function GetSettings() {
     return $Call.ByID(3436066580).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType20($result);
     }));
 }
 
@@ -455,7 +490,7 @@ export function GetSettings() {
  */
 export function GetStatus() {
     return $Call.ByID(1904259883).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType22($result);
     }));
 }
 
@@ -466,7 +501,7 @@ export function GetStatus() {
  */
 export function GetTunnelBinding(name) {
     return $Call.ByID(1947637108, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType24($result);
     }));
 }
 
@@ -478,7 +513,7 @@ export function GetTunnelBinding(name) {
  */
 export function GetTunnelDetail(name) {
     return $Call.ByID(1211015818, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType24($result);
+        return $$createType26($result);
     }));
 }
 
@@ -490,7 +525,7 @@ export function GetTunnelDetail(name) {
  */
 export function GetTunnelFields(content) {
     return $Call.ByID(2828369410, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType28($result);
     }));
 }
 
@@ -501,7 +536,7 @@ export function GetTunnelFields(content) {
  */
 export function GetTunnelPolicies(name) {
     return $Call.ByID(688340561, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType28($result);
+        return $$createType30($result);
     }));
 }
 
@@ -511,7 +546,7 @@ export function GetTunnelPolicies(name) {
  */
 export function GetUpdateState() {
     return $Call.ByID(1422034669).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType29($result);
+        return $$createType31($result);
     }));
 }
 
@@ -532,7 +567,7 @@ export function GetVersion() {
  */
 export function ImportConfig(name, content) {
     return $Call.ByID(3041138216, name, content).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -546,7 +581,7 @@ export function ImportConfig(name, content) {
  */
 export function ImportQRFromBytes(data, name) {
     return $Call.ByID(3697630092, data, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -559,7 +594,7 @@ export function ImportQRFromBytes(data, name) {
  */
 export function ImportQRFromPath(path, name) {
     return $Call.ByID(1276410894, path, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType31($result);
+        return $$createType33($result);
     }));
 }
 
@@ -574,7 +609,7 @@ export function ImportQRFromPath(path, name) {
  */
 export function ImportSettings() {
     return $Call.ByID(3314465931).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType33($result);
+        return $$createType35($result);
     }));
 }
 
@@ -586,7 +621,7 @@ export function ImportSettings() {
  */
 export function ImportZip(path) {
     return $Call.ByID(4220907101, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType35($result);
+        return $$createType37($result);
     }));
 }
 
@@ -598,7 +633,7 @@ export function ImportZip(path) {
  */
 export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType35($result);
+        return $$createType37($result);
     }));
 }
 
@@ -610,7 +645,7 @@ export function ImportZipData(data) {
  */
 export function ListPhysicalInterfaces() {
     return $Call.ByID(682080878).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType37($result);
+        return $$createType39($result);
     }));
 }
 
@@ -628,7 +663,7 @@ export function ListPhysicalInterfaces() {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType38($result);
+        return $$createType40($result);
     }));
 }
 
@@ -643,7 +678,7 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType38($result);
+        return $$createType40($result);
     }));
 }
 
@@ -673,7 +708,7 @@ export function LogFrontend(message) {
  */
 export function MeasureEndpointCandidates(name) {
     return $Call.ByID(1642477622, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType42($result);
     }));
 }
 
@@ -686,7 +721,7 @@ export function MeasureEndpointCandidates(name) {
  */
 export function MigrateLegacyData(opts) {
     return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType42($result);
+        return $$createType44($result);
     }));
 }
 
@@ -750,7 +785,7 @@ export function OpenURL(url) {
  */
 export function PendingAddressConflicts() {
     return $Call.ByID(3872522765).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType44($result);
+        return $$createType46($result);
     }));
 }
 
@@ -771,7 +806,7 @@ export function PendingAddressConflicts() {
  */
 export function PolicyReport(name) {
     return $Call.ByID(1901060591, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType45($result);
+        return $$createType47($result);
     }));
 }
 
@@ -782,7 +817,7 @@ export function PolicyReport(name) {
  */
 export function PolicyReportAll() {
     return $Call.ByID(3331289786).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType45($result);
+        return $$createType47($result);
     }));
 }
 
@@ -860,7 +895,7 @@ export function ReconcileHistoryFromStatus(activeNames, handshakeMap, rxByTunnel
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType47($result);
+        return $$createType49($result);
     }));
 }
 
@@ -915,7 +950,7 @@ export function ResolveDNSPathConflict(tunnel, action) {
  */
 export function ResolveScriptRef(command) {
     return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType49($result);
+        return $$createType51($result);
     }));
 }
 
@@ -945,7 +980,7 @@ export function ResumeAutoConnect(tunnel) {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType51($result);
+        return $$createType53($result);
     }));
 }
 
@@ -1282,11 +1317,36 @@ export function SetUpdateScheduler(sched, store) {
 }
 
 /**
+ * SystemProxy returns the proxy address the operating system currently
+ * reports, or "" when it reports none. The Settings → Proxy panel shows it
+ * next to the "Follow system" row so that row never has to be taken on
+ * faith: it either names the address in use or says there isn't one.
+ * 
+ * SystemProxy 返回操作系统当前报告的代理地址，没有时返回空串。「设置 → 代理」
+ * 面板把它显示在「跟随系统」这一行旁边，于是这一行不必靠猜：要么写出正在用的
+ * 地址，要么说明系统没配代理。
+ * @returns {$CancellablePromise<string>}
+ */
+export function SystemProxy() {
+    return $Call.ByID(3520789386);
+}
+
+/**
  * TestMirrorConnectivity probes the direct GitHub API endpoint plus every
  * given mirror prefix in parallel and returns one row per target: reachable
- * rows first, fastest first, failures last. The Settings page calls it as
- * soon as it opens, so the user sees — without clicking anything — whether
- * direct works at all and which mirror is actually fastest right now.
+ * rows first, fastest first, failures last.
+ * 
+ * The Settings → Proxy panel no longer calls this: its list now covers
+ * direct, the OS proxy, manual addresses and mirrors alike, and it measures
+ * that list through TestUpdatePaths. This one stays as the mirror-only
+ * sweep, and both share the same transport/URL mapping.
+ * 
+ * TestMirrorConnectivity 并行探测 GitHub API 直连与每个镜像前缀，每个目标返回一行：
+ * 可达的排在前面（快的在前），失败的排在后面。
+ * 
+ * 「设置 → 代理」面板已经不再调用它：那里的列表现在同时覆盖直连、系统代理、手动
+ * 地址与镜像，并统一由 TestUpdatePaths 测量。这里作为「只扫镜像」的那份保留下来，
+ * 两者共用同一份 transport / URL 映射。
  * 
  * The probe is an HTTP round-trip against the real API URL, NOT an ICMP
  * ping: an accelerator mirror is an HTTP reverse proxy for the API, so "the
@@ -1306,20 +1366,33 @@ export function SetUpdateScheduler(sched, store) {
  */
 export function TestMirrorConnectivity(prefixes) {
     return $Call.ByID(1083645311, prefixes).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType53($result);
+        return $$createType55($result);
     }));
 }
 
 /**
  * TestProxy performs a round-trip request to the GitHub Releases API using
- * the given proxy configuration and reports success plus latency. The
- * Settings → Proxy "test connection" button calls this so the user can
- * verify a proxy works before saving it.
+ * the given proxy configuration and reports success plus latency.
  * 
- * mode is one of "direct", "mirror" or "manual":
+ * The Settings → Proxy panel no longer calls this: it measures every row at
+ * once through TestUpdatePaths, which is the same probe expressed per row.
+ * TestProxy stays as the single-path entry point — a caller that wants one
+ * answer about one path, without building a list — and shares
+ * PathTransport/PathRequestURL with it so the two can never disagree.
+ * 
+ * TestProxy 用给定的代理配置向 GitHub Releases API 发一次往返请求，报告是否
+ * 成功与耗时。
+ * 
+ * 「设置 → 代理」面板已经不再调用它：那里现在经 TestUpdatePaths 一次量完所有行，
+ * 而 TestUpdatePaths 就是同一探测按行表达的版本。TestProxy 作为单通路入口保留
+ * 下来——给只想问一条通路、不想先凑一个列表的调用方——并与它共用
+ * PathTransport / PathRequestURL，因此两者不可能给出互相矛盾的答案。
+ * 
+ * mode is one of "direct", "system", "mirror" or "manual":
  *   - "direct": rawURL ignored; a plain Transport (explicitly ignoring any
  *     environment HTTP_PROXY/HTTPS_PROXY, which is what "direct" means in
  *     the UI).
+ *   - "system": the OS proxy is asked for at request time.
  *   - "mirror": rawURL is a GitHub accelerator mirror prefix (e.g.
  *     "https://ghfast.top"); the API endpoint is fetched directly through
  *     "<mirror>/<official endpoint>".
@@ -1331,7 +1404,33 @@ export function TestMirrorConnectivity(prefixes) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType54($result);
+        return $$createType56($result);
+    }));
+}
+
+/**
+ * TestUpdatePaths measures every row of the Settings → Proxy path list in
+ * parallel. Each row sends the real request an update check would send
+ * (rewritten through that row's own mirror prefix when it has one), out
+ * through that row's own way of leaving the machine — so the number beside a
+ * row is "what choosing this row actually costs right now".
+ * 
+ * Rows are probed concurrently because they are independent network paths:
+ * measuring them in series would make the last one look slow simply because
+ * it happened to be measured last.
+ * 
+ * TestUpdatePaths 并行测量「设置 → 代理」通路列表的每一行。每一行都发出更新检查
+ * 真会发的那个请求（该行带镜像前缀时按前缀改写），并经该行自己的出口方式出去——
+ * 于是行旁那个数字就是「选这一行当下实际要花多久」。
+ * 
+ * 各行并行探测，因为它们彼此是独立的网络通路：串行测量会让最后一行仅仅因为
+ * 恰好最后被测而显得慢。
+ * @param {$models.UpdatePathSpec[]} specs
+ * @returns {$CancellablePromise<$models.UpdatePathResult[]>}
+ */
+export function TestUpdatePaths(specs) {
+    return $Call.ByID(3481429742, specs).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType58($result);
     }));
 }
 
@@ -1404,44 +1503,48 @@ const $$createType10 = $models.CurrentNetwork.createFrom;
 const $$createType11 = $Create.Array($Create.Any);
 const $$createType12 = $models.EndpointSettings.createFrom;
 const $$createType13 = $models.KnownSSIDs.createFrom;
-const $$createType14 = $models.PublicIPInfo.createFrom;
-const $$createType15 = $models.RouteEntry.createFrom;
-const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = storage$0.Settings.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = domain$0.ConnectionStatus.createFrom;
+const $$createType14 = $models.TunnelManualOverride.createFrom;
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = $models.PublicIPInfo.createFrom;
+const $$createType17 = $models.RouteEntry.createFrom;
+const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = storage$0.Settings.createFrom;
 const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = $models.TunnelMetaBinding.createFrom;
+const $$createType21 = domain$0.ConnectionStatus.createFrom;
 const $$createType22 = $Create.Nullable($$createType21);
-const $$createType23 = domain$0.WireGuardConfig.createFrom;
+const $$createType23 = $models.TunnelMetaBinding.createFrom;
 const $$createType24 = $Create.Nullable($$createType23);
-const $$createType25 = $models.TunnelFields.createFrom;
+const $$createType25 = domain$0.WireGuardConfig.createFrom;
 const $$createType26 = $Create.Nullable($$createType25);
-const $$createType27 = $models.TunnelPolicies.createFrom;
+const $$createType27 = $models.TunnelFields.createFrom;
 const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = $models.UpdateState.createFrom;
-const $$createType30 = $models.TunnelInfo.createFrom;
-const $$createType31 = $Create.Nullable($$createType30);
-const $$createType32 = $models.SettingsImportResult.createFrom;
+const $$createType29 = $models.TunnelPolicies.createFrom;
+const $$createType30 = $Create.Nullable($$createType29);
+const $$createType31 = $models.UpdateState.createFrom;
+const $$createType32 = $models.TunnelInfo.createFrom;
 const $$createType33 = $Create.Nullable($$createType32);
-const $$createType34 = $models.ZipImportResult.createFrom;
-const $$createType35 = $Create.Array($$createType34);
-const $$createType36 = $models.PhysicalInterface.createFrom;
+const $$createType34 = $models.SettingsImportResult.createFrom;
+const $$createType35 = $Create.Nullable($$createType34);
+const $$createType36 = $models.ZipImportResult.createFrom;
 const $$createType37 = $Create.Array($$createType36);
-const $$createType38 = $Create.Array($$createType30);
-const $$createType39 = endpoint$0.Measurement.createFrom;
-const $$createType40 = $Create.Array($$createType39);
-const $$createType41 = storage$0.MigrateResult.createFrom;
-const $$createType42 = $Create.Nullable($$createType41);
-const $$createType43 = ipc$0.AddressConflictPayload.createFrom;
-const $$createType44 = $Create.Array($$createType43);
-const $$createType45 = policy$0.Report.createFrom;
-const $$createType46 = $models.PublicDNSRefresh.createFrom;
-const $$createType47 = $Create.Nullable($$createType46);
-const $$createType48 = $models.ScriptRef.createFrom;
+const $$createType38 = $models.PhysicalInterface.createFrom;
+const $$createType39 = $Create.Array($$createType38);
+const $$createType40 = $Create.Array($$createType32);
+const $$createType41 = endpoint$0.Measurement.createFrom;
+const $$createType42 = $Create.Array($$createType41);
+const $$createType43 = storage$0.MigrateResult.createFrom;
+const $$createType44 = $Create.Nullable($$createType43);
+const $$createType45 = ipc$0.AddressConflictPayload.createFrom;
+const $$createType46 = $Create.Array($$createType45);
+const $$createType47 = policy$0.Report.createFrom;
+const $$createType48 = $models.PublicDNSRefresh.createFrom;
 const $$createType49 = $Create.Nullable($$createType48);
-const $$createType50 = $models.DNSLeakResult.createFrom;
+const $$createType50 = $models.ScriptRef.createFrom;
 const $$createType51 = $Create.Nullable($$createType50);
-const $$createType52 = $models.MirrorTestRow.createFrom;
-const $$createType53 = $Create.Array($$createType52);
-const $$createType54 = $models.TestProxyResult.createFrom;
+const $$createType52 = $models.DNSLeakResult.createFrom;
+const $$createType53 = $Create.Nullable($$createType52);
+const $$createType54 = $models.MirrorTestRow.createFrom;
+const $$createType55 = $Create.Array($$createType54);
+const $$createType56 = $models.TestProxyResult.createFrom;
+const $$createType57 = $models.UpdatePathResult.createFrom;
+const $$createType58 = $Create.Array($$createType57);

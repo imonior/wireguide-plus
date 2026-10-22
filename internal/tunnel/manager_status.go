@@ -341,6 +341,17 @@ func (m *Manager) ActiveTunnel() string {
 // whose endpoint could not even be resolved (DNS not up yet at boot, a wrong
 // hostname) shows as connected for the whole duration of its attempt and
 // then silently vanishes, which reads as "connected, then dropped".
+//
+// Setup finished is still not "working": StateConnected also holds for a
+// tunnel whose peer never answers (wrong public key, dead endpoint, upstream
+// down), and that one never recovers on its own either. Claims about
+// connectivity therefore intersect this list with the per-tunnel handshake
+// flag (gui.upTunnelSet) — the handshake is the first evidence a packet
+// reached the peer.
+//
+// 建立完成仍不等于「能用」：对端永不应答的隧道（公钥错、endpoint 死、上游断）
+// 同样停在 StateConnected，而且也不会自己恢复。因此对外宣称连通时要拿本集合与
+// 每隧道握手标志取交集（gui.upTunnelSet）——握手是「包真的到了对端」的第一个证据。
 func (m *Manager) EstablishedTunnels() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

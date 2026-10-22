@@ -26,8 +26,11 @@ export {
     TestProxyResult,
     TunnelFields,
     TunnelInfo,
+    TunnelManualOverride,
     TunnelMetaBinding,
     TunnelPolicies,
+    UpdatePathResult,
+    UpdatePathSpec,
     UpdateState,
     ZipImportResult
 } from "./models.js";

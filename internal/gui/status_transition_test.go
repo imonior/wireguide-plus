@@ -109,3 +109,45 @@ func TestComputeStatusTransitionsFailedAttemptNotAnnouncedDown(t *testing.T) {
 	tr, _ = computeStatusTransitions(connSet("X", tcsConnected), keySet(), keySet())
 	assertTransition(t, tr, nil, []string{"X"}, nil)
 }
+
+// TestUpTunnelSetRequiresHandshake pins the rule behind upTunnelSet: setup
+// finished is not "connected" — only a completed handshake is. A tunnel
+// missing from the handshake map is "no handshake seen", never "unknown, so
+// assume the best".
+func TestUpTunnelSetRequiresHandshake(t *testing.T) {
+	up := upTunnelSet(keySet("A", "B"), map[string]bool{"A": true})
+	if !up["A"] {
+		t.Error("A: established + handshook must be up")
+	}
+	if up["B"] {
+		t.Error("B: established but never handshook must NOT be up")
+	}
+	if upTunnelSet(keySet("C"), nil)["C"] {
+		t.Error("C: no handshake entry must mean not up, not unknown=up")
+	}
+	if len(upTunnelSet(nil, nil)) != 0 {
+		t.Error("empty input must yield an empty set")
+	}
+}
+
+// TestEstablishedWithoutHandshakeNotAnnouncedConnected is the regression for
+// the "🟢 Connected" bubble shown for a tunnel whose peer never answered:
+// the interface comes up (StateConnected, so it is in the established set)
+// but no handshake ever completes, so nothing may claim a connection until
+// the handshake actually lands — and the handshake is what earns the bubble.
+func TestEstablishedWithoutHandshakeNotAnnouncedConnected(t *testing.T) {
+	// Setup finished, peer silent: announced as still connecting.
+	tr, cur := computeStatusTransitions(nil, upTunnelSet(keySet("X"), nil), keySet("X"))
+	assertTransition(t, tr, nil, nil, []string{"X"})
+	if cur["X"] != tcsConnecting {
+		t.Errorf("cur[X] = %v, want tcsConnecting while no handshake has landed", cur["X"])
+	}
+
+	// The peer answers: the handshake is the transition that earns "connected".
+	tr, _ = computeStatusTransitions(cur, upTunnelSet(keySet("X"), keySet("X")), keySet("X"))
+	assertTransition(t, tr, []string{"X"}, nil, nil)
+
+	// Still silent on the next poll: nothing new to announce (no spam).
+	tr, _ = computeStatusTransitions(connSet("X", tcsConnecting), upTunnelSet(keySet("X"), nil), keySet("X"))
+	assertTransition(t, tr, nil, nil, nil)
+}

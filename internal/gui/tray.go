@@ -49,8 +49,15 @@ var appQuitting atomic.Bool
 // cannot render colored emoji — a 🟢 degrades to a grey outline circle
 // there. Windows therefore uses plain vector glyphs (✔ / ✗) that stay
 // legible in both light and dark themes, and accepts their monochrome ink.
+// connectingGlyph marks a tunnel that is up but has not completed a
+// WireGuard handshake yet (or is still dialling): present and moving, not
+// yet carrying traffic. It exists so "established" never borrows the
+// connected glyph while the peer is silent.
+// connectingGlyph 标记「已建立但尚未握手」（或仍在拨号）的隧道：已经在动，
+// 但还没真正通流量。有它之后，"已建立"就不会在对端沉默时借用"已连接"的符号。
 var (
 	connectedGlyph    = "🟢"
+	connectingGlyph   = "🟡"
 	disconnectedGlyph = "🔴"
 )
 
@@ -58,8 +65,11 @@ func init() {
 	if runtime.GOOS == "windows" {
 		// GDI renders these as plain text glyphs (no colored emoji). A
 		// filled ✔ vs hollow ✗ reads far better than ●/○, which both look
-		// like grey circles in the small tray font.
+		// like grey circles in the small tray font. "…" is the monochrome
+		// stand-in for the yellow disc: legible in both themes and in the
+		// small menu font, unlike the coloured emoji.
 		connectedGlyph = "✔"
+		connectingGlyph = "…"
 		disconnectedGlyph = "✗"
 	}
 }
@@ -526,10 +536,25 @@ type trayManager struct {
 	mu            sync.Mutex
 	activeTunnels map[string]bool // cached from status events (connecting too)
 	// establishedTunnels is the subset that finished setup (StateConnected).
-	// Everything user-visible — the "on" icon, the tooltip and the status
-	// bubble — reads this one so a tunnel whose connect attempt is still
-	// running (and may fail) is never announced as connected.
+	// Lifecycle truth: it says the interface is up, nothing about whether
+	// the peer answers.
 	establishedTunnels map[string]bool
+	// upTunnels is the subset of establishedTunnels whose peer has completed
+	// at least one WireGuard handshake — the tunnels the UI may CLAIM as
+	// "connected" (green icon, tooltip, tray bubble, overview rows).
+	//
+	// Interface-up and tunnel-working are two different questions: a tunnel
+	// whose peer is unreachable (wrong key, dead endpoint, upstream down)
+	// finishes setup and sits in StateConnected forever while never
+	// handshaking. Announcing that as "connected" is the bug this field
+	// exists to prevent.
+	//
+	// "At least once" rather than "recently": staleness (no handshake inside
+	// the threshold) toggles with peer silence, and feeding a toggling bit
+	// into the transition engine produced phantom "X disconnected" bubbles
+	// for tunnels that had simply gone idle. Freshness stays a colour-only
+	// axis (see TunnelDetail's amber dot); announcements latch.
+	upTunnels map[string]bool
 	// lastNotifiedConnected records, per tunnel, the connection state the
 	// last status bubble announced. The bubble is gated on a *transition*
 	// (a tunnel going up/down/connecting) rather than on the raw established
@@ -732,6 +757,37 @@ func (t *trayManager) safeSetIcon(icon []byte) {
 	}()
 }
 
+// upTunnelSet returns the established tunnels that may be *announced* as
+// connected: setup finished AND the peer has completed at least one
+// WireGuard handshake.
+//
+// Two independent facts, deliberately kept apart. StateConnected only says
+// the interface was configured and brought up; it stays true forever for a
+// tunnel whose peer never answers (wrong public key, dead endpoint, upstream
+// down, NAT hole closed). The handshake is the first evidence that packets
+// actually reached the peer, so it — not the state machine — decides what
+// the UI is allowed to claim.
+//
+// upTunnelSet 返回可以被**宣告**为「已连接」的已建立隧道：setup 完成，且对端
+// 至少完成过一次 WireGuard 握手。
+//
+// 这是两件独立的事，刻意分开。StateConnected 只说明接口已配置并拉起；对端永不
+// 应答的隧道（公钥错、endpoint 死、上游断、NAT 洞关闭）会永远停在这个状态。
+// 握手是「包真的到了对端」的第一个证据，所以由它——而不是状态机——来决定 UI
+// 可以宣称什么。
+func upTunnelSet(established, handshake map[string]bool) map[string]bool {
+	up := make(map[string]bool, len(established))
+	for name := range established {
+		// No handshake entry means "no handshake seen yet", which is
+		// exactly the case this filter exists to catch — not "unknown,
+		// assume the best".
+		if handshake[name] {
+			up[name] = true
+		}
+	}
+	return up
+}
+
 // setIconState receives BOTH sets on purpose:
 //
 //	activeNames      — connecting/connected/disconnecting (lifecycle truth,
@@ -739,9 +795,11 @@ func (t *trayManager) safeSetIcon(icon []byte) {
 //	establishedNames — tunnels whose setup actually finished
 //
 // Anything the user can read as "it's connected" (the green "on" icon, the
-// tooltip listing names, the status bubble) keys off establishedNames. Using
-// activeNames there is what made a failing connect look like "connected, then
-// dropped": during the attempt the tunnel is neither up nor gone.
+// tooltip listing names, the status bubble) keys off upTunnelSet(established,
+// handshake). Using activeNames there is what made a failing connect look
+// like "connected, then dropped": during the attempt the tunnel is neither up
+// nor gone. Using establishedNames alone is the quieter half of the same lie:
+// an interface that came up against a dead peer stays "connected" forever.
 func (t *trayManager) setIconState(activeNames []string, establishedNames []string, handshakeMap map[string]bool, outOfRange []string) {
 	newSet := make(map[string]bool, len(activeNames))
 	for _, n := range activeNames {
@@ -756,25 +814,29 @@ func (t *trayManager) setIconState(activeNames []string, establishedNames []stri
 			newEstablished[n] = true
 		}
 	}
+	// The claim set: established AND handshook at least once.
+	newUp := upTunnelSet(newEstablished, handshakeMap)
 
 	t.mu.Lock()
 	prev := t.activeTunnels
 	prevEstablished := t.establishedTunnels
+	prevUp := t.upTunnels
 	prevHandshake := t.hasHandshake
 	prevAnyConnected := len(prev) > 0
 	t.activeTunnels = newSet
 	t.establishedTunnels = newEstablished
+	t.upTunnels = newUp
 	t.hasHandshake = handshakeMap
 	t.outOfRange = outOfRange
 	t.mu.Unlock()
 
 	// Everything user-visible reads these, not the raw active list.
-	connectedNames := make([]string, 0, len(newEstablished))
-	for n := range newEstablished {
+	connectedNames := make([]string, 0, len(newUp))
+	for n := range newUp {
 		connectedNames = append(connectedNames, n)
 	}
 	sort.Strings(connectedNames)
-	anyConnected := len(newEstablished) > 0
+	anyConnected := len(newUp) > 0
 
 	// Gate on BOTH sets: the icon must change when a tunnel finishes its
 	// transition (connecting → connected) even though the active set
@@ -791,6 +853,24 @@ func (t *trayManager) setIconState(activeNames []string, establishedNames []stri
 	if !activeChanged {
 		for k := range prevEstablished {
 			if !newEstablished[k] {
+				activeChanged = true
+				break
+			}
+		}
+	}
+	// A tunnel finishing its first handshake is a real change to what we may
+	// claim, even though neither the active nor the established set moved.
+	if !activeChanged {
+		for k := range newUp {
+			if !prevUp[k] {
+				activeChanged = true
+				break
+			}
+		}
+	}
+	if !activeChanged {
+		for k := range prevUp {
+			if !newUp[k] {
 				activeChanged = true
 				break
 			}
@@ -899,7 +979,7 @@ func (t *trayManager) startIconHeartbeat() {
 					return
 				}
 				t.mu.Lock()
-				anyConnected := len(t.establishedTunnels) > 0
+				anyConnected := len(t.upTunnels) > 0
 				t.mu.Unlock()
 				t.safeSetIcon(t.iconForState(anyConnected))
 				slog.Debug("tray: icon heartbeat reapplied", "connected", anyConnected)
@@ -955,7 +1035,12 @@ func (t *trayManager) scheduleStatusNotification() {
 func (t *trayManager) showStatusNotification() {
 	t.mu.Lock()
 	prev := t.lastNotifiedConnected
-	tr, cur := computeStatusTransitions(prev, t.establishedTunnels, t.activeTunnels)
+	// The *claim* set, not the established set: a tunnel that finished setup
+	// against a silent peer is announced as still connecting until its first
+	// handshake lands — then the handshake itself is the transition that
+	// earns the "connected" bubble. Announcing it from establishedNames is
+	// what showed "🟢 Connected" for a tunnel that never handshook.
+	tr, cur := computeStatusTransitions(prev, t.upTunnels, t.activeTunnels)
 	outOfRange := append([]string(nil), t.outOfRange...)
 	t.lastNotifiedConnected = cur
 	t.mu.Unlock()
@@ -1049,9 +1134,12 @@ func (t *trayManager) showLaunchOverview() {
 	}
 
 	t.mu.Lock()
-	established := make(map[string]bool, len(t.establishedTunnels))
-	for n := range t.establishedTunnels {
-		established[n] = true
+	// "connected" here is the claim set (established + handshook): the
+	// overview is a status report, and reporting "connected" for a tunnel
+	// whose peer never answered is the same false claim as the bubble's.
+	up := make(map[string]bool, len(t.upTunnels))
+	for n := range t.upTunnels {
+		up[n] = true
 	}
 	active := make(map[string]bool, len(t.activeTunnels))
 	for n := range t.activeTunnels {
@@ -1063,7 +1151,7 @@ func (t *trayManager) showLaunchOverview() {
 	for _, info := range infos {
 		state := "disconnected"
 		switch {
-		case established[info.Name]:
+		case up[info.Name]:
 			state = "connected"
 		case active[info.Name]:
 			state = "connecting"
@@ -1100,8 +1188,9 @@ type statusTransition struct {
 }
 
 // computeStatusTransitions compares the previously-announced connection
-// state (prev) with the current one — established tunnels are "connected",
-// active-but-not-established tunnels are "connecting" — and returns only the
+// state (prev) with the current one — tunnels in the claim set (established
+// AND handshook; see upTunnelSet) are "connected", every other active
+// tunnel is "connecting" — and returns only the
 // tunnels whose state actually changed. A tunnel present in both snapshots
 // with the same state contributes nothing; that is exactly what stops a
 // stably-connected tunnel from being re-announced "connected" on every 30s
@@ -1227,6 +1316,7 @@ func (t *trayManager) rebuildMenu() {
 	// glyph" flickers.
 	t.mu.Lock()
 	activeSet := t.activeTunnels
+	upSet := t.upTunnels
 	t.mu.Unlock()
 
 	// Refill the single persistent Menu in place (see the menu field
@@ -1245,27 +1335,32 @@ func (t *trayManager) rebuildMenu() {
 
 	for _, tun := range tunnels {
 		tun := tun // loop-var capture
-		connected := activeSet[tun.Name]
-		// Each tunnel is a checkbox item: the native checkmark in front
-		// of the name is an independent ON/OFF switch — click it to
-		// toggle the tunnel. The glyph keeps the connection status
-		// visible next to the switch (🟢 = connected, 🔴 = off on
-		// macOS/Linux; ✔/✗ monochrome on the GDI-drawn Windows menu).
-		// WireGuard "connected" means the first handshake has completed,
-		// so any tunnel in the active set is green; a separate yellow
-		// "connecting" glyph would leave the menu stuck on yellow right
-		// after a connect if the handshake timestamp had not been
-		// refreshed yet. Wails flips
-		// the checkmark itself on click and hands the NEW state to the
-		// callback via ctx.IsChecked(), so the action follows the switch;
-		// a failed connect/disconnect is corrected on the next
-		// status-driven rebuild.
+		// The checkbox is the ON/OFF switch, so it tracks the ACTIVE set:
+		// an up-but-silent tunnel must still read as "on" or clicking it
+		// would try to connect again instead of disconnecting. The glyph
+		// is the status claim and tracks the UP set instead — 🟢 only once
+		// the peer has actually handshook, 🟡 while the tunnel is dialling
+		// or waiting for its first handshake, 🔴 when it is off
+		// (✔ / … / ✗ monochrome on the GDI-drawn Windows menu).
+		//
+		// 复选框是开关，所以跟随 ACTIVE 集合：已建立但对端沉默的隧道仍须显示为
+		// 「开」，否则点它会被当成重新连接而不是断开。图标才是状态宣称，跟随 UP
+		// 集合——对端真的握过手才🟢，拨号中或等首次握手时🟡，关闭时🔴
+		// （GDI 绘制的 Windows 菜单上是单色的 ✔ / … / ✗）。
+		active := activeSet[tun.Name]
 		label := disconnectedGlyph + " " + tun.Name
-		if connected {
+		switch {
+		case upSet[tun.Name]:
 			label = connectedGlyph + " " + tun.Name
+		case active:
+			label = connectingGlyph + " " + tun.Name
 		}
 		tunName := tun.Name
-		m.AddCheckbox(label, connected).OnClick(func(ctx *application.Context) {
+		// Wails flips the checkmark itself on click and hands the NEW state
+		// to the callback via ctx.IsChecked(), so the action follows the
+		// switch; a failed connect/disconnect is corrected on the next
+		// status-driven rebuild.
+		m.AddCheckbox(label, active).OnClick(func(ctx *application.Context) {
 			if ctx.IsChecked() {
 				if err := t.svc.Connect(tunName); err != nil {
 					slog.Warn("tray connect failed", "tunnel", tunName, "error", err)

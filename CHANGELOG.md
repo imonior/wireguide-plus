@@ -4,6 +4,24 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.0] - 2026-10-23
+
+### ✨ Added
+
+- **Settings → Proxy is now one "update path" list.** Every way an update request can leave the machine — Direct (GitHub), Follow system, a manual proxy address, and each accelerator mirror — is a single-select row, and the two dimensions no longer stack: choosing a mirror is a different way out, not a proxy with a prefix glued on. Each row is measured with the real request an update check would send, out through that row's own path, as soon as the page opens; "Test speed" repeats it on demand. Adding a proxy address or a mirror prefix also selects it, because an address that was added but never chosen is indistinguishable from one that does nothing.
+- **"Follow system" names the address it will use.** The row shows what the OS currently reports for its proxy — or says there is none — so it never has to be taken on faith. On Windows a machine-wide proxy set through group policy is honoured as well; that configuration makes Windows ignore the per-user value entirely, so the row used to read "no proxy" on managed machines.
+- **Manual takeover is stated where it happens.** Taking a tunnel over by hand (a manual connect or disconnect) suppresses its automation rules, and nothing on screen used to say so. The tunnel list and the detail page now both state which way the tunnel is latched, and carry a "Restore automation" button that hands that one tunnel back to its rules.
+
+### 🔧 Changed
+
+- **Endpoint candidates now show what the host resolves to.** Each candidate row gained a "resolves to" column — the public IP behind a DDNS name — beside endpoint, reachability and latency. The four columns are fixed-width with latency right-aligned, so drift is visible at a glance and the numbers can be compared by scanning straight down.
+- **The public-IP readout goes out through the selected path.** It used to bypass the proxy configuration on purpose. It lives in the proxy panel and answers "where does traffic sent through this path appear to come from", so with a proxy selected the egress genuinely is the proxy's and reporting the bare machine IP there described a path the app was not using. Mirror mode still leaves directly: a mirror rewrites GitHub URLs, it is not an outbound route.
+
+### 🐛 Fixed
+
+- **A tunnel was announced "Connected" before it had ever handshook.** "Established" only says the interface came up; it stays true forever for a tunnel whose peer never answers — wrong public key, dead endpoint, upstream down — and the tray bubble, icon, tooltip and launch overview all read that as connected. Anything the user may read as "connected" now requires a completed handshake on top of it: a tunnel that is up but silent is announced as connecting until its first handshake lands, and the tray menu marks it with its own glyph. Freshness still only colours the indicator — a handshake that has gone stale never announces a disconnect, because staleness toggles with peer silence and would spray phantom "disconnected" bubbles at tunnels that had simply gone idle.
+- **Double-clicking the menu-bar icon on macOS now opens the main window.** Wails gives a macOS status item either native menu tracking or a click callback, never both, and OnDoubleClick is wired up in the Windows backend only — so the gesture did nothing at all. A single click still opens the menu, natively.
+
 ## [2.7.3] - 2026-10-16
 
 ### ✨ Added

@@ -97,10 +97,14 @@ type ConnectionStatus struct {
 	ActiveTunnels []string `json:"active_tunnels,omitempty"`
 
 	// EstablishedTunnels lists the names of tunnels that have finished
-	// setup and reached StateConnected — the subset of ActiveTunnels that
-	// genuinely carries traffic. Rendered states (badge, icon, "Connected"
-	// popup) key off this list, so a tunnel whose connect attempt fails is
-	// never advertised as connected for the duration of its attempt.
+	// setup and reached StateConnected — the subset of ActiveTunnels whose
+	// interface is up. A tunnel in this list may still be useless: setup
+	// completes against a silent peer (wrong key, dead endpoint, upstream
+	// down) and the state stays connected forever. Anything that *claims*
+	// "connected" to the user (badge, icon, "Connected" popup) therefore
+	// intersects this list with the per-tunnel handshake flag — see
+	// gui.upTunnelSet. The list on its own only rules out tunnels whose
+	// connect attempt has not finished yet.
 	EstablishedTunnels []string `json:"established_tunnels,omitempty"`
 
 	// Tunnels carries per-tunnel status for multi-tunnel setups. The frontend

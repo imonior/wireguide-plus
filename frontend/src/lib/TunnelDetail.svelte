@@ -39,6 +39,70 @@
   let autoBtnBusy = false;
   let autoBtnErr = '';
 
+  // Manual override latch for the tunnel on screen: while the user has taken
+  // a tunnel over by hand (manual connect or disconnect), its automation
+  // rules are suppressed. The tunnel list says so beside the row; the detail
+  // page has to say it too, because this is where the user lands after
+  // clicking a tunnel — and it is the page they read while deciding whether
+  // the rules should come back.
+  // 当前隧道的手动接管闩锁：用户手动连接/断开后，该隧道的自动化规则被抑制。
+  // 列表已在行旁说明，详情页也必须说明——点击隧道后用户就落在这里，而是否恢复
+  // 规则正是在这一页做的决定。
+  let manualOverride = ''; // '' | 'off' | 'on'
+  let restoringAutomation = false;
+  let overrideSeq = 0;
+
+  // Reload when the tunnel changes, or when the active/established sets move
+  // — the moment a manual connect/disconnect latches or releases one. Same
+  // signature trick as the list: keying on the raw status broadcast would
+  // re-query at the helper's 1 Hz rate for nothing.
+  // 隧道切换、或 active/established 集合变化时重载——那正是手动连接/断开闩住或
+  // 释放某条隧道的时刻。与列表同一签名技巧：若直接以状态广播为键，会以 helper
+  // 的 1 Hz 频率无意义地重复查询。
+  $: overrideSignature = [
+    $selectedTunnel?.name || '',
+    ($connectionStatus?.active_tunnels || []).join(','),
+    ($connectionStatus?.established_tunnels || []).join(','),
+  ].join('|');
+  $: if (TunnelService) void loadManualOverride(overrideSignature);
+
+  async function loadManualOverride(_sig) {
+    const name = $selectedTunnel?.name;
+    if (!TunnelService || !name) {
+      manualOverride = '';
+      return;
+    }
+    const seq = ++overrideSeq;
+    try {
+      const list = await TunnelService.GetManualOverrides();
+      if (seq !== overrideSeq) return;
+      const hit = (list || []).find((o) => o && o.name === name);
+      manualOverride = hit ? hit.override : '';
+    } catch (_) {
+      // A failed read must never blank the panel: "no latch" is the
+      // pre-feature behaviour, not a broken one.
+      // 读取失败绝不能让面板出错：「无闩锁」是本特性出现之前的行为，不算坏掉。
+      if (seq === overrideSeq) manualOverride = '';
+    }
+  }
+
+  // Hand the tunnel back to its automation rules by releasing whichever
+  // manual latch it carries (off or on — they are mutually exclusive).
+  // 释放该隧道所带的手动闩锁（off 或 on，二者互斥），把它交还给自动化规则。
+  async function restoreAutomation() {
+    const name = $selectedTunnel?.name;
+    if (!TunnelService || !name || restoringAutomation) return;
+    restoringAutomation = true;
+    try {
+      await TunnelService.ClearManualOverride(name);
+      manualOverride = '';
+    } catch (e) {
+      console.warn('failed to restore automation for tunnel:', name, e);
+    } finally {
+      restoringAutomation = false;
+    }
+  }
+
   let detail = null;
   let loading = false;
   let error = '';
@@ -1277,6 +1341,19 @@
     {#if autoBtnErr}
       <div class="automation-err">{autoBtnErr}</div>
     {/if}
+    <!-- Manual-override notice. Deliberately separate from the automation
+         bar above: that bar is the durable "automation on/off" switch, this
+         is the transient latch a manual connect/disconnect leaves behind.
+         Showing them as one control would let a user read "automation off"
+         and never learn that a single click can hand the tunnel back. -->
+    {#if manualOverride}
+      <div class="manual-override-note">
+        <span class="mo-text">{$t(manualOverride === 'off' ? 'tunnel.manual_override_off' : 'tunnel.manual_override_on')}</span>
+        <button class="mo-btn" type="button" on:click={restoreAutomation} disabled={restoringAutomation}>
+          {$t('tunnel.restore_automation')}
+        </button>
+      </div>
+    {/if}
 
     <!-- LATENCY ROW: probe display + target editor on ONE row.
          The headline number and the editable targets sit side by side so the
@@ -1489,24 +1566,52 @@
         {#if endpointPolicy}
           <p class="endpoint-effective">{$t('tunnel.endpoint_effective_values', endpointPolicy)}</p>
         {/if}
+        <!-- Four columns, in the order the user reads them: the endpoint,
+             the public IP it currently resolves to (the point of the column
+             is DDNS drift — a name that moved is visible here), whether it
+             answers at all, and how fast. The first three are identifiers
+             and a state word, so they read left-aligned; latency is
+             right-aligned so the numbers stack and can be compared by
+             scanning straight down the column. -->
         <div class="endpoint-candidate-list">
+          <div class="endpoint-candidate endpoint-candidate-head" aria-hidden="true">
+            <span class="ec-col ec-col-endpoint">{$t('tunnel.endpoint_col_endpoint')}</span>
+            <span class="ec-col ec-col-resolved">{$t('tunnel.endpoint_col_resolved')}</span>
+            <span class="ec-col ec-col-reach">{$t('tunnel.endpoint_col_reachability')}</span>
+            <span class="ec-col ec-col-ms">{$t('tunnel.latency')}</span>
+            <span class="ec-col ec-col-act"></span>
+          </div>
           {#each epSettings.candidates as cand (cand)}
             <div class="endpoint-candidate" class:endpoint-candidate-active={cand === epSettings.active}>
-              <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
-              {#if epMeasurementMap[cand]}
-                <span class="endpoint-candidate-ms"
-                  class:ms-ok={epMeasurementMap[cand].reachable}
-                  class:ms-bad={!epMeasurementMap[cand].reachable}>
-                  {epMeasurementMap[cand].reachable
-                    ? `${Math.round(epMeasurementMap[cand].latency_ms)} ms`
-                    : $t('tunnel.endpoint_unreachable')}
-                </span>
-              {/if}
-              {#if cand === epSettings.active}
-                <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_in_use')}</span>
-              {:else}
-                <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
-              {/if}
+              <span class="ec-col ec-col-endpoint">
+                <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
+                {#if cand === epSettings.active}
+                  <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_in_use')}</span>
+                {:else}
+                  <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
+                {/if}
+              </span>
+              <span class="ec-col ec-col-resolved mono" title={epMeasurementMap[cand]?.resolved_ip || ''}>
+                {epMeasurementMap[cand]?.resolved_ip || '—'}
+              </span>
+              <span class="ec-col ec-col-reach"
+                class:ms-ok={epMeasurementMap[cand]?.reachable}
+                class:ms-bad={epMeasurementMap[cand] && !epMeasurementMap[cand].reachable}>
+                {#if !epMeasurementMap[cand]}
+                  —
+                {:else if epMeasurementMap[cand].reachable}
+                  {$t('tunnel.endpoint_reachable')}
+                {:else}
+                  {$t('tunnel.endpoint_unreachable')}
+                {/if}
+              </span>
+              <span class="ec-col ec-col-ms"
+                class:ms-ok={epMeasurementMap[cand]?.reachable}
+                class:ms-bad={epMeasurementMap[cand] && !epMeasurementMap[cand].reachable}>
+                {epMeasurementMap[cand] && epMeasurementMap[cand].reachable
+                  ? `${Math.round(epMeasurementMap[cand].latency_ms)} ms`
+                  : '—'}
+              </span>
               <button class="endpoint-candidate-del" type="button"
                 title={$t('tunnel.endpoint_candidate_remove')}
                 disabled={epBusy || cand === epSettings.active}
@@ -2119,6 +2224,41 @@
     color: var(--red, #ef4444);
   }
 
+  /* Manual-override notice: a latch is a transient state, so it reads as a
+     callout (amber) rather than as another switch in the automation bar. */
+  .manual-override-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -2px 0 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--amber, #f59e0b) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--amber, #f59e0b) 38%, transparent);
+  }
+  .manual-override-note .mo-text {
+    font: 500 12px/16px var(--font-sans);
+    color: var(--text);
+  }
+  .manual-override-note .mo-btn {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    font: 600 11px/14px var(--font-sans);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .manual-override-note .mo-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+  .manual-override-note .mo-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
   /* ========== STATS HERO ==========
      One row: RX / TX / latency counters plus the throughput graph.
      The counters only need room for a few characters, so they are pinned
@@ -2284,8 +2424,15 @@
     flex-direction: column;
     gap: 3px;
   }
+  /* Four fixed columns + a trailing action slot. Grid (not flex) so every
+     row shares the exact same column edges — with flex the resolved-IP and
+     latency values drifted depending on how long the endpoint string was,
+     which made the columns impossible to read down. The endpoint column is
+     the only elastic one because hostnames vary wildly in length; the three
+     data columns are pinned so the numbers line up. */
   .endpoint-candidate {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px 84px 76px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
@@ -2295,8 +2442,37 @@
   .endpoint-candidate-active {
     box-shadow: inset 2px 0 0 var(--green);
   }
+  .ec-col {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The three leading columns are identifiers/state words: left-aligned. */
+  .ec-col-endpoint,
+  .ec-col-resolved,
+  .ec-col-reach {
+    text-align: left;
+  }
+  /* Latency is the only numeric column: right-aligned so the digits stack
+     and the eye can compare down the column without re-reading each row. */
+  .ec-col-ms {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .ec-col-act {
+    /* action slot placeholder in the header row, keeps the grid aligned */
+  }
+  .endpoint-candidate-head {
+    background: none;
+    padding: 0 6px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
   .endpoint-candidate-addr {
-    flex: 1;
     min-width: 0;
     font-size: 12px;
     color: var(--text-primary);
@@ -2304,7 +2480,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .ec-col-endpoint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ec-col-resolved {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .ec-col-reach {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
   .endpoint-candidate-badge {
+    flex: none;
     font-size: 10px;
     color: var(--green);
     white-space: nowrap;
@@ -2317,8 +2507,17 @@
     color: var(--text-muted);
     white-space: nowrap;
   }
-  .endpoint-candidate-ms.ms-ok { color: var(--green); }
-  .endpoint-candidate-ms.ms-bad { color: var(--red, #FF453A); }
+  .ec-col-ms {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  /* Reachability and latency share the good/bad ink so a row that is green
+     in one column is green in the other — two columns describing the same
+     probe must never disagree on colour. */
+  .ec-col-reach.ms-ok,
+  .ec-col-ms.ms-ok { color: var(--green); }
+  .ec-col-reach.ms-bad,
+  .ec-col-ms.ms-bad { color: var(--red, #FF453A); }
   .endpoint-icmp-note {
     margin: 6px 0 0;
     font-size: 11px;
