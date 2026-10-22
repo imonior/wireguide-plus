@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.2] - 2026-10-23
+
+### 🐛 Fixed
+
+- **The endpoint candidates list no longer prints the same fact twice.** "Reachable" and the latency number came from one and the same probe, so the reachability column was removed: latency is now the third column, and usage status (in use / not in use) is a fourth column of its own, right-aligned. An endpoint that does not answer simply shows no latency number instead of a second column saying "unreachable".
+
 ## [2.8.1] - 2026-10-23
 
 ### 🐛 Fixed

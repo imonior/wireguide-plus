@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.2] - 2026-10-23
+
+### 🐛 修復
+
+- **Endpoint 候選清單不再把同一件事印兩遍。**「可達性」與延遲數字出自同一次探測，可達性欄已刪除：延遲欄成為第 3 欄，使用狀態（使用中 / 未使用）獨立為第 4 欄並靠右對齊。無回應的位址直接不顯示延遲數字，而不是再用一欄去說「無法連線」。
+
 ## [2.8.1] - 2026-10-23
 
 ### 🐛 修復

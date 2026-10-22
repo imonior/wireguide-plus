@@ -1566,44 +1566,30 @@
         {#if endpointPolicy}
           <p class="endpoint-effective">{$t('tunnel.endpoint_effective_values', endpointPolicy)}</p>
         {/if}
-        <!-- Four columns, in the order the user reads them: the endpoint,
-             the public IP it currently resolves to (the point of the column
-             is DDNS drift — a name that moved is visible here), whether it
-             answers at all, and how fast. The first three are identifiers
-             and a state word, so they read left-aligned; latency is
-             right-aligned so the numbers stack and can be compared by
-             scanning straight down the column. -->
+        <!-- Three columns plus a usage-status word, in the order the user
+             reads them: the endpoint, the public IP it currently resolves
+             to (the point of the column is DDNS drift — a name that moved
+             is visible here), and how fast it answers. Reachability is NOT
+             a fourth column: a probe that gets no reply already shows it by
+             having no latency number, so the two columns were one reading
+             printed twice. Endpoint and resolved IP read left-aligned;
+             latency and usage status are right-aligned so the digits and
+             the status words line up down their columns. -->
         <div class="endpoint-candidate-list">
           <div class="endpoint-candidate endpoint-candidate-head" aria-hidden="true">
             <span class="ec-col ec-col-endpoint">{$t('tunnel.endpoint_col_endpoint')}</span>
             <span class="ec-col ec-col-resolved">{$t('tunnel.endpoint_col_resolved')}</span>
-            <span class="ec-col ec-col-reach">{$t('tunnel.endpoint_col_reachability')}</span>
             <span class="ec-col ec-col-ms">{$t('tunnel.latency')}</span>
+            <span class="ec-col ec-col-status">{$t('tunnel.endpoint_col_status')}</span>
             <span class="ec-col ec-col-act"></span>
           </div>
           {#each epSettings.candidates as cand (cand)}
             <div class="endpoint-candidate" class:endpoint-candidate-active={cand === epSettings.active}>
               <span class="ec-col ec-col-endpoint">
                 <span class="endpoint-candidate-addr mono" title={cand}>{cand}</span>
-                {#if cand === epSettings.active}
-                  <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_in_use')}</span>
-                {:else}
-                  <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
-                {/if}
               </span>
               <span class="ec-col ec-col-resolved mono" title={epMeasurementMap[cand]?.resolved_ip || ''}>
                 {epMeasurementMap[cand]?.resolved_ip || '—'}
-              </span>
-              <span class="ec-col ec-col-reach"
-                class:ms-ok={epMeasurementMap[cand]?.reachable}
-                class:ms-bad={epMeasurementMap[cand] && !epMeasurementMap[cand].reachable}>
-                {#if !epMeasurementMap[cand]}
-                  —
-                {:else if epMeasurementMap[cand].reachable}
-                  {$t('tunnel.endpoint_reachable')}
-                {:else}
-                  {$t('tunnel.endpoint_unreachable')}
-                {/if}
               </span>
               <span class="ec-col ec-col-ms"
                 class:ms-ok={epMeasurementMap[cand]?.reachable}
@@ -1611,6 +1597,13 @@
                 {epMeasurementMap[cand] && epMeasurementMap[cand].reachable
                   ? `${Math.round(epMeasurementMap[cand].latency_ms)} ms`
                   : '—'}
+              </span>
+              <span class="ec-col ec-col-status">
+                {#if cand === epSettings.active}
+                  <span class="endpoint-candidate-badge">{$t('tunnel.endpoint_in_use')}</span>
+                {:else}
+                  <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
+                {/if}
               </span>
               <button class="endpoint-candidate-del" type="button"
                 title={$t('tunnel.endpoint_candidate_remove')}
@@ -2424,15 +2417,16 @@
     flex-direction: column;
     gap: 3px;
   }
-  /* Four fixed columns + a trailing action slot. Grid (not flex) so every
-     row shares the exact same column edges — with flex the resolved-IP and
-     latency values drifted depending on how long the endpoint string was,
-     which made the columns impossible to read down. The endpoint column is
-     the only elastic one because hostnames vary wildly in length; the three
-     data columns are pinned so the numbers line up. */
+  /* Three fixed data columns, a status word, and a trailing action slot.
+     Grid (not flex) so every row shares the exact same column edges — with
+     flex the resolved-IP and latency values drifted depending on how long
+     the endpoint string was, which made the columns impossible to read
+     down. The endpoint column is the only elastic one because hostnames
+     vary wildly in length; the other columns are pinned so the numbers and
+     status words line up. */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px 84px 76px 20px;
+    grid-template-columns: minmax(0, 1fr) 132px 76px 84px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
@@ -2448,17 +2442,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The three leading columns are identifiers/state words: left-aligned. */
+  /* The two leading columns are identifiers: left-aligned. */
   .ec-col-endpoint,
-  .ec-col-resolved,
-  .ec-col-reach {
+  .ec-col-resolved {
     text-align: left;
   }
-  /* Latency is the only numeric column: right-aligned so the digits stack
-     and the eye can compare down the column without re-reading each row. */
+  /* Latency is the numeric column: right-aligned so the digits stack and
+     the eye can compare down the column without re-reading each row. */
   .ec-col-ms {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+  /* Usage status shares the right edge with the latency digits, so the
+     in-use / not-in-use words line up with the numbers beside them. */
+  .ec-col-status {
+    text-align: right;
   }
   .ec-col-act {
     /* action slot placeholder in the header row, keeps the grid aligned */
@@ -2480,21 +2478,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .ec-col-endpoint {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
   .ec-col-resolved {
     font-size: 11px;
     color: var(--text-muted);
   }
-  .ec-col-reach {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
   .endpoint-candidate-badge {
-    flex: none;
     font-size: 10px;
     color: var(--green);
     white-space: nowrap;
@@ -2502,21 +2490,13 @@
   .endpoint-candidate-badge-idle {
     color: var(--text-muted);
   }
-  .endpoint-candidate-ms {
-    font-size: 11px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
   .ec-col-ms {
     font-size: 11px;
     color: var(--text-muted);
   }
-  /* Reachability and latency share the good/bad ink so a row that is green
-     in one column is green in the other — two columns describing the same
-     probe must never disagree on colour. */
-  .ec-col-reach.ms-ok,
+  /* Latency now carries the probe's good/bad ink on its own: a row with a
+     number is green, a row with none (no reply) is red. */
   .ec-col-ms.ms-ok { color: var(--green); }
-  .ec-col-reach.ms-bad,
   .ec-col-ms.ms-bad { color: var(--red, #FF453A); }
   .endpoint-icmp-note {
     margin: 6px 0 0;

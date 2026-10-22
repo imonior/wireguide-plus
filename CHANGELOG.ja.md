@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.2] - 2026-10-23
+
+### 🐛 修正
+
+- **エンドポイント候補リストが同じ事実を二度表示しなくなりました。**「到達性」と遅延数値は同じプローブ由来だったため、到達性列を削除しました。遅延列が 3 列目、使用状態（使用中 / 未使用）は独立した 4 列目に右揃えで表示されます。応答しないエンドポイントは、「到達不可」と別列に書く代わりに、遅延数値を表示しないだけになりました。
+
 ## [2.8.1] - 2026-10-23
 
 ### 🐛 修正
