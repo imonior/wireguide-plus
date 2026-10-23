@@ -90,6 +90,9 @@
     "endpoint_candidates": "엔드포인트 후보",
     "endpoint_candidates_hint": "같은 피어의 대체 host:port 주소입니다. 위의 전환 시점에 따라 연결 시 가장 응답이 빠른 주소로 연결하고, 현재 주소가 응답하지 않으면 다음으로 이동합니다. 설정 파일에는 항상 하나의 사용 중인 엔드포인트만 남습니다.",
     "endpoint_switch_timing": "전환 시점",
+    "endpoint_switch_failed": "엔드포인트 전환 실패: {error}",
+    "endpoint_switching": "전환 중…",
+    "endpoint_switch_to": "전환",
     "endpoint_in_use": "사용 중",
     "endpoint_not_in_use": "미사용",
     "endpoint_measure": "측정",
@@ -134,7 +137,9 @@
     "manual_override_on_short": "수동 켬 · 규칙 일시중지",
     "restore_automation": "자동 규칙 복원",
     "manual_control": "수동 제어",
-    "automation_toggle_tip": "켜져 있으면 WireGuide Plus가 이 터널을 자동으로 연결하거나 끊습니다. '중지'를 누르면 수동 제어로 전환되며 재시작 후에도 유지됩니다."
+    "automation_toggle_tip": "켜져 있으면 WireGuide Plus가 이 터널을 자동으로 연결하거나 끊습니다. '중지'를 누르면 수동 제어로 전환되며 재시작 후에도 유지됩니다.",
+    "automation_active": "활성",
+    "automation_standby": "대기"
   },
   "import": {
     "zip_result_title": "가져오기 결과",
@@ -560,7 +565,6 @@
     "state_connecting": "연결 중",
     "state_disconnected": "연결 끊김",
     "state_tooltip": "터널의 실제 연결 상태: 연결됨＝NIC 준비 완료 및 핸드셰이크 성공으로 데이터 전송 가능; 연결 중＝NIC는 생성됐지만 아직 핸드셰이크 전(하프 오픈); 연결 끊김＝NIC 없음.",
-    "status_row_label": "터널 상태",
     "override_auto_connect": "자동 · 연결 예정",
     "override_auto_disconnect": "자동 · 연결 해제 예정",
     "override_auto_none": "자동 · 규칙 없음",

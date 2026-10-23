@@ -90,6 +90,9 @@
     "endpoint_candidates": "Endpoint candidates",
     "endpoint_candidates_hint": "Alternative host:port addresses for this peer. Per the switch timing above, the app dials the best responder when connecting and moves on when the current one stops responding. The config file keeps a single in-use endpoint.",
     "endpoint_switch_timing": "Switch timing",
+    "endpoint_switch_failed": "Failed to switch endpoint: {error}",
+    "endpoint_switching": "Switching…",
+    "endpoint_switch_to": "Switch to",
     "endpoint_in_use": "in use",
     "endpoint_not_in_use": "not in use",
     "endpoint_measure": "Measure",
@@ -134,7 +137,9 @@
     "manual_override_on_short": "Manual on · rules paused",
     "restore_automation": "Restore automation rules",
     "manual_control": "Manual control",
-    "automation_toggle_tip": "When on, WireGuide Plus may connect or disconnect this tunnel automatically. Stop it to take full manual control; the setting sticks across restarts."
+    "automation_toggle_tip": "When on, WireGuide Plus may connect or disconnect this tunnel automatically. Stop it to take full manual control; the setting sticks across restarts.",
+    "automation_active": "active",
+    "automation_standby": "standby"
   },
   "import": {
     "zip_result_title": "Import Results",
@@ -560,7 +565,6 @@
     "state_connecting": "connecting",
     "state_disconnected": "disconnected",
     "state_tooltip": "The tunnel's real connection state: connected = NIC ready and handshake done, can carry traffic; connecting = NIC created but handshake not yet done (half-open); disconnected = no NIC.",
-    "status_row_label": "Tunnel status",
     "override_auto_connect": "auto · will connect",
     "override_auto_disconnect": "auto · will disconnect",
     "override_auto_none": "auto · no rules",

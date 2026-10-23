@@ -1097,6 +1097,35 @@ export function SetApp(app) {
 }
 
 /**
+ * SetEndpointActive makes addr the endpoint WireGuard dials for this tunnel.
+ * The address is written straight into the .conf's first peer and persisted,
+ * so what the editor shows is always what comes up next — the .conf is the
+ * single source of truth for "which address is in use" (see applyEndpointChoice).
+ * 
+ * If the tunnel is currently up, it is briefly brought down and back up so the
+ * new address actually takes effect: WireGuard has no UAPI hot-switch for a
+ * live endpoint, so a re-create is unavoidable. Crucially this does NOT touch
+ * the manual-override latch — switching the address is not "taking over" the
+ * tunnel from automation. The helper simply re-reads the .conf on connect, so
+ * the persisted address is what dials.
+ * 
+ * SetEndpointActive 把 addr 设为该隧道 WireGuard 实际会拨的地址。地址直接写入
+ * .conf 首个 peer 并落盘——编辑器看到的永远是下次会拨的那个，因为「当前在用哪个
+ * 地址」的唯一真相源就是 .conf（见 applyEndpointChoice）。
+ * 
+ * 若隧道当前是通的，会先短暂断开再连上，让新地址真正生效：WireGuard 没有针对
+ * 活动 endpoint 的 UAPI 热切换，重建连接不可避免。关键是这不会碰「手动接管」闩锁——
+ * 切换地址不等于把隧道从自动化手里「接管」走。helper 连接时重读 .conf，因此落盘的
+ * 地址就是会去拨的那个。
+ * @param {string} name
+ * @param {string} addr
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetEndpointActive(name, addr) {
+    return $Call.ByID(1419246206, name, addr);
+}
+
+/**
  * SetEndpointAutoSwitch arms or disarms automatic candidate selection.
  * Switching it off never moves the active endpoint: the tunnel keeps using
  * whatever address is in the .conf until the user changes it by hand.

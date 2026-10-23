@@ -10,6 +10,7 @@
   import { createEventDispatcher, tick, onDestroy } from 'svelte';
   import AutomationEditor from './AutomationEditor.svelte';
   import StatsDashboard from './StatsDashboard.svelte';
+  import { manualOverrides, clearManualOverride, refreshManualOverrides, setManualOverrideService } from '../stores/manualoverride.js';
 
   export let TunnelService;
   const dispatch = createEventDispatcher();
@@ -38,6 +39,48 @@
   let automationDisabled = false;
   let autoBtnBusy = false;
   let autoBtnErr = '';
+
+  // Manual-takeover latch for THIS tunnel, read from the shared store so it
+  // stays in lockstep with the list and the automation editor. While set, the
+  // automation bar shows a "Manual control" state and a restore button instead
+  // of the durable on/off toggle — the same single-source behaviour the editor
+  // already follows. Empty string means no manual latch is held.
+  // 本隧道的手动接管闩锁，取自共享 store，与列表、自动化编辑器始终同步。一旦置位，
+  // 自动化栏就显示「手动接管」状态与恢复按钮，而非常驻 on/off 开关——与编辑器同源、同表现。
+  // 空串表示当前没有手动闩锁。
+  $: manualLatch = (() => {
+    const name = $selectedTunnel?.name;
+    if (!name) return '';
+    const hit = ($manualOverrides || []).find(o => o && o.name === name);
+    return hit ? (hit.override === 'on' ? 'on' : 'off') : '';
+  })();
+  let restoringOverride = false;
+  // Release this tunnel's manual latch and hand control back to automation. The
+  // shared store refreshes, so the list and editor drop their indicators too.
+  // 释放本隧道的手动闩锁，交还自动化。共享 store 会刷新，于是列表与编辑器也同步撤下提示。
+  async function restoreManual() {
+    const name = $selectedTunnel?.name;
+    if (!name || restoringOverride) return;
+    restoringOverride = true;
+    try {
+      await clearManualOverride(name);
+    } catch (e) {
+      console.warn('failed to restore automation for tunnel:', name, e);
+    } finally {
+      restoringOverride = false;
+    }
+  }
+
+  // "Active" means automation is ON (not disabled, not manually overridden) AND
+  // the tunnel is currently established — i.e. automation is actively keeping it
+  // up. When automation is on but the tunnel is down, it is on "standby" (no
+  // connect rule is firing right now). This is the detail page's compact
+  // "automation active / inactive" signal; it reuses the already-known
+  // connection state instead of re-running the full rule evaluation.
+  // 「已激活」= 自动化开启（未关闭、未被手动接管）且隧道当前已建立，即自动化正把它维持在线上；
+  // 开启但隧道未起则为「待命」（当前没有连规则触发）。这是详情页紧凑的「已激活/未激活」信号，
+  // 复用已有的连接态，不再跑一次完整规则评估。
+  $: automationActive = !automationDisabled && !manualLatch && !!isEstablished;
 
   // The automation on/off switch and the manual-latch release both live in
   // the AutomationEditor embedded below (its on/off column shows a "Manual
@@ -87,6 +130,14 @@
     loadDetail($selectedTunnel.name);
     loadAutomationState($selectedTunnel.name);
     loadEndpointSettings($selectedTunnel.name);
+    // The manual-override store is shared with the list and the automation
+    // editor; register this surface's service (idempotent) and pull the
+    // latest latch set so the detail page shows the same manual-control
+    // state as every other surface.
+    // 手动接管 store 与列表、自动化编辑器共享；注册本面的服务（幂等）并拉取最新闩锁集，
+    // 使详情页与所有其它表面显示同一份手动接管状态。
+    setManualOverrideService(TunnelService);
+    refreshManualOverrides();
   }
 
   // Per-tunnel notes. Populated from TunnelInfo.notes in the store, edited
@@ -712,6 +763,12 @@
   let epBusy = false;
   let epMeasuring = false;
   let epMeasurements = [];
+  // True while a manual endpoint switch is in flight (disconnect + reconnect
+  // for an up tunnel). Locks the candidate buttons so two switches can't race.
+  // epSwitching 为手动切换 endpoint 进行中（连通隧道会先断后连）。期间锁住
+  // 候选按钮，避免两次切换互相打架。
+  let epSwitching = false;
+  let switchingAddr = '';
 
   async function loadEndpointSettings(name) {
     epError = '';
@@ -797,6 +854,31 @@
       epError = errText(e);
     } finally {
       epBusy = false;
+    }
+  }
+
+  // switchEndpoint makes the chosen candidate the address WireGuard dials. The
+  // backend rewrites the .conf and — for an up tunnel — reconnects with it, but
+  // does NOT latch the tunnel into manual control (per product decision: switch
+  // the address, don't take the tunnel over). The badge follows from re-reading
+  // the settings, so no extra state needs to be seeded here.
+  // switchEndpoint 把选中的候选设为 WireGuard 实际拨的地址。后端改写 .conf，
+  // 若隧道连通则用它重连，但绝不会把隧道闩锁进手动接管（产品决策：只换地址，
+  // 不接管）。徽标随重新读取的设置而移动，无需在此额外播种状态。
+  async function switchEndpoint(addr) {
+    const name = $selectedTunnel?.name;
+    if (!name || epBusy || epSwitching) return;
+    epSwitching = true;
+    switchingAddr = addr;
+    try {
+      await TunnelService.SetEndpointActive(name, addr);
+      epError = '';
+      await loadEndpointSettings(name);
+    } catch (e) {
+      epError = $t('tunnel.endpoint_switch_failed', { error: errText(e) });
+    } finally {
+      epSwitching = false;
+      switchingAddr = '';
     }
   }
 
@@ -1258,30 +1340,55 @@
          the next tick — no restart. Closing the editor re-reads the flag
          (see the modal watcher above) so the two controls never show
          different states. -->
-    <div class="automation-bar" class:auto-off={automationDisabled}>
-      <span class="automation-state">
-        <Icon name="zap" size={13} strokeWidth={2} />
-        {#if automationDisabled}
-          <span class="automation-state-text">{$t('tunnel.automation_off')}</span>
-        {:else}
-          <span class="automation-state-text">{$t('tunnel.automation_on')}</span>
-        {/if}
-      </span>
-      <button
-        class="btn-automation"
-        class:btn-automation-off={automationDisabled}
-        on:click={toggleAutomation}
-        disabled={autoBtnBusy || !$selectedTunnel}
-        title={$t('tunnel.automation_toggle_tip')}>
-        {#if autoBtnBusy}
-          <span class="spinner"></span>
-        {:else if automationDisabled}
-          <Icon name="rotate-ccw" size={13} strokeWidth={2} />
-        {:else}
-          <Icon name="x" size={13} strokeWidth={2.25} />
-        {/if}
-        <span>{automationDisabled ? $t('tunnel.automation_resume') : $t('tunnel.automation_stop')}</span>
-      </button>
+    <div class="automation-bar" class:auto-off={automationDisabled} class:manual={manualLatch}>
+      {#if manualLatch}
+        <!-- A hand action (manual connect / disconnect) latched this tunnel, so
+             automation is paused until the user releases it. Show the same
+             "Manual control" state as the automation editor and offer the one
+             restore action — the durable on/off toggle is meaningless while a
+             latch overrides it. -->
+        <span class="automation-state">
+          <Icon name="lock" size={13} strokeWidth={2} />
+          <span class="automation-state-text">{$t('tunnel.manual_control')}</span>
+        </span>
+        <button
+          class="btn-automation btn-automation-restore"
+          on:click={restoreManual}
+          disabled={restoringOverride || !$selectedTunnel}
+          title={$t('tunnel.restore_automation')}>
+          {#if restoringOverride}
+            <span class="spinner"></span>
+          {:else}
+            <Icon name="rotate-ccw" size={13} strokeWidth={2} />
+          {/if}
+          <span>{$t('tunnel.restore_automation')}</span>
+        </button>
+      {:else}
+        <span class="automation-state">
+          <Icon name="zap" size={13} strokeWidth={2} />
+          {#if automationDisabled}
+            <span class="automation-state-text">{$t('tunnel.automation_off')}</span>
+          {:else}
+            <span class="automation-state-text">{$t('tunnel.automation_on')}</span>
+            <span class="automation-active-tag" class:active={automationActive}>{$t(automationActive ? 'tunnel.automation_active' : 'tunnel.automation_standby')}</span>
+          {/if}
+        </span>
+        <button
+          class="btn-automation"
+          class:btn-automation-off={automationDisabled}
+          on:click={toggleAutomation}
+          disabled={autoBtnBusy || !$selectedTunnel}
+          title={$t('tunnel.automation_toggle_tip')}>
+          {#if autoBtnBusy}
+            <span class="spinner"></span>
+          {:else if automationDisabled}
+            <Icon name="rotate-ccw" size={13} strokeWidth={2} />
+          {:else}
+            <Icon name="x" size={13} strokeWidth={2.25} />
+          {/if}
+          <span>{automationDisabled ? $t('tunnel.automation_resume') : $t('tunnel.automation_stop')}</span>
+        </button>
+      {/if}
     </div>
     {#if autoBtnErr}
       <div class="automation-err">{autoBtnErr}</div>
@@ -1537,10 +1644,20 @@
                   <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
                 {/if}
               </span>
-              <button class="endpoint-candidate-del" type="button"
-                title={$t('tunnel.endpoint_candidate_remove')}
-                disabled={epBusy || cand === epSettings.active}
-                on:click={() => removeEndpointCandidate(cand)}>×</button>
+              <span class="ec-col ec-col-act">
+                {#if cand !== epSettings.active}
+                  <button class="endpoint-candidate-switch" type="button"
+                    title={$t('tunnel.endpoint_switch_to')}
+                    disabled={epBusy || epSwitching}
+                    on:click={() => switchEndpoint(cand)}>
+                    {switchingAddr === cand ? $t('tunnel.endpoint_switching') : $t('tunnel.endpoint_switch_to')}
+                  </button>
+                {/if}
+                <button class="endpoint-candidate-del" type="button"
+                  title={$t('tunnel.endpoint_candidate_remove')}
+                  disabled={epBusy || epSwitching || cand === epSettings.active}
+                  on:click={() => removeEndpointCandidate(cand)}>×</button>
+              </span>
             </div>
           {/each}
         </div>
@@ -2109,6 +2226,22 @@
     background: color-mix(in srgb, var(--yellow) 12%, var(--bg-card));
     border-color: color-mix(in srgb, var(--yellow) 36%, var(--border));
   }
+  /* Manual takeover: amber, same family as the editor's "Manual control"
+     banner, so the paused-by-hand state reads identically everywhere. */
+  .automation-bar.manual {
+    background: color-mix(in srgb, var(--amber, #ff9f0a) 14%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--amber, #ff9f0a) 45%, var(--border));
+  }
+  .automation-bar.manual .automation-state :global(svg) {
+    color: color-mix(in srgb, var(--amber, #ff9f0a) 80%, var(--text-primary));
+  }
+  .btn-automation-restore {
+    border-color: color-mix(in srgb, var(--amber, #ff9f0a) 55%, var(--border));
+    background: color-mix(in srgb, var(--amber, #ff9f0a) 16%, transparent);
+  }
+  .btn-automation-restore:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--amber, #ff9f0a) 26%, transparent);
+  }
   .automation-state {
     display: inline-flex;
     align-items: center;
@@ -2125,6 +2258,22 @@
     color: var(--yellow, #f59e0b);
   }
   .automation-state-text { color: var(--text-primary); }
+  /* Compact "active / standby" tag next to "Automation on". Green when
+     automation is actively holding the tunnel up, muted grey when it is on
+     but nothing is firing right now. */
+  .automation-active-tag {
+    font: 600 10px/1 var(--font-sans);
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--text-muted) 30%, var(--border));
+  }
+  .automation-active-tag.active {
+    color: var(--green, #34c759);
+    background: color-mix(in srgb, var(--green, #34c759) 16%, transparent);
+    border-color: color-mix(in srgb, var(--green, #34c759) 42%, var(--border));
+  }
   .btn-automation {
     display: inline-flex;
     align-items: center;
@@ -2332,7 +2481,7 @@
      status words line up. */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px 76px 84px 20px;
+    grid-template-columns: minmax(0, 1fr) 132px 76px 84px auto;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
@@ -2365,7 +2514,14 @@
     text-align: right;
   }
   .ec-col-act {
-    /* action slot placeholder in the header row, keeps the grid aligned */
+    /* Holds both action buttons (switch + remove) so the grid keeps exactly
+       five columns. Justified to the end so the × sits at the row's edge. */
+    /* 同时容纳「切换」与「删除」两个按钮，使网格严格保持五列。
+       靠右对齐，让 × 落在行尾。 */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
   }
   .endpoint-candidate-head {
     background: none;
@@ -2429,6 +2585,27 @@
   }
   .endpoint-candidate-del:disabled {
     opacity: 0.35;
+    cursor: default;
+  }
+  .endpoint-candidate-switch {
+    flex-shrink: 0;
+    height: 20px;
+    padding: 0 7px;
+    border: 1px solid var(--border, rgba(120, 120, 128, 0.32));
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent, #0a84ff);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .endpoint-candidate-switch:hover:enabled {
+    background-color: var(--bg-hover);
+  }
+  .endpoint-candidate-switch:disabled {
+    opacity: 0.45;
     cursor: default;
   }
   .endpoint-candidate-add {

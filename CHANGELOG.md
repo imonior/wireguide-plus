@@ -4,6 +4,21 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.4] - 2026-10-24
+
+### ✨ Added
+
+- **Endpoint candidates can now be switched to by hand.** Every candidate that is not already in use gained a "Switch to" button: it writes the chosen address into the tunnel's config file — the one source of truth for "which address dials" — and, when the tunnel is up, briefly reconnects so the new address takes effect immediately. Switching the address is not taking the tunnel over: it never sets the manual latch, so automation stays in control and no "Restore automation" notice appears for a switch.
+- **The automation bar now says whether automation is doing anything.** With automation on, the detail page tags it "active" when the tunnel is up and the rules are holding it there, and "standby" when automation is armed but nothing is firing at the moment — so "automation is on" and "automation is keeping this tunnel up" are no longer the same sentence.
+
+### 🔧 Changed
+
+- **The tunnel status line moved next to the automation switch.** It used to sit on its own row below Default State, away from the control it describes; it now reads directly under the on/off column, with a coloured dot for the tunnel state and the control source beside it.
+
+### 🐛 Fixed
+
+- **Live matching no longer misses Wi-Fi and Ethernet rules stored in the older spelling.** A condition persisted as `wifi` or `ethernet` — the spelling kept verbatim on disk — was never counted against the editor's `ssid` / `interface` vocabulary, so a rule that was in fact matching left the live-matching row saying no rule matches. The stored type is now normalized before it is counted.
+
 ## [2.8.3] - 2026-10-23
 
 ### 🐛 Fixed

@@ -936,12 +936,26 @@
     // connect the engine would refuse.
     return preview.decision;
   }
+  // A condition's persisted type can be the legacy 'wifi' / 'ethernet'
+  // spellings (kept verbatim from disk) even though the editor's dropdown
+  // exposes them as 'ssid' / 'interface'. The match-count compares against
+  // the dropdown vocabulary, so normalize the stored type before matching —
+  // otherwise a matched Wi-Fi/SSID rule (type 'wifi') is never counted and the
+  // live-matching row wrongly says "No rule matches".
+  // 条件落盘的 type 可能是旧式的 'wifi' / 'ethernet'（从磁盘原样读入），而编辑器下拉框
+  // 用的是 'ssid' / 'interface'。计数用下拉框那套词汇比较，因此先归一化：否则已匹配的
+  // Wi-Fi/SSID 规则（type 为 'wifi'）永远计不上，living match 行会误报「没有规则匹配」。
+  function condTypeNorm(type) {
+    if (type === 'wifi') return 'ssid';
+    if (type === 'ethernet') return 'interface';
+    return type;
+  }
   function conditionMatchCount(type) {
     let count = 0;
     for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
       const rule = rules[ruleIdx];
       for (let i = 0; i < rule.conds.length; i++) {
-        if (rule.conds[i].type === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
+        if (condTypeNorm(rule.conds[i].type) === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
       }
     }
     return count;
@@ -1004,6 +1018,20 @@
           </label>
           <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
         {/if}
+        <!-- Merged tunnel status line: connection state + control source, moved
+             up from the old standalone bottom row so it reads next to the on/off
+             control instead of floating below Default State. The control-source
+             chip reuses the same override_* labels the live strip shows. -->
+        <div class="am-exclude-status">
+          {#if tunnelStateKey}
+            <span class="am-status-dot am-status-{tunnelStateKey}" title={$t('automation.state_tooltip')}></span>
+            <span class="am-status-state">{$t('automation.state_' + tunnelStateKey)}</span>
+          {:else}
+            <span class="am-status-state am-status-dim">{$t('automation.network_unavailable')}</span>
+          {/if}
+          <span class="am-status-sep">·</span>
+          <span class="am-override am-override-{controlClass}" title={$t('automation.override_tooltip')}>{$t(controlLabelKey)}</span>
+        </div>
       </div>
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
@@ -1040,16 +1068,6 @@
             aria-checked={defaultState === 'disconnect'} on:click={() => setDefaultState('disconnect')}>{$t('automation.action_disconnect')}</button>
         </div>
         <span class="am-default-hint">{$t('automation.default_when_no_match', { state: $t(defaultState === 'connect' ? 'automation.action_connect' : 'automation.action_disconnect') })}</span>
-      </div>
-      <div class="am-tunnel-status">
-        <span class="am-default-label">{$t('automation.status_row_label')}</span>
-        {#if tunnelStateKey}
-          <span class="am-tunnel-state am-tunnel-state-{tunnelStateKey}" title={$t('automation.state_tooltip')}>{$t('automation.state_' + tunnelStateKey)}</span>
-        {/if}
-        <span class="am-override am-override-{controlClass}" title={$t('automation.override_tooltip')}>{$t(controlLabelKey)}</span>
-        <!-- The manual latch is released from the on/off column above (where
-             it also shows as a "Manual control" banner), so this status row
-             only names the latch — it no longer carries its own button. -->
       </div>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
@@ -1380,26 +1398,27 @@
   .am-default-opt.am-effective {
     box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 50%, transparent);
   }
-  /* Tunnel actual-state chip — a TUNNEL-level fact (connected / connecting /
-     disconnected), placed after the Default State buttons, independent of any
-     single rule/condition. "connecting" is the half-open state, shown amber &
-     neutral (neither "in effect" nor "not in effect"). */
-  .am-tunnel-state {
-    flex-shrink: 0; font: 600 10px/1 var(--font-sans);
-    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);
-  }
-  .am-tunnel-state-connected { color: var(--green, #34c759); background: color-mix(in srgb, var(--green, #34c759) 14%, transparent); border-color: color-mix(in srgb, var(--green, #34c759) 40%, var(--border)); }
-  .am-tunnel-state-connecting { color: var(--orange, #ff9f0a); background: color-mix(in srgb, var(--orange, #ff9f0a) 14%, transparent); border-color: color-mix(in srgb, var(--orange, #ff9f0a) 40%, var(--border)); }
-  .am-tunnel-state-disconnected { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 12%, transparent); }
   /* Tunnel status row — its own line: the link fact on the left, the control
      source on the right, so physical state and "who is deciding" never crowd
      the Default State control. */
-  .am-tunnel-status {
-    flex-shrink: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin: 6px 0 0; padding: 7px 10px;
+  .am-exclude-status {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin: 8px 0 0; padding: 5px 10px;
     background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
     border: 1px solid var(--border); border-radius: 8px;
+    font: 600 11px/1.3 var(--font-sans); color: var(--text-secondary);
   }
+  .am-status-dot {
+    width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
+    background: var(--text-muted);
+  }
+  .am-status-connected { background: var(--green, #34c759); }
+  .am-status-connecting { background: var(--amber, #ff9f0a); }
+  .am-status-disconnected { background: var(--red, #ff3b30); }
+  .am-status-state { color: var(--text-primary); }
+  .am-status-dim { color: var(--text-muted); font-weight: 400; }
+  .am-status-sep { color: var(--text-muted); }
+  .am-status-control { margin-left: 2px; }
   .am-override {
     flex-shrink: 0; font: 600 10px/1 var(--font-sans);
     padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);

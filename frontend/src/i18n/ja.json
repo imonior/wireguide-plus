@@ -90,6 +90,9 @@
     "endpoint_candidates": "エンドポイント候補",
     "endpoint_candidates_hint": "同じピアの代替 host:port です。上の切り替えタイミングに従い、接続時に最も応答の良いものへ接続し、現在の宛先が応答しなくなると次へ移動します。設定ファイルには常に 1 つの使用中のエンドポイントだけが残ります。",
     "endpoint_switch_timing": "切り替えタイミング",
+    "endpoint_switch_failed": "エンドポイントの切り替えに失敗しました：{error}",
+    "endpoint_switching": "切り替え中…",
+    "endpoint_switch_to": "切り替え",
     "endpoint_in_use": "使用中",
     "endpoint_not_in_use": "未使用",
     "endpoint_measure": "計測",
@@ -134,7 +137,9 @@
     "manual_override_on_short": "手動接続 · ルール停止中",
     "restore_automation": "自動ルールを復元",
     "manual_control": "手動制御",
-    "automation_toggle_tip": "有効な場合、WireGuide Plus はこのトンネルを自動で接続・切断します。「停止」を押すと手動制御に切り替わり、再起動後も維持されます。"
+    "automation_toggle_tip": "有効な場合、WireGuide Plus はこのトンネルを自動で接続・切断します。「停止」を押すと手動制御に切り替わり、再起動後も維持されます。",
+    "automation_active": "アクティブ",
+    "automation_standby": "待機"
   },
   "import": {
     "zip_result_title": "インポート結果",
@@ -560,7 +565,6 @@
     "state_connecting": "接続中",
     "state_disconnected": "切断済み",
     "state_tooltip": "トンネルの実際の接続状態：接続済み＝NIC 準備完了かつハンドシェイク成功でデータ転送可能；接続中＝NIC は作成済みだが未ハンドシェイク（ハーフオープン）；切断済み＝NIC なし。",
-    "status_row_label": "トンネル状態",
     "override_auto_connect": "自動 · 接続予定",
     "override_auto_disconnect": "自動 · 切断予定",
     "override_auto_none": "自動 · ルールなし",

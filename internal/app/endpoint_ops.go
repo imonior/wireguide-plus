@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/imonior/wireguide-plus/internal/config"
+	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/endpoint"
+	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/storage"
 )
 
@@ -176,6 +178,109 @@ func (s *TunnelService) MeasureEndpointCandidates(name string) ([]endpoint.Measu
 		return []endpoint.Measurement{}, nil
 	}
 	return endpoint.Measure(list), nil
+}
+
+// SetEndpointActive makes addr the endpoint WireGuard dials for this tunnel.
+// The address is written straight into the .conf's first peer and persisted,
+// so what the editor shows is always what comes up next — the .conf is the
+// single source of truth for "which address is in use" (see applyEndpointChoice).
+//
+// If the tunnel is currently up, it is briefly brought down and back up so the
+// new address actually takes effect: WireGuard has no UAPI hot-switch for a
+// live endpoint, so a re-create is unavoidable. Crucially this does NOT touch
+// the manual-override latch — switching the address is not "taking over" the
+// tunnel from automation. The helper simply re-reads the .conf on connect, so
+// the persisted address is what dials.
+//
+// SetEndpointActive 把 addr 设为该隧道 WireGuard 实际会拨的地址。地址直接写入
+// .conf 首个 peer 并落盘——编辑器看到的永远是下次会拨的那个，因为「当前在用哪个
+// 地址」的唯一真相源就是 .conf（见 applyEndpointChoice）。
+//
+// 若隧道当前是通的，会先短暂断开再连上，让新地址真正生效：WireGuard 没有针对
+// 活动 endpoint 的 UAPI 热切换，重建连接不可避免。关键是这不会碰「手动接管」闩锁——
+// 切换地址不等于把隧道从自动化手里「接管」走。helper 连接时重读 .conf，因此落盘的
+// 地址就是会去拨的那个。
+func (s *TunnelService) SetEndpointActive(name, addr string) error {
+	if !s.tunnelStore.Exists(name) {
+		return fmt.Errorf("tunnel %q does not exist", name)
+	}
+	cfg, err := s.tunnelStore.Load(name)
+	if err != nil {
+		return fmt.Errorf("loading tunnel %s: %w", name, err)
+	}
+	// Reject anything that isn't a valid "host:port" before writing it into
+	// the .conf — a typo here would only fail later, at connect time.
+	// 先拒绝任何不是合法 host:port 的值，再写进 .conf——这里的拼写错误
+	// 若不及时拦下，只能等到连接时才炸。
+	if err := validateEndpointCandidate(addr); err != nil {
+		return err
+	}
+	if err := setFirstPeerEndpoint(cfg, addr); err != nil {
+		return err
+	}
+	if err := s.tunnelStore.Save(cfg); err != nil {
+		return fmt.Errorf("saving tunnel %s: %w", name, err)
+	}
+	slog.Info("endpoint: active set by user",
+		"category", "tunnel", "tunnel", name, "to", addr, "mode", "manual_switch")
+
+	// Apply now only if the tunnel is up. We deliberately skip the Connect/
+	// Disconnect wrappers — they set the manual latch, which is exactly the
+	// "takeover" this action must NOT do (per product decision: switch the
+	// address, don't take the tunnel over). The bare IPC pair re-creates the
+	// link with the freshly-saved .conf and leaves automation in control.
+	// 仅在隧道当前连通时立即生效。刻意绕过 Connect/Disconnect 包装——它们会设置
+	// 手动闩锁，而那正是本动作绝不可以做的「接管」（产品决策：只换地址，不接管）。
+	// 裸 IPC 用刚落盘的 .conf 重建链路，自动化仍掌权。
+	active, err := s.isActiveTunnel(name)
+	if err != nil {
+		// Helper unreachable — the persisted address still applies on the
+		// next connect, so this is not an error.
+		// helper 不可达——落盘的地址下次连接仍会生效，所以不算错误。
+		slog.Warn("endpoint: cannot query active state; change applies on next connect",
+			"category", "tunnel", "tunnel", name, "error", err)
+		return nil
+	}
+	if !active {
+		return nil
+	}
+
+	s.clients.MarkInflight()
+	defer s.clients.UnmarkInflight()
+	if err := s.callLong(ipc.MethodDisconnect, ipc.DisconnectRequest{TunnelName: name}, nil); err != nil {
+		if isClientClosed(err) {
+			err = s.callLong(ipc.MethodDisconnect, ipc.DisconnectRequest{TunnelName: name}, nil)
+		}
+		if err != nil {
+			slog.Warn("endpoint: disconnect failed; address still saved",
+				"category", "tunnel", "tunnel", name, "error", err)
+			return err
+		}
+	}
+
+	// Reload the freshly-saved config so the connect carries the new endpoint.
+	// 重新加载落盘后的配置，确保 connect 带上新地址。
+	cfg2, err := s.tunnelStore.Load(name)
+	if err != nil {
+		return fmt.Errorf("loading tunnel %s after endpoint switch: %w", name, err)
+	}
+	// Mirror Connect's scripting/AWG gating, but NOT its manual-on latch and
+	// NOT its auto-switch re-evaluation — the user explicitly chose this
+	// address, so we must not let auto-switch silently override it.
+	// 照搬 Connect 的脚本/AWG 门控，但绝不照搬它的 manual-on 闩锁，也不跑它的
+	// 自动切换重评估——用户是显式选了这个地址，绝不能被自动切换悄悄覆盖。
+	if st, err := s.settingsStore.Load(); err == nil && st != nil {
+		cfg2.EnableScripts = st.EnableWgScripts
+		if cfg2.Protocol == domain.ProtocolAmneziaWG && !st.EnableAWG {
+			return fmt.Errorf("%s — enable it in Settings → Advanced to connect this tunnel", domain.ErrAWGDisabled)
+		}
+	}
+	if err := s.callLong(ipc.MethodConnect, ipc.ConnectRequest{Config: cfg2}, nil); err != nil {
+		slog.Warn("endpoint: reconnect failed; tunnel left down",
+			"category", "tunnel", "tunnel", name, "error", err)
+		return err
+	}
+	return nil
 }
 
 // firstPeerEndpoint returns the endpoint of the first peer that has one.

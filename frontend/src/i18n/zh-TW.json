@@ -90,6 +90,9 @@
     "endpoint_candidates": "Endpoint 候選",
     "endpoint_candidates_hint": "同一 peer 的備用 host:port 位址。按上面的切換時機，連線時會撥通實測最佳的位址；目前位址不再回應時自動換到下一個。設定檔裡始終只保留一個正在使用的 endpoint。",
     "endpoint_switch_timing": "切換時機",
+    "endpoint_switch_failed": "切換位址失敗：{error}",
+    "endpoint_switching": "切換中…",
+    "endpoint_switch_to": "切換至",
     "endpoint_in_use": "使用中",
     "endpoint_not_in_use": "未使用",
     "endpoint_measure": "測速",
@@ -134,7 +137,9 @@
     "manual_override_on_short": "手動連線 · 規則已暫停",
     "restore_automation": "恢復自動規則",
     "manual_control": "手動接管",
-    "automation_toggle_tip": "開啟時，WireGuide Plus 可自動連線或斷開此隧道。點擊「停止」即由你完全手動控制，設定重啟後依然生效。"
+    "automation_toggle_tip": "開啟時，WireGuide Plus 可自動連線或斷開此隧道。點擊「停止」即由你完全手動控制，設定重啟後依然生效。",
+    "automation_active": "已激活",
+    "automation_standby": "待命"
   },
   "import": {
     "zip_result_title": "匯入結果",
@@ -560,7 +565,6 @@
     "state_connecting": "連線中",
     "state_disconnected": "已斷開",
     "state_tooltip": "通道的真實連線狀態：已連線＝網卡就緒且握手成功、可傳輸資料；連線中＝網卡已建但尚未握手（半開態）；已斷開＝無網卡。",
-    "status_row_label": "通道狀態",
     "override_auto_connect": "自動 · 將連線",
     "override_auto_disconnect": "自動 · 將斷開",
     "override_auto_none": "自動 · 無規則",

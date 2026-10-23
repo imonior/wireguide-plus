@@ -90,6 +90,9 @@
     "endpoint_candidates": "Endpoint 候选",
     "endpoint_candidates_hint": "同一 peer 的备用 host:port 地址。按上面的切换时机，连接时会拨通实测最优的地址；当前地址不再响应时自动换到下一个。配置文件里始终只保留一个正在使用的 endpoint。",
     "endpoint_switch_timing": "切换时机",
+    "endpoint_switch_failed": "切换地址失败：{error}",
+    "endpoint_switching": "切换中…",
+    "endpoint_switch_to": "切换至",
     "endpoint_in_use": "使用中",
     "endpoint_not_in_use": "未使用",
     "endpoint_measure": "测速",
@@ -134,7 +137,9 @@
     "manual_override_on_short": "手动连接 · 规则已暂停",
     "restore_automation": "恢复自动规则",
     "manual_control": "手动接管",
-    "automation_toggle_tip": "开启时，WireGuide Plus 可自动连接或断开此隧道。点击「停止」即由你完全手动控制，设置重启后依然生效。"
+    "automation_toggle_tip": "开启时，WireGuide Plus 可自动连接或断开此隧道。点击「停止」即由你完全手动控制，设置重启后依然生效。",
+    "automation_active": "已激活",
+    "automation_standby": "待命"
   },
   "import": {
     "zip_result_title": "导入结果",
@@ -560,7 +565,6 @@
     "state_connecting": "连接中",
     "state_disconnected": "已断开",
     "state_tooltip": "隧道的真实连接状态：已连接＝网卡就绪且握手成功、可传输数据；连接中＝网卡已建但尚未握手（半开态）；已断开＝无网卡。",
-    "status_row_label": "隧道状态",
     "override_auto_connect": "自动 · 将连接",
     "override_auto_disconnect": "自动 · 将断开",
     "override_auto_none": "自动 · 无规则",
