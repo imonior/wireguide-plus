@@ -6,6 +6,7 @@
     "out_of_range": "探測目標不在隧道範圍內",
     "open_window": "打開主介面",
     "disconnect": "斷開連線",
+    "connect": "連線",
     "overview_auto": "自動",
     "overview_manual": "手動"
   },
@@ -129,7 +130,10 @@
     "automation_resume": "恢復自動連線",
     "manual_override_off": "已手動停止連線，自動連線規則失效",
     "manual_override_on": "已手動啟動連線，自動連線規則失效",
+    "manual_override_off_short": "手動斷開 · 規則已暫停",
+    "manual_override_on_short": "手動連線 · 規則已暫停",
     "restore_automation": "恢復自動規則",
+    "manual_control": "手動接管",
     "automation_toggle_tip": "開啟時，WireGuide Plus 可自動連線或斷開此隧道。點擊「停止」即由你完全手動控制，設定重啟後依然生效。"
   },
   "import": {

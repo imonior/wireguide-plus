@@ -23,7 +23,8 @@ import (
 // unplug/replug, network loss, manual connect/disconnect), a small
 // self-drawn bubble pops up near the notification area reporting the
 // current connection situation. It carries a mini menu (Open Window /
-// Disconnect), can be dismissed with the ✕ button, and — being a standing
+// action — Disconnect while the tunnel is up, Connect after it dropped),
+// can be dismissed with the ✕ button, and — being a standing
 // notification — stays until the user acts; only the informational launch
 // overview closes itself after the configured duration. Any press-drag on
 // the bubble moves it (WM_NCHITTEST returns HTCAPTION outside the buttons).
@@ -220,6 +221,10 @@ type popupTexts struct {
 	outOfRange string
 	openLabel  string
 	discLabel  string
+	// connectLabel is the action button's label on a bubble that reported
+	// a lost connection: the button offers the opposite of what just
+	// happened, so a "disconnected" bubble carries Connect, not Disconnect.
+	connectLabel string
 	// autoLabel/manualLabel tag each row of the launch overview bubble
 	// (see popupData.overview): automation may act on the tunnel or not.
 	autoLabel   string
@@ -232,15 +237,15 @@ type popupTexts struct {
 func popupTextsFor(lang string) popupTexts {
 	switch lang {
 	case "zh-TW", "zh-Hant":
-		return popupTexts{connected: "已連線", connecting: "連線中", notConnected: "未連線", outOfRange: "探測目標不在隧道範圍內", openLabel: "開啟主視窗", discLabel: "中斷連線", autoLabel: "自動", manualLabel: "手動"}
+		return popupTexts{connected: "已連線", connecting: "連線中", notConnected: "未連線", outOfRange: "探測目標不在隧道範圍內", openLabel: "開啟主視窗", discLabel: "中斷連線", connectLabel: "連線", autoLabel: "自動", manualLabel: "手動"}
 	case "zh", "zh-CN", "zh-Hans":
-		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接", autoLabel: "自动", manualLabel: "手动"}
+		return popupTexts{connected: "已连接", connecting: "连接中", notConnected: "未连接", outOfRange: "探测目标不在隧道范围内", openLabel: "打开主界面", discLabel: "断开连接", connectLabel: "连接", autoLabel: "自动", manualLabel: "手动"}
 	case "ko":
-		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기", autoLabel: "자동", manualLabel: "수동"}
+		return popupTexts{connected: "연결됨", connecting: "연결 중", notConnected: "연결 안 됨", outOfRange: "터널 범위 밖의 프로브 대상", openLabel: "창 열기", discLabel: "연결 끊기", connectLabel: "연결", autoLabel: "자동", manualLabel: "수동"}
 	case "ja":
-		return popupTexts{connected: "接続済み", connecting: "接続中", notConnected: "未接続", outOfRange: "トンネル範囲外のプローブ先", openLabel: "ウィンドウを開く", discLabel: "切断", autoLabel: "自動", manualLabel: "手動"}
+		return popupTexts{connected: "接続済み", connecting: "接続中", notConnected: "未接続", outOfRange: "トンネル範囲外のプローブ先", openLabel: "ウィンドウを開く", discLabel: "切断", connectLabel: "接続", autoLabel: "自動", manualLabel: "手動"}
 	default:
-		return popupTexts{connected: "Connected", connecting: "Connecting", notConnected: "Disconnected", outOfRange: "Probe target outside tunnel routes", openLabel: "Open Window", discLabel: "Disconnect", autoLabel: "auto", manualLabel: "manual"}
+		return popupTexts{connected: "Connected", connecting: "Connecting", notConnected: "Disconnected", outOfRange: "Probe target outside tunnel routes", openLabel: "Open Window", discLabel: "Disconnect", connectLabel: "Connect", autoLabel: "auto", manualLabel: "manual"}
 	}
 }
 
@@ -315,15 +320,23 @@ type popupData struct {
 	// overview, when non-empty, switches the bubble to per-tunnel rows
 	// instead of a single status caption + joined names line. autoTags says
 	// which flavour: true is the launch status report (name + right-aligned
-	// "state · auto/manual" tag, no Disconnect button — the overview
+	// "state · auto/manual" tag, no action button — the overview
 	// describes, it does not act); false is a status transition, where each
-	// row reads "state: name" in the state's colour and Disconnect stays
-	// available.
-	overview     []overviewRow
-	autoTags     bool
-	lang         string
-	onOpen       func()
+	// row reads "state: name" in the state's colour and the action button
+	// stays available.
+	overview []overviewRow
+	autoTags bool
+	lang     string
+	onOpen   func()
+	// onDisconnect fires from the action button while the bubble reports
+	// a live connection (Disconnect tears the tunnels down).
 	onDisconnect func()
+	// onConnect fires from the action button after the bubble reported a
+	// lost connection (Connect brings the named tunnels back). It is the
+	// mirror of onDisconnect: the button always offers the opposite of
+	// what just happened, so a bubble that says "disconnected" must not
+	// offer "Disconnect" again.
+	onConnect func()
 
 	themeLight bool
 	dpi        uint32
@@ -339,11 +352,20 @@ type popupData struct {
 	bodyRect  windows.Rect
 	warnRect  windows.Rect
 	openRect  windows.Rect
-	discRect  windows.Rect
+	// actRect is the action button (Disconnect or Connect — see actLabel
+	// / onAct). Kept as its own rect so hit-testing, hover and drawing
+	// share one geometry regardless of which action it carries.
+	actRect windows.Rect
 
 	hoverClose bool
 	hoverOpen  bool
-	hoverDisc  bool
+	hoverAct   bool
+
+	// actLabel / onAct freeze the action button's label and callback at
+	// construction time, chosen from the reported state: disconnected →
+	// Connect + onConnect, anything else → Disconnect + onDisconnect.
+	actLabel string
+	onAct    func()
 
 	// ncPress records where a non-client (caption) press began, in screen
 	// coords, so the matching release can tell a click from a drag.
@@ -368,18 +390,22 @@ var (
 // Manager.EstablishedTunnels): popupStateConnecting exists so the bubble can
 // say "still trying" instead of "connected" for a tunnel whose connect
 // attempt has not finished — and may yet fail.
-func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	spawnPopup(transitionRows(names, state), false, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+//
+// onConnect is the action button's callback for the disconnected case: the
+// bubble names the tunnels that just dropped, and Connect brings them back
+// up. It is ignored (the button shows Disconnect) while state is live.
+func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
+	spawnPopup(transitionRows(names, state), false, names, state, outOfRange, lang, duration, onOpen, onDisconnect, onConnect)
 }
 
 // showOverviewPopup displays the launch status-overview bubble: every
 // tunnel with its connection state and automation mode. Informational —
 // the only action is Open Window.
 func showOverviewPopup(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
-	spawnPopup(rows, true, nil, popupStateConnected, nil, lang, duration, onOpen, nil)
+	spawnPopup(rows, true, nil, popupStateConnected, nil, lang, duration, onOpen, nil, nil)
 }
 
-func spawnPopup(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func spawnPopup(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("popup: recovered from panic in showStatusPopup", "err", r, "stack", string(debug.Stack()))
@@ -392,7 +418,7 @@ func spawnPopup(overview []overviewRow, autoTags bool, names []string, state pop
 		"out_of_range", outOfRange, "duration", duration, "overview_rows", len(overview))
 	ensurePopupClass()
 	closeConnectPopup() // replace any stale popup
-	go runPopupLoop(overview, autoTags, names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+	go runPopupLoop(overview, autoTags, names, state, outOfRange, lang, duration, onOpen, onDisconnect, onConnect)
 }
 
 func closeConnectPopup() {
@@ -429,7 +455,7 @@ func loadCursor(hinst uintptr, id int32) uintptr {
 	return c
 }
 
-func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
 	// The window's message queue is bound to the OS thread that created it.
 	// A plain goroutine can migrate between OS threads between syscalls, which
 	// would make GetMessage/DispatchMessage run on a different thread than the
@@ -453,6 +479,7 @@ func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state p
 		lang:         lang,
 		onOpen:       onOpen,
 		onDisconnect: onDisconnect,
+		onConnect:    onConnect,
 		themeLight:   systemLightTheme(),
 		dpi:          96,
 	}
@@ -530,30 +557,39 @@ func runPopupLoop(overview []overviewRow, autoTags bool, names []string, state p
 		d.warnRect = windows.Rect{Left: pad, Top: d.bodyRect.Bottom, Right: w - pad, Bottom: d.bodyRect.Bottom + warnLine}
 	}
 
-	// Buttons, right-aligned: [Disconnect] [Open Window]. The overview
-	// bubble only describes — Disconnect has no meaningful "all of the
-	// above" target there — so it keeps just Open Window, flush right.
-	// Transition bubbles keep both buttons even in row mode.
+	// Buttons, right-aligned: [action] [Open Window]. The action button's
+	// label and callback follow the reported state: a bubble that just lost
+	// the connection offers Connect (onConnect brings the named tunnels
+	// back), anything else offers Disconnect (onDisconnect tears them down).
+	// The overview bubble only describes — the action has no meaningful
+	// "all of the above" target there — so it keeps just Open Window, flush
+	// right. Transition bubbles keep both buttons even in row mode.
 	texts := popupTextsFor(lang)
+	d.actLabel = texts.discLabel
+	d.onAct = onDisconnect
+	if state == popupStateDisconnected && onConnect != nil {
+		d.actLabel = texts.connectLabel
+		d.onAct = onConnect
+	}
 	measDC, _, _ := procGetDC.Call(0)
 	btnH := int32(28 * d.scale)
 	btnY := h - pad - btnH
 	summary := len(d.overview) > 0 && d.autoTags
-	discW := int32(0)
+	actW := int32(0)
 	if !summary {
-		discW = measureText(measDC, d.bodyFont, texts.discLabel) + int32(24*d.scale)
+		actW = measureText(measDC, d.bodyFont, d.actLabel) + int32(24*d.scale)
 	}
 	openW := measureText(measDC, d.bodyFont, texts.openLabel) + int32(24*d.scale)
 	if measDC != 0 {
 		procReleaseDC.Call(0, measDC)
 	}
-	d.discRect = windows.Rect{Left: w - pad - discW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
+	d.actRect = windows.Rect{Left: w - pad - actW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
 	if summary {
-		d.discRect = windows.Rect{} // zero rect: never hit
+		d.actRect = windows.Rect{} // zero rect: never hit
 		d.openRect = windows.Rect{Left: w - pad - openW, Top: btnY, Right: w - pad, Bottom: btnY + btnH}
 	} else {
-		d.openRect = windows.Rect{Left: w - pad - discW - int32(8*d.scale) - openW, Top: btnY,
-			Right: w - pad - discW - int32(8*d.scale), Bottom: btnY + btnH}
+		d.openRect = windows.Rect{Left: w - pad - actW - int32(8*d.scale) - openW, Top: btnY,
+			Right: w - pad - actW - int32(8*d.scale), Bottom: btnY + btnH}
 	}
 
 	x, y := popupPosition(w, h, d.scale)
@@ -684,7 +720,7 @@ func popupWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		var wr windows.Rect
 		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&wr)))
 		p := popupPoint{X: sp.X - wr.Left, Y: sp.Y - wr.Top}
-		if inRect(p, d.closeRect) || inRect(p, d.openRect) || inRect(p, d.discRect) {
+		if inRect(p, d.closeRect) || inRect(p, d.openRect) || inRect(p, d.actRect) {
 			return htClient
 		}
 		return htCaption
@@ -735,13 +771,13 @@ func popupWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		switch {
 		case inRect(p, d.closeRect):
 			procDestroyWindow.Call(hwnd)
-		case inRect(p, d.discRect):
+		case inRect(p, d.actRect):
 			procDestroyWindow.Call(hwnd)
-			if d.onDisconnect != nil {
+			if d.onAct != nil {
 				// Run async: the callbacks (tunnel service RPCs,
 				// showDock's InvokeSync) may block; holding this
 				// bubble's message loop would stall WM_TIMER/WM_QUIT.
-				go d.onDisconnect()
+				go d.onAct()
 			}
 		case inRect(p, d.openRect):
 			procDestroyWindow.Call(hwnd)
@@ -757,16 +793,16 @@ func popupWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		p := pointFromLPARAM(lParam)
 		hClose := inRect(p, d.closeRect)
 		hOpen := inRect(p, d.openRect)
-		hDisc := inRect(p, d.discRect)
-		if hClose != d.hoverClose || hOpen != d.hoverOpen || hDisc != d.hoverDisc {
-			d.hoverClose, d.hoverOpen, d.hoverDisc = hClose, hOpen, hDisc
+		hAct := inRect(p, d.actRect)
+		if hClose != d.hoverClose || hOpen != d.hoverOpen || hAct != d.hoverAct {
+			d.hoverClose, d.hoverOpen, d.hoverAct = hClose, hOpen, hAct
 			procInvalidateRect.Call(hwnd, 0, 1)
 		}
 		trackMouseLeave(hwnd)
 		return 0
 	case wmMouseLeave:
-		if d.hoverClose || d.hoverOpen || d.hoverDisc {
-			d.hoverClose, d.hoverOpen, d.hoverDisc = false, false, false
+		if d.hoverClose || d.hoverOpen || d.hoverAct {
+			d.hoverClose, d.hoverOpen, d.hoverAct = false, false, false
 			procInvalidateRect.Call(hwnd, 0, 1)
 		}
 		return 0
@@ -864,7 +900,7 @@ func drawPopup(d *popupData) {
 	// Buttons
 	drawPopupButton(hdc, d, d.openRect, texts.openLabel, d.hoverOpen)
 	if len(d.overview) == 0 || !d.autoTags {
-		drawPopupButton(hdc, d, d.discRect, texts.discLabel, d.hoverDisc)
+		drawPopupButton(hdc, d, d.actRect, d.actLabel, d.hoverAct)
 	}
 }
 

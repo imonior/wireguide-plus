@@ -6,6 +6,7 @@
     "out_of_range": "Probe target outside tunnel routes",
     "open_window": "Open Window",
     "disconnect": "Disconnect",
+    "connect": "Connect",
     "overview_auto": "auto",
     "overview_manual": "manual"
   },
@@ -129,7 +130,10 @@
     "automation_resume": "Resume auto-connect",
     "manual_override_off": "Manually stopped — automation rules are suspended",
     "manual_override_on": "Manually started — automation rules are suspended",
+    "manual_override_off_short": "Manual off · rules paused",
+    "manual_override_on_short": "Manual on · rules paused",
     "restore_automation": "Restore automation rules",
+    "manual_control": "Manual control",
     "automation_toggle_tip": "When on, WireGuide Plus may connect or disconnect this tunnel automatically. Stop it to take full manual control; the setting sticks across restarts."
   },
   "import": {

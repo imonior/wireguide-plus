@@ -17,58 +17,60 @@
 
   // Tunnels the user has taken over by hand (manual connect / disconnect).
   // While a latch holds, the matching automation rules are suppressed — which
-  // is otherwise invisible, so the list states it next to the row.
-  // 被用户手动接管（手动连接/断开）的隧道。闩锁期间匹配的自动化规则是被抑制
-  // 的——这一点原本不可见，故列表在行旁明示。
-  let manualOverrides = [];
+  // is otherwise invisible, so the list states it beside the row. The latch
+  // state lives in ONE shared store (see stores/manualoverride.js) that every
+  // surface reads, so a restore on the detail page / editor clears it here
+  // too, instantly and completely — there is no per-surface copy to fall out
+  // of sync.
+  // 被用户手动接管（手动连接/断开）的隧道。闩锁期间匹配的自动化规则被抑制，这一点
+  // 原本不可见，故列表在行旁明示。闩锁状态只存在于一个共享 store（见
+  // stores/manualoverride.js），所有表面都读它，因此在详情页/编辑器点恢复也会立刻
+  // 在这里清除——没有会失同步的每面私有副本。
+  import { manualOverrides, refreshManualOverrides, clearManualOverride, setManualOverrideService } from '../stores/manualoverride.js';
+
   let restoringName = '';
-  let overrideSeq = 0;
+
+  // Keep the shared store's backend service current, and reload the latch map
+  // exactly when the active/established sets change — that is the moment a
+  // manual connect or disconnect has just latched (or released) a tunnel.
+  // Keying on the status broadcast itself would re-query at the helper's 1 Hz
+  // rate for no reason.
+  // 维护共享 store 的后端服务，并在 active/established 集合变化时重拉闩锁映射——那正是
+  // 手动连接/断开刚刚闩住（或释放）某条隧道的时刻。若直接以状态广播为键，会以 helper
+  // 的 1 Hz 频率无意义地重复查询。
+  $: if (TunnelService) setManualOverrideService(TunnelService);
+  $: statusSignature = [
+    ($connectionStatus?.active_tunnels || []).join(','),
+    ($connectionStatus?.established_tunnels || []).join(','),
+  ].join('|');
+  $: if (TunnelService) void refreshManualOverrides(statusSignature);
+
+  // Live backend latch per tunnel (name -> 'off' | 'on'), straight from the
+  // shared store. The strip — and its restore button — appears only while a
+  // latch is present; the moment it is cleared (from ANY surface) the strip
+  // vanishes here too. There is no "restored" lingering state: with the latch
+  // gone there is nothing left to restore, so no button is shown anywhere.
+  // 每个隧道的实时后端闩锁（name -> 'off' | 'on'），直接来自共享 store。提示条及其
+  // 恢复按钮只在闩锁存在时出现；一旦被任一表面清除，这里的提示条也立刻消失。不存在
+  // 「已恢复」滞留态：闩锁既已不在，便无可恢复之物，故任何地方都不显示恢复按钮。
   $: manualOverrideMap = (() => {
     const m = {};
-    for (const o of manualOverrides || []) {
+    for (const o of $manualOverrides || []) {
       if (o && o.name) m[o.name] = o.override;
     }
     return m;
   })();
 
-  // Reload exactly when the active/established sets change — that is the
-  // moment a manual connect or disconnect has just latched (or released) a
-  // tunnel. Keying on the status broadcast itself would re-query at the
-  // helper's 1 Hz rate for no reason.
-  // 仅在 active/established 集合变化时重载——那正是手动连接或断开刚刚闩住
-  // （或释放）某条隧道的时刻。若直接以状态广播为键，会以 helper 的 1 Hz 频率
-  // 无意义地重复查询。
-  $: statusSignature = [
-    ($connectionStatus?.active_tunnels || []).join(','),
-    ($connectionStatus?.established_tunnels || []).join(','),
-  ].join('|');
-  $: if (TunnelService) void loadManualOverrides(statusSignature);
-
-  async function loadManualOverrides(_sig) {
-    if (!TunnelService) return;
-    const seq = ++overrideSeq;
-    try {
-      const list = await TunnelService.GetManualOverrides();
-      if (seq !== overrideSeq) return;
-      manualOverrides = Array.isArray(list) ? list : [];
-    } catch (_) {
-      // A failed read must never hide the list: no overrides shown is the
-      // pre-feature behaviour, not a broken one.
-      if (seq === overrideSeq) manualOverrides = [];
-    }
-  }
-
-  // Hand the tunnel back to its automation rules by releasing whichever
-  // manual latch it carries (off or on — they are mutually exclusive).
-  // 释放该隧道所带的手动闩锁（off 或 on，二者互斥），把它交还给自动化规则。
+  // Hand the tunnel back to its automation rules by releasing whichever manual
+  // latch it carries (off or on — mutually exclusive). The shared clear
+  // refreshes the store, so every surface drops its indicator at once.
+  // 释放该隧道所带的手动闩锁（off 或 on，二者互斥），交还给自动化规则。共享清除会
+  // 刷新 store，于是所有表面同时撤下提示。
   async function restoreAutomation(name) {
     if (!TunnelService || !name || restoringName) return;
     restoringName = name;
     try {
-      await TunnelService.ClearManualOverride(name);
-      manualOverrides = (manualOverrides || []).filter((o) => o.name !== name);
-    } catch (e) {
-      console.warn('failed to restore automation for tunnel:', name, e);
+      await clearManualOverride(name);
     } finally {
       restoringName = '';
     }
@@ -210,49 +212,68 @@
       </div>
     {:else}
       {#each sorted as tun (tun.name)}
-        <button
-          class="tunnel-item"
-          class:active={$selectedTunnel?.name === tun.name}
-          class:connected={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
-          class:pending={pendingSet.has(tun.name)}
-          aria-current={$selectedTunnel?.name === tun.name ? 'true' : undefined}
-          on:click={() => select(tun)}
+        <!-- One card per tunnel. The row button and the manual-override
+             strip are siblings INSIDE the card so the strip reads as the
+             bottom of the info bar, not as a separate section beside it.
+             The strip can never live inside the <button> (a button may not
+             contain another button), hence the wrapper. -->
+        <div
+          class="tunnel-entry"
+          class:entry-active={$selectedTunnel?.name === tun.name}
+          class:entry-connected={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
+          class:entry-pending={pendingSet.has(tun.name)}
         >
-          <span class="status-dot"
-            class:on={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
-            class:pending={pendingSet.has(tun.name)}
-            class:warning={establishedSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
-          <div class="tunnel-text">
-            <span class="tunnel-name">{tun.name}</span>
-            {#if tun.protocol === 'amneziawg' && $appSettings.loaded}
-              <!-- One element, one style, two states: "AmneziaWG ON" /
-                   "AmneziaWG OFF". Only the colour modifier changes so the
-                   badge keeps identical geometry in both states. -->
-              <span
-                class="awg-badge"
-                class:awg-badge--off={!$appSettings.enable_awg}
-                title={$appSettings.enable_awg ? $t('tunnel.awg_on_tip') : $t('tunnel.awg_off_tip')}>
-                {$appSettings.enable_awg ? $t('tunnel.awg_on') : $t('tunnel.awg_off')}
+          <button
+            class="tunnel-item"
+            class:active={$selectedTunnel?.name === tun.name}
+            aria-current={$selectedTunnel?.name === tun.name ? 'true' : undefined}
+            on:click={() => select(tun)}
+          >
+            <span class="status-dot"
+              class:on={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
+              class:pending={pendingSet.has(tun.name)}
+              class:warning={establishedSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
+            <div class="tunnel-text">
+              <span class="tunnel-name">{tun.name}</span>
+              {#if tun.protocol === 'amneziawg' && $appSettings.loaded}
+                <!-- One element, one style, two states: "AmneziaWG ON" /
+                     "AmneziaWG OFF". Only the colour modifier changes so the
+                     badge keeps identical geometry in both states. -->
+                <span
+                  class="awg-badge"
+                  class:awg-badge--off={!$appSettings.enable_awg}
+                  title={$appSettings.enable_awg ? $t('tunnel.awg_on_tip') : $t('tunnel.awg_off_tip')}>
+                  {$appSettings.enable_awg ? $t('tunnel.awg_on') : $t('tunnel.awg_off')}
+                </span>
+              {/if}
+              {#if tun.endpoint}
+                <span class="tunnel-meta">{tun.endpoint}</span>
+              {/if}
+            </div>
+          </button>
+          <!-- Manual-override strip: the bottom of the tunnel's own card.
+               The wording is a short state phrase, not a sentence — a long
+               one wrapped into the restore button on a narrow list. Shown only
+               while the latch is present; the shared store (and therefore this
+               strip) clears the instant a restore happens on ANY surface, so the
+               list, detail page and editor stay in lock-step. -->
+          <!-- 手动接管提示条：隧道自身卡片的底边。措辞是简短状态短语而非整句——
+               过长会在窄列表里挤进恢复按钮。仅在闩锁存在时显示；共享 store（亦即本
+               提示条）会在任一表面点恢复的那一刻清空，于是列表、详情页、编辑器始终
+               同步。 -->
+          {#if manualOverrideMap[tun.name]}
+            <div class="manual-override" role="status">
+              <span class="mo-text">
+                {$t(manualOverrideMap[tun.name] === 'off' ? 'tunnel.manual_override_off_short' : 'tunnel.manual_override_on_short')}
               </span>
-            {/if}
-            {#if tun.endpoint}
-              <span class="tunnel-meta">{tun.endpoint}</span>
-            {/if}
-          </div>
-        </button>
-        <!-- Manual-override notice. Sits as a SIBLING of the row button, never
-             inside it: a <button> may not contain another <button>, and the
-             restore action needs its own focusable control. -->
-        {#if manualOverrideMap[tun.name]}
-          <div class="manual-override" role="status">
-            <span class="mo-text">{$t(manualOverrideMap[tun.name] === 'off' ? 'tunnel.manual_override_off' : 'tunnel.manual_override_on')}</span>
-            <button
-              class="mo-restore"
-              disabled={restoringName === tun.name}
-              on:click={() => restoreAutomation(tun.name)}
-            >{$t('tunnel.restore_automation')}</button>
-          </div>
-        {/if}
+              <button
+                class="mo-restore"
+                disabled={restoringName === tun.name}
+                on:click={() => restoreAutomation(tun.name)}
+              >{$t('tunnel.restore_automation')}</button>
+            </div>
+          {/if}
+        </div>
       {/each}
     {/if}
   </div>
@@ -412,12 +433,44 @@
     cursor: pointer;
   }
 
-  /* --- List items: card-style with name + endpoint --- */
+  /* --- List items: one card per tunnel ---
+     The card (.tunnel-entry) owns every tunnel-level visual: the hover
+     wash, the active-selection wash, and the spacing between tunnels. The
+     row button inside is transparent and content-only, and the
+     manual-override strip is the card's bottom edge — which is what makes
+     it read as part of the info bar instead of a section beside it. */
   .list-items {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 0 var(--space-2) var(--space-2);
+  }
+  .tunnel-entry {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 2px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tunnel-entry {
+      transition: background-color var(--dur-fast) var(--ease-out);
+    }
+    .status-dot {
+      transition: background-color var(--dur-base) var(--ease-out),
+                  box-shadow var(--dur-base) var(--ease-out);
+    }
+  }
+  .tunnel-entry:hover {
+    background: var(--bg-hover);
+  }
+  /* Declared after :hover so the selected tunnel keeps its wash while the
+     pointer is anywhere on its card. */
+  .tunnel-entry.entry-active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .tunnel-entry.entry-active .tunnel-name {
+    font-weight: 600;
+    color: var(--text-primary);
   }
   .tunnel-item {
     display: flex;
@@ -426,10 +479,9 @@
     width: 100%;
     min-height: 52px;
     padding: 8px 10px;
-    margin-bottom: 2px;
     background: transparent;
     border: 0;
-    border-radius: 10px;
+    border-radius: 0;
     color: var(--text-primary);
     font: var(--text-body);
     cursor: pointer;
@@ -437,28 +489,25 @@
     position: relative;
     overflow: hidden;
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .tunnel-item {
-      transition: background-color var(--dur-fast) var(--ease-out),
-                  border-color var(--dur-fast) var(--ease-out);
-    }
-    .status-dot {
-      transition: background-color var(--dur-base) var(--ease-out),
-                  box-shadow var(--dur-base) var(--ease-out);
-    }
-  }
-  /* --- Manual override notice ---
-     The user took this tunnel over by hand, so its automation rules are dead
-     until restored. Rendered directly under the row so the reason is visible
-     exactly where the connect/disconnect was clicked. */
+
+  /* --- Manual override strip: the bottom of the tunnel's own card ---
+     The user took this tunnel over by hand, so its automation rules are
+     suspended until restored. Indented to line up with the tunnel name
+     (status dot 8px + gap 10px + row padding 10px) and worded as a short
+     state phrase rather than a sentence: a full sentence wrapped into the
+     restore button on a narrow list. The strip exists only while a latch is
+     present — the shared store clears it (and the restore button with it) the
+     moment a restore happens anywhere, so no "restored" state can linger. */
+  /* --- 手动接管提示条：隧道自身卡片的底边 ---
+     用户手动接管了这条隧道，于是其自动化规则在恢复前被挂起。缩进与隧道名对齐
+     （状态点 8px + 间距 10px + 行内边距 10px），措辞为简短状态短语而非整句——整句会
+     在窄列表里挤进恢复按钮。提示条仅在闩锁存在时出现——共享 store 会在任一处置处点
+     恢复的瞬间把它（连同恢复按钮）一并清空，故不会留下「已恢复」滞留态。 */
   .manual-override {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 2px 0 4px;
-    padding: 5px 10px 6px 24px;
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--text-muted) 9%, transparent);
+    padding: 0 10px 9px 28px;
   }
   .mo-text {
     flex: 1;
@@ -466,6 +515,9 @@
     font-size: 11px;
     line-height: 1.35;
     color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .mo-restore {
     flex: none;
@@ -487,19 +539,10 @@
     cursor: default;
   }
 
-  .tunnel-item:hover {
-    background: var(--bg-hover);
-  }
-  .tunnel-item.active {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-  .tunnel-item.active .tunnel-name {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  /* Claiming-to-be-connected left-edge accent pill */
-  .tunnel-item.connected::before {
+  /* Claiming-to-be-connected left-edge accent pill. Still centred on the
+     ROW (the strip below never carried a state of its own), now addressed
+     through the card's state class. */
+  .tunnel-entry.entry-connected .tunnel-item::before {
     content: '';
     position: absolute;
     left: 0;
@@ -514,7 +557,7 @@
   /* In-progress left-edge pill: same geometry, drained of colour. A tunnel
      that is still dialling gets the marker (it is doing something) without
      borrowing the green that means "carrying traffic". */
-  .tunnel-item.pending::before {
+  .tunnel-entry.entry-pending .tunnel-item::before {
     content: '';
     position: absolute;
     left: 0;

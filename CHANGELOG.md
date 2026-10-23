@@ -4,6 +4,15 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.3] - 2026-10-23
+
+### 🐛 Fixed
+
+- **Restoring automation after a manual takeover now actually resumes the rules.** Clearing the latch used to be the whole action, but because the automation engine is event-driven and macOS has no periodic poll, the tunnel stayed suppressed until the next network change. A restore now requests an immediate re-evaluation, so a tunnel that qualifies reconnects right away. (Regression introduced in 2.8.0.)
+- **"Restore automation" is now one button in the automation panel and stays in sync everywhere.** The detail page and the automation editor each used to show a separate restore notice that could disagree; the control now lives in the same on/off column as the automation switch (the panel switches to an amber "Manual control" banner with a "Restore automation" button while a tunnel is taken over by hand), and clearing the latch on any surface dismisses the notice on every surface at once.
+- **The tunnel list names both manual-takeover directions.** The inline status strip now reads either "manually disconnected · rules paused" or "manually connected · rules paused", depending on whether you took the tunnel over by hand with a disconnect or a connect.
+- **The drop popup's action button was mislabeled.** When a tunnel went down, the system-tray bubble offered a "Disconnect" button; it now reads "Connect" and actually reconnects the tunnel.
+
 ## [2.8.2] - 2026-10-23
 
 ### 🐛 Fixed

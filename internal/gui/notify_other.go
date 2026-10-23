@@ -8,8 +8,8 @@ import "time"
 // Wails secondary window (see popup_wails.go). macOS/Linux have no native
 // tray popup of their own, so this delegates to the shared, cross-platform
 // implementation rather than a no-op.
-func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
-	showStatusPopupWails(names, state, outOfRange, lang, duration, onOpen, onDisconnect)
+func showStatusPopup(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
+	showStatusPopupWails(names, state, outOfRange, lang, duration, onOpen, onDisconnect, onConnect)
 }
 
 // showOverviewPopup mirrors the Windows launch-overview bubble using the

@@ -6,6 +6,7 @@
     "out_of_range": "トンネル範囲外のプローブ先",
     "open_window": "ウィンドウを開く",
     "disconnect": "切断",
+    "connect": "接続",
     "overview_auto": "自動",
     "overview_manual": "手動"
   },
@@ -129,7 +130,10 @@
     "automation_resume": "自動接続を再開",
     "manual_override_off": "手動で停止しました — 自動接続ルールは無効です",
     "manual_override_on": "手動で接続しました — 自動接続ルールは無効です",
+    "manual_override_off_short": "手動切断 · ルール停止中",
+    "manual_override_on_short": "手動接続 · ルール停止中",
     "restore_automation": "自動ルールを復元",
+    "manual_control": "手動制御",
     "automation_toggle_tip": "有効な場合、WireGuide Plus はこのトンネルを自動で接続・切断します。「停止」を押すと手動制御に切り替わり、再起動後も維持されます。"
   },
   "import": {

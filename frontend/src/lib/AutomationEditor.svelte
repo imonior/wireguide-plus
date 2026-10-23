@@ -20,6 +20,7 @@
   import { errText } from './errors.js';
   import SSIDPermissionBanner from './SSIDPermissionBanner.svelte';
   import { modalDrag } from './actions/modal-drag.js';
+  import { manualOverrides, clearManualOverride, setManualOverrideService } from '../stores/manualoverride.js';
   import { loadPhysicalInterfaces, ifaceLabel } from './interface-utils.js';
   import { getAutomationDisabled, setAutomationDisabled } from './tunnel-automation.js';
   export let TunnelService;
@@ -687,6 +688,61 @@
     : 'auto_none';
   $: controlLabelKey = 'automation.override_' + controlKey;
   $: controlClass = controlKey === 'manual_off' ? 'off' : controlKey === 'manual_on' ? 'on' : 'auto';
+  // The tunnel is under a manual latch right now: manual-off suppresses the
+  // winning connect rule, manual-on suppresses the winning disconnect rule.
+  // A manual action is the same as pausing automation by hand, so the
+  // on/off column above switches to a "Manual control" banner with the
+  // release button — there is no point showing the durable on/off switch
+  // while a latch is overriding it anyway.
+  // 当前隧道正带着手动闩锁：manual-off 抑制获胜的连接规则，manual-on 抑制获胜的
+  // 断开规则。手动接管等同于手动暂停自动化，所以上方的 on/off 栏切换成「手动接管」
+  // 横幅并附带释放按钮——闩锁本就在压制常驻开关，这时再显示开关没意义。
+  $: manualLatched = preview?.decision === 'manual-off' || preview?.decision === 'manual-on';
+  let restoringOverride = false;
+
+  // Release the manual latch and hand the tunnel back to its rules. The shared
+  // clear refreshes the one store every surface reads, so a restore here also
+  // drops the list's indicator at once; this surface then re-rates immediately
+  // (the preview decision flips from manual-* back to the rules' own verdict,
+  // and waiting for the 3s poll would leave the banner claiming a latch that
+  // was just released). Restore lives in this column because the user arrives
+  // here precisely to ask "why are my rules not running?" — and a manual
+  // action is one of the two answers (the other being the durable on/off
+  // switch above).
+  // 释放手动闩锁，把隧道交还给规则。共享清除会刷新所有表面共读的同一个 store，于是
+  // 在此点恢复也会立刻撤下列表的提示；随后本面立即重新评估（preview 的 decision 会从
+  // manual-* 翻回规则自身的结论，等 3s 轮询会让横幅继续声称一个刚刚释放的闩锁）。
+  // 恢复入口就放在这一栏：用户来到这里正是为了问「我的规则为什么没跑？」——手动接管
+  // 是两种答案之一（另一种就是上方的常驻开关）。
+  async function restoreAutomation() {
+    if (!TunnelService || !tunnelName || restoringOverride) return;
+    restoringOverride = true;
+    try {
+      await clearManualOverride(tunnelName);
+      refreshPreview();
+    } catch (e) {
+      console.warn('failed to restore automation for tunnel:', tunnelName, e);
+    } finally {
+      restoringOverride = false;
+    }
+  }
+  // Register the bound service so the shared store can reach the backend, and
+  // re-rate the moment THIS tunnel's latch entry changes in the shared store
+  // (e.g. a restore performed on the tunnel list) — keeping the Manual control
+  // banner in step with the list instead of up to 3s behind its own poll.
+  // 注册被注入的服务，使共享 store 能触达后端；并在本隧道闩锁项于共享 store 中变化时
+  // 立即重评（例如在通道列表上点了恢复），让「手动接管」横幅与列表同步，而非最多落后
+  // 自身轮询 3s。
+  $: if (TunnelService) setManualOverrideService(TunnelService);
+  let prevOverrideToken = '';
+  $: {
+    const hit = ($manualOverrides || []).find(o => o && o.name === tunnelName);
+    const token = hit ? hit.override : '';
+    if (token !== prevOverrideToken) {
+      prevOverrideToken = token;
+      if (open && TunnelService) refreshPreview();
+    }
+  }
   // Human label for the live decision strip ("this network will connect /
   // disconnect / ..."), taken from the draft's evaluated decision.
   $: decisionLabelKey = ({
@@ -928,14 +984,26 @@
            checkbox is CHECKED while automation is ENABLED — otherwise the
            "on/off" label would read backwards. The trailing state text reuses
            the hero toggle's own vocabulary (tunnel.automation_on / _off) so
-           the two controls say the same thing in the same words. -->
-      <div class="am-exclude" class:am-exclude-off={automationDisabled}>
-        <label class="am-exclude-row">
-          <input type="checkbox" style="width:15px;height:15px;accent-color:var(--accent)" checked={!automationDisabled} on:change={toggleAutomationDisabled} />
-          <span class="am-exclude-text">{$t('policy.automation_disabled')}</span>
-          <span class="am-exclude-state">{automationDisabled ? $t('tunnel.automation_off') : $t('tunnel.automation_on')}</span>
-        </label>
-        <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
+           the two controls say the same thing in the same words.
+           While a manual latch holds, automation is paused by the user's own
+           hand action — the same situation the durable off-switch would show —
+           so this column switches to a "Manual control" banner carrying the
+           release button instead of the checkbox. -->
+      <div class="am-exclude" class:am-exclude-off={automationDisabled} class:am-exclude-manual={manualLatched}>
+        {#if manualLatched}
+          <div class="am-exclude-manual-row">
+            <span class="am-exclude-text">{$t('tunnel.manual_control')}</span>
+            <button class="am-restore" type="button" on:click={restoreAutomation} disabled={restoringOverride}
+              title={$t('tunnel.restore_automation')}>{$t('tunnel.restore_automation')}</button>
+          </div>
+        {:else}
+          <label class="am-exclude-row">
+            <input type="checkbox" style="width:15px;height:15px;accent-color:var(--accent)" checked={!automationDisabled} on:change={toggleAutomationDisabled} />
+            <span class="am-exclude-text">{$t('policy.automation_disabled')}</span>
+            <span class="am-exclude-state">{automationDisabled ? $t('tunnel.automation_off') : $t('tunnel.automation_on')}</span>
+          </label>
+          <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
+        {/if}
       </div>
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
@@ -979,6 +1047,9 @@
           <span class="am-tunnel-state am-tunnel-state-{tunnelStateKey}" title={$t('automation.state_tooltip')}>{$t('automation.state_' + tunnelStateKey)}</span>
         {/if}
         <span class="am-override am-override-{controlClass}" title={$t('automation.override_tooltip')}>{$t(controlLabelKey)}</span>
+        <!-- The manual latch is released from the on/off column above (where
+             it also shows as a "Manual control" banner), so this status row
+             only names the latch — it no longer carries its own button. -->
       </div>
       <div class="am-rules-wrap">
         <div class="am-fade am-fade-top" class:show={canScrollUp}>
@@ -1339,6 +1410,29 @@
      cause). */
   .am-override-off { color: var(--red, #ff3b30); background: color-mix(in srgb, var(--red, #ff3b30) 12%, transparent); border-color: color-mix(in srgb, var(--red, #ff3b30) 40%, var(--border)); }
   .am-override-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  /* Restore button beside the manual-latch chip — the editor's own copy of
+     the action the tunnel list and the detail page offer, so the release is
+     reachable from the screen that explains WHY the rules are not
+     running. Pinned to the row's right edge; wraps below on narrow
+     dialogs. */
+  .am-restore {
+    flex-shrink: 0;
+    margin-left: auto;
+    font: 600 10px/1 var(--font-sans);
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .am-restore:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .am-restore:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
   .am-default-hint { font: 400 10px/1.3 var(--font-sans); color: var(--text-muted); margin-left: auto; text-align: right; }
   /* Rule-level drag affordances */
   .am-rule-handle { flex-shrink: 0; cursor: grab; }
@@ -1452,4 +1546,10 @@
   }
   .am-exclude-off .am-exclude-state { color: var(--text-muted); font-weight: 600; }
   .am-exclude-hint { font: 400 11px/1.45 var(--font-sans); color: var(--text-muted); margin: 2px 0 0; }
+  /* Manual latch occupies the on/off column: automation is paused by the
+     user's own hand action, so the column shows a "Manual control" banner
+     with the release button instead of the durable switch. */
+  .am-exclude-manual { background: color-mix(in srgb, var(--amber, #ff9f0a) 14%, transparent); border-color: color-mix(in srgb, var(--amber, #ff9f0a) 45%, transparent); }
+  .am-exclude-manual-row { display: flex; align-items: center; gap: 8px; }
+  .am-exclude-manual .am-exclude-text { color: color-mix(in srgb, var(--amber, #ff9f0a) 75%, var(--text-primary)); }
 </style>

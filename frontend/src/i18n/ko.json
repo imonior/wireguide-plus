@@ -6,6 +6,7 @@
     "out_of_range": "터널 범위 밖의 프로브 대상",
     "open_window": "창 열기",
     "disconnect": "연결 끊기",
+    "connect": "연결",
     "overview_auto": "자동",
     "overview_manual": "수동"
   },
@@ -129,7 +130,10 @@
     "automation_resume": "자동 연결 재개",
     "manual_override_off": "수동으로 중지됨 — 자동 연결 규칙이 비활성화되었습니다",
     "manual_override_on": "수동으로 연결됨 — 자동 연결 규칙이 비활성화되었습니다",
+    "manual_override_off_short": "수동 끔 · 규칙 일시중지",
+    "manual_override_on_short": "수동 켬 · 규칙 일시중지",
     "restore_automation": "자동 규칙 복원",
+    "manual_control": "수동 제어",
     "automation_toggle_tip": "켜져 있으면 WireGuide Plus가 이 터널을 자동으로 연결하거나 끊습니다. '중지'를 누르면 수동 제어로 전환되며 재시작 후에도 유지됩니다."
   },
   "import": {

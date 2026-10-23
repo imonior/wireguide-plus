@@ -751,6 +751,20 @@ func (s *TunnelService) ClearManualOverride(name string) error {
 	slog.Info("automation: manual latch cleared by user — rules active again",
 		"category", "network",
 		"tunnel", name)
+	// Apply the release right now instead of waiting for the next network
+	// event. The helper re-reads settings.json on every evaluation, so the
+	// latch IS gone from disk — but the engine is event-driven (macOS has no
+	// 30s poll at all), so without this request a restored tunnel sat
+	// suppressed until the next SSID/route change, which for a steady
+	// network may never come. That is exactly the "I clicked restore and
+	// nothing happened" report: the rules that should reconnect the tunnel
+	// stayed latched off in the engine's eyes.
+	// 立即让释放生效，而不是等下一个网络事件。helper 每次评估都会重读
+	// settings.json，闩锁确实已从磁盘消失——但引擎是事件驱动的（macOS 根本没有
+	// 30s 轮询），少了这次请求，被恢复的隧道会一直处于抑制状态，直到下一次
+	// SSID/路由变化，而网络不变时这一天可能永不到来。这正是「点了恢复却没反应」
+	// 的报告来源：本该把隧道连回去的规则，在引擎眼里仍被闩锁压着。
+	s.requestAutomationEval()
 	return nil
 }
 

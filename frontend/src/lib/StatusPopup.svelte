@@ -3,9 +3,12 @@
   // URL carries ?popup=1 (the secondary Wails window opened from Go's
   // showStatusPopupWails). Mirrors the Windows Win32 bubble: title, status
   // dot + caption, the tunnel list, an amber "out of tunnel routes" warning,
-  // and Open Window / Disconnect buttons. Status bubbles are persistent
+  // and Open Window / action buttons. Status bubbles are persistent
   // (duration_ms <= 0: only the user, or a newer event replacing this one,
   // closes them); the launch overview carries a positive duration.
+  // The action button follows the state: while the tunnel is up it offers
+  // Disconnect, after the connection was lost it offers Connect — the
+  // opposite action of the one the bubble just reported.
   import { onMount, onDestroy } from 'svelte';
   import { Events } from '@wailsio/runtime';
   import { t, setLanguage } from '../i18n/index.js';
@@ -80,6 +83,9 @@
   function disconnect() {
     Events.Emit('popup:disconnect');
   }
+  function connect() {
+    Events.Emit('popup:connect');
+  }
 
   onMount(() => {
     unsub = Events.On('popup:data', (e) => apply((e && e.data) || {}));
@@ -131,7 +137,11 @@
 
   <div class="popup-actions">
     {#if state !== 'overview'}
-      <button class="btn" on:click={disconnect}>{$t('popup.disconnect')}</button>
+      {#if state === 'disconnected'}
+        <button class="btn" on:click={connect}>{$t('popup.connect')}</button>
+      {:else}
+        <button class="btn" on:click={disconnect}>{$t('popup.disconnect')}</button>
+      {/if}
     {/if}
     <button class="btn btn-primary" on:click={openWindow}>{$t('popup.open_window')}</button>
   </div>

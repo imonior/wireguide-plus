@@ -1570,6 +1570,17 @@ func changedAutomation(changed []string) bool {
 	return false
 }
 
+// automationEvalRequest is the IPC ask behind requestAutomationEval,
+// indirected through a var so tests can pin that a state change really
+// pokes the helper — standing up a live helper inside a unit test is not
+// an option. Production always uses the real call.
+// automationEvalRequest 是 requestAutomationEval 背后的 IPC 请求，经变量间接
+// 转发，以便单测能钉死「状态改动确实通知了 helper」——在单测里拉起一个真实的
+// helper 并不可行。生产环境始终使用真实调用。
+var automationEvalRequest = func(s *TunnelService) error {
+	return s.call(ipc.MethodAutomationReevaluate, nil, nil)
+}
+
 // requestAutomationEval asks the helper to re-run the automation engine
 // right now. A saved policy would otherwise sit idle until the next network
 // event (SSID change, route change, 30s poll), which reads as "the Default
@@ -1577,7 +1588,15 @@ func changedAutomation(changed []string) bool {
 // else changes to trigger an evaluation. Best-effort: an unreachable helper
 // (shutting down) must not fail the save.
 func (s *TunnelService) requestAutomationEval() {
-	if err := s.call(ipc.MethodAutomationReevaluate, nil, nil); err != nil {
+	// A nil holder means "no IPC configured" (unit tests, CLI paths): there
+	// is nobody to ask, and the caller's own state change already landed on
+	// disk for the next evaluation to read.
+	// 空 holder 表示「没有配置 IPC」（单测、CLI 路径）：无处可请求，而调用方
+	// 的状态改动已落盘，下一次评估自然会读到。
+	if s.clients == nil {
+		return
+	}
+	if err := automationEvalRequest(s); err != nil {
 		slog.Debug("automation: could not request re-evaluation", "error", err)
 	}
 }

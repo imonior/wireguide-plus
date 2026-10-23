@@ -9,7 +9,8 @@ package gui
 // view (frontend/src/lib/StatusPopup.svelte, mounted by App.svelte when the
 // URL carries ?popup=1). The view mirrors the Windows bubble: title, status
 // dot + caption, the tunnel list, an amber "out of tunnel routes" warning,
-// and Open Window / Disconnect buttons. Status transitions arrive as
+// and Open Window / action buttons (Disconnect while up, Connect after a
+// drop). Status transitions arrive as
 // persistent bubbles (popupPersistent — dismissed by the user, never by a
 // timer); only the informational launch overview carries a duration.
 //
@@ -73,6 +74,11 @@ var (
 	popupCb       struct {
 		onOpen       func()
 		onDisconnect func()
+		// onConnect fires when the user presses Connect on a bubble that
+		// reported a lost connection (the action button mirrors the state:
+		// Disconnect while up, Connect after the drop). nil for bubbles
+		// that carry no connect target (the launch overview).
+		onConnect func()
 	}
 	popupLatest popupPayload
 )
@@ -112,6 +118,15 @@ func registerPopupEvents(app *application.App) {
 		}
 		destroyPopupWindow()
 	})
+	app.Event.On("popup:connect", func(_ *application.CustomEvent) {
+		popupMu.Lock()
+		cb := popupCb.onConnect
+		popupMu.Unlock()
+		if cb != nil {
+			go cb()
+		}
+		destroyPopupWindow()
+	})
 	app.Event.On("popup:close", func(_ *application.CustomEvent) {
 		destroyPopupWindow()
 	})
@@ -120,23 +135,23 @@ func registerPopupEvents(app *application.App) {
 // showStatusPopupWails opens (or refreshes) the status bubble. It is the
 // mac/Linux implementation behind notify_other.go's showStatusPopup; it is
 // never called on Windows (there notify_windows.go owns the popup).
-func showStatusPopupWails(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func showStatusPopupWails(names []string, state popupState, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
 	// The bubble is line-per-tunnel ("Connected: wg0", red/green whole line)
 	// on every platform: transitionRows builds the same rows the Windows GDI
 	// popup draws, and the Svelte view renders them one per line when state is
 	// not "overview". Names still travel for renderers that prefer the joined
 	// form and as a fallback if rows are ever dropped.
-	showPopupWails(transitionRows(names, state), names, state.String(), outOfRange, lang, duration, onOpen, onDisconnect)
+	showPopupWails(transitionRows(names, state), names, state.String(), outOfRange, lang, duration, onOpen, onDisconnect, onConnect)
 }
 
 // showOverviewPopupWails is the mac/Linux launch status-overview bubble:
 // one row per tunnel (name, connection state, automation mode). Like its
 // Windows twin it is informational — Open Window is the only action.
 func showOverviewPopupWails(rows []overviewRow, lang string, duration time.Duration, onOpen func()) {
-	showPopupWails(rows, nil, "overview", nil, lang, duration, onOpen, nil)
+	showPopupWails(rows, nil, "overview", nil, lang, duration, onOpen, nil, nil)
 }
 
-func showPopupWails(rows []overviewRow, names []string, state string, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect func()) {
+func showPopupWails(rows []overviewRow, names []string, state string, outOfRange []string, lang string, duration time.Duration, onOpen, onDisconnect, onConnect func()) {
 	if duration == 0 {
 		duration = 10 * time.Second
 	}
@@ -146,6 +161,7 @@ func showPopupWails(rows []overviewRow, names []string, state string, outOfRange
 	popupMu.Lock()
 	popupCb.onOpen = onOpen
 	popupCb.onDisconnect = onDisconnect
+	popupCb.onConnect = onConnect
 	popupLatest = popupPayload{
 		Names:      names,
 		State:      state,
@@ -266,6 +282,7 @@ func destroyPopupWindow() {
 	popupWin = nil
 	popupCb.onOpen = nil
 	popupCb.onDisconnect = nil
+	popupCb.onConnect = nil
 	popupMu.Unlock()
 	if w != nil {
 		go w.Close()

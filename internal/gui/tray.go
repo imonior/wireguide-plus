@@ -1083,6 +1083,13 @@ func (t *trayManager) showStatusNotification() {
 	// Persistent on purpose: a status bubble that vanished on a timer could
 	// be missed entirely while the user works in another app — the notify
 	// duration setting now only governs the informational launch overview.
+	//
+	// The action button mirrors the state: while the tunnel is up it reads
+	// Disconnect (tear down every active tunnel); after the drop it reads
+	// Connect — the opposite of what just happened — and brings back the
+	// tunnels this bubble named. A manual connect latches manual-on (see
+	// TunnelService.Connect), so automation stays paused until the user
+	// disconnects by hand or restarts, exactly as on the detail page.
 	showStatusPopup(names, state, outOfRange, lang, popupPersistent, showDock, func() {
 		t.mu.Lock()
 		names := make([]string, 0, len(t.activeTunnels))
@@ -1093,6 +1100,24 @@ func (t *trayManager) showStatusNotification() {
 		for _, n := range names {
 			if err := t.svc.DisconnectTunnel(n); err != nil {
 				slog.Warn("tray: popup disconnect failed", "tunnel", n, "err", err)
+			}
+		}
+	}, func() {
+		// Only the tunnels that are still down: one the automation engine
+		// already re-connected (or is mid-retry on) needs nothing, and
+		// connecting it would just latch manual-on and pause the rules
+		// for a tunnel that is coming back on its own anyway.
+		t.mu.Lock()
+		targets := make([]string, 0, len(downs))
+		for _, n := range downs {
+			if !t.upTunnels[n] && !t.activeTunnels[n] {
+				targets = append(targets, n)
+			}
+		}
+		t.mu.Unlock()
+		for _, n := range targets {
+			if err := t.svc.Connect(n); err != nil {
+				slog.Warn("tray: popup connect failed", "tunnel", n, "err", err)
 			}
 		}
 	})
