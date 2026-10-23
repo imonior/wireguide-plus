@@ -185,7 +185,7 @@
       <input class="fe-name" type="text" value={name} on:input={onNameInput}
         placeholder={$t('editor.name_placeholder')} spellcheck="false" />
     {:else}
-      <span class="fe-title">{name}</span>
+      <span class="fe-title" title={name}>{name}</span>
     {/if}
     <div class="fe-actions">
       <button class="fe-btn fe-btn-ghost" on:click={doCancel} disabled={saving}>{$t('editor.cancel')}</button>

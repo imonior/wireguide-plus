@@ -150,7 +150,7 @@
                 class:expanded={expandedId === s.id}
                 on:click={() => toggle(s.id)}>
                 <div class="row-main">
-                  <span class="tunnel-name">{s.tunnel_name}</span>
+                  <span class="tunnel-name" title={s.tunnel_name}>{s.tunnel_name}</span>
                   <span class="row-time">{formatTime(s.start_time)}</span>
                 </div>
                 <div class="row-aside">

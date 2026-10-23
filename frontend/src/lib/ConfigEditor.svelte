@@ -182,7 +182,7 @@ PersistentKeepalive = 25
         placeholder={$t('editor.name_placeholder')}
       />
     {:else}
-      <span class="editor-title">{name || $t('editor.title', { name: '' })}</span>
+      <span class="editor-title" title={name || $t('editor.title', { name: '' })}>{name || $t('editor.title', { name: '' })}</span>
     {/if}
     <div class="editor-actions">
       <button class="editor-btn editor-btn-ghost" on:click={cancel}>{$t('editor.cancel')}</button>

@@ -234,7 +234,7 @@
               class:pending={pendingSet.has(tun.name)}
               class:warning={establishedSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
             <div class="tunnel-text">
-              <span class="tunnel-name">{tun.name}</span>
+              <span class="tunnel-name" title={tun.name}>{tun.name}</span>
               {#if tun.protocol === 'amneziawg' && $appSettings.loaded}
                 <!-- One element, one style, two states: "AmneziaWG ON" /
                      "AmneziaWG OFF". Only the colour modifier changes so the
@@ -247,7 +247,7 @@
                 </span>
               {/if}
               {#if tun.endpoint}
-                <span class="tunnel-meta">{tun.endpoint}</span>
+                <span class="tunnel-meta" title={tun.endpoint}>{tun.endpoint}</span>
               {/if}
             </div>
           </button>

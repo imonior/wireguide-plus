@@ -127,7 +127,7 @@
     </div>
 
     {#if names.length > 0}
-      <div class="popup-names">{names.join(', ')}</div>
+      <div class="popup-names" title={names.join(', ')}>{names.join(', ')}</div>
     {/if}
   {/if}
 

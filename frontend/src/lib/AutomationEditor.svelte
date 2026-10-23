@@ -668,26 +668,6 @@
   // source. This is NOT the tunnel's physical up/down state — that is a
   // tunnel-level fact shown in the status row below.
   $: defaultRuleWon = winningRuleIndex < 0 && !!defaultState && preview?.decision === defaultState;
-  // The tunnel's REAL state (connected / connecting / disconnected) is a
-  // tunnel-level fact shown once as a chip after the Default State buttons —
-  // it belongs to the tunnel, not to a condition or rule. "connecting" is the
-  // half-open state (NIC created, engine running, handshake not yet done); it
-  // is shown neutrally — neither claiming "in effect" nor "not in effect".
-  $: tunnelStateKey = preview?.state === 'connected' ? 'connected'
-    : preview?.state === 'connecting' ? 'connecting'
-    : preview?.state === 'disconnected' ? 'disconnected'
-    : '';
-  // Control source: WHO is deciding this tunnel right now — automation, or a
-  // manual override that outranks it. A manual latch takes precedence over
-  // the rules (manual-off suppresses connect, manual-on suppresses
-  // disconnect) until the user acts again or the app restarts.
-  $: controlKey = preview?.decision === 'manual-off' ? 'manual_off'
-    : preview?.decision === 'manual-on' ? 'manual_on'
-    : preview?.decision === 'connect' ? 'auto_connect'
-    : preview?.decision === 'disconnect' ? 'auto_disconnect'
-    : 'auto_none';
-  $: controlLabelKey = 'automation.override_' + controlKey;
-  $: controlClass = controlKey === 'manual_off' ? 'off' : controlKey === 'manual_on' ? 'on' : 'auto';
   // The tunnel is under a manual latch right now: manual-off suppresses the
   // winning connect rule, manual-on suppresses the winning disconnect rule.
   // A manual action is the same as pausing automation by hand, so the
@@ -760,7 +740,7 @@
     'ssid-blind': 'automation.decision_ssid_blind',
     'network-unidentified': 'automation.decision_network_unidentified',
     backoff: 'automation.decision_backoff',
-  })[decisionKey()] || 'automation.decision_unmanaged';
+  })[decisionKey(preview)] || 'automation.decision_unmanaged';
   // Build one marker snapshot from the same ordered draft/details pair used
   // by the backend. Keying condition markers by the editor row id avoids
   // stale deep lookups when Svelte updates nested bind:value fields.
@@ -768,7 +748,7 @@
   // buildRules emits) in list order, so a single running counter maps cards
   // to details; draft (incomplete) cards are skipped when counting.
   $: markerSnapshot = (() => {
-    const result = { rules: {}, conditions: {} };
+    const result = { rules: {}, conditions: {}, matchCounts: {} };
     const details = preview?.rules || [];
     let detailIndex = 0;
     let firstMatch = -1;
@@ -780,7 +760,7 @@
       const ruleMatched = !!rd?.matched;
       if (ruleMatched && firstMatch < 0) firstMatch = globalIndex;
       const winning = ruleMatched && firstMatch === globalIndex;
-      result.rules[rule._gid] = winning && actionExecuted();
+      result.rules[rule._gid] = winning && actionExecuted(preview);
       for (let i = 0; i < rule.conds.length; i++) {
         const c = rule.conds[i];
         const idx = condIndexInRule(rule, i);
@@ -799,11 +779,25 @@
         //   - in-use  —— 「使用中」：该条件所属规则是首个匹配，且引擎真的执行了
         //                其动作（connect/disconnect）。这是「被采纳」标记，
         //                不表示隧道已连通（连通状态有独立的状态徽章）。
-        const inUse = conditionMatched && winning && actionExecuted();
+        const inUse = conditionMatched && winning && actionExecuted(preview);
         result.conditions[c._id] = {
           match: conditionMatched,
           active: inUse,
         };
+        // The summary rows and the badge above MUST NOT be able to disagree,
+        // so the per-type tally is accumulated from this very `match`
+        // boolean — the same one the badge renders — instead of being
+        // recomputed from a second walk over the draft or over preview. Two
+        // walks over two shapes is how the summary ended up saying "no rule
+        // matches" next to a badge that said the opposite.
+        // 汇总行与上面的徽标绝不允许互相矛盾，因此按类型累计的计数直接取自这个
+        // `match` 布尔值——也就是徽标渲染的那一个——而不是再来一遍草稿或 preview
+        // 的遍历。对两种数据结构各走一遍，正是此前汇总行显示「没有规则匹配」、
+        // 旁边徽标却显示相反结论的原因。
+        if (conditionMatched) {
+          const t = condTypeNorm(c.type);
+          result.matchCounts[t] = (result.matchCounts[t] || 0) + 1;
+        }
       }
     }
     return result;
@@ -811,22 +805,14 @@
   // The decision is actually executed only for connect/disconnect. Under
   // the manual-off latch the winning connect rule is suppressed — nothing
   // runs, so nothing may be marked "in use" (match markers stay truthful).
-  function actionExecuted() {
-    const k = decisionKey();
+  // The preview frame is passed in rather than read from the enclosing
+  // scope: see decisionKey() for why that matters.
+  // 决策真正被执行的只有 connect/disconnect。manual-off 闩锁下获胜的连接规则被
+  // 压制——什么都没执行，所以任何东西都不能标成「使用中」（匹配标记保持真实）。
+  // preview 这一帧由参数传入而非在作用域内直接读取：原因见 decisionKey()。
+  function actionExecuted(pv) {
+    const k = decisionKey(pv);
     return k === 'connect' || k === 'disconnect';
-  }
-  // Rule matching is order-based: the first matching rule of the whole
-  // list wins.
-  function isWinningRule(rd) {
-    if (!rd || !rd.matched || winningRuleIndex < 0) return false;
-    const globalIdx = (preview?.rules || []).findIndex(r => r === rd);
-    return globalIdx === winningRuleIndex;
-  }
-  // "In use" = this rule's action is what the engine executes right now:
-  // it must be the first matching rule AND that action must actually run.
-  // Later rules that also match are deprioritized: match-only, never used.
-  function ruleWon(ruleIdx) {
-    return actionExecuted() && isWinningRule(ruleDetailFor(ruleIdx));
   }
   // Preview RuleDetails keep the persisted draft order, so the k-th
   // PERSISTED editor rule card maps to the k-th preview RuleDetail. Draft
@@ -927,14 +913,32 @@
   function diskDiffers(disk) {
     return JSON.stringify(normRules(disk)) !== JSON.stringify(normRules(buildRules()));
   }
-  function decisionKey() {
-    if (!preview || !preview.decision) return 'unmanaged';
+  // The preview frame is an ARGUMENT on purpose, not something this helper
+  // reads from the enclosing scope. Svelte 5 derives a reactive statement's
+  // dependency list from the identifiers that statement names DIRECTLY; a
+  // helper reaching out for `preview` on its own is invisible to that scan.
+  // Written as `decisionKey()` the statement below compiled to an effect
+  // with an EMPTY dependency list, so it ran exactly once — at mount, while
+  // preview was still empty — and the top strip stayed frozen on "no rule
+  // matches this network" forever, even though the per-condition badges
+  // below it (which read the same frame directly) updated correctly. Taking
+  // the frame as a parameter puts `preview` back into the statement's own
+  // dependency list, so the strip follows the engine again.
+  // preview 这一帧刻意作为「参数」传入，而不是让本函数去外层作用域读。Svelte 5
+  // 是依据响应式语句中「直接出现」的标识符来推导依赖列表的；辅助函数自己去取
+  // preview 不在这次扫描范围内。写成 decisionKey() 时，下面的语句被编译成依赖
+  // 列表为空的 effect，于是只在挂载时执行一次（那时 preview 还是空的），顶部条
+  // 从此永远冻结在「无规则匹配当前网络」，而下方直读同一帧数据的条件徽标却是
+  // 正确的。把这一帧作为参数传入，preview 就重新回到该语句自己的依赖列表里，
+  // 顶部条才会重新跟随引擎结论。
+  function decisionKey(pv) {
+    if (!pv || !pv.decision) return 'unmanaged';
     // 'connect' | 'disconnect' | 'unmanaged' | 'manual-off' | 'manual-on'
     // | 'disabled' | 'blocked' | 'ssid-blind' | 'network-unidentified'
     // | 'backoff' — the last four are fail-closed / policy states the
     // engine enforces; they must be surfaced here so preview cannot claim a
     // connect the engine would refuse.
-    return preview.decision;
+    return pv.decision;
   }
   // A condition's persisted type can be the legacy 'wifi' / 'ethernet'
   // spellings (kept verbatim from disk) even though the editor's dropdown
@@ -950,16 +954,18 @@
     if (type === 'ethernet') return 'interface';
     return type;
   }
-  function conditionMatchCount(type) {
-    let count = 0;
-    for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
-      const rule = rules[ruleIdx];
-      for (let i = 0; i < rule.conds.length; i++) {
-        if (condTypeNorm(rule.conds[i].type) === type && markerSnapshot.conditions[rule.conds[i]._id]?.match) count++;
-      }
-    }
-    return count;
-  }
+  // How many conditions of this kind the engine reports as matching right
+  // now. Counted from the backend's own per-condition verdict (preview.rules)
+  // instead of from the editor's draft rows: each RuleDetail carries the
+  // condition's evaluated TYPE and its matched flag, so this count can never
+  // disagree with the badge on the rule card, and it depends on nothing but
+  // the preview frame (a helper reading draft state here is invisible to the
+  // reactive statement below, which then keeps showing a stale count).
+  // 统计引擎判定为「匹配」的同类条件数量。计数取自后端自己的逐条件结论
+  // （preview.rules），而非编辑器草稿行：每条 RuleDetail 都带条件的评估类型与
+  // matched 标记，因此这个计数不可能与规则卡上的徽标矛盾，且只依赖 preview
+  // 这一帧数据（此处若让辅助函数去读草稿状态，下面的响应式语句看不见该依赖，
+  // 计数就会一直停在旧值上）。
   // Stable interface-kind labels, reused from the Routes view so the
   // automation board and the routing table speak the same short vocabulary
   // ("Wi-Fi", "Ethernet", …). Falls back to the raw kind when unknown.
@@ -969,12 +975,30 @@
   function ifaceTypeLabel(type) {
     return type && IFACE_TYPE_KEYS.has(type) ? $t(`tools.route_iface_type_${type}`) : (type || '');
   }
+  // A Wi-Fi adapter being up and its network name being readable are two
+  // different facts: the interface list reports the link regardless of
+  // whether the SSID is known, while `on_wifi` is derived from the SSID
+  // text alone. The link is the broader of the two, so the header dot is
+  // "on Wi-Fi" if either says so.
+  // 「Wi-Fi 网卡连通」与「能读到网络名」是两个不同的事实：接口表只报链路、不关心
+  // SSID 是否已知，而 on_wifi 仅由 SSID 文本推导。链路是两者中更宽的那个，因此
+  // 顶部圆点只要有一方成立就判为「在 Wi-Fi 上」。
+  $: wifiLinkUp = (preview?.interfaces || []).some(x => x?.is_wifi || x?.type === 'wifi');
+  // The `count` on every row comes from markerSnapshot.matchCounts, which is
+  // tallied from the very boolean each condition badge renders — see the
+  // markerSnapshot builder. Reading `markerSnapshot` here (rather than
+  // calling a helper that walks the draft again) also keeps the tally inside
+  // this statement's dependency list, so it re-runs with the frame.
+  // 每行的 count 取自 markerSnapshot.matchCounts，它由每个条件徽标所渲染的那个
+  // 布尔值累计而来——见 markerSnapshot 的构建处。这里直接读 markerSnapshot（而不是
+  // 调用某个辅助函数再去遍历一遍草稿），同时把该计数放进本语句的依赖列表里，
+  // 使其随数据帧一起重算。
   $: networkFacts = [
-    { key: 'interface', label: $t('automation.network_interface'), value: (preview?.interfaces || []).map(x => `${x.name}${x.type ? ' - ' + ifaceTypeLabel(x.type) : ''} (${x.active ? $t('automation.interface_in_use') : $t('automation.interface_not_in_use')})`).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('interface') },
-    { key: 'ssid', label: $t('automation.network_ssid'), value: preview?.on_wifi && preview?.ssid ? preview.ssid : $t('automation.wifi_not_connected'), count: conditionMatchCount('ssid') },
-    { key: 'gateway_mac', label: $t('automation.network_gateway_mac'), value: preview?.gateway_mac || $t('automation.network_unavailable'), count: conditionMatchCount('network') },
-    { key: 'gateway_ip', label: $t('automation.network_gateway_ip'), value: preview?.gateway_ip || $t('automation.network_unavailable'), count: conditionMatchCount('gateway_ip') },
-    { key: 'subnet', label: $t('automation.network_subnet'), value: (preview?.subnets || []).join(', ') || $t('automation.network_unavailable'), count: conditionMatchCount('subnet') },
+    { key: 'interface', label: $t('automation.network_interface'), value: (preview?.interfaces || []).map(x => `${x.name}${x.type ? ' - ' + ifaceTypeLabel(x.type) : ''} (${x.active ? $t('automation.interface_in_use') : $t('automation.interface_not_in_use')})`).join(', ') || $t('automation.network_unavailable'), count: markerSnapshot?.matchCounts?.interface || 0 },
+    { key: 'ssid', label: $t('automation.network_ssid'), value: preview?.ssid || (wifiLinkUp ? $t('automation.network_unavailable') : $t('automation.wifi_not_connected')), count: markerSnapshot?.matchCounts?.ssid || 0 },
+    { key: 'gateway_mac', label: $t('automation.network_gateway_mac'), value: preview?.gateway_mac || $t('automation.network_unavailable'), count: markerSnapshot?.matchCounts?.network || 0 },
+    { key: 'gateway_ip', label: $t('automation.network_gateway_ip'), value: preview?.gateway_ip || $t('automation.network_unavailable'), count: markerSnapshot?.matchCounts?.gateway_ip || 0 },
+    { key: 'subnet', label: $t('automation.network_subnet'), value: (preview?.subnets || []).join(', ') || $t('automation.network_unavailable'), count: markerSnapshot?.matchCounts?.subnet || 0 },
   ];
 </script>
 
@@ -986,7 +1010,7 @@
         <div class="am-icon"><Icon name="wifi" size={18} strokeWidth={2} /></div>
         <div class="am-header-text">
           <h3>{$t('automation.title')}</h3>
-          <p class="am-sub">{tunnelName}</p>
+          <p class="am-sub" title={tunnelName}>{tunnelName}</p>
         </div>
         <button class="am-close" on:click={close} aria-label="Close"><Icon name="x" size={16} strokeWidth={2} /></button>
       </div>
@@ -1018,27 +1042,19 @@
           </label>
           <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
         {/if}
-        <!-- Merged tunnel status line: connection state + control source, moved
-             up from the old standalone bottom row so it reads next to the on/off
-             control instead of floating below Default State. The control-source
-             chip reuses the same override_* labels the live strip shows. -->
-        <div class="am-exclude-status">
-          {#if tunnelStateKey}
-            <span class="am-status-dot am-status-{tunnelStateKey}" title={$t('automation.state_tooltip')}></span>
-            <span class="am-status-state">{$t('automation.state_' + tunnelStateKey)}</span>
-          {:else}
-            <span class="am-status-state am-status-dim">{$t('automation.network_unavailable')}</span>
-          {/if}
-          <span class="am-status-sep">·</span>
-          <span class="am-override am-override-{controlClass}" title={$t('automation.override_tooltip')}>{$t(controlLabelKey)}</span>
-        </div>
+        <!-- No tunnel status row here on purpose: the connection state and the
+             control source are tunnel-level facts that the detail page and the
+             tunnel list already show, and repeating them inside the rule editor
+             read as if they belonged to the rules being edited.
+             刻意不在此处放隧道状态行：连接状态与控制来源是隧道级事实，详情页与通道列表
+             已经显示过；在规则编辑器里再复述一遍，容易被误读成「属于正在编辑的规则」。 -->
       </div>
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
         <SSIDPermissionBanner {TunnelService} />
         <!-- Live decision strip -->
         <div class="am-live">
-          <span class="am-live-dot am-live-dot-{preview?.on_wifi ? 'wifi' : 'wired'}"></span>
+          <span class="am-live-dot am-live-dot-{(wifiLinkUp || preview?.on_wifi) ? 'wifi' : 'wired'}"></span>
           <span class="am-live-label">{$t('automation.live_matching')}</span>
           <span class="am-live-decision">{$t(decisionLabelKey)}</span>
         </div>
@@ -1398,37 +1414,6 @@
   .am-default-opt.am-effective {
     box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 50%, transparent);
   }
-  /* Tunnel status row — its own line: the link fact on the left, the control
-     source on the right, so physical state and "who is deciding" never crowd
-     the Default State control. */
-  .am-exclude-status {
-    flex-shrink: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    margin: 8px 0 0; padding: 5px 10px;
-    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-    border: 1px solid var(--border); border-radius: 8px;
-    font: 600 11px/1.3 var(--font-sans); color: var(--text-secondary);
-  }
-  .am-status-dot {
-    width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
-    background: var(--text-muted);
-  }
-  .am-status-connected { background: var(--green, #34c759); }
-  .am-status-connecting { background: var(--amber, #ff9f0a); }
-  .am-status-disconnected { background: var(--red, #ff3b30); }
-  .am-status-state { color: var(--text-primary); }
-  .am-status-dim { color: var(--text-muted); font-weight: 400; }
-  .am-status-sep { color: var(--text-muted); }
-  .am-status-control { margin-left: 2px; }
-  .am-override {
-    flex-shrink: 0; font: 600 10px/1 var(--font-sans);
-    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);
-  }
-  .am-override-auto { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 10%, transparent); }
-  /* Manual latches outrank automation — colour them so a paused/reversed
-     automation is impossible to miss (this is the #1 "my rule didn't fire"
-     cause). */
-  .am-override-off { color: var(--red, #ff3b30); background: color-mix(in srgb, var(--red, #ff3b30) 12%, transparent); border-color: color-mix(in srgb, var(--red, #ff3b30) 40%, var(--border)); }
-  .am-override-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
   /* Restore button beside the manual-latch chip — the editor's own copy of
      the action the tunnel list and the detail page offer, so the release is
      reachable from the screen that explains WHY the rules are not

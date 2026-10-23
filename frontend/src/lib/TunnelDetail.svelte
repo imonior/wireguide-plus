@@ -1225,7 +1225,7 @@
               }}
             />
           {:else}
-            <h2 class="hero-name" on:dblclick={startRename} title={$t('tunnel.rename_hint')}>{$selectedTunnel.name}</h2>
+            <h2 class="hero-name" on:dblclick={startRename} title={`${$selectedTunnel.name} \u00b7 ${$t('tunnel.rename_hint')}`}>{$selectedTunnel.name}</h2>
             <button class="btn-rename" on:click={startRename} title="Rename">
               <Icon name="pencil" size={12} strokeWidth={1.75} />
             </button>
@@ -1605,21 +1605,28 @@
         {#if endpointPolicy}
           <p class="endpoint-effective">{$t('tunnel.endpoint_effective_values', endpointPolicy)}</p>
         {/if}
-        <!-- Three columns plus a usage-status word, in the order the user
-             reads them: the endpoint, the public IP it currently resolves
-             to (the point of the column is DDNS drift — a name that moved
-             is visible here), and how fast it answers. Reachability is NOT
-             a fourth column: a probe that gets no reply already shows it by
-             having no latency number, so the two columns were one reading
-             printed twice. Endpoint and resolved IP read left-aligned;
-             latency and usage status are right-aligned so the digits and
-             the status words line up down their columns. -->
+        <!-- Four readings in the order the user reads them, then one action
+             column of its own: the endpoint, the public IP it currently
+             resolves to (the point of the column is DDNS drift — a name
+             that moved is visible here), how fast it answers, and whether
+             it is the one in use. Reachability is NOT a column of its own:
+             a probe that gets no reply already shows it by having no
+             latency number, so the two would be one reading printed twice.
+             Endpoint and resolved IP read left-aligned; latency, usage
+             status and the switch button are pinned columns so the digits,
+             the status words and the buttons line up down their columns.
+             The switch button sits in a column of its own (not squeezed in
+             beside the remove button) so the two actions never compete for
+             the same space, and the endpoint column keeps a floor wide
+             enough for a long DDNS hostname instead of being squeezed to
+             a few ellipsised characters whenever the pane is narrow. -->
         <div class="endpoint-candidate-list">
           <div class="endpoint-candidate endpoint-candidate-head" aria-hidden="true">
             <span class="ec-col ec-col-endpoint">{$t('tunnel.endpoint_col_endpoint')}</span>
             <span class="ec-col ec-col-resolved">{$t('tunnel.endpoint_col_resolved')}</span>
             <span class="ec-col ec-col-ms">{$t('tunnel.latency')}</span>
             <span class="ec-col ec-col-status">{$t('tunnel.endpoint_col_status')}</span>
+            <span class="ec-col ec-col-switch"></span>
             <span class="ec-col ec-col-act"></span>
           </div>
           {#each epSettings.candidates as cand (cand)}
@@ -1644,7 +1651,7 @@
                   <span class="endpoint-candidate-badge endpoint-candidate-badge-idle">{$t('tunnel.endpoint_not_in_use')}</span>
                 {/if}
               </span>
-              <span class="ec-col ec-col-act">
+              <span class="ec-col ec-col-switch">
                 {#if cand !== epSettings.active}
                   <button class="endpoint-candidate-switch" type="button"
                     title={$t('tunnel.endpoint_switch_to')}
@@ -1653,6 +1660,8 @@
                     {switchingAddr === cand ? $t('tunnel.endpoint_switching') : $t('tunnel.endpoint_switch_to')}
                   </button>
                 {/if}
+              </span>
+              <span class="ec-col ec-col-act">
                 <button class="endpoint-candidate-del" type="button"
                   title={$t('tunnel.endpoint_candidate_remove')}
                   disabled={epBusy || epSwitching || cand === epSettings.active}
@@ -2477,11 +2486,18 @@
      flex the resolved-IP and latency values drifted depending on how long
      the endpoint string was, which made the columns impossible to read
      down. The endpoint column is the only elastic one because hostnames
-     vary wildly in length; the other columns are pinned so the numbers and
-     status words line up. */
+     vary wildly in length; the other columns are pinned so the numbers,
+     the status words and the buttons line up.
+
+     The endpoint column's floor (200px) is what keeps a long DDNS name
+     readable: with a bare `minmax(0, 1fr)` the elastic column absorbed
+     every squeeze and a name like `my-very-long-host.ddns.example.com`
+     collapsed to a handful of ellipsised characters. The switch button
+     therefore gets a pinned column of its own instead of sharing the last
+     one with the remove button. */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px 76px 84px auto;
+    grid-template-columns: minmax(200px, 1fr) 132px 76px 84px 88px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
@@ -2513,11 +2529,17 @@
   .ec-col-status {
     text-align: right;
   }
+  /* The switch button owns its own column, right-aligned so the buttons
+     stack straight down the list and sit next to the remove column. */
+  /* 「切换」按钮独占一列，靠右对齐，使按钮在列表里纵向对齐，并紧邻删除列。 */
+  .ec-col-switch {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  /* Remove button only — pinned to the row's right edge. */
+  /* 只放删除按钮——固定在行尾右侧。 */
   .ec-col-act {
-    /* Holds both action buttons (switch + remove) so the grid keeps exactly
-       five columns. Justified to the end so the × sits at the row's edge. */
-    /* 同时容纳「切换」与「删除」两个按钮，使网格严格保持五列。
-       靠右对齐，让 × 落在行尾。 */
     display: flex;
     align-items: center;
     justify-content: flex-end;

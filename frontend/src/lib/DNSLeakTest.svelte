@@ -341,7 +341,7 @@
                   <span class="server-current">{$t('tools.dns_current_dns')}</span>
                 {/if}
               </span>
-              <span class="server-host">
+              <span class="server-host" title={server.hostname || ''}>
                 {server.hostname || ''}
                 {#if server.source_iface}
                   <span class="server-iface">{server.source_iface}</span>

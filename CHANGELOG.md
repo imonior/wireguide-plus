@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.8.5] - 2026-10-24
+
+### 🔧 Changed
+
+- **The automation editor no longer shows a tunnel-status line.** The on/off column already reports whether the tunnel is up and who is driving it (automation or a manual latch), so the separate status row was redundant; it is gone, and the panel is one row shorter.
+- **The endpoint list gained a dedicated switch column.** The "Switch to" action that v2.8.4 added to each unused candidate now sits in its own fifth column instead of sharing the status column, and the address column is wider so long DDNS hostnames are no longer clipped. The original four-column layout is otherwise unchanged.
+- **Truncated labels now reveal their full text on hover.** Ten panels that clip long names — tunnel names, endpoint hosts, script paths, policy text, the update path note and others — now carry a tooltip with the complete string, so nothing is lost behind an ellipsis.
+
+### 🐛 Fixed
+
+- **The live-matching summary row now reports the real match counts.** A Svelte 5 reactivity mistake left the summary reading its network facts from a computation that captured no reactive dependencies, so it froze on its initial "no rule matches" state even while the detail rows below correctly showed matches. The summary now derives its counts from the same snapshot the detail badges use, so the totals and the per-condition rows always agree.
+
 ## [2.8.4] - 2026-10-24
 
 ### ✨ Added

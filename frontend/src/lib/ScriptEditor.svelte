@@ -194,9 +194,18 @@
   // $.untrack——Svelte 5 只按语法引用追踪，挂载后应用的钩子不会触发状态
   // 文本、行样式与按钮态的重渲染。
   $: hookView = (() => {
+    // The four hook values are named here on purpose instead of being read
+    // through hookCmd(). A helper that reaches into the enclosing scope is
+    // invisible to the dependency scan, and that left this statement with an
+    // EMPTY dependency list: it ran once at mount and a hook applied later
+    // never re-rendered the status text, the row class or the buttons.
+    // 这里刻意直接写出四个 hook 取值，而不是经 hookCmd() 去取。辅助函数自己去外层
+    // 作用域读值不在依赖扫描范围内，那会让本语句的依赖列表为空：只在挂载时跑一次，
+    // 之后应用钩子也不会重渲染状态文本、行样式与按钮。
+    const cmds = { PreUp: preUp, PostUp: postUp, PreDown: preDown, PostDown: postDown };
     const out = {};
     for (const hook of HOOKS) {
-      const cmd = hookCmd(hook);
+      const cmd = cmds[hook] || '';
       const ref = cmd ? resolveRefLocal(cmd) : null;
       out[hook] = { cmd, ref, name: ref ? baseName(ref) : '' };
     }

@@ -76,7 +76,7 @@
         {#each rows as row}
           <div class="policy-item {severityClass(row.severity)}">
             <span class="policy-domain">{row.domain}</span>
-            <span class="policy-text">{row.text}</span>
+            <span class="policy-text" title={row.text}>{row.text}</span>
             <span class="policy-kind">{row.kind}</span>
           </div>
         {/each}

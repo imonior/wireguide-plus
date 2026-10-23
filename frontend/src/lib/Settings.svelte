@@ -1306,7 +1306,7 @@
                       {#if p.kind === 'system'}
                         <!-- Naming the address the OS reports keeps this row
                              from being a guess the user has to trust. -->
-                        <span class="path-note">
+                        <span class="path-note" title={systemProxyAddr === null ? '' : (systemProxyAddr || $t('settings.proxy_system_none'))}>
                           {systemProxyAddr === null ? '' : (systemProxyAddr || $t('settings.proxy_system_none'))}
                         </span>
                       {/if}
