@@ -14,6 +14,9 @@
   export let content = ''; // two-way bound to the editor's .conf text
   export let name = ''; // tunnel name (preset for new script filenames)
   export let enabled = false; // settings.enable_wg_scripts
+  // hideHints suppresses the explanatory hint text — set in mini mode, where
+  // optional "提示" must not appear even for always-on modules like scripts.
+  export let hideHints = false;
 
   const dispatch = createEventDispatcher();
 
@@ -217,7 +220,7 @@
   <div class="scripts-panel">
     <div class="scripts-head">
       <span class="scripts-title">{$t('scripts.title')}</span>
-      <p class="scripts-hint">{$t('scripts.hint')}</p>
+      {#if !hideHints}<p class="scripts-hint">{$t('scripts.hint')}</p>{/if}
     </div>
 
     <!-- Two hooks per row (PreUp+PostUp, then PreDown+PostDown): the script

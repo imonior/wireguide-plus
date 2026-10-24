@@ -24,7 +24,7 @@
   import { tunnels, selectedTunnel, refreshTunnels, refreshStatus, subscribeToEvents, unsubscribe, initialLoad, connectionStatus } from './stores/tunnels.js';
   import { applyTheme, initThemeWatcher } from './stores/theme.js';
   import { startLogListener, stopLogListener } from './stores/logs.js';
-  import { compactList, listSort, listActiveOnTop, listPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_MAX, LIST_PANE_DEFAULT } from './stores/ui.js';
+  import { compactList, uiMode, moduleVis, moduleFlags, listSort, listActiveOnTop, listPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_MAX, LIST_PANE_DEFAULT } from './stores/ui.js';
   import { errText, localizeValidation } from './lib/errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './lib/tunnel-name.js';
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
@@ -34,6 +34,18 @@
 
   // View state
   let currentView = 'tunnels'; // 'tunnels' | 'history' | 'dnsleak' | 'routes' | 'logs'
+
+  // If the active view's sidebar module is hidden (mini mode or a custom
+  // visibility toggle), fall back to the tunnel list so a hidden page does
+  // not stay on screen with no way to navigate to it.
+  $: if ($moduleFlags.__mode) {
+    if ((currentView === 'history' && !$moduleFlags.nav_history) ||
+        (currentView === 'dnsleak' && !$moduleFlags.nav_dns_leak) ||
+        (currentView === 'routes' && !$moduleFlags.nav_route) ||
+        (currentView === 'logs' && !$moduleFlags.nav_log)) {
+      currentView = 'tunnels';
+    }
+  }
 
   // Popup window mode: when the app is loaded in the secondary status-bubble
   // window (URL carries ?popup=1) we render only <StatusPopup/> and skip the
@@ -166,6 +178,25 @@
     listSort.set(s?.list_sort || 'name_asc');
     listActiveOnTop.set(s?.list_active_on_top ?? true);
     listPaneWidth.set(s?.list_pane_width || LIST_PANE_DEFAULT);
+    // Module-visibility preset: legacy "normal" and unknown values collapse
+    // to "all"; only "mini" / "custom" are distinct. Seed the per-module map
+    // too so every surface reacts immediately on startup.
+    const mode = (s?.ui_mode === 'mini' || s?.ui_mode === 'custom') ? s.ui_mode : 'all';
+    uiMode.set(mode);
+    const vis = s?.ui_visibility || {};
+    moduleVis.set({
+      nav_history: vis.nav_history !== false,
+      nav_dns_leak: vis.nav_dns_leak !== false,
+      nav_route: vis.nav_route !== false,
+      nav_log: vis.nav_log !== false,
+      automation_extra: vis.automation_extra !== false,
+      tunnel_latency: vis.tunnel_latency !== false,
+      tunnel_traffic: vis.tunnel_traffic !== false,
+      tunnel_notes: vis.tunnel_notes !== false,
+      tunnel_endpoint: vis.tunnel_endpoint !== false,
+      tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+      settings_proxy: vis.settings_proxy !== false,
+    });
     // Apply persisted language. 'auto' means "follow OS locale" — we
     // resolve that via detectLanguage(). Without this, launching the
     // app always showed the detected language even if the user had
@@ -1341,7 +1372,7 @@
 {#if isPopup}
   <StatusPopup />
 {:else}
-<div class="app" class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog) && currentView === 'tunnels' ? true : undefined}>
+<div class="app" class:mini={$moduleFlags.__mode === 'mini'} class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog) && currentView === 'tunnels' ? true : undefined}>
   <!-- Wails adds .file-drop-target-active class to .app when dragging files.
        We only render the overlay when drop-target is actually active — i.e.
        on the tunnels view with no modal open — so it can never steal clicks
@@ -1401,34 +1432,44 @@
             <span class="nav-badge">{($connectionStatus.active_tunnels).length}</span>
           {/if}
         </button>
+        {#if $moduleFlags.nav_history}
         <button class="nav-item" class:active={currentView === 'history'} on:click={() => currentView = 'history'}>
           <span class="nav-icon-box">
             <Icon name="clock" size={15} strokeWidth={2} />
           </span>
           <span class="nav-label">{$t('nav.history')}</span>
         </button>
+        {/if}
       </div>
 
       <div class="nav-group">
+        {#if $moduleFlags.nav_dns_leak || $moduleFlags.nav_route || $moduleFlags.nav_log}
         <span class="nav-group-label">{$t('nav.tools')}</span>
+        {/if}
+        {#if $moduleFlags.nav_dns_leak}
         <button class="nav-item" class:active={currentView === 'dnsleak'} on:click={() => currentView = 'dnsleak'}>
           <span class="nav-icon-box">
             <Icon name="activity" size={15} strokeWidth={2} />
           </span>
           <span class="nav-label">{$t('tools.tab_dns_leak')}</span>
         </button>
+        {/if}
+        {#if $moduleFlags.nav_route}
         <button class="nav-item" class:active={currentView === 'routes'} on:click={() => currentView = 'routes'}>
           <span class="nav-icon-box">
             <Icon name="network" size={15} strokeWidth={2} />
           </span>
           <span class="nav-label">{$t('tools.tab_routes')}</span>
         </button>
+        {/if}
+        {#if $moduleFlags.nav_log}
         <button class="nav-item" class:active={currentView === 'logs'} on:click={() => currentView = 'logs'}>
           <span class="nav-icon-box">
             <Icon name="terminal" size={15} strokeWidth={2} />
           </span>
           <span class="nav-label">{$t('nav.logs')}</span>
         </button>
+        {/if}
       </div>
 
       <div class="nav-spacer"></div>
@@ -1572,7 +1613,7 @@
                portable (policy principle 1/2). -->
           <TunnelPolicies name={editorOriginalName || editName} isNew={editorIsNew}
             on:policychange={(e) => { pendingPolicies = e.detail; }} />
-          <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} />
+          <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} hideHints={$moduleFlags.__mode === 'mini'} />
         </div>
       </div>
     </div>
@@ -2406,5 +2447,40 @@
     margin: 0 0 var(--space-4);
     color: var(--text-primary);
     font: var(--text-title-2);
+  }
+
+  /* ========== MINI MODE ==========
+     Collapses the navigation drawer to an icon-only rail. Purely presentational:
+     the same backend state is shown, just denser, and TunnelDetail hides its
+     secondary (tunnel-management) actions so only the essential connect/
+     disconnect + status surface remains. */
+  .app.mini .sidebar {
+    width: 60px;
+    padding-top: 52px;
+    align-items: center;
+  }
+  .app.mini .brand-area {
+    padding: 8px 0 18px;
+    justify-content: center;
+  }
+  .app.mini .brand-text { display: none; }
+  .app.mini .nav-group { padding: 0 6px; }
+  .app.mini .nav-group-label { display: none; }
+  .app.mini .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+  .app.mini .nav-label { display: none; }
+  .app.mini .nav-footer { padding: 4px 0 10px; }
+  /* Keep the active-tunnel count as a small corner marker beside the icon. */
+  .app.mini .nav-badge {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
   }
 </style>

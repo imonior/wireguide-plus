@@ -63,6 +63,9 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Endpoint failover (multi-endpoint)** — a tunnel with several endpoint candidates automatically switches to the fastest reachable one and fails over instantly when the current endpoint goes unreachable. A global master switch (Settings → Advanced) gates it, and each tunnel picks its own switching mode: **off**, **switch on reconnect** (candidates are re-ranked whenever the tunnel connects or disconnects, for any reason) or **dynamic** (the background keeps measuring candidates and moves the tunnel to a materially faster endpoint after a sustained confirmation window). Threshold, margin, sustain window and cooldown are all tunable in Settings → Advanced.
 - **Proxy mirrors & public-IP display** — configure GitHub accelerator mirrors for update and metadata fetches, and see your current public IP and geolocation at a glance (Settings → Proxy).
 
+- **Global hotkey** — bind a system-wide shortcut (off by default) that shows, hides or focuses the main window from anywhere; press the combination you want to capture it (Settings → Global Hotkey). macOS and Windows only.
+- **GUI module visibility** — under Settings → Appearance pick **All visible** (default), **Mini** (a compact window without optional hints and secondary panels) or **Custom** (choose exactly which sidebar, tunnel, automation and proxy panels to show); the controls that drive a tunnel always stay visible.
+
 ## Fixes & enhancements over upstream wireguide
 
 ### Fixes

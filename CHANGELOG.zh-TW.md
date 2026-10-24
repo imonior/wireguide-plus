@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.9.0] - 2026-10-24
+
+### ✨ 新增
+
+- **全域快捷鍵可顯示、隱藏並聚焦主視窗。** 設定中新增「全域快捷鍵」區塊（預設關閉），可綁定一個系統級快速鍵，從任何地方把視窗帶到前景，或收回托盤 / 工作列。直接按下想要的組合鍵即可擷取——`Ctrl+Alt+Space` 作為跨平台預設值已預填。支援 macOS 與 Windows；其他平台會提示不支援全域快捷鍵。
+- **可按需選擇介面顯示多少內容。** 設定 → 外觀現提供三種模式：**全部顯示**（預設，顯示所有面板）、**精簡**（緊湊視窗，隱藏可選提示與次級面板）和**自訂**（勾選保留側欄、通道、自動化與代理中哪些面板）。驅動隧道所需的控件——設定編輯區、連線 / 中斷連線、即時隧道狀態、endpoint 快速切換以及自動化條件設定——在任何模式下都保持可見。
+
 ## [2.8.5] - 2026-10-24
 
 ### 🔧 變更

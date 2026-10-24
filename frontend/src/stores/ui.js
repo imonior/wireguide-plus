@@ -1,4 +1,4 @@
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/internal/app';
 
 // Shared UI view-state, mirrored from persisted Settings. App.onMount
@@ -7,6 +7,64 @@ import { TunnelService } from '../../bindings/github.com/imonior/wireguide-plus/
 
 // compactList mirrors Settings.compact_list — persisted from Settings.svelte.
 export const compactList = writable(false);
+
+// The full set of optional GUI modules the user can show/hide. The keys
+// here are the authoritative list; moduleFlags below resolves each to a
+// visible boolean based on the active UIMode.
+const MODULE_KEYS = [
+  'nav_history', 'nav_dns_leak', 'nav_route', 'nav_log',
+  'automation_extra',
+  'tunnel_latency', 'tunnel_traffic', 'tunnel_notes', 'tunnel_endpoint', 'tunnel_hero_meta',
+  'settings_proxy',
+];
+
+// uiMode mirrors Settings.ui_mode — the module-visibility preset:
+// "all" (default) | "mini" | "custom". An older stored value "normal" is
+// treated as "all" everywhere (see resolveMode). Read by App.svelte
+// (sidebar collapse + optional nav items) and TunnelDetail / AutomationEditor
+// / Settings via moduleFlags.
+export const uiMode = writable('all');
+
+// moduleVis mirrors Settings.ui_visibility — the per-module show/hide map,
+// used only when uiMode == "custom". Every entry defaults to true.
+export const moduleVis = writable({
+  nav_history: true, nav_dns_leak: true, nav_route: true, nav_log: true,
+  automation_extra: true,
+  tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
+  tunnel_endpoint: true, tunnel_hero_meta: true,
+  settings_proxy: true,
+});
+
+// resolveMode normalises the stored value: "normal" (legacy) and "" both
+// collapse to "all".
+function resolveMode(m) {
+  if (m === 'mini' || m === 'custom') return m;
+  return 'all';
+}
+
+// moduleFlags is the resolved visibility map: true = module visible.
+//   mini   → every optional module hidden.
+//   all    → every optional module visible.
+//   custom → per moduleVis flag.
+// Components read it as $moduleFlags.<key>.
+export const moduleFlags = derived([uiMode, moduleVis], ([$mode, $vis]) => {
+  const mode = resolveMode($mode);
+  const out = {};
+  for (const k of MODULE_KEYS) {
+    if (mode === 'mini') out[k] = false;
+    else if (mode === 'all') out[k] = true;
+    else out[k] = !!$vis[k];
+  }
+  out.__mode = mode; // convenient for templates that branch on the preset
+  return out;
+});
+
+// isModuleVisible is the imperative sibling of $moduleFlags, for use in
+// plain JS (event handlers, guards) rather than template expressions.
+export function isModuleVisible(name) {
+  const f = get(moduleFlags);
+  return name === '__mode' ? f.__mode : !!f[name];
+}
 
 // Tunnel-list ordering, controlled from the list header.
 export const listSort = writable('name_asc');       // "name_asc" | "name_desc"

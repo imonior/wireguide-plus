@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.9.0] - 2026-10-24
+
+### ✨ 新增
+
+- **全局热键可显示、隐藏并聚焦主窗口。** 设置中新增「全局热键」分区（默认关闭），可绑定一个系统级快捷键，从任何地方把窗口提到前台，或收回托盘 / 任务栏。直接按下想要的组合键即可捕获——`Ctrl+Alt+Space` 作为跨平台默认值已预填。支持 macOS 与 Windows；其他平台会提示不支持全局热键。
+- **可按需选择界面显示多少内容。** 设置 → 外观现提供三种模式：**全部可见**（默认，显示所有面板）、**精简**（紧凑窗口，隐藏可选提示与次级面板）和**自定义**（勾选保留侧栏、通道、自动化与代理中哪些面板）。驱动隧道所需的控件——配置编辑区、连接 / 断开、实时隧道状态、endpoint 快速切换以及自动化条件设置——在任何模式下都保持可见。
+
 ## [2.8.5] - 2026-10-24
 
 ### 🔧 变更

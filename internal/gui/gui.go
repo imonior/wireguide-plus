@@ -334,6 +334,14 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	}
 	win := app.Window.NewWithOptions(opts)
 
+	// Wire the primary window into the service and start the global
+	// toggle-window hotkey (registered from the persisted settings). The
+	// toggle closure lives in this package because it needs the
+	// platform-specific dock-window glue (showDock / hideDock).
+	tunnelService.SetMainWindow(win)
+	tunnelService.SetHotkeyToggle(func() { toggleMainWindow(win) })
+	tunnelService.InitHotkey()
+
 	// Linux re-applies X/Y as relative to the current monitor's work area
 	// after showing the window (webview_window_linux.go), which would shift a
 	// saved absolute position by that monitor's origin. Re-apply the position
@@ -487,6 +495,10 @@ func Run(assetsHandler http.Handler, dataDir string) error {
 	doShutdown = func() {
 		shutdownOnce.Do(func() {
 			recoveryGate.Trip()
+			// Tear down the global hotkey so it stops firing during/after
+			// shutdown (the macOS Carbon handler is process-lifetime, but
+			// the registered hotkey is removed here).
+			tunnelService.CloseHotkey()
 			// Persist window geometry (covers "Quit" from the tray while
 			// the window is hidden — close-to-tray already saved it).
 			saveWindowState()

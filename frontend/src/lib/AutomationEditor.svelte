@@ -23,6 +23,7 @@
   import { manualOverrides, clearManualOverride, setManualOverrideService } from '../stores/manualoverride.js';
   import { loadPhysicalInterfaces, ifaceLabel } from './interface-utils.js';
   import { getAutomationDisabled, setAutomationDisabled } from './tunnel-automation.js';
+  import { moduleFlags } from '../stores/ui.js';
   export let TunnelService;
   export let tunnelName = '';
   export let open = false;
@@ -1014,10 +1015,12 @@
         </div>
         <button class="am-close" on:click={close} aria-label="Close"><Icon name="x" size={16} strokeWidth={2} /></button>
       </div>
+      {#if $moduleFlags.automation_extra}
       <details class="am-help">
         <summary>{$t('automation.help_summary')}</summary>
         <p class="am-hint">{$t('automation.hint')}</p>
       </details>
+      {/if}
       <!-- Automation on/off. The stored flag is automation_disabled, so the
            checkbox is CHECKED while automation is ENABLED — otherwise the
            "on/off" label would read backwards. The trailing state text reuses
@@ -1049,6 +1052,7 @@
              刻意不在此处放隧道状态行：连接状态与控制来源是隧道级事实，详情页与通道列表
              已经显示过；在规则编辑器里再复述一遍，容易被误读成「属于正在编辑的规则」。 -->
       </div>
+      {#if $moduleFlags.automation_extra}
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
         <SSIDPermissionBanner {TunnelService} />
@@ -1069,6 +1073,7 @@
           {/each}
         </div>
       </details>
+      {/if}
       <div class="am-default-state" class:am-default-won={defaultRuleWon}>
         <span class="am-default-label">{$t('automation.default_state')}</span>
         <div class="am-default-opts" role="radiogroup" aria-label={$t('automation.default_state')}>

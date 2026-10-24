@@ -4,6 +4,13 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.9.0] - 2026-10-24
+
+### ✨ Added
+
+- **A global hotkey can show, hide and focus the main window.** A new **Global Hotkey** section in Settings (off by default) binds a system-wide shortcut that brings the window forward from anywhere, or tucks it back to the tray / taskbar. Press the combination you want to capture it — `Ctrl+Alt+Space` is pre-filled as a cross-platform default. Available on macOS and Windows; other platforms show a short note that global hotkeys are not supported.
+- **Choose how much of the interface you see.** Settings → Appearance now offers three modes: **All visible** (the default — everything on), **Mini** (a compact window that drops optional hints and secondary panels) and **Custom** (tick exactly which sidebar, tunnel, automation and proxy panels to keep). The controls you need to drive a tunnel — the config editor, connect / disconnect, live tunnel status, the endpoint quick-switch and the automation condition set — stay visible in every mode.
+
 ## [2.8.5] - 2026-10-24
 
 ### 🔧 Changed

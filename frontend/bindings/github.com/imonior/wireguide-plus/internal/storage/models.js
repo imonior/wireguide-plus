@@ -14,6 +14,55 @@ import * as wifi$0 from "../wifi/models.js";
 import * as time$0 from "../../../../../time/models.js";
 
 /**
+ * HotkeyConfig is the global hotkey that toggles (show / hide / focus) the
+ * main window. Enabled is opt-in (default false) so a freshly installed app
+ * never grabs a system-wide shortcut the user didn't ask for. Combo is the
+ * canonical string "Ctrl+Alt+Space" — modifiers are Ctrl/Alt/Shift/Win and
+ * the final segment is a KeyboardEvent.code token (e.g. "Space", "KeyT",
+ * "F12", "Digit1"). An empty Combo means "no key assigned".
+ * 
+ * HotkeyConfig 是切换（显示/隐藏/聚焦）主窗口的全局热键配置。Enabled 为
+ * 选择性开启（默认 false），保证全新安装不会擅自占用系统级快捷键。Combo 是
+ * 形如 "Ctrl+Alt+Space" 的规范字符串——修饰键为 Ctrl/Alt/Shift/Win，末段是
+ * KeyboardEvent.code 令牌（如 "Space"、"KeyT"、"F12"、"Digit1"）。空 Combo
+ * 表示「未指定按键」。
+ */
+export class HotkeyConfig {
+    /**
+     * Creates a new HotkeyConfig instance.
+     * @param {Partial<HotkeyConfig>} [$$source = {}] - The source object to create the HotkeyConfig.
+     */
+    constructor($$source = {}) {
+        if (!("enabled" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["enabled"] = false;
+        }
+        if (!("combo" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["combo"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HotkeyConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {HotkeyConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new HotkeyConfig(/** @type {Partial<HotkeyConfig>} */($$parsedSource));
+    }
+}
+
+/**
  * LegacyDataItem describes one file that exists in the legacy directory and
  * can be copied to the current location.
  */
@@ -311,6 +360,128 @@ export class MigrateResult {
 }
 
 /**
+ * ModuleVisibility is the per-module show/hide map used only when
+ * Settings.UIMode == "custom". Every flag defaults to true (see
+ * DefaultModuleVisibility) so "custom" starts from the full layout and the
+ * user hides what they don't want. The flag names are the keys the frontend
+ * reads through its moduleFlags store.
+ * 
+ * ModuleVisibility 是仅当 UIMode == "custom" 时生效的逐项可见性开关，每个开关
+ * 默认 true（见 DefaultModuleVisibility），因此「自定义」从完整布局出发，由用户
+ * 隐藏不需要的项。开关名即前端 moduleFlags store 读取的键。
+ */
+export class ModuleVisibility {
+    /**
+     * Creates a new ModuleVisibility instance.
+     * @param {Partial<ModuleVisibility>} [$$source = {}] - The source object to create the ModuleVisibility.
+     */
+    constructor($$source = {}) {
+        if (!("nav_history" in $$source)) {
+            /**
+             * NavHistory / NavDnsLeak / NavRoute / NavLog toggle the four optional
+             * sidebar quick-menu entries. The tunnels entry and the settings entry
+             * are always shown.
+             * @member
+             * @type {boolean}
+             */
+            this["nav_history"] = false;
+        }
+        if (!("nav_dns_leak" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["nav_dns_leak"] = false;
+        }
+        if (!("nav_route" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["nav_route"] = false;
+        }
+        if (!("nav_log" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["nav_log"] = false;
+        }
+        if (!("automation_extra" in $$source)) {
+            /**
+             * AutomationExtra toggles the live network-matching panel and the help
+             * text inside the automation editor; the rule list and the default
+             * connect/disconnect state (the "condition settings") are always shown.
+             * @member
+             * @type {boolean}
+             */
+            this["automation_extra"] = false;
+        }
+        if (!("tunnel_latency" in $$source)) {
+            /**
+             * TunnelLatency / TunnelTraffic / TunnelNotes / TunnelEndpoint /
+             * TunnelHeroMeta toggle the verbose detail blocks on the tunnel detail
+             * surface (latency row, rx/tx + graph, notes, endpoint candidate table,
+             * handshake/duration/interface meta). The config area, connect/disconnect
+             * button, tunnel state, and endpoint quick-switch stay always on.
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_latency"] = false;
+        }
+        if (!("tunnel_traffic" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_traffic"] = false;
+        }
+        if (!("tunnel_notes" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_notes"] = false;
+        }
+        if (!("tunnel_endpoint" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_endpoint"] = false;
+        }
+        if (!("tunnel_hero_meta" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_hero_meta"] = false;
+        }
+        if (!("settings_proxy" in $$source)) {
+            /**
+             * SettingsProxy toggles the proxy section (accelerator mirrors + public
+             * IP) inside Settings.
+             * @member
+             * @type {boolean}
+             */
+            this["settings_proxy"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ModuleVisibility instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ModuleVisibility}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ModuleVisibility(/** @type {Partial<ModuleVisibility>} */($$parsedSource));
+    }
+}
+
+/**
  * Session is one VPN session record. EndTime is a pointer so a still-active
  * session (no end yet) can be distinguished from a completed session that
  * happens to have ended at time.Time{} — the previous flat-struct design
@@ -557,6 +728,53 @@ export class Settings {
              * @type {boolean}
              */
             this["compact_list"] = false;
+        }
+        if (!("ui_mode" in $$source)) {
+            /**
+             * UIMode selects the GUI module-visibility preset:
+             *   "all"   (default) — every module shows, exactly as before.
+             *   "mini"  — every OPTIONAL module is hidden; only the always-on
+             *             essentials stay (config area, condition settings, connect/
+             *             disconnect, tunnel state, scripts when enabled).
+             *   "custom" — each module's visibility follows the per-flag map in
+             *             ModuleVisibility below.
+             * The json key is kept as "ui_mode" for backward compatibility; an older
+             * stored value "normal" is treated as "all" on the frontend.
+             * 
+             * UIMode 选择 GUI 模块可见性预设：
+             *   "all"（默认）—— 所有模块均显示，与改动前一致。
+             *   "mini" —— 隐藏所有可选项，仅保留始终显示的要素（配置区、条件设置区、
+             *             连接/断开、隧道状态、脚本（开启时））。
+             *   "custom" —— 各模块可见性遵循下方 ModuleVisibility 的逐项开关。
+             * json 键保留为 "ui_mode" 以兼容旧配置；旧值 "normal" 在前端按 "all" 处理。
+             * "all", "mini", "custom"
+             * @member
+             * @type {string}
+             */
+            this["ui_mode"] = "";
+        }
+        if (!("ui_visibility" in $$source)) {
+            /**
+             * ModuleVisibility is the per-module show/hide map used only when
+             * UIMode == "custom". Every flag defaults to true so "custom" starts
+             * from the full layout and the user hides what they don't want.
+             * 
+             * ModuleVisibility 是仅当 UIMode == "custom" 时生效的逐项可见性开关。
+             * 每个开关默认 true，因此「自定义」从完整布局出发，由用户隐藏不需要的项。
+             * @member
+             * @type {ModuleVisibility}
+             */
+            this["ui_visibility"] = (new ModuleVisibility());
+        }
+        if (!("hotkey" in $$source)) {
+            /**
+             * Hotkey toggles (show / hide / focus) the main window with a
+             * system-wide shortcut. Disabled by default — see HotkeyConfig.
+             * Hotkey 用系统级快捷键切换（显示/隐藏/聚焦）主窗口。默认关闭，详见 HotkeyConfig。
+             * @member
+             * @type {HotkeyConfig}
+             */
+            this["hotkey"] = (new HotkeyConfig());
         }
         if (/** @type {any} */(false)) {
             /**
@@ -868,30 +1086,38 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField22_0 = $$createType4;
-        const $$createField23_0 = $$createType2;
-        const $$createField24_0 = $$createType2;
+        const $$createField15_0 = $$createType3;
+        const $$createField16_0 = $$createType4;
+        const $$createField25_0 = $$createType6;
+        const $$createField26_0 = $$createType2;
         const $$createField27_0 = $$createType2;
-        const $$createField34_0 = $$createType2;
-        const $$createField35_0 = $$createType2;
+        const $$createField30_0 = $$createType2;
+        const $$createField37_0 = $$createType2;
+        const $$createField38_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("ui_visibility" in $$parsedSource) {
+            $$parsedSource["ui_visibility"] = $$createField15_0($$parsedSource["ui_visibility"]);
+        }
+        if ("hotkey" in $$parsedSource) {
+            $$parsedSource["hotkey"] = $$createField16_0($$parsedSource["hotkey"]);
+        }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField22_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField25_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField23_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField26_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField24_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField27_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("proxy_mirrors" in $$parsedSource) {
-            $$parsedSource["proxy_mirrors"] = $$createField27_0($$parsedSource["proxy_mirrors"]);
+            $$parsedSource["proxy_mirrors"] = $$createField30_0($$parsedSource["proxy_mirrors"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField34_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField37_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField35_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField38_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
@@ -901,5 +1127,7 @@ export class Settings {
 const $$createType0 = LegacyDataItem.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = wifi$0.Automation.createFrom;
-const $$createType4 = $Create.Nullable($$createType3);
+const $$createType3 = ModuleVisibility.createFrom;
+const $$createType4 = HotkeyConfig.createFrom;
+const $$createType5 = wifi$0.Automation.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);

@@ -208,6 +208,15 @@ export function CloseHistorySessions(reason) {
 }
 
 /**
+ * CloseHotkey tears the hotkey manager down (used on app shutdown).
+ * CloseHotkey 拆除热键管理器（用于应用退出）。
+ * @returns {$CancellablePromise<void>}
+ */
+export function CloseHotkey() {
+    return $Call.ByID(1696252995);
+}
+
+/**
  * Connect loads a tunnel config from local storage and asks the helper to
  * bring it up. The helper re-validates server-side.
  * 
@@ -559,6 +568,16 @@ export function GetVersion() {
 }
 
 /**
+ * HotkeySupported reports whether the platform can register a global hotkey,
+ * so the frontend can show/hide the setting.
+ * HotkeySupported 报告当前平台是否支持注册全局热键，供前端显隐该设置项。
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function HotkeySupported() {
+    return $Call.ByID(2839653289);
+}
+
+/**
  * ImportConfig parses, validates, and saves a tunnel config under the given
  * name. Returns a TunnelInfo for optimistic UI display.
  * @param {string} name
@@ -635,6 +654,18 @@ export function ImportZipData(data) {
     return $Call.ByID(602544381, data).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType37($result);
     }));
+}
+
+/**
+ * InitHotkey builds the hotkey manager and registers it from the persisted
+ * settings. Called once during GUI startup; safe to skip (hotkeyMgr stays nil)
+ * in non-GUI contexts.
+ * InitHotkey 构建热键管理器并按已保存的设置注册。在 GUI 启动期调用一次；
+ * 非 GUI 上下文可跳过（hotkeyMgr 保持 nil）。
+ * @returns {$CancellablePromise<void>}
+ */
+export function InitHotkey() {
+    return $Call.ByID(1599407871);
 }
 
 /**
@@ -1201,6 +1232,19 @@ export function SetHookInText(content, hook, command) {
 }
 
 /**
+ * SetHotkeyToggle injects the window toggle closure (provided by the GUI
+ * package, which owns the platform-specific dock-window glue). Called once
+ * before initHotkey.
+ * SetHotkeyToggle 注入窗口切换闭包（由 GUI 包提供，因其持有平台相关的
+ * dock 窗口胶水代码）。在 initHotkey 之前调用一次。
+ * @param {any} fn
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetHotkeyToggle(fn) {
+    return $Call.ByID(614928743, fn);
+}
+
+/**
  * SetKeepConnectionOnIdle enables or disables the master "keep connection on
  * idle" switch (keep tunnels alive through screen-saver / display sleep /
  * session lock). Persistence is handled by Settings.SaveSettings; this call
@@ -1221,6 +1265,17 @@ export function SetKeepConnectionOnIdle(enabled) {
  */
 export function SetLogLevel(level) {
     return $Call.ByID(3123419305, level);
+}
+
+/**
+ * SetMainWindow injects the primary window after it is created in gui.Run, so
+ * the hotkey toggle closure can show/hide/focus it.
+ * SetMainWindow 在 gui.Run 中窗口创建后注入主窗口，供热键切换闭包使用。
+ * @param {application$0.WebviewWindow | null} win
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetMainWindow(win) {
+    return $Call.ByID(715749124, win);
 }
 
 /**

@@ -4,7 +4,7 @@
   import { t, setLanguage, getLanguage, detectLanguage } from '../i18n/index.js';
   import { applyTheme } from '../stores/theme.js';
   import { connectionStatus, tunnels } from '../stores/tunnels.js';
-  import { compactList } from '../stores/ui.js';
+  import { compactList, uiMode, moduleVis, moduleFlags } from '../stores/ui.js';
   import { appSettings } from '../stores/settings.js';
   import Icon from './Icon.svelte';
   import { modalDrag } from './actions/modal-drag.js';
@@ -204,6 +204,17 @@
     tray_icon_style: 'color',
     auto_update_check: true,
     compact_list: false,
+    // UIMode preset: "all" (full layout) | "mini" | "custom". Legacy
+    // "normal" is normalised to "all" on load.
+    ui_mode: 'all',
+    // Per-module visibility map, used when ui_mode == "custom".
+    ui_visibility: {
+      nav_history: true, nav_dns_leak: true, nav_route: true, nav_log: true,
+      automation_extra: true,
+      tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
+      tunnel_endpoint: true, tunnel_hero_meta: true,
+      settings_proxy: true,
+    },
     proxy_mode: 'direct',
     proxy_url: '',
     // null = "never customized" → the backend falls back to its built-in
@@ -227,6 +238,9 @@
     endpoint_margin_pct: 30,
     endpoint_sustained_sec: 30,
     endpoint_cooldown_sec: 300,
+    // Global toggle-window hotkey. Opt-in (enabled: false); combo is the
+    // canonical "Ctrl+Alt+Space" string. Empty combo means "no key".
+    hotkey: { enabled: false, combo: '' },
   };
   let loaded = false;
   let appVersion = '';
@@ -261,6 +275,27 @@
         settings.log_level = s.log_level || 'info';
         settings.tray_icon_style = s.tray_icon_style || 'color';
         settings.compact_list = s.compact_list ?? false;
+        // Module-visibility preset: legacy "normal" and any unknown value
+        // normalise to "all"; only "mini" / "custom" are distinct.
+        settings.ui_mode = (s.ui_mode === 'mini' || s.ui_mode === 'custom') ? s.ui_mode : 'all';
+        // Per-module visibility map (used when ui_mode == "custom").
+        const vis = s.ui_visibility || {};
+        settings.ui_visibility = {
+          nav_history: vis.nav_history !== false,
+          nav_dns_leak: vis.nav_dns_leak !== false,
+          nav_route: vis.nav_route !== false,
+          nav_log: vis.nav_log !== false,
+          automation_extra: vis.automation_extra !== false,
+          tunnel_latency: vis.tunnel_latency !== false,
+          tunnel_traffic: vis.tunnel_traffic !== false,
+          tunnel_notes: vis.tunnel_notes !== false,
+          tunnel_endpoint: vis.tunnel_endpoint !== false,
+          tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+          settings_proxy: vis.settings_proxy !== false,
+        };
+        // Keep the shared store in sync so every surface reacts immediately.
+        uiMode.set(settings.ui_mode);
+        moduleVis.set(settings.ui_visibility);
         // Legacy settings.json predates this field — *bool null on
         // the Go side becomes undefined here; default to true to match
         // Settings.AutoUpdateCheckEnabled() semantics.
@@ -291,6 +326,12 @@
         settings.endpoint_margin_pct = Number(s.endpoint_margin_pct) >= 1 ? Number(s.endpoint_margin_pct) : 30;
         settings.endpoint_sustained_sec = Number(s.endpoint_sustained_sec) >= 0 ? Number(s.endpoint_sustained_sec) : 30;
         settings.endpoint_cooldown_sec = Number(s.endpoint_cooldown_sec) >= 240 ? Number(s.endpoint_cooldown_sec) : 300;
+        // Global hotkey: normalize enabled flag and keep an empty combo as
+        // "no key" (the backend treats it as disabled).
+        settings.hotkey = {
+          enabled: s.hotkey?.enabled === true,
+          combo: (typeof s.hotkey?.combo === 'string' && s.hotkey.combo) ? s.hotkey.combo : '',
+        };
         // Measure every update path and resolve the public IP as soon as the
         // page opens — both are read-only lookups the user would otherwise
         // have to click for. Fire-and-forget: a failed lookup must never
@@ -298,6 +339,10 @@
         runPathScan();
         loadSystemProxy();
         loadPublicIP();
+        // Whether the platform can register a global hotkey (macOS/Windows
+        // only); gates the hotkey UI so unsupported platforms show a note
+        // instead of controls they cannot use.
+        try { hotkeySupported = await TunnelService.HotkeySupported(); } catch (_) { hotkeySupported = false; }
       }
     } catch (e) {
       console.error('load settings:', e);
@@ -371,6 +416,8 @@
         log_level: settings.log_level,
         auto_update_check: settings.auto_update_check,
         compact_list: settings.compact_list,
+        ui_mode: settings.ui_mode,
+        ui_visibility: settings.ui_visibility,
         proxy_mode: settings.proxy_mode,
         proxy_url: settings.proxy_url,
         proxy_mirrors: settings.proxy_mirrors,
@@ -384,6 +431,7 @@
         endpoint_margin_pct: settings.endpoint_margin_pct,
         endpoint_sustained_sec: settings.endpoint_sustained_sec,
         endpoint_cooldown_sec: settings.endpoint_cooldown_sec,
+        hotkey: settings.hotkey,
       });
     } catch (e) {
       console.error('save settings:', e);
@@ -417,6 +465,24 @@
     // Update the shared store so the tunnel list re-renders immediately,
     // then persist.
     compactList.set(settings.compact_list);
+    scheduleSave();
+  }
+
+  // Module-visibility preset: "all" | "mini" | "custom". Drives the uiMode
+  // store that App.svelte / TunnelDetail / AutomationEditor read, then
+  // persists. Legacy "normal" collapses to "all".
+  function onUIModeChange(e) {
+    const v = e.target.value;
+    settings.ui_mode = (v === 'mini' || v === 'custom') ? v : 'all';
+    uiMode.set(settings.ui_mode);
+    scheduleSave();
+  }
+
+  // Per-module visibility toggle (custom mode). Spreads a fresh map so the
+  // derived moduleFlags store re-evaluates, then persists.
+  function onVisChange(key, val) {
+    settings.ui_visibility = { ...settings.ui_visibility, [key]: val };
+    moduleVis.set(settings.ui_visibility);
     scheduleSave();
   }
 
@@ -1050,11 +1116,38 @@
     // reopened (and direct mode can linger showing a dead address).
     if (p.proxy_mode != null) settings.proxy_mode = p.proxy_mode;
     if (p.proxy_url != null) settings.proxy_url = p.proxy_url;
+    if (p.ui_mode != null) { settings.ui_mode = (p.ui_mode === 'mini' || p.ui_mode === 'custom') ? p.ui_mode : 'all'; uiMode.set(settings.ui_mode); }
+    // Per-module visibility map — normalise each flag (default true).
+    if (p.ui_visibility != null) {
+      const vis = p.ui_visibility || {};
+      settings.ui_visibility = {
+        nav_history: vis.nav_history !== false,
+        nav_dns_leak: vis.nav_dns_leak !== false,
+        nav_route: vis.nav_route !== false,
+        nav_log: vis.nav_log !== false,
+        automation_extra: vis.automation_extra !== false,
+        tunnel_latency: vis.tunnel_latency !== false,
+        tunnel_traffic: vis.tunnel_traffic !== false,
+        tunnel_notes: vis.tunnel_notes !== false,
+        tunnel_endpoint: vis.tunnel_endpoint !== false,
+        tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+        settings_proxy: vis.settings_proxy !== false,
+      };
+      moduleVis.set(settings.ui_visibility);
+    }
+    // Global hotkey (mirrored so another client's change reflects live).
+    if (p.hotkey != null) {
+      settings.hotkey = {
+        enabled: p.hotkey.enabled === true,
+        combo: (typeof p.hotkey.combo === 'string' && p.hotkey.combo) ? p.hotkey.combo : '',
+      };
+    }
     settings = settings; // trigger reactivity
   }
 
   onDestroy(() => {
     window.removeEventListener('keydown', onKeyDown);
+    if (capturing) stopHotkeyCapture();
     if (settingsChangedUnsub) settingsChangedUnsub();
     if (unsubUpdateProgress) unsubUpdateProgress();
     if (saveTimer) {
@@ -1084,6 +1177,88 @@
       e.preventDefault();
       close();
     }
+  }
+
+  // ---- Global hotkey section ----
+  // hotkeySupported gates the whole section: the backend reports whether the
+  // platform can register a system-wide shortcut (macOS / Windows only).
+  let hotkeySupported = false;
+  let capturing = false;
+  let hotkeyError = '';
+
+  // Friendly labels for event.code tokens so the stored canonical combo
+  // ("Ctrl+Alt+KeyT") reads as "Ctrl + Alt + T" in the UI.
+  const COMBO_KEY_LABELS = {
+    Space: 'Space', Enter: 'Enter', Tab: 'Tab', Escape: 'Esc', Backspace: 'Backspace',
+    Delete: 'Del', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+    Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", Backslash: '\\',
+    BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`',
+  };
+  function displayCombo(combo) {
+    if (!combo || typeof combo !== 'string') return '';
+    return combo.split('+').map((seg) => {
+      if (COMBO_KEY_LABELS[seg]) return COMBO_KEY_LABELS[seg];
+      if (seg.startsWith('Key') && seg.length === 4) return seg[3];
+      if (seg.startsWith('Digit') && seg.length === 6) return seg[5];
+      return seg;
+    }).join(' + ');
+  }
+
+  // Modifier key codes: a lone modifier press is not a valid hotkey key, so
+  // the capture listener ignores them and waits for the real key.
+  const MODIFIER_CODES = ['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'];
+
+  function onCaptureKeyDown(e) {
+    if (MODIFIER_CODES.includes(e.code)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      stopHotkeyCapture();
+      return;
+    }
+    const mods = [];
+    if (e.ctrlKey) mods.push('Ctrl');
+    if (e.altKey) mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+    if (e.metaKey) mods.push('Win');
+    if (mods.length === 0) {
+      hotkeyError = $t('settings.hotkey_modifiers_required');
+      stopHotkeyCapture();
+      return;
+    }
+    settings.hotkey.combo = [...mods, e.code].join('+');
+    settings.hotkey.enabled = true;
+    hotkeyError = '';
+    stopHotkeyCapture();
+    settings = settings;
+    scheduleSave();
+  }
+
+  function startHotkeyCapture() {
+    capturing = true;
+    hotkeyError = '';
+    window.addEventListener('keydown', onCaptureKeyDown, true);
+  }
+  function stopHotkeyCapture() {
+    capturing = false;
+    window.removeEventListener('keydown', onCaptureKeyDown, true);
+  }
+  function onHotkeyEnabledChange(e) {
+    settings.hotkey.enabled = e.target.checked;
+    // One-click enable with no key yet: pre-fill the cross-platform default
+    // so the shortcut just works.
+    if (settings.hotkey.enabled && !settings.hotkey.combo) {
+      settings.hotkey.combo = 'Ctrl+Alt+Space';
+    }
+    settings = settings;
+    scheduleSave();
+  }
+  function clearHotkey() {
+    settings.hotkey.combo = '';
+    settings.hotkey.enabled = false;
+    hotkeyError = '';
+    settings = settings;
+    scheduleSave();
   }
 
   // Register the listener synchronously and tear it down via
@@ -1170,6 +1345,85 @@
                   <span class="toggle-track"></span>
                 </label>
               </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label class="setting-label" for="ui-mode-select">{$t('settings.ui_mode')}</label>
+                  <p class="setting-desc">{$t('settings.ui_mode_hint')}</p>
+                </div>
+                <select id="ui-mode-select" value={settings.ui_mode} on:change={onUIModeChange}>
+                  <option value="all">{$t('settings.ui_mode_all')}</option>
+                  <option value="mini">{$t('settings.ui_mode_mini')}</option>
+                  <option value="custom">{$t('settings.ui_mode_custom')}</option>
+                </select>
+              </div>
+              {#if settings.ui_mode === 'custom'}
+                <p class="setting-desc vis-custom-hint">{$t('settings.vis_custom_hint')}</p>
+                <div class="vis-groups">
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_sidebar')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_history} on:change={(e) => onVisChange('nav_history', e.target.checked)} /> <span>{$t('settings.vis_nav_history')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_dns_leak} on:change={(e) => onVisChange('nav_dns_leak', e.target.checked)} /> <span>{$t('settings.vis_nav_dns_leak')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_route} on:change={(e) => onVisChange('nav_route', e.target.checked)} /> <span>{$t('settings.vis_nav_route')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_log} on:change={(e) => onVisChange('nav_log', e.target.checked)} /> <span>{$t('settings.vis_nav_log')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_tunnel')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_latency} on:change={(e) => onVisChange('tunnel_latency', e.target.checked)} /> <span>{$t('settings.vis_tunnel_latency')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_traffic} on:change={(e) => onVisChange('tunnel_traffic', e.target.checked)} /> <span>{$t('settings.vis_tunnel_traffic')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_notes} on:change={(e) => onVisChange('tunnel_notes', e.target.checked)} /> <span>{$t('settings.vis_tunnel_notes')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_endpoint} on:change={(e) => onVisChange('tunnel_endpoint', e.target.checked)} /> <span>{$t('settings.vis_tunnel_endpoint')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_hero_meta} on:change={(e) => onVisChange('tunnel_hero_meta', e.target.checked)} /> <span>{$t('settings.vis_tunnel_hero_meta')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_automation')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.automation_extra} on:change={(e) => onVisChange('automation_extra', e.target.checked)} /> <span>{$t('settings.vis_automation_extra')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_settings')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.settings_proxy} on:change={(e) => onVisChange('settings_proxy', e.target.checked)} /> <span>{$t('settings.vis_settings_proxy')}</span></label>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.section_hotkey')}</h4>
+            <div class="settings-card">
+              <div class="setting-row setting-row--toggle">
+                <div class="setting-info">
+                  <label class="setting-label" for="hotkey-enabled">{$t('settings.hotkey_enabled')}</label>
+                  <p class="setting-desc">{$t('settings.hotkey_enabled_hint')}</p>
+                </div>
+                <label class="toggle">
+                  <input id="hotkey-enabled" type="checkbox" checked={settings.hotkey.enabled} on:change={onHotkeyEnabledChange} disabled={!hotkeySupported} />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              {#if hotkeySupported}
+                <p class="setting-desc">{$t('settings.hotkey_desc')}</p>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <label class="setting-label">{$t('settings.hotkey_current')}</label>
+                    <p class="setting-desc hotkey-current">
+                      {#if capturing}{$t('settings.hotkey_capturing')}
+                      {:else if displayCombo(settings.hotkey.combo)}{displayCombo(settings.hotkey.combo)}
+                      {:else}{$t('settings.hotkey_none')}{/if}
+                    </p>
+                  </div>
+                  <div class="hotkey-actions">
+                    {#if capturing}
+                      <button class="btn" type="button" on:click={stopHotkeyCapture}>{$t('settings.hotkey_capturing')}</button>
+                    {:else}
+                      <button class="btn" type="button" on:click={startHotkeyCapture}>{$t('settings.hotkey_capture')}</button>
+                      <button class="btn btn-ghost" type="button" on:click={clearHotkey} disabled={!settings.hotkey.combo}>{$t('settings.hotkey_clear')}</button>
+                    {/if}
+                  </div>
+                </div>
+                {#if hotkeyError}<p class="setting-desc hotkey-error">{hotkeyError}</p>{/if}
+              {:else}
+                <p class="setting-desc">{$t('settings.hotkey_unsupported')}</p>
+              {/if}
             </div>
           </div>
 
@@ -1245,6 +1499,7 @@
           </div>
 
           <div class="settings-section">
+            {#if $moduleFlags.settings_proxy}
             <h4 class="section-title">{$t('settings.proxy')}</h4>
             <div class="settings-card">
               <!-- Where this machine appears to be — the fastest way to see
@@ -1359,6 +1614,7 @@
                 </div>
               </div>
             </div>
+            {/if}
           </div>
 
         {:else if activeTab === 'advanced'}
@@ -1951,6 +2207,85 @@
     font: 400 11px/15px var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
     color: var(--text-muted);
     letter-spacing: 0.01em;
+  }
+
+  /* ---- Global hotkey section ---- */
+  .hotkey-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border, #2a2a2a);
+    background: var(--bg-secondary, #252525);
+    color: var(--text-primary);
+    font: 500 12px/1 var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--bg-hover, #2f2f2f);
+    border-color: var(--accent, #3b82f6);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-ghost {
+    background: transparent;
+  }
+  .hotkey-current {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-top: 2px;
+  }
+  .hotkey-error {
+    color: var(--danger, #ef4444);
+    margin-top: 6px;
+  }
+
+  /* ---- Module-visibility custom panel ---- */
+  .vis-custom-hint {
+    margin: 2px 0 8px;
+  }
+  .vis-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-card, var(--bg-elevated, #fff));
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+  }
+  .vis-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .vis-group-title {
+    font: 600 10px/13px var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .vis-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 400 13px/18px var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .vis-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent, #0a84ff);
+    cursor: pointer;
   }
 
   /* ---- Toggle switch (34×20px, 200ms slide) ---- */

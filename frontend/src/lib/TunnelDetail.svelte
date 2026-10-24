@@ -11,6 +11,7 @@
   import AutomationEditor from './AutomationEditor.svelte';
   import StatsDashboard from './StatsDashboard.svelte';
   import { manualOverrides, clearManualOverride, refreshManualOverrides, setManualOverrideService } from '../stores/manualoverride.js';
+  import { moduleFlags } from '../stores/ui.js';
 
   export let TunnelService;
   const dispatch = createEventDispatcher();
@@ -23,6 +24,11 @@
   // (previously the hero only refreshed on a tunnel-name change, so toggling
   // there left it showing the stale "running" state until a tunnel switch).
   let automationEditorWasOpen = false;
+  // mini = the "mini" module-visibility preset — collapses the sidebar and
+  // hides every optional module (all moduleFlags resolve to false). Kept as a
+  // short alias for the compact-switch branch below.
+  $: mini = $moduleFlags.__mode === 'mini';
+
   $: if (showAutomation) automationEditorWasOpen = true;
   $: if (!showAutomation && automationEditorWasOpen) {
     automationEditorWasOpen = false;
@@ -1274,6 +1280,10 @@
           {/if}
         </div>
         {#if isConnected && status.state === 'connected'}
+          <!-- Detailed handshake / duration / interface lines and the
+               interval note are verbose "提示" detail — hidden unless the
+               tunnel_hero_meta module is visible. -->
+          {#if $moduleFlags.tunnel_hero_meta}
           <div class="hero-meta">
             <span class="meta-item" class:meta-stale={isStale}>
               <Icon name="clock" size={12} strokeWidth={2} />
@@ -1294,6 +1304,7 @@
             {/if}
           </div>
           <p class="hero-note">{$t('tunnel.handshake_interval_note')}</p>
+          {/if}
         {/if}
       </div>
     </div>
@@ -1402,7 +1413,9 @@
          as "tunnel up, ICMP filtered" rather than a disagreeing aggregate.
          The redundant endpoint card that used to live here was removed — the
          endpoint already shows (and is now copyable) in the hero above. -->
-    {#if $selectedTunnel.endpoint}
+    <!-- Latency probe display + target editor: verbose "提示" detail.
+         Hidden unless the tunnel_latency module is visible. -->
+    {#if $selectedTunnel.endpoint && $moduleFlags.tunnel_latency}
       <div class="latency-row">
         <!-- LATENCY DISPLAY -->
         <div class="latency-card">
@@ -1566,7 +1579,12 @@
 
     <!-- ENDPOINT CANDIDATES: alternative addresses for this peer. The .conf
          still holds one Endpoint; this list is what failover may dial. -->
-    {#if $selectedTunnel?.endpoint}
+    <!-- Full endpoint candidate management table: verbose "提示" detail
+         (mode selector, per-row resolved IP / latency / status / remove,
+         measure + add actions, ICMP note). Shown only when the
+         tunnel_endpoint module is visible; otherwise the compact quick
+         switch below replaces it. -->
+    {#if $selectedTunnel?.endpoint && $moduleFlags.tunnel_endpoint}
       <div class="endpoint-candidates">
         <div class="endpoint-candidates-head">
           <h3 class="section-label">{$t('tunnel.endpoint_candidates')}</h3>
@@ -1673,6 +1691,9 @@
         <!-- ICMP caveat: an unreachable row does NOT mean the tunnel is dead.
              Many servers drop ping; the switch decision uses handshakes. -->
         <p class="endpoint-icmp-note">{$t('tunnel.endpoint_icmp_note')}</p>
+        <!-- Adding a candidate is a management action — hidden in mini
+             mode, where only the existing list + quick-switch stay. -->
+        {#if !mini}
         <div class="endpoint-candidate-add">
           <input type="text" spellcheck="false" autocomplete="off"
             placeholder={$t('tunnel.endpoint_candidate_placeholder')}
@@ -1681,14 +1702,32 @@
           <button class="btn-secondary" type="button" disabled={epBusy}
             on:click={addEndpointCandidate}>{$t('tunnel.endpoint_candidate_add')}</button>
         </div>
+        {/if}
         {#if epError}
           <div class="endpoint-candidate-error">{epError}</div>
         {/if}
       </div>
     {/if}
 
-    <!-- STATS HERO: counters + throughput graph on ONE row (connected only). -->
-    {#if isConnected && status.state === 'connected'}
+    <!-- When the tunnel_endpoint module is hidden (mini mode, or custom with
+         the module off), the compact quick-switch replaces the full table so
+         the essential "switch active endpoint" control stays available. -->
+    {#if $selectedTunnel?.endpoint && !$moduleFlags.tunnel_endpoint}
+      <div class="endpoint-quick-switch">
+        <label class="section-label" for="ep-quick">{$t('tunnel.endpoint_col_endpoint')}</label>
+        <select id="ep-quick" class="ep-quick-select"
+          on:change={(e) => { const v = e.target.value; if (v && v !== epSettings.active) switchEndpoint(v); }}>
+          {#each epSettings.candidates as cand (cand)}
+            <option value={cand} selected={cand === epSettings.active}>{cand}</option>
+          {/each}
+        </select>
+      </div>
+    {/if}
+
+    <!-- STATS HERO: counters + throughput graph on ONE row (connected only).
+         Verbose traffic "提示" — hidden unless the tunnel_traffic module is
+         visible. -->
+    {#if isConnected && status.state === 'connected' && $moduleFlags.tunnel_traffic}
       <div class="stats-hero">
         <div class="stat-card stat-rx">
           <div class="stat-card-top">
@@ -1710,7 +1749,9 @@
       </div>
     {/if}
 
-    <!-- NOTES -->
+    <!-- NOTES: info/editing surface — hidden unless the tunnel_notes
+         module is visible. -->
+    {#if $moduleFlags.tunnel_notes}
     <div class="info-section">
       <h3 class="section-label">{$t('tunnel.notes')}</h3>
       <textarea
@@ -1725,12 +1766,17 @@
         <div class="notes-error">{notesError}</div>
       {/if}
     </div>
+    {/if}
 
     {#if error}
       <div class="error-msg">{error}</div>
     {/if}
 
-    <!-- SECONDARY ACTIONS: 4-up icon button grid -->
+    <!-- SECONDARY ACTIONS: 4-up icon button grid.
+         Hidden in mini mode — these are tunnel-management actions (edit,
+         export, automation editor, delete), not the essential connect/
+         disconnect + status surface the compact layout is for. -->
+    {#if !mini}
     <div class="secondary-actions">
       <button class="btn-icon-action" on:click={() => dispatch('edit', $selectedTunnel.name)}>
         <Icon name="file-pen" size={15} strokeWidth={1.75} />
@@ -1749,6 +1795,7 @@
         <span>{$t('tunnel.delete')}</span>
       </button>
     </div>
+    {/if}
   {/if}
 </div>
 
@@ -2481,23 +2528,29 @@
     flex-direction: column;
     gap: 3px;
   }
-  /* Three fixed data columns, a status word, and a trailing action slot.
-     Grid (not flex) so every row shares the exact same column edges — with
-     flex the resolved-IP and latency values drifted depending on how long
-     the endpoint string was, which made the columns impossible to read
-     down. The endpoint column is the only elastic one because hostnames
-     vary wildly in length; the other columns are pinned so the numbers,
-     the status words and the buttons line up.
+  /* Six shared columns: endpoint, resolved IP, latency, status, switch,
+     remove. Grid (not flex) so every row lines up on the same edges; with
+     flex the resolved-IP and latency values drifted by endpoint length and
+     the columns became unreadable down the list. The endpoint column is the
+     only elastic one — hostnames vary wildly — and it is `minmax(0, 1fr)`,
+     NOT a fixed floor, so the whole grid always fills exactly the card's
+     width and never overflows it. The added switch and remove columns are
+     absorbed by the elastic endpoint column, keeping the total width equal
+     to the four-column layout above and below this list (no misalignment).
+     Long DDNS names are handled by `text-overflow: ellipsis` plus a `title`
+     tooltip (added in v2.8.5), so no minimum width is needed for them.
 
-     The endpoint column's floor (200px) is what keeps a long DDNS name
-     readable: with a bare `minmax(0, 1fr)` the elastic column absorbed
-     every squeeze and a name like `my-very-long-host.ddns.example.com`
-     collapsed to a handful of ellipsised characters. The switch button
-     therefore gets a pinned column of its own instead of sharing the last
-     one with the remove button. */
+     六个共享列：endpoint、解析 IP、延迟、状态、切换、删除。用 grid 而非
+     flex，保证每行对齐到同一列边；用 flex 时解析 IP 与延迟会因 endpoint
+     长度漂移，列表向下读时各列对不齐。endpoint 列是唯一弹性列（主机名长度
+     差异极大），且为 `minmax(0, 1fr)` 而非固定下限，因此整个网格始终精确
+     填满卡片宽度、绝不溢出。新增的切换列与删除列由弹性 endpoint 列吸收，
+     使总宽度与上下方四列布局一致（不会出现宽度不齐）。长 DDNS 名由
+     `text-overflow: ellipsis` + `title` 悬浮提示（v2.8.5 新增）处理，无需
+     为其预留最小宽度。 */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(200px, 1fr) 132px 76px 84px 88px 20px;
+    grid-template-columns: minmax(0, 1fr) 132px 76px 84px 88px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;
@@ -2647,6 +2700,27 @@
     font-size: 11px;
     color: var(--red, #FF453A);
     word-break: break-word;
+  }
+  /* Compact endpoint quick-switch shown only in mini mode. */
+  .endpoint-quick-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 10px;
+  }
+  .endpoint-quick-switch .section-label {
+    margin: 0;
+    white-space: nowrap;
+  }
+  .ep-quick-select {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: var(--bg-input, var(--bg-card));
+    color: var(--text-primary);
   }
   .latency-head {
     display: flex;

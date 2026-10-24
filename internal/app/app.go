@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/imonior/wireguide-plus/internal/domain"
+	"github.com/imonior/wireguide-plus/internal/hotkey"
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
@@ -74,6 +75,18 @@ type TunnelService struct {
 	// would walk the activeSessions sync.Map even in the steady state.
 	reconcileMu      sync.Mutex
 	lastReconcileSig string
+
+	// mainWin is the primary WebviewWindow, injected after creation so the
+	// hotkey handler can toggle it. May stay nil in non-GUI test contexts.
+	mainWin *application.WebviewWindow
+
+	// hotkeyToggle is the window show/hide/focus closure injected by the GUI
+	// (it owns the platform-specific dock-window glue). The hotkey manager
+	// fires it when the global shortcut is pressed.
+	hotkeyToggle func()
+
+	// hotkeyMgr owns the global toggle-window hotkey (nil until initHotkey).
+	hotkeyMgr *hotkey.Manager
 }
 
 // lastKnownTunnelStats is the value type for TunnelService.lastKnownStats.
@@ -112,6 +125,92 @@ func (s *TunnelService) SetApp(app *application.App) {
 func (s *TunnelService) SetUpdateScheduler(sched *update.Scheduler, store *update.StateStore) {
 	s.updateScheduler = sched
 	s.updateStore = store
+}
+
+// SetMainWindow injects the primary window after it is created in gui.Run, so
+// the hotkey toggle closure can show/hide/focus it.
+// SetMainWindow 在 gui.Run 中窗口创建后注入主窗口，供热键切换闭包使用。
+func (s *TunnelService) SetMainWindow(win *application.WebviewWindow) {
+	s.mainWin = win
+}
+
+// SetHotkeyToggle injects the window toggle closure (provided by the GUI
+// package, which owns the platform-specific dock-window glue). Called once
+// before initHotkey.
+// SetHotkeyToggle 注入窗口切换闭包（由 GUI 包提供，因其持有平台相关的
+// dock 窗口胶水代码）。在 initHotkey 之前调用一次。
+func (s *TunnelService) SetHotkeyToggle(fn func()) {
+	s.hotkeyToggle = fn
+}
+
+// InitHotkey builds the hotkey manager and registers it from the persisted
+// settings. Called once during GUI startup; safe to skip (hotkeyMgr stays nil)
+// in non-GUI contexts.
+// InitHotkey 构建热键管理器并按已保存的设置注册。在 GUI 启动期调用一次；
+// 非 GUI 上下文可跳过（hotkeyMgr 保持 nil）。
+func (s *TunnelService) InitHotkey() {
+	if s.hotkeyToggle == nil {
+		return
+	}
+	s.hotkeyMgr = hotkey.NewManager(s.onHotkeyFired)
+	settings, err := s.settingsStore.Load()
+	if err == nil && settings != nil {
+		if err := applyHotkeyConfig(s.hotkeyMgr, settings.Hotkey); err != nil {
+			slog.Warn("hotkey: initial registration failed", "error", err)
+		}
+	}
+}
+
+// onHotkeyFired is the callback the hotkey manager invokes on a press. It
+// marshals to the UI thread (the closure does that itself) and toggles the
+// window.
+// onHotkeyFired 是热键管理器在按键时调用的回调。它（由闭包自身）编组到 UI
+// 线程并切换窗口。
+func (s *TunnelService) onHotkeyFired() {
+	if s.hotkeyToggle != nil {
+		s.hotkeyToggle()
+	}
+}
+
+// reregisterHotkey applies a new hotkey config at runtime (e.g. on save), so
+// a changed combo or enable/disable takes effect without restarting the app.
+// reregisterHotkey 在运行时套用新的热键配置（如保存时），使修改后的组合键或
+// 开关立即生效，无需重启应用。
+func (s *TunnelService) reregisterHotkey(cfg storage.HotkeyConfig) {
+	if s.hotkeyMgr == nil {
+		return
+	}
+	if err := applyHotkeyConfig(s.hotkeyMgr, cfg); err != nil {
+		slog.Warn("hotkey: re-registration failed", "error", err)
+	}
+}
+
+// CloseHotkey tears the hotkey manager down (used on app shutdown).
+// CloseHotkey 拆除热键管理器（用于应用退出）。
+func (s *TunnelService) CloseHotkey() {
+	if s.hotkeyMgr != nil {
+		_ = s.hotkeyMgr.Close()
+	}
+}
+
+// HotkeySupported reports whether the platform can register a global hotkey,
+// so the frontend can show/hide the setting.
+// HotkeySupported 报告当前平台是否支持注册全局热键，供前端显隐该设置项。
+func (s *TunnelService) HotkeySupported() bool {
+	return hotkey.Supported()
+}
+
+// applyHotkeyConfig registers (or clears) the hotkey from a HotkeyConfig.
+// applyHotkeyConfig 按 HotkeyConfig 注册（或清除）热键。
+func applyHotkeyConfig(mgr *hotkey.Manager, cfg storage.HotkeyConfig) error {
+	if !cfg.Enabled || cfg.Combo == "" {
+		return mgr.Register(hotkey.Combo{})
+	}
+	c, err := hotkey.ParseCombo(cfg.Combo)
+	if err != nil {
+		return err
+	}
+	return mgr.Register(c)
 }
 
 // errHelperUnavailable is the error returned when the IPC client has been

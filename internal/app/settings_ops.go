@@ -592,6 +592,14 @@ func (s *TunnelService) SaveSettings(settings *storage.Settings) error {
 		})
 	}
 
+	// Global hotkey changed through this whole-settings save: re-register it
+	// live so a new combo or an enable/disable toggle takes effect without
+	// restarting the app. A non-nil prev that differs in Hotkey (a comparable
+	// struct) means the user touched the hotkey section.
+	if prev == nil || prev.Hotkey != settings.Hotkey {
+		s.reregisterHotkey(settings.Hotkey)
+	}
+
 	return nil
 }
 

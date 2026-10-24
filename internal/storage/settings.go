@@ -12,6 +12,85 @@ import (
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
 
+// ModuleVisibility is the per-module show/hide map used only when
+// Settings.UIMode == "custom". Every flag defaults to true (see
+// DefaultModuleVisibility) so "custom" starts from the full layout and the
+// user hides what they don't want. The flag names are the keys the frontend
+// reads through its moduleFlags store.
+//
+// ModuleVisibility 是仅当 UIMode == "custom" 时生效的逐项可见性开关，每个开关
+// 默认 true（见 DefaultModuleVisibility），因此「自定义」从完整布局出发，由用户
+// 隐藏不需要的项。开关名即前端 moduleFlags store 读取的键。
+type ModuleVisibility struct {
+	// NavHistory / NavDnsLeak / NavRoute / NavLog toggle the four optional
+	// sidebar quick-menu entries. The tunnels entry and the settings entry
+	// are always shown.
+	NavHistory bool `json:"nav_history"`
+	NavDnsLeak bool `json:"nav_dns_leak"`
+	NavRoute   bool `json:"nav_route"`
+	NavLog     bool `json:"nav_log"`
+	// AutomationExtra toggles the live network-matching panel and the help
+	// text inside the automation editor; the rule list and the default
+	// connect/disconnect state (the "condition settings") are always shown.
+	AutomationExtra bool `json:"automation_extra"`
+	// TunnelLatency / TunnelTraffic / TunnelNotes / TunnelEndpoint /
+	// TunnelHeroMeta toggle the verbose detail blocks on the tunnel detail
+	// surface (latency row, rx/tx + graph, notes, endpoint candidate table,
+	// handshake/duration/interface meta). The config area, connect/disconnect
+	// button, tunnel state, and endpoint quick-switch stay always on.
+	TunnelLatency  bool `json:"tunnel_latency"`
+	TunnelTraffic  bool `json:"tunnel_traffic"`
+	TunnelNotes    bool `json:"tunnel_notes"`
+	TunnelEndpoint bool `json:"tunnel_endpoint"`
+	TunnelHeroMeta bool `json:"tunnel_hero_meta"`
+	// SettingsProxy toggles the proxy section (accelerator mirrors + public
+	// IP) inside Settings.
+	SettingsProxy bool `json:"settings_proxy"`
+}
+
+// DefaultModuleVisibility returns a ModuleVisibility with every flag on.
+// DefaultModuleVisibility 返回所有开关均为开启的 ModuleVisibility。
+func DefaultModuleVisibility() ModuleVisibility {
+	return ModuleVisibility{
+		NavHistory:      true,
+		NavDnsLeak:      true,
+		NavRoute:        true,
+		NavLog:          true,
+		AutomationExtra: true,
+		TunnelLatency:   true,
+		TunnelTraffic:   true,
+		TunnelNotes:     true,
+		TunnelEndpoint:  true,
+		TunnelHeroMeta:  true,
+		SettingsProxy:   true,
+	}
+}
+
+// HotkeyConfig is the global hotkey that toggles (show / hide / focus) the
+// main window. Enabled is opt-in (default false) so a freshly installed app
+// never grabs a system-wide shortcut the user didn't ask for. Combo is the
+// canonical string "Ctrl+Alt+Space" — modifiers are Ctrl/Alt/Shift/Win and
+// the final segment is a KeyboardEvent.code token (e.g. "Space", "KeyT",
+// "F12", "Digit1"). An empty Combo means "no key assigned".
+//
+// HotkeyConfig 是切换（显示/隐藏/聚焦）主窗口的全局热键配置。Enabled 为
+// 选择性开启（默认 false），保证全新安装不会擅自占用系统级快捷键。Combo 是
+// 形如 "Ctrl+Alt+Space" 的规范字符串——修饰键为 Ctrl/Alt/Shift/Win，末段是
+// KeyboardEvent.code 令牌（如 "Space"、"KeyT"、"F12"、"Digit1"）。空 Combo
+// 表示「未指定按键」。
+type HotkeyConfig struct {
+	Enabled bool   `json:"enabled"`
+	Combo   string `json:"combo"`
+}
+
+// DefaultHotkeyConfig returns the hotkey default: disabled, with a sensible
+// cross-platform combo pre-filled so a one-click enable just works.
+// DefaultHotkeyConfig 返回热键默认值：关闭，并预填一个跨平台通用的组合键，
+// 这样一键开启即可生效。
+func DefaultHotkeyConfig() HotkeyConfig {
+	return HotkeyConfig{Enabled: false, Combo: "Ctrl+Alt+Space"}
+}
+
 // Settings holds application-wide settings.
 type Settings struct {
 	Language       string `json:"language"`        // "auto", "en", "ko", "ja", "zh"
@@ -75,6 +154,34 @@ type Settings struct {
 	PinInterface       bool   `json:"pin_interface"` // pin bypass routes to upstream interface (-ifscope)
 	LogLevel           string `json:"log_level"`     // "debug", "info", "warn", "error"
 	CompactList        bool   `json:"compact_list"`  // dense tunnel list: hide endpoint line, shorter rows
+	// UIMode selects the GUI module-visibility preset:
+	//   "all"   (default) — every module shows, exactly as before.
+	//   "mini"  — every OPTIONAL module is hidden; only the always-on
+	//             essentials stay (config area, condition settings, connect/
+	//             disconnect, tunnel state, scripts when enabled).
+	//   "custom" — each module's visibility follows the per-flag map in
+	//             ModuleVisibility below.
+	// The json key is kept as "ui_mode" for backward compatibility; an older
+	// stored value "normal" is treated as "all" on the frontend.
+	//
+	// UIMode 选择 GUI 模块可见性预设：
+	//   "all"（默认）—— 所有模块均显示，与改动前一致。
+	//   "mini" —— 隐藏所有可选项，仅保留始终显示的要素（配置区、条件设置区、
+	//             连接/断开、隧道状态、脚本（开启时））。
+	//   "custom" —— 各模块可见性遵循下方 ModuleVisibility 的逐项开关。
+	// json 键保留为 "ui_mode" 以兼容旧配置；旧值 "normal" 在前端按 "all" 处理。
+	UIMode string `json:"ui_mode"` // "all", "mini", "custom"
+	// ModuleVisibility is the per-module show/hide map used only when
+	// UIMode == "custom". Every flag defaults to true so "custom" starts
+	// from the full layout and the user hides what they don't want.
+	//
+	// ModuleVisibility 是仅当 UIMode == "custom" 时生效的逐项可见性开关。
+	// 每个开关默认 true，因此「自定义」从完整布局出发，由用户隐藏不需要的项。
+	ModuleVisibility ModuleVisibility `json:"ui_visibility"`
+	// Hotkey toggles (show / hide / focus) the main window with a
+	// system-wide shortcut. Disabled by default — see HotkeyConfig.
+	// Hotkey 用系统级快捷键切换（显示/隐藏/聚焦）主窗口。默认关闭，详见 HotkeyConfig。
+	Hotkey HotkeyConfig `json:"hotkey"`
 	// LogRetentionDays is how many days of daily log files to keep.
 	// 0 means the default (7). Files older than this are removed at
 	// startup and whenever settings are saved.
@@ -407,12 +514,15 @@ func DefaultSettings() *Settings {
 		Language:             "auto",
 		Theme:                "system", // follows OS dark/light mode
 		TrayIconStyle:        "color",
-		NotifyDurationMs:     10000, // 10s default notification duration
-		HealthCheck:          true,  // periodic handshake monitoring + auto-reconnect ON by default / 周期性握手监测与自动重连默认开启
-		KeepConnectionOnIdle: true,  // keep tunnels alive through idle/screen-saver/lock by default
-		PreventSystemSleep:   false, // opt-in: an invasive power override, leave it to the user
-		PinInterface:         false, // off by default — enable for dual-network setups
-		EnableAWG:            true,  // AWG support is on by default
+		UIMode:               "all",                     // module-visibility preset: "all" | "mini" | "custom"
+		ModuleVisibility:     DefaultModuleVisibility(), // every module on; used when UIMode == "custom"
+		Hotkey:               DefaultHotkeyConfig(),     // global toggle-window hotkey, opt-in (disabled)
+		NotifyDurationMs:     10000,                     // 10s default notification duration
+		HealthCheck:          true,                      // periodic handshake monitoring + auto-reconnect ON by default / 周期性握手监测与自动重连默认开启
+		KeepConnectionOnIdle: true,                      // keep tunnels alive through idle/screen-saver/lock by default
+		PreventSystemSleep:   false,                     // opt-in: an invasive power override, leave it to the user
+		PinInterface:         false,                     // off by default — enable for dual-network setups
+		EnableAWG:            true,                      // AWG support is on by default
 		LogLevel:             "info",
 		LogRetentionDays:     logging.DefaultRetentionDays,
 		HistoryRetentionDays: DefaultHistoryRetentionDays,
