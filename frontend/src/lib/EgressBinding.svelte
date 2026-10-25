@@ -19,6 +19,13 @@
 
   export let name = ''; // SAVED tunnel name — the meta sidecar key
   export let isNew = false;
+  // hideHints suppresses the explanatory hint text — set from the shared
+  // create_hints module flag, which is off in the mini preset (only the
+  // config itself and the action buttons stay) and toggleable in custom.
+  //
+  // hideHints 隐藏说明性提示文字——由共享的 create_hints 模块开关驱动，该
+  // 开关在 mini 预设下关闭（只保留配置本身与操作按钮），自定义下可勾选。
+  export let hideHints = false;
 
   let ifaces = [];
   let bindIfIndex = 0;
@@ -96,7 +103,7 @@
   <div class="egress-panel">
     <div class="egress-head">
       <span class="egress-title">{$t('fields.section_bind')}</span>
-      <p class="egress-hint">{$t('fields.bind_hint')}</p>
+      {#if !hideHints}<p class="egress-hint">{$t('fields.bind_hint')}</p>{/if}
     </div>
     <div class="egress-row">
       <label class="egress-label" for="egress-select">{$t('fields.bind_egress')}</label>

@@ -1043,7 +1043,16 @@
             <span class="am-exclude-text">{$t('policy.automation_disabled')}</span>
             <span class="am-exclude-state">{automationDisabled ? $t('tunnel.automation_off') : $t('tunnel.automation_on')}</span>
           </label>
+          <!-- The on/off hint is part of the automation_extra family: mini
+               keeps only the condition settings and the rule list, so the
+               hint goes with the help text and live matching; custom can
+               bring it back with the same checkbox.
+               开关提示隶属于 automation_extra 一族：mini 只保留条件设置与
+               规则列表，该提示与帮助文字、实时匹配一同隐藏；自定义下可用同一
+               复选框唤回。 -->
+          {#if $moduleFlags.automation_extra}
           <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
+          {/if}
         {/if}
         <!-- No tunnel status row here on purpose: the connection state and the
              control source are tunnel-level facts that the detail page and the

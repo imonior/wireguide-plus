@@ -14,9 +14,20 @@ export const compactList = writable(false);
 const MODULE_KEYS = [
   'nav_history', 'nav_dns_leak', 'nav_route', 'nav_log',
   'automation_extra',
-  'tunnel_latency', 'tunnel_traffic', 'tunnel_notes', 'tunnel_endpoint', 'tunnel_hero_meta',
+  'tunnel_latency', 'tunnel_traffic', 'tunnel_notes', 'tunnel_endpoint',
+  'tunnel_hero_meta', 'tunnel_actions', 'create_hints',
   'settings_proxy',
 ];
+
+// Modules the mini preset keeps VISIBLE. Everything else optional is hidden
+// in mini; the tunnel detail's management buttons (edit / export /
+// automation / delete) are essential actions rather than verbose detail, so
+// mini shows them and only the custom preset can turn them off.
+//
+// mini 预设下仍然可见的模块。其余可选模块在 mini 下全部隐藏；隧道详情底部的
+// 管理按钮（编辑 / 导出 / 自动化 / 删除）是必备操作而非冗详信息，因此 mini
+// 保留显示，只有「自定义」预设能将其关闭。
+const MINI_KEEP = { tunnel_actions: true };
 
 // uiMode mirrors Settings.ui_mode — the module-visibility preset:
 // "all" (default) | "mini" | "custom". An older stored value "normal" is
@@ -32,6 +43,7 @@ export const moduleVis = writable({
   automation_extra: true,
   tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
   tunnel_endpoint: true, tunnel_hero_meta: true,
+  tunnel_actions: true, create_hints: true,
   settings_proxy: true,
 });
 
@@ -43,7 +55,7 @@ function resolveMode(m) {
 }
 
 // moduleFlags is the resolved visibility map: true = module visible.
-//   mini   → every optional module hidden.
+//   mini   → every optional module hidden except MINI_KEEP.
 //   all    → every optional module visible.
 //   custom → per moduleVis flag.
 // Components read it as $moduleFlags.<key>.
@@ -51,7 +63,7 @@ export const moduleFlags = derived([uiMode, moduleVis], ([$mode, $vis]) => {
   const mode = resolveMode($mode);
   const out = {};
   for (const k of MODULE_KEYS) {
-    if (mode === 'mini') out[k] = false;
+    if (mode === 'mini') out[k] = !!MINI_KEEP[k];
     else if (mode === 'all') out[k] = true;
     else out[k] = !!$vis[k];
   }
@@ -74,7 +86,38 @@ export const listActiveOnTop = writable(true);
 export const LIST_PANE_MIN = 190;
 export const LIST_PANE_MAX = 460;
 export const LIST_PANE_DEFAULT = 240;
+// The mini preset keeps the list column deliberately narrow so the detail
+// surface gets the room: a smaller cap and a smaller default. The clamp is
+// non-destructive — the stored width is kept as-is, so switching back to
+// all/custom restores whatever the user had there.
+//
+// mini 预设下通道列表列保持窄小，把空间让给详情界面：更小的上限与默认值。
+// 钳制是非破坏的——存储值原样保留，切回全部/自定义时恢复此前的宽度。
+export const LIST_PANE_MINI_MAX = 220;
+export const LIST_PANE_MINI_DEFAULT = 200;
 export const listPaneWidth = writable(LIST_PANE_DEFAULT);
+
+// effectiveListPaneWidth is what the UI actually renders: the stored width,
+// clamped to the mini cap while the mini preset is active.
+//
+// effectiveListPaneWidth 是界面实际渲染的宽度：存储宽度在 mini 预设生效期间
+// 钳制到 mini 上限。
+export const effectiveListPaneWidth = derived(
+  [listPaneWidth, uiMode],
+  ([$w, $mode]) => ($mode === 'mini' ? Math.min($w, LIST_PANE_MINI_MAX) : $w)
+);
+
+// paneMaxForMode / paneDefaultForMode keep the drag, keyboard and reset
+// controls honest about the active preset's limits.
+//
+// paneMaxForMode / paneDefaultForMode 让拖拽、键盘与重置控件遵循当前预设的
+// 宽度边界。
+export function paneMaxForMode(mode) {
+  return mode === 'mini' ? LIST_PANE_MINI_MAX : LIST_PANE_MAX;
+}
+export function paneDefaultForMode(mode) {
+  return mode === 'mini' ? LIST_PANE_MINI_DEFAULT : LIST_PANE_DEFAULT;
+}
 
 let saveTimer = null;
 

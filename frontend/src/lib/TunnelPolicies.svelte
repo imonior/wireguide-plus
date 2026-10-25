@@ -24,6 +24,15 @@
 
   export let name = ''; // SAVED tunnel name — the meta sidecar key
   export let isNew = false;
+  // hideHints suppresses the explanatory hint text — set from the shared
+  // create_hints module flag, which is off in the mini preset (only the
+  // config itself and the action buttons stay) and toggleable in custom.
+  // Errors and conflict warnings are NOT hints and always stay.
+  //
+  // hideHints 隐藏说明性提示文字——由共享的 create_hints 模块开关驱动，该
+  // 开关在 mini 预设下关闭（只保留配置本身与操作按钮），自定义下可勾选。
+  // 错误与冲突警告不属于提示，始终显示。
+  export let hideHints = false;
 
   const dispatch = createEventDispatcher();
 
@@ -162,14 +171,14 @@
 <div class="policies">
   <div class="policies-head">
     <span class="brand">WireGuide Plus</span>
-    <span class="hint">{$t('policy.traffic_protect')}</span>
+    {#if !hideHints}<span class="hint">{$t('policy.traffic_protect')}</span>{/if}
   </div>
 
   <label class="row">
     <input type="checkbox" bind:checked={trafficProtect} on:change={persist} />
     <span class="label-text">{$t('policy.traffic_protect')}</span>
   </label>
-  <p class="desc">{$t('policy.traffic_protect_hint')}</p>
+  {#if !hideHints}<p class="desc">{$t('policy.traffic_protect_hint')}</p>{/if}
 
   <div class="field">
     <span class="label-text">{$t('policy.domains_through_tunnel')}</span>
@@ -180,21 +189,21 @@
       bind:value={domainsText}
       on:change={persist}
     />
-    <p class="desc">{$t('policy.domains_through_tunnel_hint')}</p>
+    {#if !hideHints}<p class="desc">{$t('policy.domains_through_tunnel_hint')}</p>{/if}
   </div>
 
   <label class="row">
     <input type="checkbox" bind:checked={useAsDefaultDNS} on:change={persist} />
     <span class="label-text">{$t('policy.use_as_default_dns')}</span>
   </label>
-  <p class="desc">{$t('policy.use_as_default_dns_hint')}</p>
+  {#if !hideHints}<p class="desc">{$t('policy.use_as_default_dns_hint')}</p>{/if}
 
   {#if dnsPathEnabled}
     <label class="row">
       <input type="checkbox" bind:checked={dnsResolvePath} on:change={persist} />
       <span class="label-text">{$t('policy.dns_resolve_path')}</span>
     </label>
-    <p class="desc">{$t('policy.dns_resolve_path_hint')}</p>
+    {#if !hideHints}<p class="desc">{$t('policy.dns_resolve_path_hint')}</p>{/if}
     {#if conflictWarn}
       <p class="warn">{conflictWarn}</p>
     {/if}
@@ -208,7 +217,7 @@
         <option value="on">{$t('policy.keep_idle_on')}</option>
         <option value="off">{$t('policy.keep_idle_off')}</option>
       </select>
-      <p class="desc">{$t('policy.keep_connection_on_idle_hint')}</p>
+      {#if !hideHints}<p class="desc">{$t('policy.keep_connection_on_idle_hint')}</p>{/if}
     </div>
   {/if}
 

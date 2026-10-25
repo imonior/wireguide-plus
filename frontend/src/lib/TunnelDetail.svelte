@@ -1773,10 +1773,14 @@
     {/if}
 
     <!-- SECONDARY ACTIONS: 4-up icon button grid.
-         Hidden in mini mode — these are tunnel-management actions (edit,
-         export, automation editor, delete), not the essential connect/
-         disconnect + status surface the compact layout is for. -->
-    {#if !mini}
+         Tunnel-management actions (edit, export, automation editor,
+         delete) — kept visible in EVERY preset including mini, because
+         managing a tunnel is not "verbose detail"; only the custom preset
+         can hide them (tunnel_actions module).
+         次级操作：四联图标按钮栅格。隧道管理操作（编辑、导出、自动化编辑器、
+         删除）——在所有预设（含 mini）下保持可见，因为管理隧道不属于「冗详
+         信息」；只有「自定义」预设能通过 tunnel_actions 模块将其隐藏。 -->
+    {#if $moduleFlags.tunnel_actions}
     <div class="secondary-actions">
       <button class="btn-icon-action" on:click={() => dispatch('edit', $selectedTunnel.name)}>
         <Icon name="file-pen" size={15} strokeWidth={1.75} />
@@ -2550,7 +2554,7 @@
      为其预留最小宽度。 */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px 76px 84px 88px 20px;
+    grid-template-columns: minmax(0, 1fr) 104px 76px 84px 88px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;

@@ -213,6 +213,7 @@
       automation_extra: true,
       tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
       tunnel_endpoint: true, tunnel_hero_meta: true,
+      tunnel_actions: true, create_hints: true,
       settings_proxy: true,
     },
     proxy_mode: 'direct',
@@ -291,6 +292,8 @@
           tunnel_notes: vis.tunnel_notes !== false,
           tunnel_endpoint: vis.tunnel_endpoint !== false,
           tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+          tunnel_actions: vis.tunnel_actions !== false,
+          create_hints: vis.create_hints !== false,
           settings_proxy: vis.settings_proxy !== false,
         };
         // Keep the shared store in sync so every surface reacts immediately.
@@ -1131,6 +1134,8 @@
         tunnel_notes: vis.tunnel_notes !== false,
         tunnel_endpoint: vis.tunnel_endpoint !== false,
         tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+        tunnel_actions: vis.tunnel_actions !== false,
+        create_hints: vis.create_hints !== false,
         settings_proxy: vis.settings_proxy !== false,
       };
       moduleVis.set(settings.ui_visibility);
@@ -1301,6 +1306,15 @@
           <Icon name="settings" size={14} strokeWidth={1.75} />
           <span>{$t('settings.general')}</span>
         </button>
+        <!-- UI mode is a whole-app layout preset (sidebar, tunnel list,
+             detail, editor), so it gets a tab of its own rather than sitting
+             under General → Appearance.
+             UI 模式是影响全局的布局预设（侧栏、通道列表、详情、编辑器），
+             因此独立成 tab，不再放在 General → Appearance 之下。 -->
+        <button role="tab" aria-selected={activeTab === 'interface'} class:active={activeTab === 'interface'} on:click={() => activeTab = 'interface'}>
+          <Icon name="eye" size={14} strokeWidth={1.75} />
+          <span>{$t('settings.interface')}</span>
+        </button>
         <button role="tab" aria-selected={activeTab === 'advanced'} class:active={activeTab === 'advanced'} on:click={() => activeTab = 'advanced'}>
           <Icon name="wrench" size={14} strokeWidth={1.75} />
           <span>{$t('settings.advanced')}</span>
@@ -1345,45 +1359,6 @@
                   <span class="toggle-track"></span>
                 </label>
               </div>
-              <div class="setting-row">
-                <div class="setting-info">
-                  <label class="setting-label" for="ui-mode-select">{$t('settings.ui_mode')}</label>
-                  <p class="setting-desc">{$t('settings.ui_mode_hint')}</p>
-                </div>
-                <select id="ui-mode-select" value={settings.ui_mode} on:change={onUIModeChange}>
-                  <option value="all">{$t('settings.ui_mode_all')}</option>
-                  <option value="mini">{$t('settings.ui_mode_mini')}</option>
-                  <option value="custom">{$t('settings.ui_mode_custom')}</option>
-                </select>
-              </div>
-              {#if settings.ui_mode === 'custom'}
-                <p class="setting-desc vis-custom-hint">{$t('settings.vis_custom_hint')}</p>
-                <div class="vis-groups">
-                  <div class="vis-group">
-                    <div class="vis-group-title">{$t('settings.vis_group_sidebar')}</div>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_history} on:change={(e) => onVisChange('nav_history', e.target.checked)} /> <span>{$t('settings.vis_nav_history')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_dns_leak} on:change={(e) => onVisChange('nav_dns_leak', e.target.checked)} /> <span>{$t('settings.vis_nav_dns_leak')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_route} on:change={(e) => onVisChange('nav_route', e.target.checked)} /> <span>{$t('settings.vis_nav_route')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_log} on:change={(e) => onVisChange('nav_log', e.target.checked)} /> <span>{$t('settings.vis_nav_log')}</span></label>
-                  </div>
-                  <div class="vis-group">
-                    <div class="vis-group-title">{$t('settings.vis_group_tunnel')}</div>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_latency} on:change={(e) => onVisChange('tunnel_latency', e.target.checked)} /> <span>{$t('settings.vis_tunnel_latency')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_traffic} on:change={(e) => onVisChange('tunnel_traffic', e.target.checked)} /> <span>{$t('settings.vis_tunnel_traffic')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_notes} on:change={(e) => onVisChange('tunnel_notes', e.target.checked)} /> <span>{$t('settings.vis_tunnel_notes')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_endpoint} on:change={(e) => onVisChange('tunnel_endpoint', e.target.checked)} /> <span>{$t('settings.vis_tunnel_endpoint')}</span></label>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_hero_meta} on:change={(e) => onVisChange('tunnel_hero_meta', e.target.checked)} /> <span>{$t('settings.vis_tunnel_hero_meta')}</span></label>
-                  </div>
-                  <div class="vis-group">
-                    <div class="vis-group-title">{$t('settings.vis_group_automation')}</div>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.automation_extra} on:change={(e) => onVisChange('automation_extra', e.target.checked)} /> <span>{$t('settings.vis_automation_extra')}</span></label>
-                  </div>
-                  <div class="vis-group">
-                    <div class="vis-group-title">{$t('settings.vis_group_settings')}</div>
-                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.settings_proxy} on:change={(e) => onVisChange('settings_proxy', e.target.checked)} /> <span>{$t('settings.vis_settings_proxy')}</span></label>
-                  </div>
-                </div>
-              {/if}
             </div>
           </div>
 
@@ -1615,6 +1590,57 @@
               </div>
             </div>
             {/if}
+          </div>
+
+        {:else if activeTab === 'interface'}
+          <div class="settings-section">
+            <h4 class="section-title">{$t('settings.ui_mode')}</h4>
+            <div class="settings-card">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <p class="setting-desc">{$t('settings.ui_mode_hint')}</p>
+                </div>
+                <select id="ui-mode-select" value={settings.ui_mode} on:change={onUIModeChange} aria-label={$t('settings.ui_mode')}>
+                  <option value="all">{$t('settings.ui_mode_all')}</option>
+                  <option value="mini">{$t('settings.ui_mode_mini')}</option>
+                  <option value="custom">{$t('settings.ui_mode_custom')}</option>
+                </select>
+              </div>
+              {#if settings.ui_mode === 'custom'}
+                <p class="setting-desc vis-custom-hint">{$t('settings.vis_custom_hint')}</p>
+                <div class="vis-groups">
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_sidebar')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_history} on:change={(e) => onVisChange('nav_history', e.target.checked)} /> <span>{$t('settings.vis_nav_history')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_dns_leak} on:change={(e) => onVisChange('nav_dns_leak', e.target.checked)} /> <span>{$t('settings.vis_nav_dns_leak')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_route} on:change={(e) => onVisChange('nav_route', e.target.checked)} /> <span>{$t('settings.vis_nav_route')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.nav_log} on:change={(e) => onVisChange('nav_log', e.target.checked)} /> <span>{$t('settings.vis_nav_log')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_tunnel')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_latency} on:change={(e) => onVisChange('tunnel_latency', e.target.checked)} /> <span>{$t('settings.vis_tunnel_latency')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_traffic} on:change={(e) => onVisChange('tunnel_traffic', e.target.checked)} /> <span>{$t('settings.vis_tunnel_traffic')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_notes} on:change={(e) => onVisChange('tunnel_notes', e.target.checked)} /> <span>{$t('settings.vis_tunnel_notes')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_endpoint} on:change={(e) => onVisChange('tunnel_endpoint', e.target.checked)} /> <span>{$t('settings.vis_tunnel_endpoint')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_hero_meta} on:change={(e) => onVisChange('tunnel_hero_meta', e.target.checked)} /> <span>{$t('settings.vis_tunnel_hero_meta')}</span></label>
+                    <!-- Management buttons stay visible even in mini, so this
+                         checkbox only bites in the custom preset.
+                         管理按钮在 mini 下也保持可见，因此该复选框只在自定义
+                         预设下生效。 -->
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_actions} on:change={(e) => onVisChange('tunnel_actions', e.target.checked)} /> <span>{$t('settings.vis_tunnel_actions')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.create_hints} on:change={(e) => onVisChange('create_hints', e.target.checked)} /> <span>{$t('settings.vis_create_hints')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_automation')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.automation_extra} on:change={(e) => onVisChange('automation_extra', e.target.checked)} /> <span>{$t('settings.vis_automation_extra')}</span></label>
+                  </div>
+                  <div class="vis-group">
+                    <div class="vis-group-title">{$t('settings.vis_group_settings')}</div>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.settings_proxy} on:change={(e) => onVisChange('settings_proxy', e.target.checked)} /> <span>{$t('settings.vis_settings_proxy')}</span></label>
+                  </div>
+                </div>
+              {/if}
+            </div>
           </div>
 
         {:else if activeTab === 'advanced'}

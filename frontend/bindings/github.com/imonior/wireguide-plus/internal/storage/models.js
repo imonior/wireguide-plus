@@ -409,9 +409,13 @@ export class ModuleVisibility {
         }
         if (!("automation_extra" in $$source)) {
             /**
-             * AutomationExtra toggles the live network-matching panel and the help
-             * text inside the automation editor; the rule list and the default
-             * connect/disconnect state (the "condition settings") are always shown.
+             * AutomationExtra toggles the live network-matching panel, the help text
+             * and the automation on/off hint inside the automation editor; the rule
+             * list and the default connect/disconnect state (the "condition
+             * settings") are always shown.
+             * 
+             * AutomationExtra 控制自动化编辑器内的实时匹配面板、帮助文字与自动化开关
+             * 提示；规则列表与默认连接/断开状态（即「条件设置」）始终显示。
              * @member
              * @type {boolean}
              */
@@ -423,7 +427,14 @@ export class ModuleVisibility {
              * TunnelHeroMeta toggle the verbose detail blocks on the tunnel detail
              * surface (latency row, rx/tx + graph, notes, endpoint candidate table,
              * handshake/duration/interface meta). The config area, connect/disconnect
-             * button, tunnel state, and endpoint quick-switch stay always on.
+             * button, tunnel state, and endpoint quick-switch stay always on; the
+             * bottom management button grid is governed by TunnelActions below.
+             * 
+             * TunnelLatency / TunnelTraffic / TunnelNotes / TunnelEndpoint /
+             * TunnelHeroMeta 控制隧道详情界面上的冗详信息块（延迟行、rx/tx + 图表、
+             * 备注、endpoint 候选表、握手/时长/接口元数据）。配置区、连接/断开按钮、
+             * 隧道状态与 endpoint 快速切换始终显示；底部管理按钮栅格由下方的
+             * TunnelActions 控制。
              * @member
              * @type {boolean}
              */
@@ -456,6 +467,36 @@ export class ModuleVisibility {
              * @type {boolean}
              */
             this["tunnel_hero_meta"] = false;
+        }
+        if (!("tunnel_actions" in $$source)) {
+            /**
+             * TunnelActions toggles the bottom management button grid (edit / export
+             * / automation editor / delete) on the tunnel detail surface. Unlike the
+             * other tunnel_* flags it stays VISIBLE in the mini preset — those
+             * buttons are essential management actions, not verbose detail — so only
+             * the "custom" preset can turn them off.
+             * 
+             * TunnelActions 控制隧道详情界面底部的管理按钮栅格（编辑 / 导出 / 自动化
+             * 编辑器 / 删除）。与其他 tunnel_* 开关不同，它在 mini 预设下保持可见——
+             * 这些是必备的管理操作而非冗详信息——因此只有「自定义」预设能将其关闭。
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_actions"] = false;
+        }
+        if (!("create_hints" in $$source)) {
+            /**
+             * CreateHints toggles the explanatory hint text inside the tunnel editor
+             * dialog (egress binding, policies, scripts). Hidden in the mini preset,
+             * where only the config itself and the action buttons of features enabled
+             * in Settings remain.
+             * 
+             * CreateHints 控制隧道编辑器对话框内的说明性提示文字（出口绑定、策略、
+             * 脚本）。在 mini 预设下隐藏，只保留配置本身与设置中已开启功能的操作按钮。
+             * @member
+             * @type {boolean}
+             */
+            this["create_hints"] = false;
         }
         if (!("settings_proxy" in $$source)) {
             /**

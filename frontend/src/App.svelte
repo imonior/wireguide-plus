@@ -24,7 +24,7 @@
   import { tunnels, selectedTunnel, refreshTunnels, refreshStatus, subscribeToEvents, unsubscribe, initialLoad, connectionStatus } from './stores/tunnels.js';
   import { applyTheme, initThemeWatcher } from './stores/theme.js';
   import { startLogListener, stopLogListener } from './stores/logs.js';
-  import { compactList, uiMode, moduleVis, moduleFlags, listSort, listActiveOnTop, listPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_MAX, LIST_PANE_DEFAULT } from './stores/ui.js';
+  import { compactList, uiMode, moduleVis, moduleFlags, listSort, listActiveOnTop, listPaneWidth, effectiveListPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_DEFAULT, paneMaxForMode, paneDefaultForMode } from './stores/ui.js';
   import { errText, localizeValidation } from './lib/errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './lib/tunnel-name.js';
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
@@ -195,6 +195,8 @@
       tunnel_notes: vis.tunnel_notes !== false,
       tunnel_endpoint: vis.tunnel_endpoint !== false,
       tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+      tunnel_actions: vis.tunnel_actions !== false,
+      create_hints: vis.create_hints !== false,
       settings_proxy: vis.settings_proxy !== false,
     });
     // Apply persisted language. 'auto' means "follow OS locale" — we
@@ -680,7 +682,8 @@
   let resizeStartW = 0;
   function onResizeMove(e) {
     if (!resizing) return;
-    const w = Math.min(LIST_PANE_MAX, Math.max(LIST_PANE_MIN, resizeStartW + (e.clientX - resizeStartX)));
+    const max = paneMaxForMode($uiMode);
+    const w = Math.min(max, Math.max(LIST_PANE_MIN, resizeStartW + (e.clientX - resizeStartX)));
     listPaneWidth.set(w);
   }
   function onResizeEnd() {
@@ -696,15 +699,21 @@
     e.preventDefault();
     resizing = true;
     resizeStartX = e.clientX;
-    resizeStartW = $listPaneWidth;
+    // Start from what is actually rendered (the mini clamp applies), so the
+    // first drag pixel moves the divider even when the pane is clamped.
+    // 从实际渲染的宽度起算（mini 下存在钳制），这样即使面板被钳制，拖拽第一
+    // 像素分隔条就会移动。
+    resizeStartW = $effectiveListPaneWidth;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     window.addEventListener('mousemove', onResizeMove);
     window.addEventListener('mouseup', onResizeEnd);
   }
   function onResizeReset() {
-    // Double-click the handle to reset to the default width.
-    listPaneWidth.set(LIST_PANE_DEFAULT);
+    // Double-click the handle to reset to the active preset's default width
+    // (mini resets narrower than all/custom).
+    // 双击分隔条重置为当前预设的默认宽度（mini 的重置值比全部/自定义更窄）。
+    listPaneWidth.set(paneDefaultForMode($uiMode));
     saveListPrefs();
   }
   function onResizeKeydown(e) {
@@ -715,7 +724,7 @@
       saveListPrefs();
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      listPaneWidth.set(Math.min(LIST_PANE_MAX, $listPaneWidth + 24));
+      listPaneWidth.set(Math.min(paneMaxForMode($uiMode), $listPaneWidth + 24));
       saveListPrefs();
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -1494,7 +1503,7 @@
 
       {#if currentView === 'tunnels'}
         <div class="tunnels-view">
-          <div class="tunnel-list-pane" style="width: {$listPaneWidth}px;">
+          <div class="tunnel-list-pane" style="width: {$effectiveListPaneWidth}px;">
             <TunnelList {TunnelService} on:import={handleImportOpen} on:new={handleNewTunnelOpen} />
           </div>
           <div class="pane-resizer" class:resizing
@@ -1607,13 +1616,15 @@
                one. Keyed by the SAVED name — the meta sidecar key — so a
                rename-in-progress cannot orphan the binding. -->
           <EgressBinding name={editorOriginalName || editName} isNew={editorIsNew}
+            hideHints={!$moduleFlags.create_hints}
             on:bindchange={(e) => { pendingBinding = e.detail; }} />
           <!-- WireGuide Plus private policies. Deliberately NOT part of the
                .conf: they live in the meta sidecar so the config stays
                portable (policy principle 1/2). -->
           <TunnelPolicies name={editorOriginalName || editName} isNew={editorIsNew}
+            hideHints={!$moduleFlags.create_hints}
             on:policychange={(e) => { pendingPolicies = e.detail; }} />
-          <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} hideHints={$moduleFlags.__mode === 'mini'} />
+          <ScriptEditor bind:content={editorContent} name={editName} enabled={scriptsEnabled} hideHints={!$moduleFlags.create_hints} />
         </div>
       </div>
     </div>

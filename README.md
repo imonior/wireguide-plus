@@ -64,7 +64,7 @@ WireGuide Plus is a deeply **fixed and enhanced** fork of the open-source projec
 - **Proxy mirrors & public-IP display** — configure GitHub accelerator mirrors for update and metadata fetches, and see your current public IP and geolocation at a glance (Settings → Proxy).
 
 - **Global hotkey** — bind a system-wide shortcut (off by default) that shows, hides or focuses the main window from anywhere; press the combination you want to capture it (Settings → Global Hotkey). macOS and Windows only.
-- **GUI module visibility** — under Settings → Appearance pick **All visible** (default), **Mini** (a compact window without optional hints and secondary panels) or **Custom** (choose exactly which sidebar, tunnel, automation and proxy panels to show); the controls that drive a tunnel always stay visible.
+- **GUI module visibility** — under Settings → Interface pick **All visible** (default), **Mini** (a compact window without optional hints and secondary panels; the tunnel management buttons stay) or **Custom** (choose exactly which sidebar, tunnel, automation and proxy panels to show); the controls that drive a tunnel always stay visible.
 
 ## Fixes & enhancements over upstream wireguide
 

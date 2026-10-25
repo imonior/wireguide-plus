@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [2.9.1] - 2026-10-25
+
+### 🔧 Changed
+
+- **The UI mode picker now lives in its own "Interface" settings tab.** Interface density shapes the whole window — sidebar, tunnel list, detail and editor — so the mode selector was promoted out of General → Appearance into a top-level tab beside General and Advanced, with the visibility checkboxes moving along; Appearance now keeps only theme, language and compact list. Settings keys are unchanged, so nothing needs migrating.
+- **The endpoint list gives the address column more room.** The resolved-IP column shrank from 132 px to 104 px and the endpoint hostname column takes the difference, so long DDNS hostnames get more space before they truncate (an IPv4 address still fits in full).
+- **The tunnel list starts narrower in Mini mode.** While Mini is active the pane defaults to 200 px (capped at 220 px); the stored width is preserved and restored when you switch back to All visible or Custom, and dragging, arrow-key resizing and double-click-to-reset all respect the Mini bounds.
+- **Tunnel management buttons stay visible in Mini mode.** The edit / export / automation / delete grid at the bottom of the tunnel detail is essential management, not verbose detail, so the Mini preset no longer hides it — only the Custom preset can switch it off (new checkbox).
+- **The tunnel editor and the automation editor hide their setup hints in Mini mode.** Egress binding, tunnel policies and script hooks drop their explanatory text (error and conflict warnings still show), and the note beside the automation on/off switch now follows the same switch as the live-matching panel and the help text, leaving only the condition settings and the rule list. A new Custom checkbox ("setup hints in the tunnel editor") brings the tunnel-editor hints back.
+
 ## [2.9.0] - 2026-10-24
 
 ### ✨ Added
