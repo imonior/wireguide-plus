@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.0.0] - 2026-10-26
+
+### 💥 变更（行为）
+
+- **「空闲时保持连接」已移除——Health Check 现在是唯一的自动修复开关。** 旧设计里有两个互相重叠的开关：Health Check 监测握手时长并重连过期隧道，而独立的「空闲时保持连接」总开关控制会话恢复自愈，其上还有每隧道三态覆盖。现在二者合一：Health Check 开启时，屏幕关闭或会话锁定期间死掉的隧道会在你回来时立即修复；关闭时所有重连都由手动完成。Advanced 中的总开关与每隧道覆盖已删除，旧设置文件里的 `keep_connection_on_idle` 键会被静默忽略。
+- **PersistentKeepalive 注入不再依赖任何开关。** 配置中未设置 PersistentKeepalive 的隧道在连接时始终注入 25 秒 keepalive，让握手穿过休眠的网卡；显式值——包括显式 `0`——原样通过。配置文件本身永不改写。如果你之前关闭过「空闲时保持连接」，请注意只要 Health Check 保持开启（默认），隧道在会话恢复后仍会自动自愈。
+
+### ✨ 新增
+
+- **设置说明可折叠为紧凑的「+」开关。** Advanced 下每条设置的说明文字现在可以收起而不是隐藏：关闭新增的「提示与说明文字」开关后（Mini 模式自动如此），每条说明缩成一个 18 px 的「+」按钮，点击只展开该条说明，面板在不需要时保持紧凑。错误与警告文字永不折叠。
+- **自定义模式新增三个面向文字说明的可见性开关。** Custom 模式现在可以独立隐藏解释性文字，而不影响其描述的数据：「提示与说明文字」（设置页）、「握手间隔说明」（隧道详情 hero）与「Endpoint 说明与备注」（endpoint 候选表周围的解释文字）。endpoint 数据表本身仍由既有的开关控制。
+
 ## [2.9.1] - 2026-10-25
 
 ### 🔧 变更

@@ -14,15 +14,14 @@ import (
 	"github.com/imonior/wireguide-plus/internal/domain"
 	"github.com/imonior/wireguide-plus/internal/ipc"
 	"github.com/imonior/wireguide-plus/internal/network"
-	"github.com/imonior/wireguide-plus/internal/storage"
 	"github.com/imonior/wireguide-plus/internal/update"
 	"github.com/imonior/wireguide-plus/internal/wifi"
 )
 
 // defaultKeepaliveInterval is the PersistentKeepalive forced onto peers that
-// have none when "keep connection on idle" is enabled. 25s keeps the
-// WireGuard handshake flowing well inside the 150s stale threshold, so a
-// sleeping NIC (screen-saver / lock) no longer silently drops the tunnel.
+// left the value UNSET when they connect. 25s keeps the WireGuard handshake
+// flowing well inside the 150s stale threshold, so a sleeping NIC
+// (screen-saver / lock) no longer silently drops the tunnel.
 const defaultKeepaliveInterval = 25
 
 // registerHandlers binds every RPC method to a Helper method. Splitting the
@@ -47,7 +46,6 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodPendingAddressConflicts, h.handlePendingAddressConflicts)
 	h.server.Handle(ipc.MethodClearDNSPathEnforcement, h.handleClearDNSPathEnforcement)
 	h.server.Handle(ipc.MethodSetHealthCheck, h.handleSetHealthCheck)
-	h.server.Handle(ipc.MethodSetKeepConnectionOnIdle, h.handleSetKeepConnectionOnIdle)
 	h.server.Handle(ipc.MethodSetPreventSystemSleep, h.handleSetPreventSystemSleep)
 	h.server.Handle(ipc.MethodSetPinInterface, h.handleSetPinInterface)
 	h.server.Handle(ipc.MethodReportSSID, h.handleReportSSID)
@@ -326,16 +324,16 @@ func (h *Helper) doConnectHeld(cfg *domain.WireGuardConfig) error {
 	// ONLY for those unset peers. An EXPLICIT zero (the user chose "disable"
 	// after the save-time dialog — e.g. a server / non-NAT peer) is
 	// honoured, never overridden. Positive values pass through untouched.
-	// Decoupled from the "keep connection on idle" switch (heal-on-resume
-	// only); injected at runtime, the .conf is never rewritten here. The
-	// connect cache (activeCfgs) carries the mutated copy so a reconnect
-	// reuses it.
+	// Independent of the auto-repair switches (HealthCheck governs periodic
+	// and resume-heal reconnects); injected at runtime, the .conf is never
+	// rewritten here. The connect cache (activeCfgs) carries the mutated
+	// copy so a reconnect reuses it.
 	// 防假死 keepalive 兜底：仅当用户"留空未设"（nil）时，对端才不发任何保活包，
 	// 有状态 NAT/防火墙映射超时后下次握手无法抵达对端——隧道静默假死（即最初
 	// 「无法 handshake」的根因）。连接时只为这些未设的对端注入合理默认 25s。
 	// 显式 0（用户在保存弹窗中确认"禁用"，如服务端/非 NAT 对端）予以尊重、绝不覆盖；
-	// 正值原样通过。与「空闲保持连接」开关解耦（只管恢复时自愈），仅运行时注入，
-	// 此处不改写 .conf；连接缓存携带改动副本，重连复用之。
+	// 正值原样通过。与自动修复开关无关（HealthCheck 管周期与解锁自愈重连），
+	// 仅运行时注入，此处不改写 .conf；连接缓存携带改动副本，重连复用之。
 	for i := range cfg.Peers {
 		if cfg.Peers[i].PersistentKeepalive == nil {
 			v := defaultKeepaliveInterval
@@ -701,22 +699,6 @@ func (h *Helper) handleSetPinInterface(params json.RawMessage) (interface{}, err
 	return ipc.Empty{}, nil
 }
 
-// handleSetKeepConnectionOnIdle flips the master "keep connection on idle"
-// switch. Like handleSetHealthCheck it only broadcasts the change so a
-// running GUI reflects it (and any other client); the authoritative
-// persistence is Settings.SaveSettings, which the GUI calls on toggle. The
-// connect path and the session monitor read this setting live, so no
-// in-process state needs pushing here.
-func (h *Helper) handleSetKeepConnectionOnIdle(params json.RawMessage) (interface{}, error) {
-	var req ipc.SetKeepConnectionOnIdleRequest
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, err
-	}
-	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{KeepConnectionOnIdle: &req.Enabled})
-	slog.Info("keep connection on idle changed", "enabled", req.Enabled)
-	return ipc.Empty{}, nil
-}
-
 // handleSetPreventSystemSleep flips the "keep running in background" master
 // switch. It records the user's request and then reconciles the OS override:
 // the override is held only while a tunnel is actually connected (see
@@ -742,22 +724,6 @@ func (h *Helper) handleSetPreventSystemSleep(params json.RawMessage) (interface{
 	h.server.Broadcast(ipc.EventSettingsChanged, ipc.SettingsChangedPayload{PreventSystemSleep: &req.Enabled})
 	slog.Info("prevent system sleep changed", "enabled", req.Enabled)
 	return ipc.Empty{}, nil
-}
-
-// keepConnectionOnIdle resolves whether the named tunnel should be kept
-// alive through idle/screen-saver/lock: the master switch must be on and the
-// tunnel must not have opted out. Reads settings + meta live so a change made
-// from the GUI or CLI takes effect on the next connect without a restart.
-func (h *Helper) keepConnectionOnIdle(name string) bool {
-	settings, err := h.loadUserSettings()
-	if err != nil || settings == nil {
-		return false
-	}
-	var meta *storage.TunnelMeta
-	if h.userTunnelStore != nil {
-		meta, _ = h.userTunnelStore.LoadMeta(name)
-	}
-	return storage.KeepConnectionOnIdleEffective(settings, meta)
 }
 
 // handleReportSSID receives the current SSID from the GUI process.

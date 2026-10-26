@@ -127,15 +127,9 @@ type Monitor struct {
 	networkDetector NetworkChangeDetector
 	// sessionDetector fires on Windows session RESUME (display on / unlock)
 	// so the monitor can self-heal a tunnel that died while idle. nil on
-	// platforms without a session model.
+	// platforms without a session model. The heal itself is gated on the
+	// HealthCheck master switch plus automationDisabled below.
 	sessionDetector SessionDetector
-
-	// keepAliveFor reports whether a given tunnel should be kept alive
-	// through idle (the global "keep connection on idle" switch gated by
-	// per-tunnel override). When a session resumes and the tunnel is dead,
-	// healIfNeeded only reconnects tunnels for which this returns true.
-	// nil means "heal everything" (conservative default if unset).
-	keepAliveFor func(string) bool
 
 	// automationDisabled reports whether a given tunnel has opted out of
 	// automation. When set, the dead-connection monitor never auto-reconnects
@@ -151,13 +145,14 @@ type Monitor struct {
 	// without canceling each other.
 	retries map[string]*retryState
 
-	// healthCheckEnabled controls whether the periodic handshake age
-	// check runs in monitorLoop. Can be toggled at runtime via
+	// healthCheckEnabled is the single "auto-repair" authority: it gates
+	// both the periodic handshake age check in monitorLoop AND the
+	// session-resume heal (healIfNeeded). Can be toggled at runtime via
 	// SetHealthCheck. False at construction — the helper overrides it from
 	// persisted Settings at startup, whose default is now ON.
-	// healthCheckEnabled 控制 monitorLoop 是否运行周期性握手时长检测，可在
-	// 运行时通过 SetHealthCheck 切换。构造时为 false——helper 启动时会按
-	// 持久化设置覆盖，其默认值现已改为开启。
+	// healthCheckEnabled 是唯一的「自动修复」权威：同时管 monitorLoop 的周期性
+	// 握手时长检测与会话恢复自愈（healIfNeeded），可在运行时通过 SetHealthCheck
+	// 切换。构造时为 false——helper 启动时会按持久化设置覆盖，其默认值现已改为开启。
 	healthCheckEnabled bool
 }
 
@@ -188,22 +183,14 @@ func (m *Monitor) SetFirewallCallbacks(suspend FirewallSuspendFunc, resume Firew
 	m.fwResumeFn = resume
 }
 
-// SetHealthCheck enables or disables the periodic handshake age check.
+// SetHealthCheck enables or disables the auto-repair paths: the periodic
+// handshake age check and the session-resume heal of dead tunnels.
 // Safe to call while the monitor is running.
 func (m *Monitor) SetHealthCheck(enabled bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.healthCheckEnabled = enabled
 	slog.Info("health check toggled", "enabled", enabled)
-}
-
-// SetKeepAlivePredicate installs the "keep connection on idle" resolver used
-// by healIfNeeded on session resume. Must be called before Start(). A nil
-// predicate means "heal every dead tunnel" (conservative default).
-func (m *Monitor) SetKeepAlivePredicate(fn func(string) bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.keepAliveFor = fn
 }
 
 // SetAutomationDisabledPredicate installs the "automation disabled" resolver
@@ -897,8 +884,9 @@ func (m *Monitor) triggerLoop() {
 		case <-resumeCh:
 			// Session resumed (display on / unlock). Only heal tunnels
 			// that are actually dead — a healthy tunnel is left alone so
-			// the user doesn't see a needless reconnect blip. Respects the
-			// per-tunnel "keep connection on idle" opt-out.
+			// the user doesn't see a needless reconnect blip. Gated on the
+			// HealthCheck master switch (same authority as the periodic
+			// stale-handshake repair) and the per-tunnel automation opt-out.
 			slog.Info("session resume detected, self-healing dead tunnels")
 			m.healIfNeeded()
 		}
@@ -906,15 +894,22 @@ func (m *Monitor) triggerLoop() {
 }
 
 // healIfNeeded reconnects any tunnel that is currently dead or has a stale
-// handshake, but only when the tunnel hasn't opted out of "keep connection on
-// idle". A healthy tunnel is left untouched. Called on session resume (and is
-// a no-op on platforms without a session monitor, since resumeCh is never
-// signalled there).
+// handshake. Auto-repair is governed by ONE switch: the HealthCheck master
+// (the same authority as the periodic stale-handshake monitor) — when it is
+// off, no automatic repair happens anywhere and the user reconnects by hand.
+// A healthy tunnel is left untouched. A tunnel that opted out of automation
+// is never healed. Called on session resume (and is a no-op on platforms
+// without a session monitor, since resumeCh is never signalled there).
 func (m *Monitor) healIfNeeded() {
 	m.mu.Lock()
-	keepAlive := m.keepAliveFor
+	healthCheck := m.healthCheckEnabled
 	disabled := m.automationDisabled
 	m.mu.Unlock()
+
+	if !healthCheck {
+		slog.Info("session resume: health check disabled, not healing")
+		return
+	}
 
 	statuses := m.manager.AllStatuses()
 	for _, s := range statuses {
@@ -931,11 +926,6 @@ func (m *Monitor) healIfNeeded() {
 		// everywhere (see #2/#103).
 		if disabled != nil && disabled(name) {
 			slog.Info("session resume: tunnel automation disabled, not healing",
-				"tunnel", name)
-			continue
-		}
-		if keepAlive != nil && !keepAlive(name) {
-			slog.Info("session resume: tunnel opted out of keep-alive, not healing",
 				"tunnel", name)
 			continue
 		}

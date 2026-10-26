@@ -1631,14 +1631,6 @@ func (s *TunnelService) SetHealthCheck(enabled bool) error {
 	return s.call(ipc.MethodSetHealthCheck, ipc.SetHealthCheckRequest{Enabled: enabled}, nil)
 }
 
-// SetKeepConnectionOnIdle enables or disables the master "keep connection on
-// idle" switch (keep tunnels alive through screen-saver / display sleep /
-// session lock). Persistence is handled by Settings.SaveSettings; this call
-// only broadcasts the change so a running GUI reflects it immediately.
-func (s *TunnelService) SetKeepConnectionOnIdle(enabled bool) error {
-	return s.call(ipc.MethodSetKeepConnectionOnIdle, ipc.SetKeepConnectionOnIdleRequest{Enabled: enabled}, nil)
-}
-
 // SetPreventSystemSleep enables or disables the "keep running in background"
 // master switch (ignore screensaver / screen-off / hibernation). Persistence is
 // handled by Settings.SaveSettings; this call tells the helper to actually

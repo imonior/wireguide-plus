@@ -195,8 +195,11 @@
       tunnel_notes: vis.tunnel_notes !== false,
       tunnel_endpoint: vis.tunnel_endpoint !== false,
       tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+      tunnel_hero_note: vis.tunnel_hero_note !== false,
+      tunnel_endpoint_hints: vis.tunnel_endpoint_hints !== false,
       tunnel_actions: vis.tunnel_actions !== false,
       create_hints: vis.create_hints !== false,
+      settings_hints: vis.settings_hints !== false,
       settings_proxy: vis.settings_proxy !== false,
     });
     // Apply persisted language. 'auto' means "follow OS locale" — we

@@ -12,8 +12,6 @@ import (
 	"github.com/imonior/wireguide-plus/internal/storage"
 )
 
-func boolPtr(v bool) *bool { return &v }
-
 const sampleConf = `[Interface]
 PrivateKey = AAAA
 Address = 10.0.0.2/24
@@ -213,14 +211,13 @@ func TestSettingsZipRoundTripRestoresPolicySidecars(t *testing.T) {
 		t.Fatalf("seed source tunnel: %v", err)
 	}
 	want := storage.TunnelMeta{
-		TrafficProtect:       true,
-		DNSResolvePath:       true,
-		AutomationDisabled:   true,
-		UseAsDefaultDNS:      true,
-		Notes:                "office uplink",
-		Domains:              []string{"intranet.example.com"},
-		LatencyProbeTargets:  []string{"", "", "1.2.3.4", ""},
-		KeepConnectionOnIdle: boolPtr(false),
+		TrafficProtect:      true,
+		DNSResolvePath:      true,
+		AutomationDisabled:  true,
+		UseAsDefaultDNS:     true,
+		Notes:               "office uplink",
+		Domains:             []string{"intranet.example.com"},
+		LatencyProbeTargets: []string{"", "", "1.2.3.4", ""},
 	}
 	if err := src.tunnelStore.SaveMeta("wg-home", &want); err != nil {
 		t.Fatalf("seed source meta: %v", err)
@@ -279,9 +276,6 @@ func TestSettingsZipRoundTripRestoresPolicySidecars(t *testing.T) {
 	}
 	if strings.Join(got.ProbeTargets(), ",") != ",,1.2.3.4," {
 		t.Errorf("probe target lost: %v", got.ProbeTargets())
-	}
-	if got.KeepConnectionOnIdle == nil || *got.KeepConnectionOnIdle {
-		t.Errorf("idle override lost: %v", got.KeepConnectionOnIdle)
 	}
 
 	// Importing into a machine that ALREADY has wg-home de-duplicates the

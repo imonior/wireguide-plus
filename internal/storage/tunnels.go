@@ -471,15 +471,6 @@ type TunnelMeta struct {
 	// it is held at connect time until the user resolves it.
 	DNSResolvePath bool `json:"dns_resolve_path,omitempty"`
 
-	// KeepConnectionOnIdle is the per-tunnel override of the global
-	// "keep connection on idle" master switch (Settings.KeepConnectionOnIdle).
-	// nil = inherit the global default (ON); *false opts this tunnel out of
-	// idle keep-alive (no forced keepalive, and a dead-but-up link is left
-	// to the Layer-A freeze without self-heal); *true forces it on. Lives in
-	// the sidecar, never the .conf, so standard WireGuard/AWG clients ignore
-	// it.
-	KeepConnectionOnIdle *bool `json:"keep_connection_on_idle,omitempty"`
-
 	// AutomationDisabled exempts this tunnel from the automation engine: its
 	// rules and Default State are still stored and previewable, but the
 	// helper never connects or disconnects it on their behalf. This is the

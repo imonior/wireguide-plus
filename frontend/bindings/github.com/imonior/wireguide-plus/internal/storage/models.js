@@ -498,6 +498,52 @@ export class ModuleVisibility {
              */
             this["create_hints"] = false;
         }
+        if (!("tunnel_hero_note" in $$source)) {
+            /**
+             * TunnelHeroNote toggles the explanatory note under the tunnel hero (the
+             * handshake-interval explanation). It is deliberately separate from
+             * TunnelHeroMeta above: the meta line is data (handshake / duration /
+             * interface) while this one is prose, so the custom preset can keep one
+             * without the other.
+             * 
+             * TunnelHeroNote 控制隧道 hero 下方的说明文字（握手间隔说明）。它与上面的
+             * TunnelHeroMeta 刻意分开：meta 行是数据（握手 / 时长 / 接口），这一条是
+             * 说明文字，因此自定义预设可以只保留其中之一。
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_hero_note"] = false;
+        }
+        if (!("tunnel_endpoint_hints" in $$source)) {
+            /**
+             * TunnelEndpointHints toggles the explanatory text around the endpoint
+             * candidate table (switching-mode hint, candidate-list hint, ICMP note
+             * and the inline help toggle). Separate from TunnelEndpoint, which gates
+             * the table itself.
+             * 
+             * TunnelEndpointHints 控制 endpoint 候选表周围的说明文字（切换模式提示、
+             * 候选列表提示、ICMP 说明与内联帮助开关）。与控制表格本身的
+             * TunnelEndpoint 相互独立。
+             * @member
+             * @type {boolean}
+             */
+            this["tunnel_endpoint_hints"] = false;
+        }
+        if (!("settings_hints" in $$source)) {
+            /**
+             * SettingsHints toggles the hint / description text inside Settings. When
+             * it is off each hint collapses into a compact "+" toggle that reveals
+             * just that one line, so the compact layout stays compact until a single
+             * explanation is needed. Error and warning text is never collapsed.
+             * 
+             * SettingsHints 控制设置界面内的提示与说明文字。关闭时每条说明会收成一个
+             * 紧凑的「+」开关，点击只展开该条，从而保持紧凑布局；错误与警告文字永不
+             * 折叠。
+             * @member
+             * @type {boolean}
+             */
+            this["settings_hints"] = false;
+        }
         if (!("settings_proxy" in $$source)) {
             /**
              * SettingsProxy toggles the proxy section (accelerator mirrors + public
@@ -709,28 +755,18 @@ export class Settings {
         }
         if (!("health_check" in $$source)) {
             /**
+             * HealthCheck is the single "auto-repair" switch: when on, the helper
+             * periodically monitors handshake age, reconnects a stale tunnel, AND
+             * self-heals dead tunnels on session resume (display on / unlock).
+             * When off, no automatic repair happens anywhere — the user reconnects
+             * by hand. (Formerly "keep connection on idle" gated only the resume
+             * heal; the two overlapping switches were merged into this one, and
+             * the old settings key is silently ignored on load.)
              * periodic handshake age monitoring
              * @member
              * @type {boolean}
              */
             this["health_check"] = false;
-        }
-        if (!("keep_connection_on_idle" in $$source)) {
-            /**
-             * KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
-             * while the machine is idle — screen-saver, display sleep, session lock,
-             * or (after wake) a brief suspend. ON by default: when enabled, tunnels
-             * that left PersistentKeepalive UNSET get one forced at runtime
-             * (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
-             * instead of silently dying; a dead-but-interface-up link also freezes
-             * its uptime counter (Layer A) instead of inflating it. A tunnel may opt
-             * out via TunnelMeta.KeepConnectionOnIdle (per-tunnel override). Turning
-             * this off disables the feature for every tunnel (the per-tunnel switch
-             * is gated, exactly like DNSResolvePath).
-             * @member
-             * @type {boolean}
-             */
-            this["keep_connection_on_idle"] = false;
         }
         if (!("prevent_system_sleep" in $$source)) {
             /**
@@ -1127,38 +1163,38 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField15_0 = $$createType3;
-        const $$createField16_0 = $$createType4;
-        const $$createField25_0 = $$createType6;
+        const $$createField14_0 = $$createType3;
+        const $$createField15_0 = $$createType4;
+        const $$createField24_0 = $$createType6;
+        const $$createField25_0 = $$createType2;
         const $$createField26_0 = $$createType2;
-        const $$createField27_0 = $$createType2;
-        const $$createField30_0 = $$createType2;
+        const $$createField29_0 = $$createType2;
+        const $$createField36_0 = $$createType2;
         const $$createField37_0 = $$createType2;
-        const $$createField38_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ui_visibility" in $$parsedSource) {
-            $$parsedSource["ui_visibility"] = $$createField15_0($$parsedSource["ui_visibility"]);
+            $$parsedSource["ui_visibility"] = $$createField14_0($$parsedSource["ui_visibility"]);
         }
         if ("hotkey" in $$parsedSource) {
-            $$parsedSource["hotkey"] = $$createField16_0($$parsedSource["hotkey"]);
+            $$parsedSource["hotkey"] = $$createField15_0($$parsedSource["hotkey"]);
         }
         if ("automation" in $$parsedSource) {
-            $$parsedSource["automation"] = $$createField25_0($$parsedSource["automation"]);
+            $$parsedSource["automation"] = $$createField24_0($$parsedSource["automation"]);
         }
         if ("manual_off_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_off_tunnels"] = $$createField26_0($$parsedSource["manual_off_tunnels"]);
+            $$parsedSource["manual_off_tunnels"] = $$createField25_0($$parsedSource["manual_off_tunnels"]);
         }
         if ("manual_on_tunnels" in $$parsedSource) {
-            $$parsedSource["manual_on_tunnels"] = $$createField27_0($$parsedSource["manual_on_tunnels"]);
+            $$parsedSource["manual_on_tunnels"] = $$createField26_0($$parsedSource["manual_on_tunnels"]);
         }
         if ("proxy_mirrors" in $$parsedSource) {
-            $$parsedSource["proxy_mirrors"] = $$createField30_0($$parsedSource["proxy_mirrors"]);
+            $$parsedSource["proxy_mirrors"] = $$createField29_0($$parsedSource["proxy_mirrors"]);
         }
         if ("dns_test_public_servers" in $$parsedSource) {
-            $$parsedSource["dns_test_public_servers"] = $$createField37_0($$parsedSource["dns_test_public_servers"]);
+            $$parsedSource["dns_test_public_servers"] = $$createField36_0($$parsedSource["dns_test_public_servers"]);
         }
         if ("dns_test_public_fetched" in $$parsedSource) {
-            $$parsedSource["dns_test_public_fetched"] = $$createField38_0($$parsedSource["dns_test_public_fetched"]);
+            $$parsedSource["dns_test_public_fetched"] = $$createField37_0($$parsedSource["dns_test_public_fetched"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }

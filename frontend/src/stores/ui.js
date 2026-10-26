@@ -15,8 +15,9 @@ const MODULE_KEYS = [
   'nav_history', 'nav_dns_leak', 'nav_route', 'nav_log',
   'automation_extra',
   'tunnel_latency', 'tunnel_traffic', 'tunnel_notes', 'tunnel_endpoint',
-  'tunnel_hero_meta', 'tunnel_actions', 'create_hints',
-  'settings_proxy',
+  'tunnel_hero_meta', 'tunnel_hero_note', 'tunnel_endpoint_hints',
+  'tunnel_actions', 'create_hints',
+  'settings_hints', 'settings_proxy',
 ];
 
 // Modules the mini preset keeps VISIBLE. Everything else optional is hidden
@@ -43,8 +44,9 @@ export const moduleVis = writable({
   automation_extra: true,
   tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
   tunnel_endpoint: true, tunnel_hero_meta: true,
+  tunnel_hero_note: true, tunnel_endpoint_hints: true,
   tunnel_actions: true, create_hints: true,
-  settings_proxy: true,
+  settings_hints: true, settings_proxy: true,
 });
 
 // resolveMode normalises the stored value: "normal" (legacy) and "" both

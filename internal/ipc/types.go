@@ -56,12 +56,6 @@ type SetHealthCheckRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
-// SetKeepConnectionOnIdleRequest is the parameter for
-// Monitor.SetKeepConnectionOnIdle.
-type SetKeepConnectionOnIdleRequest struct {
-	Enabled bool `json:"enabled"`
-}
-
 // SetPreventSystemSleepRequest is the parameter for
 // Monitor.SetPreventSystemSleep.
 type SetPreventSystemSleepRequest struct {
@@ -202,11 +196,10 @@ type CriticalErrorPayload struct {
 // GUI can reflect a change made through another client (the CLI). Only
 // the field for the changed setting is non-nil.
 type SettingsChangedPayload struct {
-	HealthCheck          *bool   `json:"health_check,omitempty"`
-	KeepConnectionOnIdle *bool   `json:"keep_connection_on_idle,omitempty"`
-	PreventSystemSleep   *bool   `json:"prevent_system_sleep,omitempty"`
-	PinInterface         *bool   `json:"pin_interface,omitempty"`
-	LogLevel             *string `json:"log_level,omitempty"`
+	HealthCheck        *bool   `json:"health_check,omitempty"`
+	PreventSystemSleep *bool   `json:"prevent_system_sleep,omitempty"`
+	PinInterface       *bool   `json:"pin_interface,omitempty"`
+	LogLevel           *string `json:"log_level,omitempty"`
 	// ProxyMode / ProxyURL mirror the persisted proxy (used for update
 	// checks) so a change applied through another client — the CLI — is
 	// reflected live in the Settings UI, the same role the fields above

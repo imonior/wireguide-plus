@@ -4,6 +4,18 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.0.0] - 2026-10-26
+
+### 💥 Changed (behaviour)
+
+- **"Keep connection while idle" is gone — Health Check is now the single auto-repair switch.** The old design had two overlapping switches: Health Check monitored handshake age and reconnected stale tunnels, while a separate "keep connection while idle" master switch gated the session-resume self-heal, with a per-tunnel three-state override on top of that. The two are now one: with Health Check on, a tunnel that died while the screen was off or the session was locked is repaired as soon as you return; with it off, every reconnection is manual. The Advanced switch and the per-tunnel override are removed, and the old `keep_connection_on_idle` key in existing settings files is silently ignored.
+- **PersistentKeepalive injection no longer depends on any switch.** A tunnel whose config leaves PersistentKeepalive unset now always gets a 25-second keepalive injected at connect time, so the handshake keeps flowing through a sleeping NIC; explicit values — including an explicit `0` — pass through untouched. The config file is never rewritten. If you previously turned "keep connection while idle" off, note that tunnels will self-heal on session resume again as long as Health Check stays on (the default).
+
+### ✨ Added
+
+- **Settings hints collapse into a compact "+" toggle.** The explanatory text under each Advanced setting can now be collapsed instead of hidden: with the new "hint & description text" switch off (Mini mode does this automatically), every hint shrinks to an 18 px "+" button that expands just that one explanation, so the panel stays compact until a single line is actually needed. Error and warning text is never collapsed.
+- **Three new Custom-mode visibility switches for prose.** Custom mode can now hide explanatory text independently of the data it describes: "hint & description text" (Settings), "handshake-interval note" (the tunnel detail hero) and "endpoint hints & notes" (the explanatory text around the endpoint candidate table). The endpoint data table itself keeps its own existing switch.
+
 ## [2.9.1] - 2026-10-25
 
 ### 🔧 Changed

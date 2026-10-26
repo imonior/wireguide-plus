@@ -434,9 +434,11 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	h.monitor = reconnect.NewMonitor(manager, h.reconnectFn, h.onReconnectState, reconnect.DefaultConfig())
 	h.monitor.SetFirewallCallbacks(h.suspendFirewall, h.resumeFirewall)
 	// The session monitor (Windows) self-heals dead tunnels on display-on /
-	// unlock, but only for tunnels that haven't opted out of "keep
-	// connection on idle". Feed it the same resolver the connect path uses.
-	h.monitor.SetKeepAlivePredicate(h.keepConnectionOnIdle)
+	// unlock. It is gated on the HealthCheck master switch (read live by the
+	// monitor) plus the same "leave it alone" resolver the automation engine
+	// uses — see the comment below. No per-tunnel keep-alive predicate is
+	// installed: the former "keep connection on idle" switch was merged into
+	// HealthCheck (its old settings key is ignored on load).
 	// Feed the reconnect monitor the same "leave it alone" resolver the
 	// automation engine uses. This makes the dead-connection monitor honor a
 	// "stop automation" decision — manual stop must override every automated

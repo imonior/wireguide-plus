@@ -7,6 +7,10 @@
   import { compactList, uiMode, moduleVis, moduleFlags } from '../stores/ui.js';
   import { appSettings } from '../stores/settings.js';
   import Icon from './Icon.svelte';
+  // Hint / description lines that collapse into a "+" toggle when the
+  // settings_hints module is hidden (mini preset, or custom with that box
+  // unticked). Error text keeps its plain <p> and always shows.
+  import SettingHint from './SettingHint.svelte';
   import { modalDrag } from './actions/modal-drag.js';
 
   export let TunnelService;
@@ -191,10 +195,6 @@
     disconnect_on_quit: true,
     notify_duration_ms: DEFAULT_NOTIFY_DURATION,
     health_check: true,
-    // Backend default is true (a missing key means true); mirrored here so the
-    // toggle renders ON for a config.json written before the key existed,
-    // instead of showing an OFF the user never chose.
-    keep_connection_on_idle: true,
     // Backend default is false (opt-in): an invasive power override that
     // blocks system sleep — leave it OFF until the user chooses it.
     prevent_system_sleep: false,
@@ -213,8 +213,9 @@
       automation_extra: true,
       tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
       tunnel_endpoint: true, tunnel_hero_meta: true,
+      tunnel_hero_note: true, tunnel_endpoint_hints: true,
       tunnel_actions: true, create_hints: true,
-      settings_proxy: true,
+      settings_hints: true, settings_proxy: true,
     },
     proxy_mode: 'direct',
     proxy_url: '',
@@ -266,9 +267,6 @@
           ? Number(s.notify_duration_ms)
           : DEFAULT_NOTIFY_DURATION;
         settings.health_check = s.health_check ?? false;
-        // Backend default is true; a pre-existing config.json has no key, so
-        // `?? true` keeps the toggle ON rather than silently flipping it off.
-        settings.keep_connection_on_idle = s.keep_connection_on_idle ?? true;
         // Opt-in power override: OFF unless explicitly persisted as true.
         settings.prevent_system_sleep = s.prevent_system_sleep ?? false;
         settings.dns_resolve_path = s.dns_resolve_path ?? false;
@@ -292,8 +290,11 @@
           tunnel_notes: vis.tunnel_notes !== false,
           tunnel_endpoint: vis.tunnel_endpoint !== false,
           tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+          tunnel_hero_note: vis.tunnel_hero_note !== false,
+          tunnel_endpoint_hints: vis.tunnel_endpoint_hints !== false,
           tunnel_actions: vis.tunnel_actions !== false,
           create_hints: vis.create_hints !== false,
+          settings_hints: vis.settings_hints !== false,
           settings_proxy: vis.settings_proxy !== false,
         };
         // Keep the shared store in sync so every surface reacts immediately.
@@ -412,7 +413,6 @@
         disconnect_on_quit: settings.disconnect_on_quit,
         notify_duration_ms: settings.notify_duration_ms,
         health_check: settings.health_check,
-        keep_connection_on_idle: settings.keep_connection_on_idle,
         prevent_system_sleep: settings.prevent_system_sleep,
         dns_resolve_path: settings.dns_resolve_path,
         pin_interface: settings.pin_interface,
@@ -717,15 +717,6 @@
       domChecked: e.target.checked,
       friendlyName: $t('settings.health_check'),
       call: (v) => TunnelService.SetHealthCheck(v),
-    });
-  }
-
-  function onKeepConnectionOnIdleChange(e) {
-    applyLiveToggle({
-      stateKey: 'keep_connection_on_idle',
-      domChecked: e.target.checked,
-      friendlyName: $t('settings.keep_connection_on_idle'),
-      call: (v) => TunnelService.SetKeepConnectionOnIdle(v),
     });
   }
 
@@ -1110,7 +1101,6 @@
   function onSettingsChanged(event) {
     const p = event?.data || {};
     if (p.health_check != null) settings.health_check = p.health_check;
-    if (p.keep_connection_on_idle != null) settings.keep_connection_on_idle = p.keep_connection_on_idle;
     if (p.prevent_system_sleep != null) settings.prevent_system_sleep = p.prevent_system_sleep;
     if (p.pin_interface != null) settings.pin_interface = p.pin_interface;
     if (p.log_level != null) settings.log_level = p.log_level;
@@ -1134,8 +1124,11 @@
         tunnel_notes: vis.tunnel_notes !== false,
         tunnel_endpoint: vis.tunnel_endpoint !== false,
         tunnel_hero_meta: vis.tunnel_hero_meta !== false,
+        tunnel_hero_note: vis.tunnel_hero_note !== false,
+        tunnel_endpoint_hints: vis.tunnel_endpoint_hints !== false,
         tunnel_actions: vis.tunnel_actions !== false,
         create_hints: vis.create_hints !== false,
+        settings_hints: vis.settings_hints !== false,
         settings_proxy: vis.settings_proxy !== false,
       };
       moduleVis.set(settings.ui_visibility);
@@ -1352,7 +1345,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="compact-list">{$t('settings.compact_list')}</label>
-                  <p class="setting-desc">{$t('settings.compact_list_hint')}</p>
+                  <SettingHint>{$t('settings.compact_list_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="compact-list" type="checkbox" checked={settings.compact_list} on:change={onCompactListChange} />
@@ -1368,7 +1361,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="hotkey-enabled">{$t('settings.hotkey_enabled')}</label>
-                  <p class="setting-desc">{$t('settings.hotkey_enabled_hint')}</p>
+                  <SettingHint>{$t('settings.hotkey_enabled_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="hotkey-enabled" type="checkbox" checked={settings.hotkey.enabled} on:change={onHotkeyEnabledChange} disabled={!hotkeySupported} />
@@ -1376,15 +1369,15 @@
                 </label>
               </div>
               {#if hotkeySupported}
-                <p class="setting-desc">{$t('settings.hotkey_desc')}</p>
+                <SettingHint>{$t('settings.hotkey_desc')}</SettingHint>
                 <div class="setting-row">
                   <div class="setting-info">
                     <label class="setting-label">{$t('settings.hotkey_current')}</label>
-                    <p class="setting-desc hotkey-current">
+                    <SettingHint cls="hotkey-current">
                       {#if capturing}{$t('settings.hotkey_capturing')}
                       {:else if displayCombo(settings.hotkey.combo)}{displayCombo(settings.hotkey.combo)}
                       {:else}{$t('settings.hotkey_none')}{/if}
-                    </p>
+                    </SettingHint>
                   </div>
                   <div class="hotkey-actions">
                     {#if capturing}
@@ -1397,7 +1390,7 @@
                 </div>
                 {#if hotkeyError}<p class="setting-desc hotkey-error">{hotkeyError}</p>{/if}
               {:else}
-                <p class="setting-desc">{$t('settings.hotkey_unsupported')}</p>
+                <SettingHint>{$t('settings.hotkey_unsupported')}</SettingHint>
               {/if}
             </div>
           </div>
@@ -1408,7 +1401,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="auto-start">{$t('settings.auto_start')}</label>
-                  <p class="setting-desc">{$t('settings.auto_start_hint')}</p>
+                  <SettingHint>{$t('settings.auto_start_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="auto-start" type="checkbox" checked={settings.auto_start} on:change={onAutoStartChange} />
@@ -1418,7 +1411,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="start-minimized">{$t('settings.start_minimized')}</label>
-                  <p class="setting-desc">{$t('settings.start_minimized_hint')}</p>
+                  <SettingHint>{$t('settings.start_minimized_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="start-minimized" type="checkbox" checked={settings.start_minimized} on:change={onStartMinimizedChange} />
@@ -1428,7 +1421,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="disconnect-on-quit">{$t('settings.disconnect_on_quit')}</label>
-                  <p class="setting-desc">{$t('settings.disconnect_on_quit_hint')}</p>
+                  <SettingHint>{$t('settings.disconnect_on_quit_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="disconnect-on-quit" type="checkbox" checked={settings.disconnect_on_quit} on:change={onDisconnectOnQuitChange} />
@@ -1438,7 +1431,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="notify-duration">{$t('settings.notify_duration')}</label>
-                  <p class="setting-desc">{$t('settings.notify_duration_hint')}</p>
+                  <SettingHint>{$t('settings.notify_duration_hint')}</SettingHint>
                 </div>
                 <!-- value= + on:change (NOT bind:value) + numeric option
                      values — exactly the pattern used by the log-retention
@@ -1463,7 +1456,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="auto-update">{$t('settings.auto_update_check')}</label>
-                  <p class="setting-desc">{$t('settings.auto_update_check_hint')}</p>
+                  <SettingHint>{$t('settings.auto_update_check_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="auto-update" type="checkbox" bind:checked={settings.auto_update_check} on:change={scheduleSave} />
@@ -1482,7 +1475,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label">{$t('settings.public_ip')}</label>
-                  <p class="setting-desc">
+                  <SettingHint>
                     {#if !settings.public_ip_lookup}
                       {$t('settings.public_ip_disabled')}
                     {:else if publicIP.loading && !publicIP.info}
@@ -1498,7 +1491,7 @@
                     {:else if publicIP.info || publicIP.errAt}
                       {$t('settings.public_ip_failed', { err: publicIP.info?.error || publicIP.error || '' })}
                     {/if}
-                  </p>
+                  </SettingHint>
                 </div>
                 <div class="public-ip-value">{publicIP.info?.ok ? publicIP.info.ip : '—'}</div>
               </div>
@@ -1517,7 +1510,7 @@
                 <div class="path-list-head">
                   <div class="setting-info">
                     <h5 class="path-subhead">{$t('settings.proxy_path')}</h5>
-                    <p class="setting-desc">{$t('settings.proxy_path_hint')}</p>
+                    <SettingHint>{$t('settings.proxy_path_hint')}</SettingHint>
                   </div>
                   <button class="btn-secondary path-retest" type="button"
                     on:click={runPathScan} disabled={pathScan.running}>
@@ -1559,7 +1552,7 @@
                       {/if}
                     </label>
                   {/each}
-                  <p class="setting-desc path-speed-hint">{$t('settings.proxy_speed_hint')}</p>
+                  <SettingHint cls="path-speed-hint">{$t('settings.proxy_speed_hint')}</SettingHint>
                   <div class="path-add">
                     <span class="path-add-label">{$t('settings.proxy_manual')}</span>
                     <input type="text" bind:value={newProxy}
@@ -1584,8 +1577,8 @@
                   {#if pathErr}
                     <p class="setting-desc path-err">{pathErr}</p>
                   {/if}
-                  <p class="setting-desc">{$t('settings.proxy_path_proxy_hint')}</p>
-                  <p class="setting-desc">{$t('settings.proxy_mirror_hint')}</p>
+                  <SettingHint>{$t('settings.proxy_path_proxy_hint')}</SettingHint>
+                  <SettingHint>{$t('settings.proxy_mirror_hint')}</SettingHint>
                 </div>
               </div>
             </div>
@@ -1598,7 +1591,7 @@
             <div class="settings-card">
               <div class="setting-row">
                 <div class="setting-info">
-                  <p class="setting-desc">{$t('settings.ui_mode_hint')}</p>
+                  <SettingHint>{$t('settings.ui_mode_hint')}</SettingHint>
                 </div>
                 <select id="ui-mode-select" value={settings.ui_mode} on:change={onUIModeChange} aria-label={$t('settings.ui_mode')}>
                   <option value="all">{$t('settings.ui_mode_all')}</option>
@@ -1607,7 +1600,7 @@
                 </select>
               </div>
               {#if settings.ui_mode === 'custom'}
-                <p class="setting-desc vis-custom-hint">{$t('settings.vis_custom_hint')}</p>
+                <SettingHint cls="vis-custom-hint">{$t('settings.vis_custom_hint')}</SettingHint>
                 <div class="vis-groups">
                   <div class="vis-group">
                     <div class="vis-group-title">{$t('settings.vis_group_sidebar')}</div>
@@ -1622,7 +1615,16 @@
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_traffic} on:change={(e) => onVisChange('tunnel_traffic', e.target.checked)} /> <span>{$t('settings.vis_tunnel_traffic')}</span></label>
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_notes} on:change={(e) => onVisChange('tunnel_notes', e.target.checked)} /> <span>{$t('settings.vis_tunnel_notes')}</span></label>
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_endpoint} on:change={(e) => onVisChange('tunnel_endpoint', e.target.checked)} /> <span>{$t('settings.vis_tunnel_endpoint')}</span></label>
+                    <!-- The two hint entries below are deliberately separate
+                         from the blocks they belong to: the endpoint table and
+                         the hero meta line are data, these are prose, so the
+                         custom preset can keep the data and drop the text.
+                         下面两条提示项与它们所属的块刻意分开：endpoint 表格与
+                         hero meta 行是数据，这两条是说明文字，因此自定义预设
+                         可以保留数据而去掉文字。 -->
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_endpoint_hints} on:change={(e) => onVisChange('tunnel_endpoint_hints', e.target.checked)} /> <span>{$t('settings.vis_tunnel_endpoint_hints')}</span></label>
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_hero_meta} on:change={(e) => onVisChange('tunnel_hero_meta', e.target.checked)} /> <span>{$t('settings.vis_tunnel_hero_meta')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.tunnel_hero_note} on:change={(e) => onVisChange('tunnel_hero_note', e.target.checked)} /> <span>{$t('settings.vis_tunnel_hero_note')}</span></label>
                     <!-- Management buttons stay visible even in mini, so this
                          checkbox only bites in the custom preset.
                          管理按钮在 mini 下也保持可见，因此该复选框只在自定义
@@ -1636,6 +1638,12 @@
                   </div>
                   <div class="vis-group">
                     <div class="vis-group-title">{$t('settings.vis_group_settings')}</div>
+                    <!-- Unticking this collapses every settings hint into a "+"
+                         toggle instead of removing it, so the text is still one
+                         click away.
+                         取消勾选此项会把每条设置说明收成一个「+」开关，而不是
+                         直接删除，文字仍然只需点击一次即可看到。 -->
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.settings_hints} on:change={(e) => onVisChange('settings_hints', e.target.checked)} /> <span>{$t('settings.vis_settings_hints')}</span></label>
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.settings_proxy} on:change={(e) => onVisChange('settings_proxy', e.target.checked)} /> <span>{$t('settings.vis_settings_proxy')}</span></label>
                   </div>
                 </div>
@@ -1650,7 +1658,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="wg-scripts">{$t('settings.wg_scripts')}</label>
-                  <p class="setting-desc">{$t('settings.wg_scripts_hint')}</p>
+                  <SettingHint>{$t('settings.wg_scripts_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="wg-scripts" type="checkbox" checked={settings.enable_wg_scripts} on:change={onWgScriptsChange} />
@@ -1670,7 +1678,7 @@
                 <div class="setting-row">
                   <div class="setting-info">
                     <span class="setting-label">{$t('settings.scripts_folder')}</span>
-                    <p class="setting-desc">{$t('settings.scripts_folder_hint')}</p>
+                    <SettingHint>{$t('settings.scripts_folder_hint')}</SettingHint>
                   </div>
                   <button class="folder-btn" on:click={() => openFolder('scripts')} disabled={openingFolder}>
                     {$t('settings.open_folder')}
@@ -1686,7 +1694,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="awg-support">{$t('settings.enable_awg')}</label>
-                  <p class="setting-desc">{$t('settings.enable_awg_hint')}</p>
+                  <SettingHint>{$t('settings.enable_awg_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="awg-support" type="checkbox" checked={settings.enable_awg} on:change={onAwgChange} />
@@ -1714,7 +1722,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="health-check">{$t('settings.health_check')}</label>
-                  <p class="setting-desc">{$t('settings.health_check_hint')}</p>
+                  <SettingHint>{$t('settings.health_check_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="health-check" type="checkbox"
@@ -1725,20 +1733,8 @@
               </div>
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
-                  <label class="setting-label" for="keep-connection-on-idle">{$t('settings.keep_connection_on_idle')}</label>
-                  <p class="setting-desc">{$t('settings.keep_connection_on_idle_hint')}</p>
-                </div>
-                <label class="toggle">
-                  <input id="keep-connection-on-idle" type="checkbox"
-                    checked={settings.keep_connection_on_idle}
-                    on:change={onKeepConnectionOnIdleChange} />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="setting-row setting-row--toggle">
-                <div class="setting-info">
                   <label class="setting-label" for="prevent-system-sleep">{$t('settings.prevent_system_sleep')}</label>
-                  <p class="setting-desc">{$t('settings.prevent_system_sleep_hint')}</p>
+                  <SettingHint>{$t('settings.prevent_system_sleep_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="prevent-system-sleep" type="checkbox"
@@ -1750,7 +1746,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="pin-interface">{$t('settings.pin_interface')}</label>
-                  <p class="setting-desc">{$t('settings.pin_interface_hint')}</p>
+                  <SettingHint>{$t('settings.pin_interface_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="pin-interface" type="checkbox"
@@ -1768,7 +1764,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="endpoint-failover-master">{$t('settings.endpoint_failover_master')}</label>
-                  <p class="setting-desc">{$t('settings.endpoint_failover_hint')}</p>
+                  <SettingHint>{$t('settings.endpoint_failover_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="endpoint-failover-master" type="checkbox"
@@ -1780,7 +1776,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="endpoint-threshold">{$t('settings.endpoint_threshold')}</label>
-                  <p class="setting-desc">{$t('settings.endpoint_threshold_hint')}</p>
+                  <SettingHint>{$t('settings.endpoint_threshold_hint')}</SettingHint>
                 </div>
                 <input id="endpoint-threshold" type="number" min="1" step="1"
                   disabled={!settings.endpoint_failover_enabled}
@@ -1789,7 +1785,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="endpoint-margin">{$t('settings.endpoint_margin')}</label>
-                  <p class="setting-desc">{$t('settings.endpoint_margin_hint')}</p>
+                  <SettingHint>{$t('settings.endpoint_margin_hint')}</SettingHint>
                 </div>
                 <input id="endpoint-margin" type="number" min="1" step="1"
                   disabled={!settings.endpoint_failover_enabled}
@@ -1798,7 +1794,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="endpoint-sustained">{$t('settings.endpoint_sustained')}</label>
-                  <p class="setting-desc">{$t('settings.endpoint_sustained_hint')}</p>
+                  <SettingHint>{$t('settings.endpoint_sustained_hint')}</SettingHint>
                 </div>
                 <input id="endpoint-sustained" type="number" min="0" step="1"
                   disabled={!settings.endpoint_failover_enabled}
@@ -1807,7 +1803,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="endpoint-cooldown">{$t('settings.endpoint_cooldown')}</label>
-                  <p class="setting-desc">{$t('settings.endpoint_cooldown_hint')}</p>
+                  <SettingHint>{$t('settings.endpoint_cooldown_hint')}</SettingHint>
                 </div>
                 <input id="endpoint-cooldown" type="number" min="240" step="1"
                   disabled={!settings.endpoint_failover_enabled}
@@ -1822,7 +1818,7 @@
               <div class="setting-row setting-row--toggle">
                 <div class="setting-info">
                   <label class="setting-label" for="dns-resolve-path">{$t('settings.dns_resolve_path')}</label>
-                  <p class="setting-desc">{$t('settings.dns_resolve_path_hint')}</p>
+                  <SettingHint>{$t('settings.dns_resolve_path_hint')}</SettingHint>
                 </div>
                 <label class="toggle">
                   <input id="dns-resolve-path" type="checkbox"
@@ -1850,7 +1846,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="log-retention">{$t('settings.log_retention')}</label>
-                  <p class="setting-desc">{$t('settings.log_retention_hint')}</p>
+                  <SettingHint>{$t('settings.log_retention_hint')}</SettingHint>
                 </div>
                 <select id="log-retention" value={settings.log_retention_days} on:change={onLogRetentionChange}>
                   {#each VALID_LOG_RETENTION_DAYS as days}
@@ -1861,7 +1857,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <label class="setting-label" for="history-retention">{$t('settings.history_retention')}</label>
-                  <p class="setting-desc">{$t('settings.history_retention_hint')}</p>
+                  <SettingHint>{$t('settings.history_retention_hint')}</SettingHint>
                 </div>
                 <select id="history-retention" value={settings.history_retention_days} on:change={onHistoryRetentionChange}>
                   <option value="0">{$t('settings.history_retention_off')}</option>
@@ -1875,7 +1871,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <span class="setting-label">{$t('settings.log_folder')}</span>
-                  <p class="setting-desc">{$t('settings.log_folder_hint')}</p>
+                  <SettingHint>{$t('settings.log_folder_hint')}</SettingHint>
                 </div>
                 <button class="folder-btn" on:click={() => openFolder('logs')} disabled={openingFolder}>
                   {$t('settings.open_folder')}
@@ -1884,7 +1880,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <span class="setting-label">{$t('settings.tunnels_folder')}</span>
-                  <p class="setting-desc">{$t('settings.tunnels_folder_hint')}</p>
+                  <SettingHint>{$t('settings.tunnels_folder_hint')}</SettingHint>
                 </div>
                 <button class="folder-btn" on:click={() => openFolder('tunnels')} disabled={openingFolder}>
                   {$t('settings.open_folder')}
@@ -1902,7 +1898,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <span class="setting-label">{$t('settings.export_settings')}</span>
-                  <p class="setting-desc">{$t('settings.export_settings_hint')}</p>
+                  <SettingHint>{$t('settings.export_settings_hint')}</SettingHint>
                 </div>
                 <button class="folder-btn" on:click={exportSettings} disabled={backupBusy}>
                   {$t('settings.export_settings')}
@@ -1911,7 +1907,7 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <span class="setting-label">{$t('settings.import_settings')}</span>
-                  <p class="setting-desc">{$t('settings.import_settings_hint')}</p>
+                  <SettingHint>{$t('settings.import_settings_hint')}</SettingHint>
                 </div>
                 <button class="folder-btn" on:click={importSettings} disabled={backupBusy}>
                   {$t('settings.import_settings')}
@@ -2265,7 +2261,12 @@
   .btn-ghost {
     background: transparent;
   }
-  .hotkey-current {
+  /* Carried-over hint classes: their <p> is now rendered inside
+     SettingHint, so these rules have to escape this file's style scoping
+     to keep matching it.
+     沿用下来的提示 class：它们的 <p> 现在渲染在 SettingHint 内部，因此这些
+     规则必须跳出本文件的样式作用域才能继续匹配。 */
+  :global(.hotkey-current) {
     color: var(--text-primary);
     font-weight: 500;
     margin-top: 2px;
@@ -2276,7 +2277,9 @@
   }
 
   /* ---- Module-visibility custom panel ---- */
-  .vis-custom-hint {
+  /* Same reason as .hotkey-current above — rendered by SettingHint.
+     与上面 .hotkey-current 同理——由 SettingHint 渲染。 */
+  :global(.vis-custom-hint) {
     margin: 2px 0 8px;
   }
   .vis-groups {

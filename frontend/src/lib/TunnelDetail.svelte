@@ -1280,9 +1280,11 @@
           {/if}
         </div>
         {#if isConnected && status.state === 'connected'}
-          <!-- Detailed handshake / duration / interface lines and the
-               interval note are verbose "提示" detail — hidden unless the
-               tunnel_hero_meta module is visible. -->
+          <!-- The meta line below is DATA (handshake / duration / interface);
+               the note under it is PROSE. They are separate modules so the
+               custom preset can keep the numbers and drop the explanation.
+               下面的 meta 行是「数据」（握手 / 时长 / 接口），其下方的说明是
+               「文字」。两者是独立模块，自定义预设可保留数字而去掉说明。 -->
           {#if $moduleFlags.tunnel_hero_meta}
           <div class="hero-meta">
             <span class="meta-item" class:meta-stale={isStale}>
@@ -1303,6 +1305,8 @@
               </span>
             {/if}
           </div>
+          {/if}
+          {#if $moduleFlags.tunnel_hero_note}
           <p class="hero-note">{$t('tunnel.handshake_interval_note')}</p>
           {/if}
         {/if}
@@ -1616,10 +1620,18 @@
           {#if !endpointMasterEnabled}
             <span class="endpoint-master-off">{$t('tunnel.endpoint_auto_switch_disabled')}</span>
           {:else if epSettings.switch_mode === 'dynamic'}
-            <span class="endpoint-mode-hint">{$t('tunnel.endpoint_mode_dynamic_hint')}</span>
+            <!-- Prose, not data: gated separately from the table so the
+                 custom preset can keep the candidate list without the text.
+                 说明文字而非数据：与表格分开控制，自定义预设可保留候选列表
+                 而去掉文字。 -->
+            {#if $moduleFlags.tunnel_endpoint_hints}
+              <span class="endpoint-mode-hint">{$t('tunnel.endpoint_mode_dynamic_hint')}</span>
+            {/if}
           {/if}
         </div>
-        <p class="endpoint-candidates-hint">{$t('tunnel.endpoint_candidates_hint')}</p>
+        {#if $moduleFlags.tunnel_endpoint_hints}
+          <p class="endpoint-candidates-hint">{$t('tunnel.endpoint_candidates_hint')}</p>
+        {/if}
         {#if endpointPolicy}
           <p class="endpoint-effective">{$t('tunnel.endpoint_effective_values', endpointPolicy)}</p>
         {/if}
@@ -1690,7 +1702,9 @@
         </div>
         <!-- ICMP caveat: an unreachable row does NOT mean the tunnel is dead.
              Many servers drop ping; the switch decision uses handshakes. -->
-        <p class="endpoint-icmp-note">{$t('tunnel.endpoint_icmp_note')}</p>
+        {#if $moduleFlags.tunnel_endpoint_hints}
+          <p class="endpoint-icmp-note">{$t('tunnel.endpoint_icmp_note')}</p>
+        {/if}
         <!-- Adding a candidate is a management action — hidden in mini
              mode, where only the existing list + quick-switch stay. -->
         {#if !mini}

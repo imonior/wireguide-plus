@@ -72,6 +72,34 @@ type ModuleVisibility struct {
 	// CreateHints 控制隧道编辑器对话框内的说明性提示文字（出口绑定、策略、
 	// 脚本）。在 mini 预设下隐藏，只保留配置本身与设置中已开启功能的操作按钮。
 	CreateHints bool `json:"create_hints"`
+	// TunnelHeroNote toggles the explanatory note under the tunnel hero (the
+	// handshake-interval explanation). It is deliberately separate from
+	// TunnelHeroMeta above: the meta line is data (handshake / duration /
+	// interface) while this one is prose, so the custom preset can keep one
+	// without the other.
+	//
+	// TunnelHeroNote 控制隧道 hero 下方的说明文字（握手间隔说明）。它与上面的
+	// TunnelHeroMeta 刻意分开：meta 行是数据（握手 / 时长 / 接口），这一条是
+	// 说明文字，因此自定义预设可以只保留其中之一。
+	TunnelHeroNote bool `json:"tunnel_hero_note"`
+	// TunnelEndpointHints toggles the explanatory text around the endpoint
+	// candidate table (switching-mode hint, candidate-list hint, ICMP note
+	// and the inline help toggle). Separate from TunnelEndpoint, which gates
+	// the table itself.
+	//
+	// TunnelEndpointHints 控制 endpoint 候选表周围的说明文字（切换模式提示、
+	// 候选列表提示、ICMP 说明与内联帮助开关）。与控制表格本身的
+	// TunnelEndpoint 相互独立。
+	TunnelEndpointHints bool `json:"tunnel_endpoint_hints"`
+	// SettingsHints toggles the hint / description text inside Settings. When
+	// it is off each hint collapses into a compact "+" toggle that reveals
+	// just that one line, so the compact layout stays compact until a single
+	// explanation is needed. Error and warning text is never collapsed.
+	//
+	// SettingsHints 控制设置界面内的提示与说明文字。关闭时每条说明会收成一个
+	// 紧凑的「+」开关，点击只展开该条，从而保持紧凑布局；错误与警告文字永不
+	// 折叠。
+	SettingsHints bool `json:"settings_hints"`
 	// SettingsProxy toggles the proxy section (accelerator mirrors + public
 	// IP) inside Settings.
 	SettingsProxy bool `json:"settings_proxy"`
@@ -81,19 +109,22 @@ type ModuleVisibility struct {
 // DefaultModuleVisibility 返回所有开关均为开启的 ModuleVisibility。
 func DefaultModuleVisibility() ModuleVisibility {
 	return ModuleVisibility{
-		NavHistory:      true,
-		NavDnsLeak:      true,
-		NavRoute:        true,
-		NavLog:          true,
-		AutomationExtra: true,
-		TunnelLatency:   true,
-		TunnelTraffic:   true,
-		TunnelNotes:     true,
-		TunnelEndpoint:  true,
-		TunnelHeroMeta:  true,
-		TunnelActions:   true,
-		CreateHints:     true,
-		SettingsProxy:   true,
+		NavHistory:          true,
+		NavDnsLeak:          true,
+		NavRoute:            true,
+		NavLog:              true,
+		AutomationExtra:     true,
+		TunnelLatency:       true,
+		TunnelTraffic:       true,
+		TunnelNotes:         true,
+		TunnelEndpoint:      true,
+		TunnelHeroMeta:      true,
+		TunnelHeroNote:      true,
+		TunnelEndpointHints: true,
+		TunnelActions:       true,
+		CreateHints:         true,
+		SettingsHints:       true,
+		SettingsProxy:       true,
 	}
 }
 
@@ -162,18 +193,14 @@ type Settings struct {
 	// is reported. Turning it on only reveals the per-tunnel switches —
 	// each tunnel still has to opt in on its own.
 	DNSResolvePath bool `json:"dns_resolve_path"`
-	HealthCheck    bool `json:"health_check"` // periodic handshake age monitoring
-	// KeepConnectionOnIdle is the MASTER switch for keeping a tunnel alive
-	// while the machine is idle — screen-saver, display sleep, session lock,
-	// or (after wake) a brief suspend. ON by default: when enabled, tunnels
-	// that left PersistentKeepalive UNSET get one forced at runtime
-	// (25s) so the WireGuard handshake keeps flowing through a sleeping NIC
-	// instead of silently dying; a dead-but-interface-up link also freezes
-	// its uptime counter (Layer A) instead of inflating it. A tunnel may opt
-	// out via TunnelMeta.KeepConnectionOnIdle (per-tunnel override). Turning
-	// this off disables the feature for every tunnel (the per-tunnel switch
-	// is gated, exactly like DNSResolvePath).
-	KeepConnectionOnIdle bool `json:"keep_connection_on_idle"`
+	// HealthCheck is the single "auto-repair" switch: when on, the helper
+	// periodically monitors handshake age, reconnects a stale tunnel, AND
+	// self-heals dead tunnels on session resume (display on / unlock).
+	// When off, no automatic repair happens anywhere — the user reconnects
+	// by hand. (Formerly "keep connection on idle" gated only the resume
+	// heal; the two overlapping switches were merged into this one, and
+	// the old settings key is silently ignored on load.)
+	HealthCheck bool `json:"health_check"` // periodic handshake age monitoring
 	// PreventSystemSleep is the master switch for "keep running in the
 	// background": while on, WireGuide Plus asks the OS not to sleep, suspend,
 	// or turn the display off (ignore screensaver / screen-off / hibernation).
@@ -549,8 +576,7 @@ func DefaultSettings() *Settings {
 		ModuleVisibility:     DefaultModuleVisibility(), // every module on; used when UIMode == "custom"
 		Hotkey:               DefaultHotkeyConfig(),     // global toggle-window hotkey, opt-in (disabled)
 		NotifyDurationMs:     10000,                     // 10s default notification duration
-		HealthCheck:          true,                      // periodic handshake monitoring + auto-reconnect ON by default / 周期性握手监测与自动重连默认开启
-		KeepConnectionOnIdle: true,                      // keep tunnels alive through idle/screen-saver/lock by default
+		HealthCheck:          true,                      // periodic handshake monitoring + auto-reconnect (stale + on resume) ON by default / 周期性握手监测与自动重连（含解锁自愈）默认开启
 		PreventSystemSleep:   false,                     // opt-in: an invasive power override, leave it to the user
 		PinInterface:         false,                     // off by default — enable for dual-network setups
 		EnableAWG:            true,                      // AWG support is on by default
@@ -710,35 +736,11 @@ func (s *Settings) DisconnectOnQuitEnabled() bool {
 	return *s.DisconnectOnQuit
 }
 
-// KeepConnectionOnIdleEnabled reports whether the master switch is on. When
-// off the per-tunnel override is inert and the feature does not exist (no
-// forced keepalive, no idle self-heal) — same gating model as DNSResolvePath.
-func (s *Settings) KeepConnectionOnIdleEnabled() bool {
-	return s != nil && s.KeepConnectionOnIdle
-}
-
 // PreventSystemSleepEnabled reports whether the "keep running in background"
 // master switch is on. When off the OS is free to sleep/suspend/turn the
 // display off as usual; when on the helper inhibits those transitions.
 func (s *Settings) PreventSystemSleepEnabled() bool {
 	return s != nil && s.PreventSystemSleep
-}
-
-// KeepConnectionOnIdleEffective resolves the per-tunnel "keep connection on
-// idle" decision: the master switch must be on, and a tunnel may opt out (or
-// in) via its meta override. A nil override inherits the global ON default,
-// so both existing tunnels and newly-added ones keep their connection alive
-// through idle/screen-saver/lock by default — exactly the behaviour the user
-// asked for. A non-nil *false opts the tunnel out; *true opts it in
-// explicitly even if (hypothetically) the global default were ever flipped.
-func KeepConnectionOnIdleEffective(settings *Settings, meta *TunnelMeta) bool {
-	if !settings.KeepConnectionOnIdleEnabled() {
-		return false
-	}
-	if meta != nil && meta.KeepConnectionOnIdle != nil {
-		return *meta.KeepConnectionOnIdle
-	}
-	return true
 }
 
 // SettingsStore manages the app settings JSON file.

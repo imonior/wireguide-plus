@@ -6,12 +6,12 @@ package reconnect
 // that died while the machine was idle (the NIC went to sleep, the upstream
 // dropped) so the user doesn't come back to a silently-dead VPN.
 //
-// Display-OFF / lock events are intentionally NOT surfaced: with "keep
-// connection on idle" enabled the tunnel's PersistentKeepalive keeps the
-// handshake flowing through a sleeping NIC, and even without it the honest
-// uptime counter (Layer A) just freezes — there is nothing to "do" on idle,
-// and tearing the tunnel down on screen-saver would be exactly the wrong
-// behaviour.
+// Display-OFF / lock events are intentionally NOT surfaced: there is nothing
+// to "do" on idle — tearing the tunnel down on screen-saver would be exactly
+// the wrong behaviour, and keeping the handshake flowing through a sleeping
+// NIC is the job of the PersistentKeepalive injected unconditionally at
+// connect time. When the session resumes, healIfNeeded repairs tunnels that
+// died while idle (gated on the HealthCheck master switch).
 type SessionDetector interface {
 	Start()
 	Stop()

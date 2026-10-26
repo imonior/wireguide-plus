@@ -977,6 +977,9 @@ func TestAutomationDisabled_SkipsHealOnResume(t *testing.T) {
 
 	mon, mgr, _ := newTestMonitor(testConfig(), reconnectFn)
 	mon.SetAutomationDisabledPredicate(func(n string) bool { return n == "TS451D" })
+	// The resume heal is gated on the HealthCheck master switch (the merged
+	// auto-repair authority) — turn it on for this test.
+	mon.SetHealthCheck(true)
 	mon.mu.Lock()
 	mon.running = true
 	mon.mu.Unlock()

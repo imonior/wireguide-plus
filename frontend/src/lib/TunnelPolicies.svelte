@@ -41,12 +41,6 @@
   let useAsDefaultDNS = false;
   let dnsResolvePath = false;
   let dnsPathEnabled = false; // master switch from Settings
-  // Per-tunnel "keep connection on idle" override. Tri-state: 'inherit'
-  // (nil — follow the global switch), 'on' (force keepalive for this
-  // tunnel) or 'off' (opt this tunnel out). Mirrors the global master gate
-  // the same way the DNS resolve path row does.
-  let keepIdleMode = 'inherit';
-  let keepIdleEnabled = false; // master switch from Settings
   let conflictWarn = '';
   let loadErr = '';
   let lastLoadedName = '';
@@ -71,7 +65,6 @@
         domainsText = '';
         useAsDefaultDNS = false;
         dnsResolvePath = false;
-        keepIdleMode = 'inherit';
         await loadMaster();
         return;
       }
@@ -80,9 +73,6 @@
       domainsText = (p?.domains || []).join(', ');
       useAsDefaultDNS = !!p?.use_as_default_dns;
       dnsResolvePath = !!p?.dns_resolve_path;
-      // undefined / null => inherit the global switch.
-      const k = p?.keep_connection_on_idle;
-      keepIdleMode = k === true ? 'on' : k === false ? 'off' : 'inherit';
       await loadMaster();
       loadErr = '';
     } catch (e) {
@@ -101,8 +91,6 @@
         .filter(Boolean),
       use_as_default_dns: useAsDefaultDNS,
       dns_resolve_path: dnsResolvePath,
-      // null => inherit (field omitted on the wire); true/false => override.
-      keep_connection_on_idle: keepIdleMode === 'inherit' ? null : keepIdleMode === 'on',
       // automation_disabled is owned by the Automation editor + hero toggle,
       // not this panel. SetTunnelPolicies replaces the whole sidecar, so
       // persist() refreshes this field from the live sidecar before saving to
@@ -118,10 +106,8 @@
     try {
       const s = await TunnelService.GetSettings();
       dnsPathEnabled = !!s?.dns_resolve_path;
-      keepIdleEnabled = !!s?.keep_connection_on_idle;
     } catch {
       dnsPathEnabled = false;
-      keepIdleEnabled = false;
     }
   }
 
@@ -209,18 +195,6 @@
     {/if}
   {/if}
 
-  {#if keepIdleEnabled}
-    <div class="field">
-      <span class="label-text">{$t('policy.keep_connection_on_idle')}</span>
-      <select class="select-input" bind:value={keepIdleMode} on:change={persist}>
-        <option value="inherit">{$t('policy.keep_idle_inherit')}</option>
-        <option value="on">{$t('policy.keep_idle_on')}</option>
-        <option value="off">{$t('policy.keep_idle_off')}</option>
-      </select>
-      {#if !hideHints}<p class="desc">{$t('policy.keep_connection_on_idle_hint')}</p>{/if}
-    </div>
-  {/if}
-
   {#if loadErr}
     <p class="err">{loadErr}</p>
   {/if}
@@ -262,8 +236,7 @@
     line-height: 1.45;
   }
   .field { margin-top: 6px; }
-  .text-input,
-  .select-input {
+  .text-input {
     width: 100%;
     margin-top: 4px;
     padding: 6px 8px;

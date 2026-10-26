@@ -162,7 +162,6 @@ const (
 	// runtime state, not config). A no-op when nothing is enforcing.
 	MethodClearDNSPathEnforcement = "Tunnel.ClearDNSPathEnforcement"
 	MethodSetHealthCheck          = "Monitor.SetHealthCheck"
-	MethodSetKeepConnectionOnIdle = "Monitor.SetKeepConnectionOnIdle"
 	MethodSetPreventSystemSleep   = "Monitor.SetPreventSystemSleep"
 	MethodSetPinInterface         = "Network.SetPinInterface"
 	MethodReportSSID              = "Wifi.ReportSSID"
