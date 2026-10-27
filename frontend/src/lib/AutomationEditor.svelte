@@ -1043,13 +1043,13 @@
             <span class="am-exclude-text">{$t('policy.automation_disabled')}</span>
             <span class="am-exclude-state">{automationDisabled ? $t('tunnel.automation_off') : $t('tunnel.automation_on')}</span>
           </label>
-          <!-- The on/off hint is part of the automation_extra family: mini
-               keeps only the condition settings and the rule list, so the
-               hint goes with the help text and live matching; custom can
-               bring it back with the same checkbox.
-               开关提示隶属于 automation_extra 一族：mini 只保留条件设置与
-               规则列表，该提示与帮助文字、实时匹配一同隐藏；自定义下可用同一
-               复选框唤回。 -->
+          <!-- The on/off hint belongs to the automation_extra family (the
+               prose switch): mini keeps only the condition settings and the
+               rule list, so the hint goes with the help text; the
+               live-matching DATA panel has its own automation_live switch.
+               开关提示隶属于 automation_extra 一族（说明文字开关）：mini 只
+               保留条件设置与规则列表，该提示与帮助文字一同隐藏；实时匹配数据
+               面板有独立的 automation_live 开关。 -->
           {#if $moduleFlags.automation_extra}
           <p class="am-exclude-hint">{$t('policy.automation_disabled_hint')}</p>
           {/if}
@@ -1061,7 +1061,7 @@
              刻意不在此处放隧道状态行：连接状态与控制来源是隧道级事实，详情页与通道列表
              已经显示过；在规则编辑器里再复述一遍，容易被误读成「属于正在编辑的规则」。 -->
       </div>
-      {#if $moduleFlags.automation_extra}
+      {#if $moduleFlags.automation_live}
       <details class="am-info" open>
         <summary>{$t('automation.live_matching')}</summary>
         <SSIDPermissionBanner {TunnelService} />

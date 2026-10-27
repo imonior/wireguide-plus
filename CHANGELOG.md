@@ -4,6 +4,20 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.1.0] - 2026-10-27
+
+### ✨ Added
+
+- **The automation module's visibility switch is now two switches.** Custom mode splits the old "Automation help & live matching" checkbox into "Automation help & hints" — the explanatory prose (the help details and the automation on/off hint) — and "Live matching info" — the data panel (current network facts, per-rule match counts, the live decision strip) — so the prose and the data can be shown independently. Both default to on, mini keeps hiding both, and existing settings carry over unchanged.
+
+### 🔧 Changed
+
+- **The endpoint candidate table squeezes its two identifier columns together.** The resolved-IP column is no longer a fixed 104 px: endpoint and resolved IP are both elastic now, so a narrow window compresses them together instead of starving the hostname column alone. The latency column shrank from 76 px to 58 px — exactly what its digits and widest header need — while the status badge, the switch button and the remove button keep their sizes at any width.
+
+### 🐛 Fixed
+
+- **macOS: a double-click on the menu-bar icon now brings the main window to the very front.** The window used to appear behind the frontmost window of the previously active app (a "second layer"): the double-click is consumed by our own event monitor, so the activation request did not ride on a user event the system itself dispatched, and recent macOS silently drops such requests. The window is now ordered to the front regardless of activation state before the app activates — the visual result is deterministic topmost, without a permanent float (working in another app simply brings that app forward, since the window's level never changes).
+
 ## [3.0.0] - 2026-10-26
 
 ### 💥 Changed (behaviour)

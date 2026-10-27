@@ -409,13 +409,15 @@ export class ModuleVisibility {
         }
         if (!("automation_extra" in $$source)) {
             /**
-             * AutomationExtra toggles the live network-matching panel, the help text
-             * and the automation on/off hint inside the automation editor; the rule
+             * AutomationExtra toggles the explanatory prose inside the automation
+             * editor — the help details and the automation on/off hint. The rule
              * list and the default connect/disconnect state (the "condition
-             * settings") are always shown.
+             * settings") are always shown. The live-matching panel has its own
+             * switch (AutomationLive below).
              * 
-             * AutomationExtra 控制自动化编辑器内的实时匹配面板、帮助文字与自动化开关
-             * 提示；规则列表与默认连接/断开状态（即「条件设置」）始终显示。
+             * AutomationExtra 控制自动化编辑器内的说明性文字——帮助折叠块与自动化开关
+             * 提示。规则列表与默认连接/断开状态（即「条件设置」）始终显示。实时匹配
+             * 面板有独立开关（见下方 AutomationLive）。
              * @member
              * @type {boolean}
              */
@@ -497,6 +499,24 @@ export class ModuleVisibility {
              * @type {boolean}
              */
             this["create_hints"] = false;
+        }
+        if (!("automation_live" in $$source)) {
+            /**
+             * AutomationLive toggles the live-matching panel inside the automation
+             * editor — the data view (current network facts, per-rule match counts,
+             * the live decision strip). Deliberately separate from AutomationExtra:
+             * the extra switch covers explanatory prose while this one covers a
+             * functional panel, so the custom preset can keep the data and drop the
+             * prose (or the reverse).
+             * 
+             * AutomationLive 控制自动化编辑器内的实时匹配面板——数据视图（当前网络
+             * 事实、每条规则的匹配计数、实时决策条）。刻意与 AutomationExtra 分开：
+             * 后者管的是说明性文字，这一条管的是功能面板，因此自定义预设可以保留
+             * 数据、去掉文字（反之亦然）。
+             * @member
+             * @type {boolean}
+             */
+            this["automation_live"] = false;
         }
         if (!("tunnel_hero_note" in $$source)) {
             /**

@@ -18,6 +18,43 @@ void dockShowAndActivate() {
 	});
 }
 
+// dockOrderMainFront finds the main (titled) WebviewWindow and orders it to
+// the very front of the global window list, THEN activates the app.
+// orderFrontRegardless is the load-bearing call: activation alone is
+// unreliable for an app that lives as a status-bar (Accessory) process —
+// recent macOS can silently drop an activation request that does not ride
+// on a user event the system itself dispatched to the app, and our
+// double-click detector consumes the click in an NSEvent monitor before the
+// system ever sees it. The dropped activation leaves the freshly shown
+// window BEHIND the previously frontmost app's window (the reported
+// "second layer"). Ordering the window front regardless of activation state
+// makes the visual result deterministic: the window is topmost, and once
+// the user works elsewhere that other app simply comes forward — no
+// permanent float, because the window's level never changes. The trailing
+// activate (when honoured) only adds keyboard focus on top of the
+// already-front window.
+//
+// dockOrderMainFront 在全局窗口列表中找到主窗口（带标题栏的
+// WebviewWindow），先将其排到最前，再激活应用。orderFrontRegardless 是关键
+// 一手：对常驻状态栏（Accessory）进程的应用，单独激活并不可靠——较新的
+// macOS 会静默丢弃不带系统自有用户事件的激活请求，而我们的双击检测器在
+// NSEvent 监视器里就把点击消费掉了，系统根本看不到。被丢弃的激活会让新显示
+// 的窗口排在前一个前台应用窗口之后（即「第二层」现象）。无论激活成败都强制
+// 置前，视觉结果就是确定的：窗口在最顶层；用户去操作其他软件时对方自然回到
+// 前面——窗口层级从未改变，因此不是常驻置顶。尾部的激活（若被采纳）只是给
+// 已经在最前的窗口补上键盘焦点。
+void dockOrderMainFront() {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		for (NSWindow *win in [NSApp windows]) {
+			if (![[win className] hasPrefix:@"WebviewWindow"]) continue;
+			if (!([win styleMask] & NSWindowStyleMaskTitled)) continue;
+			[win orderFrontRegardless];
+			[NSApp activateIgnoringOtherApps:YES];
+			return;
+		}
+	});
+}
+
 // popupFloatAsync queues one configure attempt on the main thread and reports
 // (via the atomic flag) whether the previous attempt matched. Async rather
 // than dispatch_sync: a sync round-trip can stall indefinitely while a tray
@@ -272,7 +309,7 @@ func showDock() {
 			}
 			dockWindow.Show()
 			dockWindow.Focus()
-			C.dockShowAndActivate()
+			C.dockOrderMainFront()
 
 			// Check if the window actually became visible. Info level:
 			// this loop is the story behind "main window flashes and is

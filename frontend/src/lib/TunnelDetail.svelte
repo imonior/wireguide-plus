@@ -2549,26 +2549,32 @@
   /* Six shared columns: endpoint, resolved IP, latency, status, switch,
      remove. Grid (not flex) so every row lines up on the same edges; with
      flex the resolved-IP and latency values drifted by endpoint length and
-     the columns became unreadable down the list. The endpoint column is the
-     only elastic one — hostnames vary wildly — and it is `minmax(0, 1fr)`,
-     NOT a fixed floor, so the whole grid always fills exactly the card's
-     width and never overflows it. The added switch and remove columns are
-     absorbed by the elastic endpoint column, keeping the total width equal
-     to the four-column layout above and below this list (no misalignment).
+     the columns became unreadable down the list. The two leading identifier
+     columns are BOTH elastic (`minmax(0, 1.2fr)` for hostnames, which vary
+     wildly, and `minmax(0, 1fr)` for resolved IPs) so a narrow window
+     squeezes them together instead of starving the hostname column alone —
+     resolved IPs are capped only by the same elastic squeeze, never by a
+     fixed floor. The tail columns stay fixed at what their content needs:
+     latency ("999 ms" digits + the widest header, 58px), the usage badge
+     (84px), the switch button (88px) and the remove button (20px), so those
+     controls keep their size no matter how narrow the pane gets. The whole
+     grid always fills exactly the card's width and never overflows it.
      Long DDNS names are handled by `text-overflow: ellipsis` plus a `title`
      tooltip (added in v2.8.5), so no minimum width is needed for them.
 
      六个共享列：endpoint、解析 IP、延迟、状态、切换、删除。用 grid 而非
      flex，保证每行对齐到同一列边；用 flex 时解析 IP 与延迟会因 endpoint
-     长度漂移，列表向下读时各列对不齐。endpoint 列是唯一弹性列（主机名长度
-     差异极大），且为 `minmax(0, 1fr)` 而非固定下限，因此整个网格始终精确
-     填满卡片宽度、绝不溢出。新增的切换列与删除列由弹性 endpoint 列吸收，
-     使总宽度与上下方四列布局一致（不会出现宽度不齐）。长 DDNS 名由
-     `text-overflow: ellipsis` + `title` 悬浮提示（v2.8.5 新增）处理，无需
-     为其预留最小宽度。 */
+     长度漂移，列表向下读时各列对不齐。前两列标识列都是弹性列（主机名长度
+     差异极大，用 `minmax(0, 1.2fr)`；解析 IP 用 `minmax(0, 1fr)`），因此
+     窗口变窄时两列同步压缩，而不是只把主机名列挤没——解析 IP 只受同一弹性
+     压缩约束，没有固定下限。尾部各列固定为内容实际所需宽度：延迟（"999 ms"
+     数字加最宽表头，58px）、使用状态徽章（84px）、切换按钮（88px）、删除
+     按钮（20px），无论面板多窄这些控件都不变形。整个网格始终精确填满卡片
+     宽度、绝不溢出。长 DDNS 名由 `text-overflow: ellipsis` + `title` 悬浮
+     提示（v2.8.5 新增）处理，无需为其预留最小宽度。 */
   .endpoint-candidate {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 104px 76px 84px 88px 20px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 58px 84px 88px 20px;
     align-items: center;
     gap: 8px;
     padding: 4px 6px;

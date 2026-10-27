@@ -29,13 +29,15 @@ type ModuleVisibility struct {
 	NavDnsLeak bool `json:"nav_dns_leak"`
 	NavRoute   bool `json:"nav_route"`
 	NavLog     bool `json:"nav_log"`
-	// AutomationExtra toggles the live network-matching panel, the help text
-	// and the automation on/off hint inside the automation editor; the rule
+	// AutomationExtra toggles the explanatory prose inside the automation
+	// editor — the help details and the automation on/off hint. The rule
 	// list and the default connect/disconnect state (the "condition
-	// settings") are always shown.
+	// settings") are always shown. The live-matching panel has its own
+	// switch (AutomationLive below).
 	//
-	// AutomationExtra 控制自动化编辑器内的实时匹配面板、帮助文字与自动化开关
-	// 提示；规则列表与默认连接/断开状态（即「条件设置」）始终显示。
+	// AutomationExtra 控制自动化编辑器内的说明性文字——帮助折叠块与自动化开关
+	// 提示。规则列表与默认连接/断开状态（即「条件设置」）始终显示。实时匹配
+	// 面板有独立开关（见下方 AutomationLive）。
 	AutomationExtra bool `json:"automation_extra"`
 	// TunnelLatency / TunnelTraffic / TunnelNotes / TunnelEndpoint /
 	// TunnelHeroMeta toggle the verbose detail blocks on the tunnel detail
@@ -72,6 +74,18 @@ type ModuleVisibility struct {
 	// CreateHints 控制隧道编辑器对话框内的说明性提示文字（出口绑定、策略、
 	// 脚本）。在 mini 预设下隐藏，只保留配置本身与设置中已开启功能的操作按钮。
 	CreateHints bool `json:"create_hints"`
+	// AutomationLive toggles the live-matching panel inside the automation
+	// editor — the data view (current network facts, per-rule match counts,
+	// the live decision strip). Deliberately separate from AutomationExtra:
+	// the extra switch covers explanatory prose while this one covers a
+	// functional panel, so the custom preset can keep the data and drop the
+	// prose (or the reverse).
+	//
+	// AutomationLive 控制自动化编辑器内的实时匹配面板——数据视图（当前网络
+	// 事实、每条规则的匹配计数、实时决策条）。刻意与 AutomationExtra 分开：
+	// 后者管的是说明性文字，这一条管的是功能面板，因此自定义预设可以保留
+	// 数据、去掉文字（反之亦然）。
+	AutomationLive bool `json:"automation_live"`
 	// TunnelHeroNote toggles the explanatory note under the tunnel hero (the
 	// handshake-interval explanation). It is deliberately separate from
 	// TunnelHeroMeta above: the meta line is data (handshake / duration /
@@ -114,6 +128,7 @@ func DefaultModuleVisibility() ModuleVisibility {
 		NavRoute:            true,
 		NavLog:              true,
 		AutomationExtra:     true,
+		AutomationLive:      true,
 		TunnelLatency:       true,
 		TunnelTraffic:       true,
 		TunnelNotes:         true,

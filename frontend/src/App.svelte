@@ -190,6 +190,7 @@
       nav_route: vis.nav_route !== false,
       nav_log: vis.nav_log !== false,
       automation_extra: vis.automation_extra !== false,
+      automation_live: vis.automation_live !== false,
       tunnel_latency: vis.tunnel_latency !== false,
       tunnel_traffic: vis.tunnel_traffic !== false,
       tunnel_notes: vis.tunnel_notes !== false,

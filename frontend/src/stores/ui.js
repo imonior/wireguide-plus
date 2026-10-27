@@ -13,7 +13,7 @@ export const compactList = writable(false);
 // visible boolean based on the active UIMode.
 const MODULE_KEYS = [
   'nav_history', 'nav_dns_leak', 'nav_route', 'nav_log',
-  'automation_extra',
+  'automation_extra', 'automation_live',
   'tunnel_latency', 'tunnel_traffic', 'tunnel_notes', 'tunnel_endpoint',
   'tunnel_hero_meta', 'tunnel_hero_note', 'tunnel_endpoint_hints',
   'tunnel_actions', 'create_hints',
@@ -41,7 +41,7 @@ export const uiMode = writable('all');
 // used only when uiMode == "custom". Every entry defaults to true.
 export const moduleVis = writable({
   nav_history: true, nav_dns_leak: true, nav_route: true, nav_log: true,
-  automation_extra: true,
+  automation_extra: true, automation_live: true,
   tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
   tunnel_endpoint: true, tunnel_hero_meta: true,
   tunnel_hero_note: true, tunnel_endpoint_hints: true,

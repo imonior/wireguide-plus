@@ -210,7 +210,7 @@
     // Per-module visibility map, used when ui_mode == "custom".
     ui_visibility: {
       nav_history: true, nav_dns_leak: true, nav_route: true, nav_log: true,
-      automation_extra: true,
+      automation_extra: true, automation_live: true,
       tunnel_latency: true, tunnel_traffic: true, tunnel_notes: true,
       tunnel_endpoint: true, tunnel_hero_meta: true,
       tunnel_hero_note: true, tunnel_endpoint_hints: true,
@@ -285,6 +285,7 @@
           nav_route: vis.nav_route !== false,
           nav_log: vis.nav_log !== false,
           automation_extra: vis.automation_extra !== false,
+          automation_live: vis.automation_live !== false,
           tunnel_latency: vis.tunnel_latency !== false,
           tunnel_traffic: vis.tunnel_traffic !== false,
           tunnel_notes: vis.tunnel_notes !== false,
@@ -1119,6 +1120,7 @@
         nav_route: vis.nav_route !== false,
         nav_log: vis.nav_log !== false,
         automation_extra: vis.automation_extra !== false,
+        automation_live: vis.automation_live !== false,
         tunnel_latency: vis.tunnel_latency !== false,
         tunnel_traffic: vis.tunnel_traffic !== false,
         tunnel_notes: vis.tunnel_notes !== false,
@@ -1635,6 +1637,7 @@
                   <div class="vis-group">
                     <div class="vis-group-title">{$t('settings.vis_group_automation')}</div>
                     <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.automation_extra} on:change={(e) => onVisChange('automation_extra', e.target.checked)} /> <span>{$t('settings.vis_automation_extra')}</span></label>
+                    <label class="vis-check"><input type="checkbox" checked={settings.ui_visibility.automation_live} on:change={(e) => onVisChange('automation_live', e.target.checked)} /> <span>{$t('settings.vis_automation_live')}</span></label>
                   </div>
                   <div class="vis-group">
                     <div class="vis-group-title">{$t('settings.vis_group_settings')}</div>
