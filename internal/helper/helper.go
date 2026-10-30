@@ -252,6 +252,14 @@ type Helper struct {
 	// can connect tunnels that aren't already in activeCfgs — i.e.
 	// the user has never opened them via the GUI in this session.
 	userTunnelStore *storage.TunnelStore
+	// userTunnelsDir is the tunnels directory the GUI uses (derived from the
+	// owner uid, same path as userTunnelStore). Kept separately so the
+	// ownership-repair handler can chown it back to the desktop user without
+	// exposing the store's internals.
+	// userTunnelsDir 是 GUI 所用的隧道目录（由 owner uid 推导，与
+	// userTunnelStore 同一路径）。单独保存，让归属修复处理函数可以把它
+	// chown 回桌面用户，而无需暴露 store 内部。
+	userTunnelsDir string
 	// settingsStore reads the same settings.json the GUI writes. The
 	// endpoint-failover tuning (master switch, thresholds, cooldown) is read
 	// here on each reconnect so a settings change takes effect on the next
@@ -375,8 +383,19 @@ func Run(addr string, ownerUID int, ownerSID, dataDir, logsDir string) error {
 	// empty and the wifi-rules helper-side path stays a no-op.
 	if appSupport, err := deriveUserAppSupport(ownerUID); err == nil && appSupport != "" {
 		h.userAppSupport = appSupport
-		h.userTunnelStore = storage.NewTunnelStore(filepath.Join(appSupport, "tunnels"))
+		h.userTunnelsDir = filepath.Join(appSupport, "tunnels")
+		h.userTunnelStore = storage.NewTunnelStore(h.userTunnelsDir)
 		h.settingsStore = storage.NewSettingsStore(appSupport)
+		// Repair tunnel-file ownership at startup: saves written by an
+		// earlier helper version could be root-owned (the GUI then can't
+		// read them and the tunnels vanish from its list). Best-effort —
+		// a failure only delays the repair to the GUI's explicit request.
+		// 启动时修复隧道文件属主：更早版本 helper 写出的文件可能是 root
+		// 属主（GUI 读不了，隧道从列表消失）。尽力而为——失败只会把修复
+		// 推迟到 GUI 显式请求时。
+		if err := repairTunnelsDir(h.userTunnelsDir, ownerUID); err != nil {
+			slog.Warn("tunnel ownership repair at startup failed", "dir", h.userTunnelsDir, "error", err)
+		}
 	}
 
 	// Create/repair the user-owned log dir BEFORE the daily handler first

@@ -76,6 +76,11 @@ func (s *TunnelStore) Save(cfg *config.WireGuardConfig) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	// Hand the file back to the directory's owner so a save written by the
+	// root helper stays readable by the unprivileged GUI (and vice versa).
+	// 归还文件属主给目录属主，保证 root helper 写出的文件对未提权的 GUI
+	// 依然可读（反之亦然）。
+	chownToDirOwner(path, s.dir)
 
 	// Stamp the creation time for a brand-new tunnel (best-effort — the
 	// .conf is already durably written; a meta hiccup must not fail the
@@ -801,5 +806,9 @@ func (s *TunnelStore) saveMetaLocked(name string, meta *TunnelMeta) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	// Same ownership hand-back as Save: a root-written sidecar must stay
+	// readable by the GUI.
+	// 与 Save 相同的属主归还：root 写出的 sidecar 必须对 GUI 保持可读。
+	chownToDirOwner(dst, s.dir)
 	return nil
 }

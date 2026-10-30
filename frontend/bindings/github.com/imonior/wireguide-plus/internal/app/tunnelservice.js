@@ -669,6 +669,22 @@ export function InitHotkey() {
 }
 
 /**
+ * ListLogFiles returns the daily log files currently in the log directory,
+ * newest first. Both the GUI ("wireguideplus-...") and the helper
+ * ("helper-...") write there, so both appear in the dropdown.
+ * 
+ * ListLogFiles 返回日志目录中当前存在的按天滚动日志文件，最新在前。GUI
+ * （"wireguideplus-..."）与 helper（"helper-..."）都写在这里，下拉里两者
+ * 都会出现。
+ * @returns {$CancellablePromise<$models.LogFileMeta[]>}
+ */
+export function ListLogFiles() {
+    return $Call.ByID(3559953806).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType39($result);
+    }));
+}
+
+/**
  * ListPhysicalInterfaces enumerates candidate egress interfaces for the
  * per-tunnel binding dropdown. Platform implementations live in
  * interface_ops_windows.go / interface_ops_linux.go / interface_ops_other.go.
@@ -676,7 +692,7 @@ export function InitHotkey() {
  */
 export function ListPhysicalInterfaces() {
     return $Call.ByID(682080878).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType39($result);
+        return $$createType41($result);
     }));
 }
 
@@ -694,7 +710,7 @@ export function ListPhysicalInterfaces() {
  */
 export function ListTunnels() {
     return $Call.ByID(3947652446).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType42($result);
     }));
 }
 
@@ -709,7 +725,7 @@ export function ListTunnels() {
  */
 export function ListTunnelsLocal() {
     return $Call.ByID(2483441253).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType42($result);
     }));
 }
 
@@ -739,7 +755,7 @@ export function LogFrontend(message) {
  */
 export function MeasureEndpointCandidates(name) {
     return $Call.ByID(1642477622, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType42($result);
+        return $$createType44($result);
     }));
 }
 
@@ -752,7 +768,7 @@ export function MeasureEndpointCandidates(name) {
  */
 export function MigrateLegacyData(opts) {
     return $Call.ByID(929862043, opts).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType44($result);
+        return $$createType46($result);
     }));
 }
 
@@ -816,7 +832,7 @@ export function OpenURL(url) {
  */
 export function PendingAddressConflicts() {
     return $Call.ByID(3872522765).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType46($result);
+        return $$createType48($result);
     }));
 }
 
@@ -837,7 +853,7 @@ export function PendingAddressConflicts() {
  */
 export function PolicyReport(name) {
     return $Call.ByID(1901060591, name).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType47($result);
+        return $$createType49($result);
     }));
 }
 
@@ -848,7 +864,7 @@ export function PolicyReport(name) {
  */
 export function PolicyReportAll() {
     return $Call.ByID(3331289786).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType47($result);
+        return $$createType49($result);
     }));
 }
 
@@ -860,6 +876,24 @@ export function PolicyReportAll() {
  */
 export function ReadFile(path) {
     return $Call.ByID(1829837485, path);
+}
+
+/**
+ * ReadLogFile returns the tail of one log file from the log directory, split
+ * into lines. Only plain filenames inside the log directory are accepted
+ * (see logFileNameRe). Files larger than logFileTailBytes are tailed and
+ * flagged Truncated.
+ * 
+ * ReadLogFile 返回日志目录中某个日志文件的尾部内容并按行切开。只接受日志
+ * 目录下的纯文件名（见 logFileNameRe）。超过 logFileTailBytes 的文件只取
+ * 末尾，并标记 Truncated。
+ * @param {string} name
+ * @returns {$CancellablePromise<$models.LogFileContent>}
+ */
+export function ReadLogFile(name) {
+    return $Call.ByID(4058200269, name).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType50($result);
+    }));
 }
 
 /**
@@ -926,7 +960,7 @@ export function ReconcileHistoryFromStatus(activeNames, handshakeMap, rxByTunnel
  */
 export function RefreshPublicDNSServers() {
     return $Call.ByID(1555797038).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType49($result);
+        return $$createType52($result);
     }));
 }
 
@@ -981,7 +1015,7 @@ export function ResolveDNSPathConflict(tunnel, action) {
  */
 export function ResolveScriptRef(command) {
     return $Call.ByID(2964749063, command).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType51($result);
+        return $$createType54($result);
     }));
 }
 
@@ -1011,7 +1045,7 @@ export function ResumeAutoConnect(tunnel) {
  */
 export function RunDNSLeakTest() {
     return $Call.ByID(3765798544).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType53($result);
+        return $$createType56($result);
     }));
 }
 
@@ -1438,7 +1472,7 @@ export function SystemProxy() {
  */
 export function TestMirrorConnectivity(prefixes) {
     return $Call.ByID(1083645311, prefixes).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType55($result);
+        return $$createType58($result);
     }));
 }
 
@@ -1476,7 +1510,7 @@ export function TestMirrorConnectivity(prefixes) {
  */
 export function TestProxy(mode, rawURL) {
     return $Call.ByID(353168149, mode, rawURL).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType56($result);
+        return $$createType59($result);
     }));
 }
 
@@ -1502,7 +1536,7 @@ export function TestProxy(mode, rawURL) {
  */
 export function TestUpdatePaths(specs) {
     return $Call.ByID(3481429742, specs).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType58($result);
+        return $$createType61($result);
     }));
 }
 
@@ -1599,24 +1633,27 @@ const $$createType34 = $models.SettingsImportResult.createFrom;
 const $$createType35 = $Create.Nullable($$createType34);
 const $$createType36 = $models.ZipImportResult.createFrom;
 const $$createType37 = $Create.Array($$createType36);
-const $$createType38 = $models.PhysicalInterface.createFrom;
+const $$createType38 = $models.LogFileMeta.createFrom;
 const $$createType39 = $Create.Array($$createType38);
-const $$createType40 = $Create.Array($$createType32);
-const $$createType41 = endpoint$0.Measurement.createFrom;
-const $$createType42 = $Create.Array($$createType41);
-const $$createType43 = storage$0.MigrateResult.createFrom;
-const $$createType44 = $Create.Nullable($$createType43);
-const $$createType45 = ipc$0.AddressConflictPayload.createFrom;
-const $$createType46 = $Create.Array($$createType45);
-const $$createType47 = policy$0.Report.createFrom;
-const $$createType48 = $models.PublicDNSRefresh.createFrom;
-const $$createType49 = $Create.Nullable($$createType48);
-const $$createType50 = $models.ScriptRef.createFrom;
-const $$createType51 = $Create.Nullable($$createType50);
-const $$createType52 = $models.DNSLeakResult.createFrom;
-const $$createType53 = $Create.Nullable($$createType52);
-const $$createType54 = $models.MirrorTestRow.createFrom;
-const $$createType55 = $Create.Array($$createType54);
-const $$createType56 = $models.TestProxyResult.createFrom;
-const $$createType57 = $models.UpdatePathResult.createFrom;
+const $$createType40 = $models.PhysicalInterface.createFrom;
+const $$createType41 = $Create.Array($$createType40);
+const $$createType42 = $Create.Array($$createType32);
+const $$createType43 = endpoint$0.Measurement.createFrom;
+const $$createType44 = $Create.Array($$createType43);
+const $$createType45 = storage$0.MigrateResult.createFrom;
+const $$createType46 = $Create.Nullable($$createType45);
+const $$createType47 = ipc$0.AddressConflictPayload.createFrom;
+const $$createType48 = $Create.Array($$createType47);
+const $$createType49 = policy$0.Report.createFrom;
+const $$createType50 = $models.LogFileContent.createFrom;
+const $$createType51 = $models.PublicDNSRefresh.createFrom;
+const $$createType52 = $Create.Nullable($$createType51);
+const $$createType53 = $models.ScriptRef.createFrom;
+const $$createType54 = $Create.Nullable($$createType53);
+const $$createType55 = $models.DNSLeakResult.createFrom;
+const $$createType56 = $Create.Nullable($$createType55);
+const $$createType57 = $models.MirrorTestRow.createFrom;
 const $$createType58 = $Create.Array($$createType57);
+const $$createType59 = $models.TestProxyResult.createFrom;
+const $$createType60 = $models.UpdatePathResult.createFrom;
+const $$createType61 = $Create.Array($$createType60);

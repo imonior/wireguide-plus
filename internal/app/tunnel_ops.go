@@ -34,7 +34,21 @@ func (s *TunnelService) ListTunnelsLocal() ([]TunnelInfo, error) {
 	for _, name := range names {
 		cfg, meta, err := s.tunnelStore.LoadWithMeta(name)
 		if err != nil {
-			slog.Warn("skipping broken tunnel config", "name", name, "error", err)
+			// Keep the tunnel in the list instead of dropping it: a config
+			// that fails to parse here is still a real file on disk, and the
+			// helper may even have its interface up — dropping it would turn a
+			// live tunnel into an invisible "ghost" that the UI counts as
+			// active yet never shows in the list.
+			slog.Warn("broken tunnel config kept in list", "name", name, "error", err)
+			// A permission error means the file was left owned by root by
+			// the privileged helper — ask it to repair ownership so the
+			// next refresh can read the tunnel again.
+			// 权限错误说明文件被特权 helper 留成了 root 属主——请求它修复
+			// 属主，让下一次刷新能重新读到该隧道。
+			if isPermissionLoadError(err) {
+				s.requestTunnelOwnershipRepair()
+			}
+			result = append(result, TunnelInfo{Name: name, LoadError: err.Error()})
 			continue
 		}
 		endpoint := ""
@@ -63,6 +77,7 @@ func (s *TunnelService) ListTunnelsLocal() ([]TunnelInfo, error) {
 			Notes:               notes,
 			LatencyProbeTargets: probeTargets,
 			Protocol:            cfg.Protocol,
+			Address:             cfg.Interface.Address,
 			CreatedAtUnix:       created,
 			LastUsedUnix:        lastUsed[name],
 		})
@@ -336,7 +351,21 @@ func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 	for _, name := range names {
 		cfg, meta, err := s.tunnelStore.LoadWithMeta(name)
 		if err != nil {
-			slog.Warn("skipping broken tunnel config", "name", name, "error", err)
+			// Keep the tunnel in the list instead of dropping it: a config
+			// that fails to parse here is still a real file on disk, and the
+			// helper may even have its interface up — dropping it would turn a
+			// live tunnel into an invisible "ghost" that the UI counts as
+			// active yet never shows in the list.
+			slog.Warn("broken tunnel config kept in list", "name", name, "error", err)
+			// A permission error means the file was left owned by root by
+			// the privileged helper — ask it to repair ownership so the
+			// next refresh can read the tunnel again.
+			// 权限错误说明文件被特权 helper 留成了 root 属主——请求它修复
+			// 属主，让下一次刷新能重新读到该隧道。
+			if isPermissionLoadError(err) {
+				s.requestTunnelOwnershipRepair()
+			}
+			result = append(result, TunnelInfo{Name: name, LoadError: err.Error()})
 			continue
 		}
 		endpoint := ""
@@ -366,6 +395,7 @@ func (s *TunnelService) ListTunnels() ([]TunnelInfo, error) {
 			Notes:               notes,
 			LatencyProbeTargets: probeTargets,
 			Protocol:            cfg.Protocol,
+			Address:             cfg.Interface.Address,
 			CreatedAtUnix:       created,
 			LastUsedUnix:        lastUsed[name],
 		})

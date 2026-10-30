@@ -482,6 +482,19 @@
     ? `${$selectedTunnel?.endpoint || ''} (${endpointLive})`
     : $selectedTunnel?.endpoint || '';
 
+  // The WireGuard interface's own address(es) inside the tunnel network —
+  // the [Interface] Address field (e.g. "10.0.0.2/24"). Static config data,
+  // so it is valid even before the tunnel is up; shown in the hero next to
+  // the live interface name so the user can see the local IP at a glance.
+  // WireGuard 接口在隧道网络内的自身地址（[Interface] 段的 Address，例如
+  // "10.0.0.2/24"）。属静态配置数据，即便隧道未起也有意义；与运行时的接口名
+  // 并列显示在 hero 中，让用户一眼看到本机 IP。
+  $: localIP = (() => {
+    const addrs = $selectedTunnel?.address;
+    if (!addrs || !addrs.length) return '';
+    return addrs.join(', ');
+  })();
+
   // The hero endpoint is plain selectable text, not a copy button: the app
   // sets `user-select: none` globally (public/style.css), so the span opts
   // back in via CSS. Selecting beats a click-to-copy here because a user
@@ -504,6 +517,7 @@
     return stripPort(sel?.endpoint || '');
   }
 
+  $: broken = !!$selectedTunnel?.load_error;
   $: autoLatency = autoLatencyTarget($selectedTunnel);
 
   // Every row the helper actually pinged, in its own display order. The
@@ -1196,6 +1210,17 @@
       <p>{$t('tunnel.no_tunnels')}</p>
     </div>
   {:else}
+    {#if $selectedTunnel?.load_error}
+      <div class="config-error-banner" role="alert">
+        <Icon name="triangle-alert" size={14} strokeWidth={2.25} />
+        <div class="ceb-body">
+          <span class="ceb-title">{$t('tunnel.config_error')}</span>
+          <span class="ceb-detail">{$t('tunnel.config_error_detail')}</span>
+        </div>
+        <span class="ceb-err" title={$selectedTunnel?.load_error}>{$selectedTunnel?.load_error}</span>
+        <button class="ceb-edit" on:click={() => dispatch('edit', $selectedTunnel?.name)}>{$t('tunnel.edit')}</button>
+      </div>
+    {/if}
     <!-- HERO STATUS CARD: big visual, gradient bg by state, large icon -->
     <div class="hero-card"
       class:hero-connected={isConnected && !noHandshake}
@@ -1267,6 +1292,21 @@
                 title={endpointLiveIP}>({endpointLive})</span>{/if}</span>
             </span>
           {/if}
+          {#if localIP}
+            <span class="hero-sep">·</span>
+            <!-- The local IP is the interface Address from the tunnel config
+                 (e.g. "10.0.0.2/24") — it is identity data, available whenever
+                 the tunnel is selected, so it lives in the always-visible
+                 status line next to the endpoint rather than the connected-only
+                 meta row.
+                 本机 IP 取自隧道配置的接口 Address（如 "10.0.0.2/24"），属于隧道
+                 身份数据，选中隧道即可见，因此放在常显的状态行（与 endpoint 并列），
+                 而非仅已连接时才渲染的 meta 行。 -->
+            <span class="hero-local-ip" title={localIP}>
+              <Icon name="globe" size={12} strokeWidth={2} />
+              {$t('tunnel.local_ip')}: <span class="mono">{localIP}</span>
+            </span>
+          {/if}
           {#if $selectedTunnel.protocol === 'amneziawg' && $appSettings.loaded}
             <span class="hero-sep">·</span>
             <!-- Single element / single style, two states — mirrors the
@@ -1330,7 +1370,7 @@
           </span>
         </button>
       {:else}
-        <button class="btn-primary-large btn-connect-lg" on:click={connect} disabled={loading || isConnecting}
+        <button class="btn-primary-large btn-connect-lg" on:click={connect} disabled={loading || isConnecting || broken}
           title={$t('tunnel.manual_connect_tip')}>
           <span class="pa-line">
             {#if loading || isConnecting}
@@ -2109,6 +2149,63 @@
     font-family: var(--font-mono);
     opacity: 0.72;
   }
+  /* The local IP reuses the icon + value pattern of the meta items, but it
+     lives in the always-visible status line, so it needs its own rule:
+     inline-flex keeps the glyph and the value on one baseline next to the
+     endpoint, and :global(svg) is required because the Icon component's
+     markup is not covered by this component's scoped CSS. Like the endpoint,
+     the value opts back into text selection so it can be copied.
+     本机 IP 沿用 meta 项「图标 + 值」的模式，但位于常显状态行，因此需要独立规则：
+     inline-flex 让图标与数值在同一基线上与 endpoint 对齐；:global(svg) 是必需的，
+     因为 Icon 组件的标记不在本组件作用域 CSS 的覆盖范围内。与 endpoint 一样，
+     该值重新开启文本选择以便复制。 */
+  .hero-local-ip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .hero-local-ip :global(svg) { opacity: 0.8; flex-shrink: 0; }
+  /* Broken-config banner: a tunnel whose .conf failed to parse is still
+     listed (see the backend ListTunnels skip->keep change) — surface the
+     failure loudly instead of leaving a silent "live but invisible" ghost. */
+  .config-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 12px 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--danger, #d33) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger, #d33) 38%, transparent);
+    color: var(--danger, #d33);
+  }
+  .config-error-banner :global(svg) { flex-shrink: 0; }
+  .ceb-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .ceb-title { font: 600 12px/15px var(--font-sans); }
+  .ceb-detail {
+    font: 400 11px/14px var(--font-sans);
+    color: color-mix(in srgb, var(--danger, #d33) 82%, var(--text-primary));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ceb-err {
+    flex: none; max-width: 36%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: 400 10px/13px var(--font-mono); opacity: 0.85;
+  }
+  .ceb-edit {
+    flex: none; height: 22px; padding: 0 9px;
+    font-size: 11px; font-weight: 600; color: #fff;
+    background: var(--danger, #d33); border: 0; border-radius: 6px; cursor: pointer;
+  }
+  .ceb-edit:hover { filter: brightness(1.08); }
   .awg-badge {
     padding: 0 6px;
     border-radius: 999px;

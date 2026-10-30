@@ -4,6 +4,24 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.2.0] - 2026-10-30
+
+### ✨ Added
+
+- **The tunnel hero now shows this machine's WireGuard IP inside the tunnel.** The hero status line — always visible while a tunnel is selected, not only when connected — now displays the interface `Address` (e.g. `10.0.0.2/24`), so you can see your in-tunnel IP at a glance without opening the editor or running `wg`.
+
+- **The log viewer can now search the current view and open any daily log file on disk.** The category row grew a search box that filters the displayed records case-insensitively and highlights every match in yellow, plus a dropdown listing the log files in the log folder (`wireguideplus-YYYY-MM-DD.log` and `helper-YYYY-MM-DD.log`). Files larger than 2 MB show their newest 2 MB, and the view returns to the live session stream at any time.
+
+### 🔧 Changed
+
+- **The version string is now uniformly prefixed with "v".** The menu-bar icon's single-click menu used to show the bare number (e.g. `3.1.0`); it now reads `WireGuide Plus v3.2.0`, matching the brand line, the Settings badge and the update banner everywhere in the app.
+
+### 🐛 Fixed
+
+- **A tunnel whose `.conf` fails to parse is no longer silently dropped from the list.** Previously such a file was skipped with only a log warning, so a tunnel that was still `up` at the OS level — and therefore counted as active in the sidebar — could vanish from the centre list with no explanation: the exact "active count says 2 but the list is missing one" symptom. It now stays in the list marked red, opens a configuration-error banner in the detail view with an Edit shortcut, and its Connect button is disabled until the config is fixed.
+
+- **Fixed tunnels disappearing from the list when the privileged helper rewrote their `.conf`.** Endpoint auto-switch persists the chosen endpoint, and because the save lands as a temp file plus atomic rename, the written file inherited the root helper's ownership — a root-owned `0600` file the unprivileged GUI can no longer read, so the tunnel vanished from the list while the sidebar still counted it as active (the `TS453Dmini` symptom: the file's owner had turned into `root` and its mtime matched the moment it disappeared). Saves now hand ownership back to the directory's owner, the helper repairs the tunnels directory at every startup and on request, and the GUI asks for that repair the moment it hits a permission error — which also self-heals files already damaged on disk.
+
 ## [3.1.0] - 2026-10-27
 
 ### ✨ Added

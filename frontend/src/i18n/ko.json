@@ -114,6 +114,9 @@
     "handshake_interval_note": "핸드셰이크는 약 120초마다 프로토콜상 재협상됩니다(고정, PersistentKeepalive와 무관). PersistentKeepalive는 설정한 간격으로 키프알라이브만 보내 NAT 경로를 유지하며, 180초 동안 핸드셰이크가 없으면 자동 재연결됩니다.",
     "duration": "연결 시간",
     "interface": "인터페이스",
+    "local_ip": "로컬 IP",
+    "config_error": "설정 오류",
+    "config_error_detail": "이 터널의 .conf 설정을 구문 분석하지 못했습니다. 편집기에서 수정한 후 다시 연결하세요.",
     "rx": "다운로드",
     "tx": "업로드",
     "latency": "지연 시간",
@@ -381,7 +384,10 @@
     "category_tunnel": "터널",
     "category_network": "네트워크",
     "category_policy": "정책",
-    "category_system": "시스템"
+    "category_system": "시스템",
+    "search_placeholder": "로그 내 검색",
+    "file_live": "실시간(현재 세션)",
+    "file_truncated": "파일이 커서 최근 2 MB만 표시"
   },
   "tools": {
     "tab_dns_leak": "DNS 유출 검사",

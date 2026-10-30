@@ -16,6 +16,8 @@ export {
     DNSServer,
     EndpointSettings,
     KnownSSIDs,
+    LogFileContent,
+    LogFileMeta,
     MirrorTestRow,
     PhysicalInterface,
     PublicDNSRefresh,

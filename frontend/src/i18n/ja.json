@@ -114,6 +114,9 @@
     "handshake_interval_note": "ハンドシェイクは約120秒ごとにプロトコルで再交渉されます（固定、PersistentKeepalive の影響なし）。PersistentKeepalive は設定間隔でキープアライブを送るだけで NAT 経路を維持し、180秒握手がなければ自動再接続します。",
     "duration": "接続時間",
     "interface": "インターフェース",
+    "local_ip": "ローカル IP",
+    "config_error": "設定エラー",
+    "config_error_detail": "このトンネルの .conf 設定を解析できませんでした。エディタで修正してから再接続してください。",
     "rx": "ダウンロード",
     "tx": "アップロード",
     "latency": "遅延",
@@ -381,7 +384,10 @@
     "category_tunnel": "トンネル",
     "category_network": "ネットワーク",
     "category_policy": "ポリシー",
-    "category_system": "システム"
+    "category_system": "システム",
+    "search_placeholder": "ログ内を検索",
+    "file_live": "ライブ（現在のセッション）",
+    "file_truncated": "ファイルが大きいため最新の 2 MB のみ表示"
   },
   "tools": {
     "tab_dns_leak": "DNS 漏洩テスト",

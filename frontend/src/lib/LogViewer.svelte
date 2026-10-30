@@ -34,6 +34,76 @@
 
   const levels = ['debug', 'info', 'warn', 'error'];
 
+  // ---- Keyword search (highlights + filters the CURRENT view) ----
+  // 关键词搜索（对当前视图做过滤并高亮命中片段）
+  let search = '';
+
+  // ---- On-disk daily log files ----
+  // An empty selectedFile means the live session view; picking a file
+  // switches the pane to that file's (tailed) raw content.
+  // selectedFile 为空表示实时会话视图；选择文件后切到该文件的（尾部）原始内容。
+  let logFiles = [];
+  let selectedFile = '';
+  let fileContent = null;
+  let fileTruncated = false;
+  let fileLoading = false;
+  let fileError = '';
+
+  async function refreshLogFiles() {
+    try {
+      logFiles = (await TunnelService.ListLogFiles()) || [];
+    } catch (e) {
+      logFiles = [];
+    }
+  }
+
+  async function selectFile(name) {
+    selectedFile = name;
+    fileError = '';
+    fileTruncated = false;
+    if (!name) {
+      fileContent = null;
+      return;
+    }
+    fileLoading = true;
+    try {
+      fileContent = await TunnelService.ReadLogFile(name);
+      fileTruncated = !!fileContent?.truncated;
+    } catch (e) {
+      fileError = e?.message || String(e);
+      fileContent = null;
+      selectedFile = '';
+    }
+    fileLoading = false;
+  }
+
+  // highlightParts splits text into alternating plain/matched fragments for
+  // case-insensitive <mark> highlighting. Params only — safe from the Svelte
+  // 5 untrack trap (no reads of component state inside).
+  // highlightParts 把文本切成 普通/命中 交替的片段，用于大小写不敏感的
+  // <mark> 高亮。仅依赖参数——不受 Svelte 5 untrack 陷阱影响（函数体内
+  // 不读组件状态）。
+  function highlightParts(text, term) {
+    const raw = text ?? '';
+    const t = (term || '').trim();
+    if (!t) return [{ s: raw, hit: false }];
+    const lower = raw.toLowerCase();
+    const needle = t.toLowerCase();
+    const parts = [];
+    let i = 0;
+    for (;;) {
+      const idx = lower.indexOf(needle, i);
+      if (idx < 0) {
+        parts.push({ s: raw.slice(i), hit: false });
+        break;
+      }
+      if (idx > i) parts.push({ s: raw.slice(i, idx), hit: false });
+      parts.push({ s: raw.slice(idx, idx + needle.length), hit: true });
+      i = idx + needle.length;
+    }
+    return parts;
+  }
+
   // Materialize the ring-buffer into a chronological array — only when
   // LogViewer is mounted (here). Push path in logs.js is O(1) and
   // allocation-free; the slice/concat happens only on this read.
@@ -51,6 +121,18 @@
     }
     return true;
   });
+
+  // Search narrows the already level/category-filtered live entries by
+  // message content (case-insensitive), and raw file lines in file mode.
+  // 搜索在已按级别/类别过滤的实时记录上按消息内容（大小写不敏感）再收窄；
+  // 文件模式下则作用于原始行。
+  $: term = search.trim().toLowerCase();
+  $: liveFiltered = term
+    ? filtered.filter((entry) => (entry.message || '').toLowerCase().includes(term))
+    : filtered;
+  $: fileLines = fileContent?.lines ?? [];
+  $: fileFiltered =
+    selectedFile && term ? fileLines.filter((line) => line.toLowerCase().includes(term)) : fileLines;
 
   // Per-level / per-category counts so the filter buttons always show how
   // many records each level/category actually has.
@@ -77,11 +159,17 @@
   }
 
   onMount(() => {
+    refreshLogFiles();
     if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
   });
 
   afterUpdate(() => {
-    if (autoScroll && shouldScroll && logContainer) {
+    // Auto-scroll only applies to the live session view — a file view is a
+    // static snapshot and scrolling it to the bottom on every update would
+    // fight the user's own scrolling.
+    // 自动滚动只作用于实时会话视图——文件视图是静态快照，每次更新都滚到底
+    // 会干扰用户自己的滚动。
+    if (!selectedFile && autoScroll && shouldScroll && logContainer) {
       logContainer.scrollTop = logContainer.scrollHeight;
       shouldScroll = false;
     }
@@ -107,7 +195,12 @@
   }
 
   async function copyAll() {
-    const text = filtered.map(formatEntry).join('\n');
+    // In file mode copy the raw (filtered) lines verbatim — they are what
+    // the user would grab from the file itself.
+    // 文件模式下按原样复制（过滤后的）原始行——那正是用户从文件里取的内容。
+    const text = selectedFile
+      ? fileFiltered.join('\n')
+      : liveFiltered.map(formatEntry).join('\n');
     try {
       await navigator.clipboard.writeText(text);
       copyFeedback = true;
@@ -121,6 +214,7 @@
   // instead of the browser's default (which often collapses grid columns
   // into a single line or adds weird spacing).
   function handleCopy(e) {
+    if (selectedFile) return; // raw file lines copy natively / 文件原始行走原生复制
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
 
@@ -189,22 +283,60 @@
         </button>
       {/each}
     </div>
+    <div class="log-actions">
+      <select
+        class="file-select"
+        bind:value={selectedFile}
+        on:change={(e) => selectFile(e.target.value)}
+        on:focus={refreshLogFiles}
+        disabled={fileLoading}
+      >
+        <option value="">{$t('log.file_live')}</option>
+        {#each logFiles as f (f.name)}
+          <option value={f.name}>{f.name}</option>
+        {/each}
+      </select>
+      <input
+        class="search-input"
+        type="search"
+        placeholder={$t('log.search_placeholder')}
+        bind:value={search}
+      />
+    </div>
   </div>
 
-  <div class="log-entries" bind:this={logContainer} on:copy={handleCopy}>
-    {#each filtered as entry (entry.id)}
-      <div class="log-entry level-{entry.level}">
-        <span class="log-time">{formatTime(entry.time)}</span>
-        <span class="log-source">{entry.source}</span>
-        <span class="log-level">{entry.level.toUpperCase()}</span>
-        <span class="log-category">{entry.category || 'app'}</span>
-        <span class="log-msg">{entry.message}</span>
-      </div>
-    {/each}
-    {#if filtered.length === 0}
-      <div class="log-empty">{$t('log.no_entries')}</div>
-    {/if}
-  </div>
+  {#if fileError}
+    <div class="file-error">{fileError}</div>
+  {/if}
+
+  {#if selectedFile}
+    <div class="log-entries log-entries--raw" bind:this={logContainer} on:copy={handleCopy}>
+      {#if fileTruncated}
+        <div class="file-truncated">{$t('log.file_truncated')}</div>
+      {/if}
+      {#each fileFiltered as line}
+        <div class="log-line">{#each highlightParts(line, search) as p}{#if p.hit}<mark>{p.s}</mark>{:else}{p.s}{/if}{/each}</div>
+      {/each}
+      {#if fileFiltered.length === 0}
+        <div class="log-empty">{$t('log.no_entries')}</div>
+      {/if}
+    </div>
+  {:else}
+    <div class="log-entries" bind:this={logContainer} on:copy={handleCopy}>
+      {#each liveFiltered as entry (entry.id)}
+        <div class="log-entry level-{entry.level}">
+          <span class="log-time">{formatTime(entry.time)}</span>
+          <span class="log-source">{entry.source}</span>
+          <span class="log-level">{entry.level.toUpperCase()}</span>
+          <span class="log-category">{entry.category || 'app'}</span>
+          <span class="log-msg">{#each highlightParts(entry.message, search) as p}{#if p.hit}<mark>{p.s}</mark>{:else}{p.s}{/if}{/each}</span>
+        </div>
+      {/each}
+      {#if liveFiltered.length === 0}
+        <div class="log-empty">{$t('log.no_entries')}</div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -285,6 +417,44 @@
     color: var(--danger, #e5534b);
   }
 
+  .search-input {
+    height: 22px;
+    width: 170px;
+    padding: 0 var(--space-2);
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font: var(--text-footnote);
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-muted); }
+  .file-select {
+    height: 22px;
+    max-width: 220px;
+    padding: 0 var(--space-1);
+    background: var(--bg-card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font: var(--text-footnote);
+    outline: none;
+  }
+  .file-select:focus { border-color: var(--accent); }
+
+  .file-error {
+    padding: var(--space-1) var(--space-4);
+    font: var(--text-footnote);
+    color: var(--danger, #e5534b);
+  }
+  .file-truncated {
+    padding: var(--space-1) var(--space-2);
+    font: var(--text-footnote);
+    color: var(--text-muted);
+    border-bottom: 0.5px solid var(--log-border);
+  }
+
   .log-entries {
     flex: 1;
     min-height: 0;
@@ -326,6 +496,23 @@
     color: var(--text-primary);
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+  }
+  /* Raw file lines: one full-width row per on-disk line, no grid columns —
+   * both the GUI and the helper write here and their line shapes differ. */
+  /* 原始文件行：每条磁盘行占满一行，不拆网格列——GUI 与 helper 都写这里，
+   * 两者的行格式不同。 */
+  .log-line {
+    padding: 2px var(--space-2);
+    border-bottom: 0.5px solid var(--log-border);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  mark {
+    background: var(--yellow, #d29922);
+    color: #1f1f1f;
+    border-radius: 2px;
+    padding: 0 1px;
   }
 
   .level-debug .log-level { color: var(--text-muted); }

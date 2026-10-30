@@ -114,6 +114,9 @@
     "handshake_interval_note": "Rekeys ~every 120s by protocol (fixed, not set by PersistentKeepalive). PersistentKeepalive only sends keepalive packets on its interval to hold the NAT path open; 180s with no handshake triggers auto-reconnect.",
     "duration": "Duration",
     "interface": "Interface",
+    "local_ip": "Local IP",
+    "config_error": "Config error",
+    "config_error_detail": "This tunnel's .conf could not be parsed. Open the editor to fix it, then reconnect.",
     "rx": "Download",
     "tx": "Upload",
     "latency": "Latency",
@@ -381,7 +384,10 @@
     "category_tunnel": "Tunnel",
     "category_network": "Network",
     "category_policy": "Policy",
-    "category_system": "System"
+    "category_system": "System",
+    "search_placeholder": "Search in log",
+    "file_live": "Live (current session)",
+    "file_truncated": "Large file — showing the newest 2 MB"
   },
   "tools": {
     "tab_dns_leak": "DNS Leak Test",

@@ -499,6 +499,107 @@ export class KnownSSIDs {
 }
 
 /**
+ * LogFileContent is the tailed content of one log file, split into lines.
+ * Lines keeps the raw on-disk text (time \t LEVEL \t message ...) rather
+ * than re-parsed fields: both the GUI and the helper write here, and their
+ * line shapes differ, so parsing in the viewer would silently drop fields.
+ * LogFileContent 是某个日志文件按行切开的尾部内容。Lines 保留磁盘上的原始
+ * 文本（时间 \t 级别 \t 消息 ...）而不做二次解析：GUI 与 helper 都会写这里，
+ * 两者的行格式不同，解析反而会静默丢字段。
+ */
+export class LogFileContent {
+    /**
+     * Creates a new LogFileContent instance.
+     * @param {Partial<LogFileContent>} [$$source = {}] - The source object to create the LogFileContent.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("lines" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["lines"] = [];
+        }
+        if (!("truncated" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["truncated"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogFileContent instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogFileContent}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("lines" in $$parsedSource) {
+            $$parsedSource["lines"] = $$createField1_0($$parsedSource["lines"]);
+        }
+        return new LogFileContent(/** @type {Partial<LogFileContent>} */($$parsedSource));
+    }
+}
+
+/**
+ * LogFileMeta describes one daily log file in the log directory.
+ * LogFileMeta 描述日志目录中的一个日志文件。
+ */
+export class LogFileMeta {
+    /**
+     * Creates a new LogFileMeta instance.
+     * @param {Partial<LogFileMeta>} [$$source = {}] - The source object to create the LogFileMeta.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("size" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size"] = 0;
+        }
+        if (!("mod_unix" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["mod_unix"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LogFileMeta instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {LogFileMeta}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LogFileMeta(/** @type {Partial<LogFileMeta>} */($$parsedSource));
+    }
+}
+
+/**
  * MirrorTestRow is one row of the Settings → Proxy connectivity table:
  * either the direct GitHub API endpoint or one accelerator mirror.
  * MirrorTestRow 是「设置 → 代理」连通性表格中的一行：要么是 GitHub API 直连，
@@ -1141,6 +1242,37 @@ export class TunnelInfo {
         }
         if (/** @type {any} */(false)) {
             /**
+             * Address is the WireGuard interface's own CIDR address(es) inside the
+             * tunnel network — the [Interface] Address field, e.g. "10.0.0.2/24".
+             * It is static config data, exposed so the frontend hero can show the
+             * tunnel's local IP next to the live interface name.
+             * Address 是 WireGuard 接口在隧道网络内的自身 CIDR 地址（[Interface] 段的
+             * Address 字段，例如 "10.0.0.2/24"）。属静态配置数据，暴露给前端 hero，
+             * 让其与运行时的接口名并列显示本隧道的本地 IP。
+             * @member
+             * @type {string[] | undefined}
+             */
+            this["address"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * LoadError is non-empty when the tunnel's .conf could not be parsed by
+             * the GUI's list scan. The tunnel is kept in the list (keyed by its file
+             * name) so a tunnel that is still up in the OS — and therefore counted as
+             * active by the helper — can never disappear from the UI into a "live but
+             * invisible" ghost state. The frontend renders it as broken with this
+             * message and lets the user open the editor to fix the config.
+             * LoadError 非空表示本隧道的 .conf 未能被 GUI 列表扫描解析。隧道仍保留在
+             * 列表中（以文件名作为键），这样仍在线（因此被 helper 计入 active）的隧道
+             * 绝不会从界面消失成「在线却不可见」的幽灵状态。前端将其渲染为损坏态并
+             * 显示此消息，用户可打开编辑器修复配置。
+             * @member
+             * @type {string | undefined}
+             */
+            this["load_error"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
              * CreatedAtUnix is the .conf file's mtime; LastUsedUnix is the most
              * recent connection start from history (0 if never connected). Both
              * feed the tunnel-list "date added" / "last used" sort (issue #17).
@@ -1167,9 +1299,13 @@ export class TunnelInfo {
      */
     static createFrom($$source = {}) {
         const $$createField4_0 = $$createType0;
+        const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("latency_probe_targets" in $$parsedSource) {
             $$parsedSource["latency_probe_targets"] = $$createField4_0($$parsedSource["latency_probe_targets"]);
+        }
+        if ("address" in $$parsedSource) {
+            $$parsedSource["address"] = $$createField6_0($$parsedSource["address"]);
         }
         return new TunnelInfo(/** @type {Partial<TunnelInfo>} */($$parsedSource));
     }

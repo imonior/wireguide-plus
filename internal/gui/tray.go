@@ -1305,13 +1305,21 @@ func (t *trayManager) scheduleRebuild() {
 // trayMenuTitle is the disabled first menu row: the app name plus the
 // running version, so users can tell which build they're on without
 // opening Settings (and so bug reports can quote it). The version is
-// injected at link time; a dev build reports "0.0.0-dev".
+// injected at link time; a dev build reports "0.0.0-dev". The version is
+// rendered with a leading "v" (e.g. "WireGuide Plus v3.1.0") to match the
+// in-app version pills and update banners — every user-facing version string
+// in the app uses the "v" + number format.
+//
+// trayMenuTitle 是禁用的首行菜单项：应用名加当前运行版本，方便用户在不打开
+// 设置的情况下确认所用构建（也便于 bug 报告引用）。版本在链接期注入；开发构建
+// 显示 "0.0.0-dev"。版本号统一带前缀 "v"（如 "WireGuide Plus v3.1.0"），与应用内
+// 的版本徽标和更新横幅保持一致——应用内所有面向用户的版本号均采用 "v" + 数字 格式。
 func trayMenuTitle() string {
 	v := strings.TrimSpace(version.Version)
 	if v == "" {
 		return "WireGuide Plus"
 	}
-	return "WireGuide Plus " + v
+	return "WireGuide Plus v" + v
 }
 
 // rebuildMenu reconstructs the whole tray menu: tunnel list, Show Window,

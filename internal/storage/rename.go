@@ -44,6 +44,12 @@ func writeBytesAtomic(data []byte, path string) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	// Hand the file back to the directory's owner so a save written by the
+	// root helper (settings/history stores live in the user's home) stays
+	// readable by the unprivileged GUI.
+	// 归还文件属主给目录属主，保证 root helper 写出的文件（设置/历史存储
+	// 都在用户主目录下）对未提权的 GUI 依然可读。
+	chownToDirOwner(path, dir)
 	return nil
 }
 

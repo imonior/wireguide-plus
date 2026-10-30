@@ -217,12 +217,13 @@
              bottom of the info bar, not as a separate section beside it.
              The strip can never live inside the <button> (a button may not
              contain another button), hence the wrapper. -->
-        <div
-          class="tunnel-entry"
-          class:entry-active={$selectedTunnel?.name === tun.name}
-          class:entry-connected={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
-          class:entry-pending={pendingSet.has(tun.name)}
-        >
+      <div
+        class="tunnel-entry"
+        class:entry-active={$selectedTunnel?.name === tun.name}
+        class:entry-connected={establishedSet.has(tun.name) && tunnelHandshakes[tun.name]}
+        class:entry-pending={pendingSet.has(tun.name)}
+        class:entry-broken={!!tun.load_error}
+      >
           <button
             class="tunnel-item"
             class:active={$selectedTunnel?.name === tun.name}
@@ -235,6 +236,12 @@
               class:warning={establishedSet.has(tun.name) && !tunnelHandshakes[tun.name]}></span>
             <div class="tunnel-text">
               <span class="tunnel-name" title={tun.name}>{tun.name}</span>
+            {#if tun.load_error}
+              <span class="tunnel-error" title={tun.load_error}>
+                <Icon name="triangle-alert" size={11} strokeWidth={2.25} />
+                <span>{$t('tunnel.config_error')}</span>
+              </span>
+            {/if}
               {#if tun.protocol === 'amneziawg' && $appSettings.loaded}
                 <!-- One element, one style, two states: "AmneziaWG ON" /
                      "AmneziaWG OFF". Only the colour modifier changes so the
@@ -622,6 +629,30 @@
     font: 500 13px/18px var(--font-sans);
     color: var(--text-primary);
     letter-spacing: -0.005em;
+  }
+  /* A tunnel whose .conf failed to parse: kept in the list (see the backend
+     ListTunnels skip->keep change) but flagged red so it can never hide in
+     plain sight — otherwise a tunnel that is still up in the OS shows up in
+     the active badge yet never appears here. */
+  .tunnel-entry.entry-broken {
+    background: color-mix(in srgb, var(--danger, #d33) 9%, transparent);
+  }
+  .tunnel-entry.entry-broken .tunnel-name {
+    color: var(--danger, #d33);
+  }
+  .tunnel-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 1px;
+    font: 400 11px/14px var(--font-sans);
+    color: var(--danger, #d33);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tunnel-error :global(svg) {
+    flex-shrink: 0;
   }
   .awg-badge {
     align-self: flex-start;

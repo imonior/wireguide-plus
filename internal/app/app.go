@@ -274,6 +274,25 @@ type TunnelInfo struct {
 	// when it is set, so users can tell at a glance why an AWG tunnel's
 	// status path behaves differently (e.g. no `wg` CLI access).
 	Protocol string `json:"protocol,omitempty"`
+	// Address is the WireGuard interface's own CIDR address(es) inside the
+	// tunnel network — the [Interface] Address field, e.g. "10.0.0.2/24".
+	// It is static config data, exposed so the frontend hero can show the
+	// tunnel's local IP next to the live interface name.
+	// Address 是 WireGuard 接口在隧道网络内的自身 CIDR 地址（[Interface] 段的
+	// Address 字段，例如 "10.0.0.2/24"）。属静态配置数据，暴露给前端 hero，
+	// 让其与运行时的接口名并列显示本隧道的本地 IP。
+	Address []string `json:"address,omitempty"`
+	// LoadError is non-empty when the tunnel's .conf could not be parsed by
+	// the GUI's list scan. The tunnel is kept in the list (keyed by its file
+	// name) so a tunnel that is still up in the OS — and therefore counted as
+	// active by the helper — can never disappear from the UI into a "live but
+	// invisible" ghost state. The frontend renders it as broken with this
+	// message and lets the user open the editor to fix the config.
+	// LoadError 非空表示本隧道的 .conf 未能被 GUI 列表扫描解析。隧道仍保留在
+	// 列表中（以文件名作为键），这样仍在线（因此被 helper 计入 active）的隧道
+	// 绝不会从界面消失成「在线却不可见」的幽灵状态。前端将其渲染为损坏态并
+	// 显示此消息，用户可打开编辑器修复配置。
+	LoadError string `json:"load_error,omitempty"`
 	// CreatedAtUnix is the .conf file's mtime; LastUsedUnix is the most
 	// recent connection start from history (0 if never connected). Both
 	// feed the tunnel-list "date added" / "last used" sort (issue #17).

@@ -191,6 +191,23 @@ const (
 	// log directory is not writable it asks the helper (running as root) to
 	// repair ownership and retries, instead of aborting.
 	MethodRepairLogOwnership = "Helper.RepairLogOwnership"
+	// MethodRepairTunnelOwnership asks the privileged helper to chown the
+	// user's tunnels directory (and every .conf / .meta.json in it) back to
+	// the desktop user. The root helper rewrites tunnel files during
+	// endpoint failover; before saves handed ownership back to the
+	// directory's owner, those files ended up root-owned at 0600 and the
+	// unprivileged GUI could no longer read them — the tunnel vanished from
+	// its list while the helper still counted it as active. The GUI calls
+	// this when loading a tunnel fails with a permission error so the files
+	// already on disk get repaired without waiting for the next helper
+	// restart (which repairs them at startup too).
+	// MethodRepairTunnelOwnership 请求特权 helper 把用户的隧道目录（及其中的
+	// 每个 .conf / .meta.json）chown 回桌面用户。root helper 在端点自动切换时
+	// 会重写隧道文件；在保存尚未归还目录属主的版本上，这些文件会变成 root
+	// 属主的 0600，未提权的 GUI 无法再读——隧道从列表消失而 helper 侧仍计为
+	// 活跃。GUI 在加载隧道遇到权限错误时调用此方法，让磁盘上已损坏的文件
+	// 立即修复，而不必等待下一次 helper 重启（重启时同样会修复）。
+	MethodRepairTunnelOwnership = "Helper.RepairTunnelOwnership"
 )
 
 // Event names (server → client notifications)

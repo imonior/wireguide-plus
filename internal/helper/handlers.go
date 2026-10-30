@@ -53,6 +53,7 @@ func (h *Helper) registerHandlers() {
 	h.server.Handle(ipc.MethodAutomationReevaluate, h.handleAutomationReevaluate)
 	h.server.Handle(ipc.MethodProbeNow, h.handleProbeNow)
 	h.server.Handle(ipc.MethodRepairLogOwnership, h.handleRepairLogOwnership)
+	h.server.Handle(ipc.MethodRepairTunnelOwnership, h.handleRepairTunnelOwnership)
 }
 
 // handleProbeNow runs one latency probe cycle right now instead of waiting
@@ -122,6 +123,24 @@ func (h *Helper) handleRepairLogOwnership(_ json.RawMessage) (interface{}, error
 		return ipc.Empty{}, nil
 	}
 	if err := prepareLogsDir(h.logsDir, h.ownerUID); err != nil {
+		return nil, err
+	}
+	return ipc.Empty{}, nil
+}
+
+// handleRepairTunnelOwnership re-applies ownership of the user's tunnels
+// directory (and every .conf / .meta.json in it) to the desktop user. Tunnel
+// files rewritten by the root helper during endpoint failover could end up
+// root-owned and unreadable by the GUI; when the GUI hits a permission error
+// loading a tunnel it calls this so the files already on disk are repaired
+// immediately instead of waiting for the next helper restart.
+//
+// handleRepairTunnelOwnership 把用户隧道目录（及其中的每个 .conf / .meta.json）
+// 的属主重新归还给桌面用户。root helper 在端点切换时重写的隧道文件可能变成
+// root 属主而 GUI 无法读取；GUI 加载隧道遇到权限错误时调用此方法，让磁盘上
+// 已损坏的文件立即修复，而不必等待下一次 helper 重启。
+func (h *Helper) handleRepairTunnelOwnership(_ json.RawMessage) (interface{}, error) {
+	if err := repairTunnelsDir(h.userTunnelsDir, h.ownerUID); err != nil {
 		return nil, err
 	}
 	return ipc.Empty{}, nil
