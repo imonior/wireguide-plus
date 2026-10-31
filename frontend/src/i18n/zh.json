@@ -114,7 +114,6 @@
     "handshake_interval_note": "每约 120 秒按协议重协商握手（固定，不受 PersistentKeepalive 影响）。PersistentKeepalive 仅按其设定间隔发保活包维持 NAT 通路；连续 180 秒无握手则自动重连。",
     "duration": "时长",
     "interface": "接口",
-    "local_ip": "本机 IP",
     "config_error": "配置错误",
     "config_error_detail": "该隧道的 .conf 配置文件无法解析。请打开编辑器修复，然后重新连接。",
     "rx": "下载",

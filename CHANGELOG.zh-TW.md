@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.2.1] - 2026-10-31
+
+### 🔧 變更
+
+- **hero 狀態列的本機 IP 不再帶文字標籤。** 現在顯示為 `🌐 10.30.35.2/32` 而非 `🌐 本機 IP: 10.30.35.2/32`——地球圖示與等寬位址保持不變，常顯狀態列更緊湊且資訊不變。
+
 ## [3.2.0] - 2026-10-30
 
 ### ✨ 新增

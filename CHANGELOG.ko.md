@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [3.2.1] - 2026-10-31
+
+### 🔧 변경
+
+- **hero 상태 행의 로컬 IP에서 텍스트 레이블을 제거했습니다.** 표시가 `🌐 로컬 IP: 10.30.35.2/32`에서 `🌐 10.30.35.2/32`로 바뀌었으며, 지구 아이콘과 고정폭 주소는 그대로 유지되어 항상 표시되는 상태 행이 더 간결해졌습니다.
+
 ## [3.2.0] - 2026-10-30
 
 ### ✨ 추가

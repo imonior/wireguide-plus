@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.2.1] - 2026-10-31
+
+### 🔧 Changed
+
+- **The hero status line shows the local IP without the text label.** The entry now reads `🌐 10.30.35.2/32` instead of `🌐 Local IP: 10.30.35.2/32` — the globe icon and the monospace address remain, so the always-visible status line stays compact while carrying the same information.
+
 ## [3.2.0] - 2026-10-30
 
 ### ✨ Added

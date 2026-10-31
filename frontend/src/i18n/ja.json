@@ -114,7 +114,6 @@
     "handshake_interval_note": "ハンドシェイクは約120秒ごとにプロトコルで再交渉されます（固定、PersistentKeepalive の影響なし）。PersistentKeepalive は設定間隔でキープアライブを送るだけで NAT 経路を維持し、180秒握手がなければ自動再接続します。",
     "duration": "接続時間",
     "interface": "インターフェース",
-    "local_ip": "ローカル IP",
     "config_error": "設定エラー",
     "config_error_detail": "このトンネルの .conf 設定を解析できませんでした。エディタで修正してから再接続してください。",
     "rx": "ダウンロード",

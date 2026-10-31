@@ -1314,7 +1314,7 @@
                  而非仅已连接时才渲染的 meta 行。 -->
             <span class="hero-local-ip" title={localIP}>
               <Icon name="globe" size={12} strokeWidth={2} />
-              {$t('tunnel.local_ip')}: <span class="mono">{localIP}</span>
+              <span class="mono">{localIP}</span>
             </span>
           {/if}
           {#if $selectedTunnel.protocol === 'amneziawg' && $appSettings.loaded}

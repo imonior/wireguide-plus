@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.2.1] - 2026-10-31
+
+### 🔧 変更
+
+- **ヒーローステータス行のローカル IP からテキストラベルを外しました。** 表示は `🌐 ローカル IP: 10.30.35.2/32` から `🌐 10.30.35.2/32` になり、地球アイコンと等幅アドレスはそのままで、常時表示のステータス行がよりコンパクトになります。
+
 ## [3.2.0] - 2026-10-30
 
 ### ✨ 追加
