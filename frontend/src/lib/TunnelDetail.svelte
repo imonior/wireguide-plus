@@ -885,6 +885,13 @@
   // switchEndpoint 把选中的候选设为 WireGuard 实际拨的地址。后端改写 .conf，
   // 若隧道连通则用它重连，但绝不会把隧道闩锁进手动接管（产品决策：只换地址，
   // 不接管）。徽标随重新读取的设置而移动，无需在此额外播种状态。
+  //
+  // The tunnel list is re-read afterwards because the hero's endpoint comes
+  // from the stored TunnelInfo, not from the endpoint settings: without this
+  // the hero kept advertising the address the tunnel had just stopped using
+  // until some unrelated refresh happened to land.
+  // 之后要重读隧道列表，因为 hero 的 endpoint 取自 TunnelInfo 而非端点设置：
+  // 少了这一步，hero 会一直标着隧道刚刚弃用的旧地址，直到某次无关的刷新碰巧发生。
   async function switchEndpoint(addr) {
     const name = $selectedTunnel?.name;
     if (!name || epBusy || epSwitching) return;
@@ -893,7 +900,10 @@
     try {
       await TunnelService.SetEndpointActive(name, addr);
       epError = '';
-      await loadEndpointSettings(name);
+      await Promise.all([
+        loadEndpointSettings(name),
+        refreshTunnels(TunnelService),
+      ]);
     } catch (e) {
       epError = $t('tunnel.endpoint_switch_failed', { error: errText(e) });
     } finally {

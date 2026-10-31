@@ -22,6 +22,8 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 - **Fixed tunnels disappearing from the list when the privileged helper rewrote their `.conf`.** Endpoint auto-switch persists the chosen endpoint, and because the save lands as a temp file plus atomic rename, the written file inherited the root helper's ownership — a root-owned `0600` file the unprivileged GUI can no longer read, so the tunnel vanished from the list while the sidebar still counted it as active (the `TS453Dmini` symptom: the file's owner had turned into `root` and its mtime matched the moment it disappeared). Saves now hand ownership back to the directory's owner, the helper repairs the tunnels directory at every startup and on request, and the GUI asks for that repair the moment it hits a permission error — which also self-heals files already damaged on disk.
 
+- **The hero status card now follows endpoint switches immediately.** Switching a tunnel's endpoint (manually, or by the helper's auto-failover) rewrites the same `.conf` in place, and the GUI's change watcher only watched the set of file names — so the hero kept advertising the address the tunnel had already stopped dialling. The watcher now also fingerprints each file's size and mtime, and a manual switch re-reads the tunnel list right away, so the endpoint text and the parenthesised live IP move together.
+
 ## [3.1.0] - 2026-10-27
 
 ### ✨ Added
