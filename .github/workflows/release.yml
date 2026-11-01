@@ -205,7 +205,7 @@ jobs:
           hdiutil create -volname "WireGuide Plus" -srcfolder dmg-root -ov -format UDZO "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-darwin-arm64.dmg"
           rm -rf dmg-root
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: macos-arm64
           path: |
@@ -439,7 +439,7 @@ jobs:
       - name: Upload unsigned installer for SignPath
         if: steps.signpath-cfg.outputs.enabled == 'true'
         id: upload-unsigned
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           # transient name — the final published artifact stays
           # 'windows-${{ matrix.asset }}' and contains the signed exe;
@@ -495,7 +495,7 @@ jobs:
           grep -q '^Valid' /tmp/sigstatus
       # --- end signing -------------------------------------------------
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: windows-${{ matrix.asset }}
           path: |
@@ -604,7 +604,7 @@ jobs:
           cp -f LICENSE bin/LICENSE.txt
           tar -czf "bin/WireGuidePlus-${{ steps.ver.outputs.ver }}-linux-${{ matrix.arch }}-portable.tar.gz" -C bin wireguideplus LICENSE.txt
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: linux-${{ matrix.arch }}
           path: |

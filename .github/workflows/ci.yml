@@ -114,7 +114,7 @@ jobs:
           dpkg-deb --info bin/wireguideplus.deb
           dpkg-deb --contents bin/wireguideplus.deb
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: linux-amd64-ci
           path: |
