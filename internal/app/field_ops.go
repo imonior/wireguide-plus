@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // Field editing support for the tunnel editor's "fields" view. The frontend
@@ -186,4 +188,24 @@ func lookupManagedKey(target map[string]string, key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// DerivePublicKey computes the WireGuard public key for a base64 private key.
+// This is a read-only utility for the field editor: the public key is shown
+// next to PrivateKey so the user can copy it into the peer's config, but it
+// is never written into [Interface] — WireGuard derives it from the private
+// key and rejects a .conf that spells it out. Any malformed key is reported
+// as an error so the frontend can clear the display instead of showing a
+// stale value.
+//
+// DerivePublicKey 计算给定 base64 私钥对应的 WireGuard 公钥。这是一个供字段
+// 编辑器使用的只读工具：公钥显示在 PrivateKey 旁边，方便复制到对端配置，但
+// 绝不写入 [Interface]——WireGuard 会自行从私钥派生，显式写出该字段的 .conf
+// 会被拒绝。任何格式非法的私钥都返回错误，便于前端清空显示而非留下旧值。
+func (s *TunnelService) DerivePublicKey(privateKey string) (string, error) {
+	key, err := wgtypes.ParseKey(strings.TrimSpace(privateKey))
+	if err != nil {
+		return "", err
+	}
+	return key.PublicKey().String(), nil
 }

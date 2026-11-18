@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.0] - 2026-11-18
+
+### ✨ 追加
+
+- **フィールドエディターに、インターフェースの導出公開鍵を読み取り専用で表示し、コピーボタンを追加しました。** `PrivateKey` 行の下に、`PublicKey` を `TunnelService.DerivePublicKey` で入力中の秘密鍵テキストからリアルタイム導出して選択可能な等幅文字で表示します。秘密鍵が空または無効な場合はヒントを表示します。この値はモデルにも `[Interface]` にも書き込まれず（WireGuard が自ら導出するため）、設定のインポート／エクスポートに影響しません。コピーボタンで公開鍵をクリップボードにコピーし、リモートピアの設定に貼り付けられます。
+
+- **フィールドエディターで編集時にインターフェースの秘密鍵を再生成できるようになりました。** `PrivateKey` 入力欄横のコンパクトな更新ボタンが、新しい Curve25519 クランプ済み秘密鍵を生成して conf テキストへ即座に書き込み、同じ新しい秘密鍵から読み取り専用の公開鍵を同時に再導出します。生成ロジックは新規設定の作成と共通で、両パスで同一のアルゴリズムを使用します。鍵をローテーションした後は、リモートピアの `PublicKey` を更新してください。
+
 ## [3.2.1] - 2026-10-31
 
 ### 🔧 変更

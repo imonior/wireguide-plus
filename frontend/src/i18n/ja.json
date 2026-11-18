@@ -670,7 +670,12 @@
     "bind_egress": "出口インターフェース",
     "bind_auto": "自動（最適 NIC）",
     "bind_hint": "このトンネルの暗号化トラフィックを指定した物理 NIC に固定します。次回接続時に有効になります。",
-    "bind_down": "ダウン"
+    "bind_down": "ダウン",
+    "public_key_placeholder": "PrivateKey から派生",
+    "public_key_invalid": "PrivateKey が無効です",
+    "public_key_copy": "コピー",
+    "public_key_copied": "コピー済み",
+    "private_key_regen": "秘密鍵を再生成"
   },
   "awg_reminder": {
     "title": "AmneziaWG トンネル",

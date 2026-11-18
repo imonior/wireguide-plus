@@ -670,7 +670,12 @@
     "bind_egress": "Egress interface",
     "bind_auto": "Auto (best underlay)",
     "bind_hint": "Pin this tunnel's encrypted traffic to a physical NIC — takes effect on the next connect.",
-    "bind_down": "down"
+    "bind_down": "down",
+    "public_key_placeholder": "Derived from PrivateKey",
+    "public_key_invalid": "Invalid PrivateKey",
+    "public_key_copy": "Copy",
+    "public_key_copied": "Copied",
+    "private_key_regen": "Regenerate PrivateKey"
   },
   "awg_reminder": {
     "title": "AmneziaWG tunnel",

@@ -670,7 +670,12 @@
     "bind_egress": "출구 인터페이스",
     "bind_auto": "자동(최적 NIC)",
     "bind_hint": "이 터널의 암호화 트래픽을 지정된 물리 NIC에 고정합니다. 다음 연결 시 적용됩니다.",
-    "bind_down": "연결 안 됨"
+    "bind_down": "연결 안 됨",
+    "public_key_placeholder": "PrivateKey에서 파생",
+    "public_key_invalid": "유효하지 않은 PrivateKey",
+    "public_key_copy": "복사",
+    "public_key_copied": "복사됨",
+    "private_key_regen": "개인 키 다시 생성"
   },
   "awg_reminder": {
     "title": "AmneziaWG 터널",

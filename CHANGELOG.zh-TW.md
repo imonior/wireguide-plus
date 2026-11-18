@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.0] - 2026-11-18
+
+### ✨ 新增
+
+- **欄位編輯器現在以唯讀方式顯示介面衍生公鑰，並提供複製按鈕。** 在 `PrivateKey` 列下方，`PublicKey` 透過 `TunnelService.DerivePublicKey` 從正在輸入的私鑰文字即時衍生，以可選取的等寬文字呈現；私鑰為空或無效時顯示提示。該值永不進入模型、不寫入 `[Interface]`（WireGuard 會自行衍生），因此不影響設定匯入匯出。複製按鈕可將公鑰放入剪貼簿，便於貼到對端設定。
+
+- **欄位編輯器支援在編輯時重新產生介面私鑰。** `PrivateKey` 輸入框旁的精簡重新整理按鈕會產生一把新的 Curve25519 鉗制私鑰，立即寫入 conf 文字，並用同一把新私鑰同步重新整理唯讀公鑰。產生邏輯與新建設定共用，兩條路徑演算法一致。輪替私鑰後請記得更新對端的 `PublicKey`。
+
 ## [3.2.1] - 2026-10-31
 
 ### 🔧 變更

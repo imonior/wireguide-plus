@@ -10,6 +10,7 @@
   import { wireguardLanguage, wireguardCompletion } from './wireguard-lang.js';
   import { resolvedTheme } from '../stores/theme.js';
   import { t } from '../i18n/index.js';
+  import { generatePrivateKey } from './wireguard-key.js';
 
   // Unified config editor: handles both "new" and "edit" modes.
   // - isNew=true: shows name input, generates template with random private key
@@ -21,16 +22,6 @@
   export let nameEditable = true;
 
   const dispatch = createEventDispatcher();
-
-  // Generate a random WireGuard private key (Curve25519 clamped)
-  function generatePrivateKey() {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    bytes[0] &= 248;
-    bytes[31] &= 127;
-    bytes[31] |= 64;
-    return btoa(String.fromCharCode(...bytes));
-  }
 
   // Build default template for new configs with auto-generated private key
   function buildNewTemplate() {

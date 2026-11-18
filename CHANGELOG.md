@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.0] - 2026-11-18
+
+### ✨ Added
+
+- **The field editor now shows the interface's derived public key, read-only, with a Copy button.** Directly below the `PrivateKey` row, `PublicKey` is derived live from the private-key text via `TunnelService.DerivePublicKey` and shown as selectable monospace text; an invalid or empty private key shows a hint instead. The value is never stored in the model or written into `[Interface]` — WireGuard derives it itself — so it cannot affect config import or export. The Copy button puts it on the clipboard for pasting into the remote peer's config.
+
+- **The field editor can regenerate the interface private key while editing.** A compact refresh button beside the `PrivateKey` input generates a fresh Curve25519-clamped key, writes it to the conf text immediately, and re-derives the read-only public key from the same new key in one step. The generator is shared with new-config creation, so both paths use identical logic. Remember to update the remote peer's `PublicKey` after rotating a key.
+
 ## [3.2.1] - 2026-10-31
 
 ### 🔧 Changed

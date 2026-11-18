@@ -670,7 +670,12 @@
     "bind_egress": "出口網卡",
     "bind_auto": "自動（最優網卡）",
     "bind_hint": "將此隧道的加密流量綁定到指定實體網卡，重新連線後生效。",
-    "bind_down": "未連線"
+    "bind_down": "未連線",
+    "public_key_placeholder": "由 PrivateKey 派生",
+    "public_key_invalid": "PrivateKey 無效",
+    "public_key_copy": "複製",
+    "public_key_copied": "已複製",
+    "private_key_regen": "重新產生私鑰"
   },
   "awg_reminder": {
     "title": "AmneziaWG 隧道",

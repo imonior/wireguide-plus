@@ -128,3 +128,35 @@ func TestSetTunnelFieldsExtraPeersIgnored(t *testing.T) {
 		t.Errorf("extra model peer should be ignored:\n%s", out)
 	}
 }
+
+func TestDerivePublicKey(t *testing.T) {
+	svc := &TunnelService{}
+	// Fixed vector: private key bytes 01..32; public key computed independently
+	// via wgtypes' own generator and pinned here so the test catches a change
+	// in derivation rules, not just self-consistency.
+	// 固定向量：私钥字节 01..32；公钥由 wgtypes 生成器独立算出并钉在此处，
+	// 这样测试能捕获派生规则的变化，而不只是自洽。
+	const (
+		private = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="
+		public  = "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9/AsrhtHHw="
+	)
+	got, err := svc.DerivePublicKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != public {
+		t.Errorf("public key = %q, want %q", got, public)
+	}
+
+	// Surrounding whitespace (pasted from the editor) must be tolerated.
+	// 编辑器粘贴时带入的首尾空白应被容忍。
+	if got, err = svc.DerivePublicKey("  " + private + "\n"); err != nil || got != public {
+		t.Errorf("trimmed key: got %q / %v, want %q / nil", got, err, public)
+	}
+
+	for _, bad := range []string{"", "not-base64!!!", "AAAA"} {
+		if got, err = svc.DerivePublicKey(bad); err == nil {
+			t.Errorf("DerivePublicKey(%q) = %q, want error", bad, got)
+		}
+	}
+}

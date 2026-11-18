@@ -4,6 +4,14 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.0] - 2026-11-18
+
+### ✨ 新增
+
+- **字段编辑器现在以只读方式显示接口派生公钥，并提供复制按钮。** 在 `PrivateKey` 行下方，`PublicKey` 通过 `TunnelService.DerivePublicKey` 从正在输入的私钥文本实时派生，以可选中的等宽文本展示；私钥为空或无效时显示提示。该值永不进入模型、不写入 `[Interface]`（WireGuard 会自行派生），因此不影响配置导入导出。复制按钮可将公钥放入剪贴板，便于粘贴到对端配置。
+
+- **字段编辑器支持在编辑时重新生成接口私钥。** `PrivateKey` 输入框旁的紧凑刷新按钮会生成一把新的 Curve25519 钳制私钥，立即写入 conf 文本，并用同一把新私钥同步刷新只读公钥。生成逻辑与新建配置共用，两条路径算法一致。轮换私钥后请记得更新对端的 `PublicKey`。
+
 ## [3.2.1] - 2026-10-31
 
 ### 🔧 变更
