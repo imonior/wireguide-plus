@@ -120,7 +120,7 @@ func installTrayDoubleClickMonitor(cb func()) {
 	go func() {
 		for i := 0; i < 40; i++ { // ~20s budget for the status item to exist
 			if bool(C.wgInstallTrayDoubleClick()) {
-				slog.Info("tray: double-click monitor installed")
+				slog.Info("tray: double-click monitor installed", "targetActionFix", trayTargetFixLabel())
 				return
 			}
 			time.Sleep(500 * time.Millisecond)

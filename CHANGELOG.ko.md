@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [3.3.1] - 2026-11-18
+
+### 🐛 수정
+
+- **macOS 27에서 메뉴 막대 아이콘을 왼쪽 클릭해도 메뉴가 열리지 않던 문제를 수정했습니다.** macOS 27에서는 시스템 메뉴 막대 에이전트가 상태 항목의 action을 직접 전송하면서 마우스 다운 이벤트는 합성하지 않아, 왼쪽 클릭 한 번과 두 번 모두 메뉴가 표시되지 않았습니다(오른쪽 클릭은 영향 없음). 트레이 컨트롤러의 `target`/`action`을 상태 항목의 button으로 전달하도록 했습니다(이 경로에서는 여전히 실제 마우스 이벤트가 생성됩니다). 동시에 상태 항목의 `target` getter를 브리지하여 Wails 자체의 정리 및 메뉴 캐싱 코드가 그대로 동작하도록 했습니다. 이 수정은 macOS 27 이상에서만 적용되며, 이전 시스템(검증된 macOS 15 포함)에는 전혀 영향을 주지 않습니다. 시작 로그에 사용된 경로(`targetActionFix=installed|not-needed|FAILED`)가 기록되어 진단에 활용할 수 있습니다.
+
 ## [3.3.0] - 2026-11-18
 
 ### ✨ 추가

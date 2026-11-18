@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.1] - 2026-11-18
+
+### 🐛 Fixed
+
+- **Fixed the menu-bar icon not opening a menu on left click on macOS 27.** On macOS 27 the system's menu-bar agent sent the status item's action directly without synthesizing a mouse-down event, so neither a single nor a double left-click produced a menu (right-click was unaffected). The tray controller's `target`/`action` are now forwarded to the status item's button — the path that still generates real mouse events — while the item's `target` getter is bridged so Wails' own cleanup and menu-caching code keeps working. The fix is gated to macOS 27 and later; older systems, including the verified-good macOS 15 path, are untouched. A startup log line reports which path was taken (`targetActionFix=installed|not-needed|FAILED`) for diagnostics.
+
 ## [3.3.0] - 2026-11-18
 
 ### ✨ Added

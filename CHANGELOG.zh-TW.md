@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.1] - 2026-11-18
+
+### 🐛 修復
+
+- **修復 macOS 27 上狀態列圖示左鍵無法彈出選單的問題。** 在 macOS 27 中，系統選單列代理會直接派發狀態列項目的 action，卻不再合成滑鼠按下事件，因此左鍵單擊與雙擊都不會彈出選單（右鍵不受影響）。現在把托盤控制器的 `target`/`action` 轉發到狀態列項目的 button——這條路徑仍會生成真實的滑鼠事件——同時橋接狀態列項目的 `target` getter，保證 Wails 自身的清理與選單快取程式碼照常運作。該修復僅在 macOS 27 及更高版本啟用，舊系統（包括已驗證正常的 macOS 15 路徑）完全不受影響。啟動日誌會輸出所走路徑（`targetActionFix=installed|not-needed|FAILED`）便於診斷。
+
 ## [3.3.0] - 2026-11-18
 
 ### ✨ 新增

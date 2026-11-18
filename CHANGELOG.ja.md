@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.1] - 2026-11-18
+
+### 🐛 修正
+
+- **macOS 27 でメニューバーアイコンの左クリックでメニューが開かない問題を修正しました。** macOS 27 ではシステムのメニューバーエージェントがステータスアイテムの action を直接送信するもののマウスダウンイベントを合成しなくなったため、左クリックのシングル／ダブルどちらでもメニューが表示されませんでした（右クリックは影響なし）。トレイコントローラーの `target`/`action` をステータスアイテムの button へ転送するようにしました（この経路では今も実際のマウスイベントが生成されます）。同時にステータスアイテムの `target` getter をブリッジし、Wails 自身の後始末とメニューキャッシュ処理がそのまま動作するようにしています。この修正は macOS 27 以降でのみ有効で、旧システム（動作確認済みの macOS 15 を含む）には一切影響しません。起動ログに経路（`targetActionFix=installed|not-needed|FAILED`）が出力され、診断に利用できます。
+
 ## [3.3.0] - 2026-11-18
 
 ### ✨ 追加

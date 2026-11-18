@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.1] - 2026-11-18
+
+### 🐛 修复
+
+- **修复 macOS 27 上状态栏图标左键无法弹出菜单的问题。** 在 macOS 27 中，系统菜单栏代理会直接派发状态栏项的 action，却不再合成鼠标按下事件，因此左键单击和双击都不会弹出菜单（右键不受影响）。现在把托盘控制器的 `target`/`action` 转发到状态栏项的 button——这条路径仍会生成真实的鼠标事件——同时桥接状态栏项的 `target` getter，保证 Wails 自身的清理与菜单缓存代码照常工作。该修复仅在 macOS 27 及更高版本启用，旧系统（包括已验证正常的 macOS 15 路径）完全不受影响。启动日志会输出所走路径（`targetActionFix=installed|not-needed|FAILED`）便于诊断。
+
 ## [3.3.0] - 2026-11-18
 
 ### ✨ 新增
