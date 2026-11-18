@@ -4,6 +4,12 @@ WireGuide Plus의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md)
 
+## [3.3.2] - 2026-11-18
+
+### 🐛 수정
+
+- **macOS 27에서 메뉴 막대 아이콘을 더블 클릭해 주 창을 여는 기능을 수정했습니다.** 더블 클릭 감지는 이전에 AppKit의 `clickCount >= 2`에 의존했지만, macOS 27의 메뉴 막대 에이전트는 각 클릭을 개별적으로 합성하여 두 번째 물리적 클릭에서도 `clickCount = 1`을 보고할 수 있어 창이 열리지 않았습니다(v3.3.1 이후 왼쪽 클릭 및 오른쪽 클릭 메뉴는 정상이었습니다). 이제 감지기가 동일한 450ms 창 내에서 클릭 횟수를 직접 계산합니다——첫 번째 클릭이 유지되는 동안 두 번째 왼쪽 클릭이 오면 더블 클릭으로 판단하며, 시스템이 보고하는 `clickCount`에 의존하지 않습니다. 이전 macOS의 동작은 변경되지 않았습니다. `[WGTrayClick]` 로그에 각 클릭의 `clickCount`와 판단 결과가 기록되어 진단에 활용할 수 있습니다.
+
 ## [3.3.1] - 2026-11-18
 
 ### 🐛 수정

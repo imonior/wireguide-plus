@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.2] - 2026-11-18
+
+### 🐛 Fixed
+
+- **Restored double-clicking the menu-bar icon to open the main window on macOS 27.** The double-click detector relied on AppKit's `clickCount >= 2`, but the macOS 27 menu-bar agent synthesizes each click separately and can report `clickCount = 1` even for the second physical click, so the window never opened (single-click and right-click menus still worked after v3.3.1). The detector now counts clicks itself within the same 450 ms window — a second left-click while the first is still held is the double-click — making it independent of what `clickCount` the system reports. Behaviour on older macOS is unchanged. A `[WGTrayClick]` log line records each click's `clickCount` and the decision for diagnosis.
+
 ## [3.3.1] - 2026-11-18
 
 ### 🐛 Fixed

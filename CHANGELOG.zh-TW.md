@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.2] - 2026-11-18
+
+### 🐛 修復
+
+- **修復 macOS 27 上雙擊狀態列圖示開啟主視窗的功能。** 雙擊偵測原先依賴 AppKit 的 `clickCount >= 2`，但 macOS 27 的選單列代理把每次點擊分別合成，第二次物理點擊也可能回報 `clickCount = 1`，導致主視窗始終無法開啟（v3.3.1 後左鍵單擊與右鍵選單皆正常）。現在偵測器在同一個 450ms 視窗內自行計數——首次點擊仍被扣住時再次收到左鍵點擊即判定為雙擊——不再依賴系統回報的 `clickCount`。舊版 macOS 行為不變。`[WGTrayClick]` 日誌會記錄每次點擊的 `clickCount` 與判定結果，便於診斷。
+
 ## [3.3.1] - 2026-11-18
 
 ### 🐛 修復

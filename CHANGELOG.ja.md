@@ -4,6 +4,12 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.2] - 2026-11-18
+
+### 🐛 修正
+
+- **macOS 27 でメニューバーアイコンのダブルクリックでメインウィンドウを開く機能を修正しました。** ダブルクリック検出は以前 AppKit の `clickCount >= 2` に依存していましたが、macOS 27 のメニューバーエージェントは各クリックを個別に合成し、2 回目の物理クリックでも `clickCount = 1` と報告されることがあり、ウィンドウが開きませんでした（v3.3.1 以降は左クリックと右クリックのメニューは正常でした）。検出器は同じ 450ms ウィンドウ内でクリック数を自分で数えるようになりました——最初のクリックが保持されている間に 2 回目の左クリックが来ればダブルクリックと判定し、システムが報告する `clickCount` に依存しません。古い macOS の動作は変わりません。`[WGTrayClick]` ログに各クリックの `clickCount` と判定結果が記録され、診断に利用できます。
+
 ## [3.3.1] - 2026-11-18
 
 ### 🐛 修正

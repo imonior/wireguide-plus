@@ -64,8 +64,16 @@ static bool wgInstallTrayDoubleClick(void) {
 			if (event.window != win) {
 				return event;
 			}
-			if (event.clickCount >= 2) {
-				// Second click of a double: consume it and open the window.
+			// A still-held first click inside the 450ms window is the double-click
+			// signal. We do NOT trust event.clickCount: on macOS 27 the menu bar
+			// agent synthesizes each click separately and may report clickCount=1
+			// even for the second physical click, which used to make the old
+			// `clickCount >= 2` test miss every double click.
+			// 窗口内仍被扣住的首次点击即为双击信号。不再信任 event.clickCount：
+			// macOS 27 的菜单栏代理把每次点击分别合成，第二次物理点击也可能
+			// 报告 clickCount=1，导致旧的 `clickCount >= 2` 判据漏掉所有双击。
+			if (wgHeldClick != nil) {
+				NSLog(@"[WGTrayClick] double: clickCount=%ld, showing main window", (long)event.clickCount);
 				wgHeldClick = nil;
 				dispatch_async(dispatch_get_main_queue(), ^{ wgTrayDoubleClick(); });
 				return nil;
@@ -73,6 +81,7 @@ static bool wgInstallTrayDoubleClick(void) {
 			// First click: hold it until we know whether a second lands.
 			NSEvent *held = event;
 			wgHeldClick = held;
+			NSLog(@"[WGTrayClick] first click held: clickCount=%ld, waiting %.0fms", (long)event.clickCount, wgDoubleClickWindowMs);
 			dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
 				(int64_t)(wgDoubleClickWindowMs * (double)NSEC_PER_MSEC)),
 				dispatch_get_main_queue(), ^{
@@ -81,6 +90,7 @@ static bool wgInstallTrayDoubleClick(void) {
 					}
 					wgHeldClick = nil;
 					wgReposted = held;
+					NSLog(@"[WGTrayClick] single: re-posting held click for native menu");
 					[NSApp postEvent:held atStart:NO];
 				});
 			return nil;
