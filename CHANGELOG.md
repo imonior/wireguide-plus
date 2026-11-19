@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.3] - 2026-11-19
+
+### ✨ Added
+
+- **A shared, read-only PublicKey bar is now visible in both editor tabs.** It sits directly under the configuration name and shows the public key derived from the `[Interface]` PrivateKey as you type, paste, or delete — in both the fields editor and the raw conf editor. The key is never written back into the conf (WireGuard derives it itself and rejects an explicit value), so import/export is unaffected. A copy button lets you paste it into the peer's config without exposing the private key.
+
+### 🐛 Fixed
+
+- **Private-key validation now happens at Save time, with clear feedback.** Saving validates the key: a valid key is saved and a dialog confirms that the public key is up to date, reminding you to update this tunnel's public key in the peer's configuration (`Peer.PublicKey`) so the peer stops trusting the old key. An invalid key is rejected with a dialog and nothing is written. The peer reminder appears only when the key actually changed (or for a new tunnel) — editing an Endpoint or any other field no longer triggers a false "update the peer" warning. An empty PrivateKey is left to the existing config validation instead of being blocked with a misleading key error, so a skeleton config can still be saved before the key is filled in.
+
 ## [3.3.2] - 2026-11-18
 
 ### 🐛 Fixed

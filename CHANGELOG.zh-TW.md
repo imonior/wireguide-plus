@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > 简体中文: [CHANGELOG.zh.md](CHANGELOG.zh.md) · English: [CHANGELOG.md](CHANGELOG.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.3] - 2026-11-19
+
+### ✨ 新增
+
+- **共享的唯讀 PublicKey 欄現在在兩個編輯分頁中皆可見。** 它位於設定名稱正下方，無論在欄位編輯器或 conf 文字編輯器中，都會隨私鑰的輸入、貼上或刪除即時顯示由 `[Interface]` PrivateKey 衍生的公鑰。該公鑰永不寫回 conf（WireGuard 會自行衍生並拒絕明確值），因此匯入匯出不受影響。欄上的複製按鈕可將其貼到對端設定，無需暴露私鑰。
+
+### 🐛 修復
+
+- **私鑰校驗改為儲存時統一進行，並給予明確回饋。** 儲存時校驗私鑰：合法則儲存並彈窗確認公鑰已更新，提醒在對端設定中更新本隧道的公鑰（`Peer.PublicKey`），使對端不再信任舊公鑰；不合法則彈窗拒絕、不寫入任何內容。對端提醒僅在金鑰確實變更（或新建隧道）時出現——只改 Endpoint 等欄位不再誤報「請更新對端公鑰」。空 PrivateKey 交由既有設定校驗處理，不再以誤導性的金鑰錯誤攔截，因此可先儲存骨架設定、之後再填金鑰。
+
 ## [3.3.2] - 2026-11-18
 
 ### 🐛 修復

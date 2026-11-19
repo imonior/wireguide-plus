@@ -10,7 +10,8 @@
   import { wireguardLanguage, wireguardCompletion } from './wireguard-lang.js';
   import { resolvedTheme } from '../stores/theme.js';
   import { t } from '../i18n/index.js';
-  import { generatePrivateKey } from './wireguard-key.js';
+  import PublicKeyBar from './PublicKeyBar.svelte';
+  import { generatePrivateKey, parseInterfacePrivateKey } from './wireguard-key.js';
 
   // Unified config editor: handles both "new" and "edit" modes.
   // - isNew=true: shows name input, generates template with random private key
@@ -20,6 +21,7 @@
   export let name = '';
   export let isNew = false;
   export let nameEditable = true;
+  export let TunnelService = null; // injected binding namespace, for key derivation
 
   const dispatch = createEventDispatcher();
 
@@ -44,6 +46,14 @@ PersistentKeepalive = 25
   }
   let editorContainer;
   let view;
+
+  // A plain reactive assignment from the prop — the template reads the
+  // derived variable directly, which stays reactive across doc changes. The
+  // parser lives in the shared wireguard-key module so the live bar and the
+  // save-time gate in App read the exact same key.
+  // 由 prop 直接派生的普通响应式赋值——模板直读该变量，随文档变化保持响应式。
+  // 解析器放在共享 wireguard-key 模块，实时公钥条与 App 保存门禁读同一把密钥。
+  $: confPrivateKey = parseInterfacePrivateKey(content);
 
   // The theme extension lives in a Compartment so we can reconfigure it at
   // runtime when the user toggles light/dark. Without the compartment we'd
@@ -180,6 +190,11 @@ PersistentKeepalive = 25
       <button class="editor-btn editor-btn-primary" on:click={save}>{$t('editor.save')}</button>
     </div>
   </div>
+
+  <!-- Shared public-key bar sits directly under the name field, mirroring the
+       fields tab. Key validation happens at Save time in App.doSave, not here.
+       共享公钥条紧邻名称栏下方，与字段 tab 一致。私钥校验在 App.doSave 保存时进行。 -->
+  <PublicKeyBar privateKey={confPrivateKey} {TunnelService} />
 
   <div class="editor-container" bind:this={editorContainer}></div>
 

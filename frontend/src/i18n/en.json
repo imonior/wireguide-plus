@@ -745,5 +745,11 @@
     "option_keep0": "I run a server / non-NAT peer — keep 0 (I understand)",
     "option_use25": "I'm behind NAT — use the recommended 25s",
     "option_cancel": "Go back and edit manually"
+  },
+  "key_save": {
+    "saved_title": "Private key and public key updated",
+    "saved_msg": "The private key was validated and saved, and the public key shown above is now up to date. Remember to update this tunnel's public key in the remote peer's configuration (its Peer.PublicKey) — until you do, the peer still trusts the old key and the tunnel may fail to connect.",
+    "invalid_title": "Invalid private key",
+    "invalid_msg": "The private key is not a valid WireGuard key. Enter a valid private key and save again — the config was not written."
   }
 }

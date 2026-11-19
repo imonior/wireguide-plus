@@ -12,6 +12,7 @@
   import { t } from '../i18n/index.js';
   import { appSettings } from '../stores/settings.js';
   import Icon from './Icon.svelte';
+  import PublicKeyBar from './PublicKeyBar.svelte';
   import { generatePrivateKey } from './wireguard-key.js';
 
   export let content = '';
@@ -60,10 +61,10 @@
       peers = (f?.peers || []).map(p => ({ ...p }));
       if (peerIdx >= peers.length) peerIdx = 0;
       loadErr = '';
-      // Derive once for the freshly loaded private key (imported/reloaded
+      // Seed the bar for the freshly loaded private key (imported/reloaded
       // configs must show the key without waiting for a keystroke).
-      // 为新载入的私钥派生一次（导入/重载的配置无需再敲一次键即可显示公钥）。
-      deriveFrom(iface['PrivateKey'] || '');
+      // 为新载入的私钥初始化公钥条（导入/重载的配置无需再敲一次键即可显示公钥）。
+      livePrivateKey = iface['PrivateKey'] || '';
     } catch (e) {
       loadErr = e?.message || String(e);
     }
@@ -135,72 +136,25 @@
 
   function onNameInput(e) { name = e.target.value; }
 
-  // The public key is derived from the PRIVATE KEY TEXT AS TYPED, not from
-  // the already-written conf: the field editor only flushes to `content` on
-  // blur (on:change), so reading the model here would leave the display one
-  // keystroke behind. Wails binds TunnelService.DerivePublicKey; each edit
-  // bumps a generation counter so a slow earlier reply cannot overwrite a
-  // newer result. `derivedPublicKey` is a plain variable ASSIGNED from the
-  // async reply — the template reads it directly, which keeps it reactive.
-  // Never put it in `iface`: pick()/apply() would then write it into the conf.
-  // 公钥从「正在输入的私钥文本」派生，而非已写回的 conf：字段编辑器只在失焦
-  // 时（on:change）把模型刷回 content，若在这里读模型，显示会慢一个按键。
-  // Wails 已绑定 TunnelService.DerivePublicKey；每次输入递增代际计数，避免
-  // 较慢的旧回复覆盖较新的结果。derivedPublicKey 是由异步回复「赋值」的普通
-  // 变量——模板直接读它即可保持响应式。切勿放进 iface，否则 pick()/apply()
-  // 会把它写进 .conf。
-  let derivedPublicKey = '';
-  let derivedState = 'idle'; // idle | ok | invalid
-  let deriveGen = 0;
-  let copied = false;
-  let copyTimer = null;
-
-  async function deriveFrom(value) {
-    const raw = (value || '').trim();
-    const gen = ++deriveGen;
-    if (!raw) {
-      derivedPublicKey = '';
-      derivedState = 'idle';
-      return;
-    }
-    if (!TunnelService || typeof TunnelService.DerivePublicKey !== 'function') return;
-    try {
-      const key = await TunnelService.DerivePublicKey(raw);
-      if (gen !== deriveGen) return; // a newer keystroke already superseded this
-      derivedPublicKey = key || '';
-      derivedState = derivedPublicKey ? 'ok' : 'invalid';
-    } catch (_) {
-      if (gen !== deriveGen) return;
-      derivedPublicKey = '';
-      derivedState = 'invalid';
-    }
-  }
+  // Live private-key text feeds PublicKeyBar, which owns derivation. Reading
+  // the text as typed (not the blur-flushed model) keeps the bar one keystroke
+  // in sync with the input. The bar never writes any value into `content`.
+  // 实时私钥文本喂给 PublicKeyBar，由它负责派生。读「正在输入的文本」而非
+  // 失焦才刷回的模型，使公钥条与输入同步、不慢一拍。该条绝不写回 content。
+  let livePrivateKey = '';
 
   // Regenerate the interface private key in place. The value is written to
   // the working model and flushed to the conf text immediately (unlike a
-  // keystroke, which waits for blur), then the read-only public key is
-  // re-derived from the SAME new key. PublicKey stays out of `iface` so it
-  // can never be persisted into [Interface].
+  // keystroke, which waits for blur); the shared bar re-derives from the SAME
+  // new key. PublicKey stays out of `iface` so it can never reach [Interface].
   // 原地重新生成接口私钥：写入工作模型并立即刷回 conf 文本（按键输入要等
-  // 失焦才写，这里不等），再用同一个新私钥重新派生只读公钥。PublicKey 始终
+  // 失焦才写，这里不等），共享公钥条用同一个新私钥重新派生。PublicKey 始终
   // 不进 iface，因此绝不会被写进 [Interface]。
   function regeneratePrivateKey() {
     const key = generatePrivateKey();
     setIface('PrivateKey', key);
-    deriveFrom(key);
+    livePrivateKey = key;
     apply();
-  }
-
-  async function copyPublicKey() {
-    if (!derivedPublicKey) return;
-    try {
-      await navigator.clipboard.writeText(derivedPublicKey);
-      copied = true;
-      if (copyTimer) clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => { copied = false; }, 1500);
-    } catch (e) {
-      console.error('[fields] copy public key failed:', e);
-    }
   }
 
   // Save has to flush before it dispatches. The last keystroke's own
@@ -269,6 +223,11 @@
     </div>
   </div>
 
+  <!-- Shared public-key bar sits directly under the name field, at the same
+       level in both editor tabs. Derived from the live PrivateKey text.
+       共享公钥条紧邻名称栏下方，两个编辑 tab 中位置一致；由实时私钥文本派生。 -->
+  <PublicKeyBar privateKey={livePrivateKey} {TunnelService} />
+
   {#if loadErr}<p class="fe-error">{loadErr}</p>{/if}
 
   {#if errors.length > 0}
@@ -288,8 +247,8 @@
             <label class="fe-label" for="fe-if-{key}">{key}{#if isRequired(key)}<span class="fe-req" title={$t('fields.required_hint')}>*</span>{/if}</label>
             <input class="fe-input" id="fe-if-{key}" type="text" value={iface[key] ?? ''}
               spellcheck="false"
-              on:input={(e) => { if (key === 'PrivateKey') deriveFrom(e.target.value); }}
-              on:change={(e) => { setIface(key, e.target.value); apply(); }} />
+              on:input={(e) => { if (key === 'PrivateKey') livePrivateKey = e.target.value; }}
+              on:change={(e) => { setIface(key, e.target.value); if (key === 'PrivateKey') livePrivateKey = e.target.value; apply(); }} />
             {#if key === 'PrivateKey'}
               <!-- Regenerate in place: new private key + synchronously refreshed
                    read-only public key, both persisted in one apply().
@@ -302,32 +261,6 @@
             {/if}
           </div>
         {/each}
-        <!-- Read-only derived public key: lives BELOW the field rows, never
-             inside `iface`, so apply()/pick() cannot write it into [Interface]
-             (WireGuard derives it itself and rejects an explicit value).
-             Pair it with the Copy button so it can be pasted into the remote
-             peer's config without exposing the private key.
-             只读派生公钥：置于字段行之外、永不进入 iface，因此 apply()/pick()
-             不会把它写进 [Interface]（WireGuard 会自行派生并拒绝显式值）。
-             旁边提供复制按钮，便于粘贴到对端配置，无需暴露私钥。 -->
-        <div class="fe-row fe-pk-row">
-          <span class="fe-label fe-pk-label">PublicKey</span>
-          <span class="fe-pk-value" class:fe-pk-empty={derivedState !== 'ok'} title={derivedState === 'ok' ? derivedPublicKey : ''}>
-            {#if derivedState === 'ok'}
-              {derivedPublicKey}
-            {:else if derivedState === 'invalid'}
-              {$t('fields.public_key_invalid')}
-            {:else}
-              {$t('fields.public_key_placeholder')}
-            {/if}
-          </span>
-          <button class="fe-pk-copy" class:copied={copied} disabled={derivedState !== 'ok'}
-            title={$t('fields.public_key_copy')} aria-label={$t('fields.public_key_copy')}
-            on:click={copyPublicKey}>
-            <Icon name={copied ? 'check' : 'copy'} size={12} strokeWidth={1.75} />
-            <span>{copied ? $t('fields.public_key_copied') : $t('fields.public_key_copy')}</span>
-          </button>
-        </div>
       </div>
 
       {#if awgOn}
@@ -499,25 +432,6 @@
   /* Required-field marker: a small accent-coloured asterisk glued to the
      key name; hovering (or focusing the row) explains it via the title. */
   .fe-req { margin-left: 3px; color: var(--red, #e5484d); font-weight: 700; }
-  /* Derived public-key row: read-only, selectable, never editable. The value
-     is identity data, so it uses the same monospace as the key fields. */
-  .fe-pk-row { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border, #ccc); }
-  .fe-pk-label { opacity: 0.7; }
-  .fe-pk-value {
-    flex: 1; min-width: 0; font-size: 12px; font-family: ui-monospace, monospace;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    user-select: text; -webkit-user-select: text;
-  }
-  .fe-pk-value.fe-pk-empty { font-family: var(--font-sans); font-style: italic; opacity: 0.5; }
-  .fe-pk-copy {
-    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
-    height: 26px; padding: 0 9px; border: 0.5px solid var(--border, #ccc);
-    border-radius: 6px; background: var(--bg-card); color: var(--text-secondary);
-    font: 500 11px/1 var(--font-sans); cursor: pointer;
-  }
-  .fe-pk-copy:disabled { opacity: 0.4; cursor: not-allowed; }
-  .fe-pk-copy:not(:disabled):hover { border-color: var(--accent); color: var(--text-primary); }
-  .fe-pk-copy.copied { color: var(--green, #30a46c); border-color: var(--green, #30a46c); }
   /* Compact regenerate button beside the editable PrivateKey field. */
   .fe-key-regen {
     flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;

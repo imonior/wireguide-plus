@@ -745,5 +745,11 @@
     "option_keep0": "我是服务端 / 非 NAT 对端——保留 0（已知晓）",
     "option_use25": "我在 NAT 后——使用推荐的 25s",
     "option_cancel": "返回手动修改"
+  },
+  "key_save": {
+    "saved_title": "私钥与公钥已更新",
+    "saved_msg": "私钥已通过校验并保存，上方显示的公钥现已更新。请记得更新对端配置中填写的本机公钥（Peer.PublicKey）——在此之前，对端仍信任旧公钥，隧道可能无法连接。",
+    "invalid_title": "私钥不合法",
+    "invalid_msg": "私钥不是合法的 WireGuard 密钥。请输入合法的私钥后重新保存——本次配置未写入。"
   }
 }

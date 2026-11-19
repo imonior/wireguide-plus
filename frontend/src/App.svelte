@@ -6,6 +6,7 @@
   import ConflictWarning from './lib/ConflictWarning.svelte';
   import AddressConflictDialog from './lib/AddressConflictDialog.svelte';
   import KeepaliveZeroDialog from './lib/KeepaliveZeroDialog.svelte';
+  import KeySaveDialog from './lib/KeySaveDialog.svelte';
   import ConfigEditor from './lib/ConfigEditor.svelte';
   import ScriptEditor from './lib/ScriptEditor.svelte';
   import FieldsEditor from './lib/FieldsEditor.svelte';
@@ -27,6 +28,7 @@
   import { compactList, uiMode, moduleVis, moduleFlags, listSort, listActiveOnTop, listPaneWidth, effectiveListPaneWidth, saveListPrefs, LIST_PANE_MIN, LIST_PANE_DEFAULT, paneMaxForMode, paneDefaultForMode } from './stores/ui.js';
   import { errText, localizeValidation } from './lib/errors.js';
   import { sanitizeTunnelName, validateTunnelName } from './lib/tunnel-name.js';
+  import { parseInterfacePrivateKey } from './lib/wireguard-key.js';
   import { t, setLanguage, detectLanguage } from './i18n/index.js';
   import { TunnelService } from '../bindings/github.com/imonior/wireguide-plus/internal/app';
   import Icon from './lib/Icon.svelte';
@@ -59,6 +61,29 @@
   let showSettings = false;
   let showConflictWarning = false;
   let showKeepaliveDialog = false;
+  // Save-time private-key gate result: raised once after the key is checked,
+  // not on every keystroke. '' = hidden, 'invalid' = key unusable (not saved),
+  // 'saved' = key valid and config written.
+  // 保存时私钥校验结果：校验后弹一次，而非逐字符弹。'' 隐藏，'invalid' 密钥不可用
+  // （未保存），'saved' 密钥合法且配置已写入。
+  let keyDialogMode = '';
+  // Original [Interface] PrivateKey captured when the editor opened. Compared
+  // against the key at Save time so the peer-reminder pops ONLY when the key
+  // actually changed — otherwise every Endpoint-only edit would cry wolf.
+  // Empty for a NEW tunnel (its template key is generated inside ConfigEditor);
+  // a new tunnel always gets the reminder because its whole identity is new.
+  // 打开编辑器时记下的原始 [Interface] PrivateKey，保存时对比：只有密钥真变了
+  // 才弹对端提醒，避免只改 Endpoint 也误报。新建隧道模板密钥在 ConfigEditor 内
+  // 生成，此处为空；新隧道整条身份都是新的，一律弹提醒。
+  let editorOriginalKey = '';
+  // Set at Save time, read after the (possibly async keepalive/AWG) save path:
+  // whether the just-saved config needs the "update the peer's public key"
+  // dialog. A plain variable, not reactive state — it is a one-shot handoff
+  // between doSave and persistEditorSave, never rendered in the template.
+  // 保存时置位、在（可能异步的 keepalive/AWG）保存路径末端读取：本次保存是否
+  // 需要弹"更新对端公钥"提醒。普通变量、非响应式状态，只在 doSave 与
+  // persistEditorSave 间一次性传递，不参与模板渲染。
+  let keyNeedsPeerReminder = false;
   let keepaliveSaveName = '';
   let keepaliveContent = '';
   let keepaliveOriginalName = '';
@@ -776,6 +801,10 @@
     editorContent = ''; // ConfigEditor will generate template when isNew + empty
     editorErrors = [];
     editorIsNew = true;
+    // A new tunnel's identity is generated inside ConfigEditor, so there is no
+    // "old" key here. Save always treats a new tunnel as a key change.
+    // 新隧道的密钥在 ConfigEditor 内生成，此处没有"旧"密钥；保存时一律视作变更。
+    editorOriginalKey = '';
     editorTab = 'conf';
     pendingBinding = null;
     pendingPolicies = null;
@@ -800,6 +829,10 @@
       editName = name;
       editorOriginalName = name;
       editorContent = content;
+      // Snapshot the key as opened, so Save can tell a real key change from an
+      // unrelated edit and only then raise the peer-reminder dialog.
+      // 记录打开时的密钥，保存时据此区分"真换了密钥"与无关改动，只对前者弹对端提醒。
+      editorOriginalKey = parseInterfacePrivateKey(content);
       editorErrors = [];
       editorIsNew = false;
       editorTab = 'conf';
@@ -964,6 +997,38 @@
       showToast($t('name.auto_fixed', { from: fix.original, to: fix.name }));
     }
 
+    // Private-key gate at SAVE time — the single authoritative moment. The
+    // read-only bar derives for display on every keystroke but never blocks;
+    // only here do we decide whether a NON-EMPTY key is usable. Deriving the
+    // public key is exactly the backend's validity test (a bad key throws).
+    // An EMPTY key is deliberately NOT blocked here: ValidateConfig already
+    // reports that required field with a localised message, and a user may
+    // legitimately save a skeleton config before filling the key in.
+    // 保存时私钥门禁——唯一权威时刻。只读公钥条逐字符派生仅供展示、从不拦截；
+    // 只有这里判定「非空」密钥是否可用。派生公钥正是后端的合法性检验。
+    // 「空」私钥故意不在此拦截：ValidateConfig 已用本地化文案报告该必填项，
+    // 且用户可能合法地先保存骨架配置、之后再填密钥。
+    try {
+      const privateKey = parseInterfacePrivateKey(saveContent);
+      if (privateKey) {
+        await withTimeout(TunnelService.DerivePublicKey(privateKey));
+        logStep('private key gate ok');
+      } else {
+        logStep('private key gate: empty, deferred to ValidateConfig');
+      }
+    } catch (err) {
+      logStep('private key gate invalid: ' + errText(err));
+      keyDialogMode = 'invalid';
+      return;
+    }
+
+    // Peer-reminder is raised only when this save actually introduces a new
+    // identity: a new tunnel, or a key differing from the one opened with.
+    // 仅当这次保存确实引入了新身份时才弹对端提醒：新建隧道，或密钥与打开时不同。
+    const savedKey = parseInterfacePrivateKey(saveContent);
+    keyNeedsPeerReminder = wasNew || (savedKey !== '' && savedKey !== editorOriginalKey);
+    logStep('key changed=' + keyNeedsPeerReminder + ' originalLen=' + editorOriginalKey.length + ' savedLen=' + savedKey.length);
+
     // Nothing below may fail silently: an unexpected throw used to leave the
     // modal open with no message at all.
     try {
@@ -1090,6 +1155,14 @@
         }
       }
       showEditor = false;
+      // Only interrupt with the peer-reminder when this save introduced a new
+      // key. An Endpoint-only edit still gets the normal saved toast below —
+      // a reminder on every save trains the user to dismiss it unread.
+      // 只有本次保存换了密钥才弹对端提醒。仅改 Endpoint 等编辑照常走下方 saved
+      // toast——每次保存都弹提醒，只会让用户养成不看就关掉的习惯。
+      if (keyNeedsPeerReminder) {
+        keyDialogMode = 'saved';
+      }
       await refreshTunnels(TunnelService);
       if (stopped) {
         // Restart what we stopped. Straight Connect, not doConnect: the edit
@@ -1385,7 +1458,7 @@
 {#if isPopup}
   <StatusPopup />
 {:else}
-<div class="app" class:mini={$moduleFlags.__mode === 'mini'} class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog) && currentView === 'tunnels' ? true : undefined}>
+<div class="app" class:mini={$moduleFlags.__mode === 'mini'} class:modal-open={showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog || !!keyDialogMode} data-file-drop-target={!(showSettings || showEditor || showConflictWarning || showZipResult || showLegacyMigration || showKeepaliveDialog || keyDialogMode) && currentView === 'tunnels' ? true : undefined}>
   <!-- Wails adds .file-drop-target-active class to .app when dragging files.
        We only render the overlay when drop-target is actually active — i.e.
        on the tunnels view with no modal open — so it can never steal clicks
@@ -1601,6 +1674,7 @@
               errors={editorErrors}
               isNew={editorIsNew}
               nameEditable={true}
+              {TunnelService}
               on:save={doSave}
               on:cancel={() => showEditor = false} />
           {:else}
@@ -1677,6 +1751,10 @@
 
   {#if showKeepaliveDialog}
     <KeepaliveZeroDialog on:resolved={onKeepaliveResolved} />
+  {/if}
+
+  {#if keyDialogMode}
+    <KeySaveDialog mode={keyDialogMode} on:resolved={() => { keyDialogMode = ''; }} />
   {/if}
 
   <EgressLostDialog

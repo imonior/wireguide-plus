@@ -4,6 +4,16 @@ All notable changes to WireGuide Plus will be documented in this file.
 
 > English: [CHANGELOG.md](CHANGELOG.md) · 繁體中文: [CHANGELOG.zh-TW.md](CHANGELOG.zh-TW.md) · 日本語: [CHANGELOG.ja.md](CHANGELOG.ja.md) · 한국어: [CHANGELOG.ko.md](CHANGELOG.ko.md)
 
+## [3.3.3] - 2026-11-19
+
+### ✨ 新增
+
+- **共享的只读 PublicKey 栏现已在两个编辑页签中均可见。** 它位于配置名称正下方，无论在字段编辑器还是 conf 文本编辑器中，都会随私钥的输入、粘贴或删除实时显示由 `[Interface]` PrivateKey 派生的公钥。该公钥永不写回 conf（WireGuard 会自行派生并拒绝显式值），因此导入导出不受影响。栏上的复制按钮可把它粘贴到对端配置，无需暴露私钥。
+
+### 🐛 修复
+
+- **私钥校验改为保存时统一进行，并给出明确反馈。** 保存时校验私钥：合法则保存并弹窗确认公钥已更新，提醒在对端配置中更新本隧道的公钥（`Peer.PublicKey`），使对端不再信任旧公钥；不合法则弹窗拒绝、不写入任何内容。对端提醒仅在密钥确实变化（或新建隧道）时出现——只改 Endpoint 等字段不再误报"请更新对端公钥"。空 PrivateKey 交由既有配置校验处理，不再以误导性的密钥错误拦截，因此可以先保存骨架配置、之后再填密钥。
+
 ## [3.3.2] - 2026-11-18
 
 ### 🐛 修复
